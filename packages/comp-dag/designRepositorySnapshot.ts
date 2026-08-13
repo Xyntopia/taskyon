@@ -12,6 +12,14 @@ import {
 } from './designGraphModel.ts'
 import { getDagNodeRecordInputHashes } from './dagNodeRecord.ts'
 import {
+  getDagModuleLockModuleIds,
+  parseDagModuleArtifact,
+  parseDagModuleLock,
+  type DagModuleArtifact,
+  type DagModuleLock,
+} from './dagModule.ts'
+import { compileLockedDagNodeRunCode } from './dagModuleCompiler.ts'
+import {
   loadStoredGraphNodeFile,
   type SavedStoredGraphNode,
   type StoredGraphNodeFile,
@@ -27,6 +35,8 @@ export type LoadedDesignRepositorySnapshot = {
   revision: GraphRevision
   files: StoredGraphNodeFile[]
   nodesByHash: Record<Hash, SavedStoredGraphNode>
+  moduleLocksByHash: Record<Hash, DagModuleLock>
+  modulesByHash: Record<Hash, DagModuleArtifact>
 }
 
 export type LoadedProjectRepositorySnapshot = {
@@ -35,6 +45,8 @@ export type LoadedProjectRepositorySnapshot = {
   extensions: Record<Hash, ProjectExtension>
   files: StoredGraphNodeFile[]
   nodesByHash: Record<Hash, SavedStoredGraphNode>
+  moduleLocksByHash: Record<Hash, DagModuleLock>
+  modulesByHash: Record<Hash, DagModuleArtifact>
 }
 
 const safeRefName = (name: string): string => {
@@ -94,6 +106,68 @@ const loadNodeClosure = async (
   return nodesByHash
 }
 
+const loadModuleClosure = async (
+  readText: DesignRepositoryTextReader,
+  nodes: Record<Hash, SavedStoredGraphNode>,
+): Promise<{
+  moduleLocksByHash: Record<Hash, DagModuleLock>
+  modulesByHash: Record<Hash, DagModuleArtifact>
+}> => {
+  const moduleLocksByHash: Record<Hash, DagModuleLock> = {}
+  const modulesByHash: Record<Hash, DagModuleArtifact> = {}
+  const lockIds = [
+    ...new Set(
+      Object.values(nodes).flatMap(({ node }) => (node.moduleLockId ? [node.moduleLockId] : [])),
+    ),
+  ]
+  for (const lockId of lockIds) {
+    const lock = parseDagModuleLock(
+      await readJson(readText, `module-locks/${hashFilePart(lockId)}.json`),
+    )
+    if (lock.id !== lockId) throw new Error(`Module lock ${lockId} has unexpected identity.`)
+    moduleLocksByHash[lock.id] = lock
+    for (const moduleId of getDagModuleLockModuleIds(lock)) {
+      if (modulesByHash[moduleId]) continue
+      const artifact = parseDagModuleArtifact(
+        await readJson(readText, `modules/${hashFilePart(moduleId)}.json`),
+      )
+      if (artifact.id !== moduleId) throw new Error(`Module ${moduleId} has unexpected identity.`)
+      modulesByHash[artifact.id] = artifact
+    }
+  }
+  return { moduleLocksByHash, modulesByHash }
+}
+
+const compileImportedNodes = async (
+  nodes: Record<Hash, SavedStoredGraphNode>,
+  moduleLocksByHash: Record<Hash, DagModuleLock>,
+  modulesByHash: Record<Hash, DagModuleArtifact>,
+): Promise<Record<Hash, SavedStoredGraphNode>> =>
+  Object.fromEntries(
+    await Promise.all(
+      Object.entries(nodes).map(async ([id, saved]) => {
+        if (!saved.node.importsSource || !saved.node.moduleLockId) return [id, saved]
+        const lock = moduleLocksByHash[saved.node.moduleLockId]
+        if (!lock) throw new Error(`DAG node ${id} references unavailable module lock.`)
+        return [
+          id,
+          {
+            ...saved,
+            node: {
+              ...saved.node,
+              runCode: await compileLockedDagNodeRunCode({
+                importsSource: saved.node.importsSource,
+                runSource: saved.node.runSource,
+                lock,
+                modules: modulesByHash,
+              }),
+            },
+          },
+        ]
+      }),
+    ),
+  ) as Record<Hash, SavedStoredGraphNode>
+
 export const loadDesignRepositorySnapshot = async (args: {
   readText: DesignRepositoryTextReader
   checkout: DesignRepositoryCheckout
@@ -103,10 +177,17 @@ export const loadDesignRepositorySnapshot = async (args: {
     await readJson(args.readText, `graph-revisions/${hashFilePart(revisionId)}.json`),
   )
   const nodesByHash = await loadNodeClosure(args.readText, Object.values(revision.nodes))
+  const modules = await loadModuleClosure(args.readText, nodesByHash)
+  const compiledNodes = await compileImportedNodes(
+    nodesByHash,
+    modules.moduleLocksByHash,
+    modules.modulesByHash,
+  )
   return {
     revision,
-    nodesByHash,
-    files: Object.values(nodesByHash)
+    nodesByHash: compiledNodes,
+    ...modules,
+    files: Object.values(compiledNodes)
       .map((node) => node.file)
       .sort((left, right) => left.path.localeCompare(right.path)),
   }
@@ -147,12 +228,19 @@ export const loadProjectRepositorySnapshot = async (args: {
     args.readText,
     Object.values(invocations).map((invocation) => invocation.rootNodeId),
   )
+  const modules = await loadModuleClosure(args.readText, nodesByHash)
+  const compiledNodes = await compileImportedNodes(
+    nodesByHash,
+    modules.moduleLocksByHash,
+    modules.modulesByHash,
+  )
   return {
     revision,
     invocations,
     extensions,
-    nodesByHash,
-    files: Object.values(nodesByHash)
+    nodesByHash: compiledNodes,
+    ...modules,
+    files: Object.values(compiledNodes)
       .map((node) => node.file)
       .sort((left, right) => left.path.localeCompare(right.path)),
   }

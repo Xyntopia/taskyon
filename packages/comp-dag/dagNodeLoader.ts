@@ -42,8 +42,11 @@ type ParsedNodeFields = {
   inputs?: unknown
   hiddenInputs?: unknown
   exposedInputs?: unknown
+  moduleLockId?: Hash
+  importsSource?: string
+  importSpecifiers?: readonly string[]
   runSource: string
-  runCode: string
+  runCode?: string
 }
 
 type PrettierPlugin = object
@@ -360,14 +363,43 @@ const findDefaultExportObject = (
   tsModule: typeof ts,
   sourceFile: ts.SourceFile,
 ): ts.ObjectLiteralExpression => {
-  if (sourceFile.statements.length !== 1) {
-    throw new Error('Stored graph node source must contain only one default export object.')
+  const executableStatements = sourceFile.statements.filter(
+    (statement) => !tsModule.isImportDeclaration(statement),
+  )
+  if (executableStatements.length !== 1) {
+    throw new Error('Stored graph node source must contain imports and one default export object.')
   }
-  const statement = sourceFile.statements[0]
+  const statement = executableStatements[0]
   if (statement && tsModule.isExportAssignment(statement)) {
     if (tsModule.isObjectLiteralExpression(statement.expression)) return statement.expression
   }
   throw new Error('Stored graph node must use "export default { ... }"')
+}
+
+const parseStaticImports = (
+  tsModule: typeof ts,
+  sourceFile: ts.SourceFile,
+): { importsSource?: string; importSpecifiers?: readonly string[] } => {
+  const imports = sourceFile.statements.filter(tsModule.isImportDeclaration)
+  const specifiers = imports.map((statement) => {
+    if (!tsModule.isStringLiteral(statement.moduleSpecifier)) {
+      throw new Error('Stored graph node import specifiers must be string literals.')
+    }
+    return statement.moduleSpecifier.text
+  })
+  const dynamicImport = sourceFile.getChildren().some(function containsImport(node): boolean {
+    return (
+      (tsModule.isCallExpression(node) &&
+        node.expression.kind === tsModule.SyntaxKind.ImportKeyword) ||
+      node.getChildren().some(containsImport)
+    )
+  })
+  if (dynamicImport) throw new Error('Stored graph nodes do not support dynamic imports.')
+  if (imports.length === 0) return {}
+  return {
+    importsSource: imports.map((statement) => statement.getText(sourceFile)).join('\n'),
+    importSpecifiers: specifiers,
+  }
 }
 
 const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
@@ -380,6 +412,7 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
     tsModule.ScriptKind.TS,
   )
   const object = findDefaultExportObject(tsModule, sourceFile)
+  const imports = parseStaticImports(tsModule, sourceFile)
   const fields = new Map<string, ts.Expression>()
   for (const prop of object.properties) {
     if (!tsModule.isPropertyAssignment(prop)) {
@@ -399,6 +432,13 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
   if (formatVersion !== 2) {
     throw new Error(`Stored graph node formatVersion must be 2, received ${formatVersion}`)
   }
+  const moduleLockId = fields.has('moduleLockId')
+    ? parseHash(parseStringField(tsModule, fields, 'moduleLockId'), 'moduleLockId')
+    : undefined
+  if (imports.importSpecifiers?.length && !moduleLockId) {
+    throw new Error('Stored graph nodes with imports require a moduleLockId.')
+  }
+  const runSource = stripExpression(tsModule, run).getText(sourceFile)
   return {
     formatVersion,
     id: parseStringField(tsModule, fields, 'id'),
@@ -419,8 +459,10 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
     inputs: parseOptionalLiteralField(tsModule, fields, 'inputs'),
     hiddenInputs: parseOptionalLiteralField(tsModule, fields, 'hiddenInputs'),
     exposedInputs: parseOptionalLiteralField(tsModule, fields, 'exposedInputs'),
-    runSource: stripExpression(tsModule, run).getText(sourceFile),
-    runCode: transpileRunSource(tsModule, stripExpression(tsModule, run).getText(sourceFile)),
+    ...(moduleLockId ? { moduleLockId } : {}),
+    ...imports,
+    runSource,
+    ...(!imports.importsSource ? { runCode: transpileRunSource(tsModule, runSource) } : {}),
   }
 }
 
@@ -441,7 +483,8 @@ const jsLiteral = (value: unknown): string => JSON.stringify(sortedObject(value)
 const emitField = (name: string, value: unknown): string => `  ${name}: ${jsLiteral(value)},\n`
 
 const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
-  let source = `export default {\n`
+  let source = node.importsSource ? `${node.importsSource}\n\n` : ''
+  source += `export default {\n`
   source += emitField('formatVersion', node.formatVersion)
   source += emitField('id', node.id)
   source += emitField('localName', node.localName)
@@ -458,6 +501,7 @@ const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
     source += emitField('hiddenInputs', node.hiddenInputs ?? {})
     source += emitField('exposedInputs', node.exposedInputs ?? {})
   }
+  if (node.moduleLockId) source += emitField('moduleLockId', node.moduleLockId)
   source += `  run: ${node.runSource},\n`
   source += `}\n`
   return source
@@ -482,8 +526,11 @@ const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDef
           hiddenInputs: parseInputRefs(fields.hiddenInputs),
           exposedInputs: parseExposedInputRefs(fields.exposedInputs),
         }),
+    ...(fields.moduleLockId ? { moduleLockId: fields.moduleLockId } : {}),
+    ...(fields.importsSource ? { importsSource: fields.importsSource } : {}),
+    ...(fields.importSpecifiers ? { importSpecifiers: fields.importSpecifiers } : {}),
     runSource: fields.runSource,
-    runCode: fields.runCode,
+    ...(fields.runCode ? { runCode: fields.runCode } : {}),
   }
 }
 
@@ -501,10 +548,9 @@ const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Pro
     ...(node.inputs ? { inputs: node.inputs } : {}),
     ...(node.hiddenInputs ? { hiddenInputs: node.hiddenInputs } : {}),
     ...(node.exposedInputs ? { exposedInputs: node.exposedInputs } : {}),
+    ...(node.moduleLockId ? { moduleLockId: node.moduleLockId } : {}),
+    ...(node.importsSource ? { importsSource: node.importsSource } : {}),
     runSource: node.runSource,
-    ...(node.staticDependencyFingerprint
-      ? { staticDependencyFingerprint: node.staticDependencyFingerprint }
-      : {}),
   })
 }
 

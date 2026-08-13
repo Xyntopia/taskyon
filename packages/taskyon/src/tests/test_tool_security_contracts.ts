@@ -1,6 +1,9 @@
 import { executeInWorkerSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import { createCapabilityPolicy, type CapabilityRequest } from '../security/capabilityPolicy'
-import { createMediatedFetch, validateSandboxFetchUrl } from '../security/mediatedFetch'
+import {
+  createMediatedFetch,
+  validateSandboxFetchUrl,
+} from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { executePythonScript } from '../tools/executePython'
 import { createSubtasksResult } from '../types/toolApi'
 import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'

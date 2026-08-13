@@ -1,6 +1,11 @@
 import { canonicalHash, canonicalJson } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
 import {
+  getDagModuleLockModuleIds,
+  parseDagModuleArtifact,
+  parseDagModuleLock,
+} from './dagModule.ts'
+import {
   parseDesignGraphRef,
   parseGraphRevision,
   parseInvocationDefinition,
@@ -31,6 +36,8 @@ export type DesignGraphGitSynchronizer = {
 }
 
 export const DESIGN_GRAPH_GIT_DIRECTORIES = [
+  'modules',
+  'module-locks',
   'nodes',
   'graph-revisions',
   'project-revisions',
@@ -85,6 +92,16 @@ const collectNodeClosure = async (store: DesignGraphObjectStore, roots: readonly
     const saved = await loadStoredGraphNodeFile({ path, source: await store.readText(path) })
     if (saved.hash !== id) throw new Error(`Stored graph node hash mismatch: ${path}`)
     paths.push(path)
+    if (saved.node.moduleLockId) {
+      const lockPath = objectPath('module-locks', saved.node.moduleLockId)
+      const lock = parseDagModuleLock(await readJson(store, lockPath))
+      paths.push(lockPath)
+      for (const moduleId of getDagModuleLockModuleIds(lock)) {
+        const modulePath = objectPath('modules', moduleId)
+        parseDagModuleArtifact(await readJson(store, modulePath))
+        paths.push(modulePath)
+      }
+    }
     pending.push(...getDagNodeRecordInputHashes(saved.node))
   }
   return paths
@@ -184,7 +201,9 @@ export const projectDesignGraphSnapshot = async (args: {
 }
 
 const parseProjectedJson = (path: string, value: unknown) => {
-  if (path.startsWith('graph-revisions/')) parseGraphRevision(value)
+  if (path.startsWith('modules/')) parseDagModuleArtifact(value)
+  else if (path.startsWith('module-locks/')) parseDagModuleLock(value)
+  else if (path.startsWith('graph-revisions/')) parseGraphRevision(value)
   else if (path.startsWith('project-revisions/')) parseProjectRevision(value)
   else if (path.startsWith('invocations/')) parseInvocationDefinition(value)
   else if (path.startsWith('extensions/')) parseProjectExtension(value)
@@ -223,6 +242,19 @@ const validateProjectedClosure = async (
 ) => {
   const readAvailable = async (path: string) => projected.get(path) ?? (await store.readText(path))
   for (const [path, content] of projected) {
+    if (path.startsWith('nodes/')) {
+      const node = (await loadStoredGraphNodeFile({ path, source: content })).node
+      if (node.moduleLockId) {
+        const lock = parseDagModuleLock(
+          JSON.parse(await readAvailable(objectPath('module-locks', node.moduleLockId))) as unknown,
+        )
+        for (const moduleId of getDagModuleLockModuleIds(lock)) {
+          parseDagModuleArtifact(
+            JSON.parse(await readAvailable(objectPath('modules', moduleId))) as unknown,
+          )
+        }
+      }
+    }
     if (path.startsWith('project-revisions/')) {
       const revision = parseProjectRevision(JSON.parse(content) as unknown)
       for (const parent of revision.parents) {

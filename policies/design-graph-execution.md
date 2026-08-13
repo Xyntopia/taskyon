@@ -62,6 +62,19 @@ exists.
   directory, Git, peer, and other external node files as import sources: validate and persist them
   through StorageClient before exposing them as stored nodes. Do not mount read-only stored nodes
   or add a separate editability capability.
+- Resolve every stored-node import through an immutable content-addressed module lock included in
+  node identity. Store the deduplicated module artifacts and lock objects in the same design-graph
+  repository and include their transitive closure in Git projections. Import-free nodes do not
+  require a meaningless empty lock.
+- Keep `use.<alias>` exclusively for declared DAG dependencies. Inject network and host operations
+  through separate typed services; never disguise a capability as a computational input or expose
+  unrestricted host RPC.
+- Authorize stored-node network access by immutable node hash, origin, and read/write access. Reuse
+  the decision for repeated rows in one compiled execution context and revoke it by ending that
+  context or through the owning capability policy.
+- Keep planner-generated reducers, query expressions, and structural nodes internal and invisible.
+  Keep trusted runtime nodes under an explicit `builtIn` source directory or registry; do not mix
+  them with editable stored-node definitions.
 - Supply the definition origin (`hard-coded` or `stored`) explicitly when composing a runtime
   graph. Absence from a host lookup is not itself authoritative origin information.
 - Use content hashes as graph identity whenever available. Local names and labels are presentation

@@ -22,14 +22,12 @@ export type DagNodeRecordInputRef = DagNodeRecordInputRefSingle | DagNodeRecordI
 export type DagNodeRunContext = {
   params: Record<string, unknown>
   use: Record<string, DagInputAccessor>
+  services: {
+    fetch: typeof fetch
+  }
 }
 
 export type DagNodeRunFunction = (ctx: DagNodeRunContext) => unknown
-
-export type DagNodeStaticDependencyFingerprint = {
-  importSpecifiers?: readonly string[]
-  lockfileHash?: Hash
-}
 
 export type DagNodeRecordStructure = {
   kind: 'explode'
@@ -51,10 +49,12 @@ export type DagNodeRecord = {
   inputs?: Record<string, DagNodeRecordInputRef>
   hiddenInputs?: Record<string, DagNodeInputRefSingle>
   exposedInputs?: Record<string, DagNodeInputRefSingle | DagNodeInputRefOneOf>
+  moduleLockId?: Hash
+  importsSource?: string
+  importSpecifiers?: readonly string[]
   runSource: string
   runCode?: string
   run?: DagNodeRunFunction
-  staticDependencyFingerprint?: DagNodeStaticDependencyFingerprint
 }
 
 export const recordInputsToRuntimeInputs = (
@@ -135,8 +135,12 @@ export const normalizeDagNodeRecordHashSource = (
       inputs: record.inputs ?? null,
       hiddenInputs: record.hiddenInputs ?? {},
       exposedInputs: record.exposedInputs ?? {},
+      ...(record.moduleLockId ? { moduleLockId: record.moduleLockId } : {}),
+      ...(record.importsSource ? { importsSource: record.importsSource } : {}),
       runSource: record.runSource,
-      staticDependencyFingerprint: record.staticDependencyFingerprint ?? null,
+      // This null slot is part of the v2 canonical identity. Module locks replace its former
+      // purpose, but removing the slot would change every import-free node hash.
+      staticDependencyFingerprint: null,
     }),
   )
 

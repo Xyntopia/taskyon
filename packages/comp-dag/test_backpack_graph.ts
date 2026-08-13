@@ -27,9 +27,6 @@ const staticSummaryRunSource = `async ({ use }) => {
 }`
 
 const createStaticSummaryRecord = async (recommendationHash: Hash): Promise<DagNodeRecord> => {
-  const staticDependencyFingerprint = {
-    importSpecifiers: ['@taskyon/comp-dag/dagNodeRecord'],
-  }
   return await defineDagNodeRecord({
     formatVersion: 2,
     localName: 'static_backpack_summary',
@@ -65,7 +62,6 @@ const createStaticSummaryRecord = async (recommendationHash: Hash): Promise<DagN
         itemCount: recommendation.itemNames.length,
       }
     },
-    staticDependencyFingerprint,
   })
 }
 

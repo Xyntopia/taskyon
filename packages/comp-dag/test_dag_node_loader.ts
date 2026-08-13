@@ -7,6 +7,9 @@ import {
 } from './dagNodeLoader.ts'
 import { loadDesignRepositorySnapshot } from './designRepositorySnapshot.ts'
 import { createGraphRevision } from './designGraphModel.ts'
+import { createDagModuleArtifact, createDagModuleLock } from './dagModule.ts'
+import { compileLockedDagNodeRunCode } from './dagModuleCompiler.ts'
+import { executeDagNodeRun } from './dagNodeRecordCompiler.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -24,25 +27,83 @@ const nodeBody = `{
   run: () => ({ value: 1 }),
 }`
 
-export const testStoredDagNodeNormalizationRejectsImportsAndTypeWrappers = async () => {
-  const importedSource = `import type { StoredDagNodeDefinition } from '@taskyon/comp-dag/dagNodeLoader'
+export const testStoredDagNodeNormalizationAcceptsLockedImports = async () => {
+  const importedSource = `import { z } from 'zod'
 
-export default ${nodeBody} satisfies StoredDagNodeDefinition
+export default ${nodeBody
+    .replace(
+      'inputs: {},',
+      "inputs: {},\n  moduleLockId: 'sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',",
+    )
+    .replace('run: () => ({ value: 1 })', 'run: () => ({ value: z.number().parse(1) })')}
 `
-  const standaloneSource = `export default ${nodeBody}\n`
-  let rejected = false
-  try {
-    await normalizeStoredGraphNodeSource(importedSource)
-  } catch {
-    rejected = true
-  }
-  assert(rejected, 'Expected stored-node source with imports and type wrappers to be rejected')
-  const standalone = await normalizeStoredGraphNodeSource(standaloneSource)
-  return { hash: await hashStoredGraphNodeSource(standalone.source), source: standalone.source }
+  const normalized = await normalizeStoredGraphNodeSource(importedSource)
+  assert(
+    normalized.node.importSpecifiers?.[0] === 'zod',
+    'Expected the static import to be recorded',
+  )
+  return { hash: await hashStoredGraphNodeSource(normalized.source), source: normalized.source }
 }
 
-testStoredDagNodeNormalizationRejectsImportsAndTypeWrappers.description =
-  'Requires stored design-graph nodes to use one standalone source format.'
+testStoredDagNodeNormalizationAcceptsLockedImports.description =
+  'Accepts explicit imports while keeping their immutable module lock in node identity.'
+
+export const testDagModuleLockUsesExactReferrerMappings = () => {
+  const moduleId = 'sha256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' as const
+  const lock = createDagModuleLock({
+    imports: {
+      $node: { zod: moduleId },
+      [moduleId]: { './helper.js': moduleId },
+    },
+    packages: {
+      zod: { version: '4.0.5', integrity: 'sha512-test', moduleId },
+    },
+  })
+  assert(lock.imports.$node?.zod === moduleId, 'Expected the node import to resolve exactly')
+  assert(lock.id.startsWith('sha256:'), 'Expected a content-addressed module lock')
+}
+
+testDagModuleLockUsesExactReferrerMappings.description =
+  'Locks imports by referrer and specifier without a node_modules installation.'
+
+export const testLockedDagModulesCompileWithoutAmbientPackageResolution = async () => {
+  const helper = createDagModuleArtifact({
+    mediaType: 'text/typescript',
+    source: `export const double = (value: number) => value * 2`,
+  })
+  const lock = createDagModuleLock({ imports: { $node: { './helper.ts': helper.id } } })
+  const runCode = await compileLockedDagNodeRunCode({
+    importsSource: `import { double } from './helper.ts'`,
+    runSource: `({ params }) => double(Number(params.value))`,
+    lock,
+    modules: { [helper.id]: helper },
+  })
+  const run = Function(`return ${runCode}`)() as (ctx: {
+    params: Record<string, unknown>
+  }) => unknown
+  assert(run({ params: { value: 4 } }) === 8, 'Expected the locked helper module to execute')
+}
+
+testLockedDagModulesCompileWithoutAmbientPackageResolution.description =
+  'Compiles a locked module closure without ambient package resolution.'
+
+export const testStoredDagNodeReceivesFetchAsASeparateService = async () => {
+  const value = await executeDagNodeRun({
+    id: 'stored-fetch-service-test',
+    runCode: `async ({ services }) => await (await services.fetch('https://example.test/value')).text()`,
+    run: undefined,
+    params: {},
+    use: {},
+    fetch: () => Promise.resolve(new Response('service-result')),
+  })
+  assert(
+    value === 'service-result',
+    `Expected stored code to use the injected fetch service, received ${String(value)}`,
+  )
+}
+
+testStoredDagNodeReceivesFetchAsASeparateService.description =
+  'Keeps network access separate from use, which remains reserved for DAG dependencies.'
 
 export const testStoredDagNodeNormalizationAcceptsNegativeSchemaNumbers = async () => {
   const normalized = await normalizeStoredGraphNodeSource(
@@ -77,7 +138,7 @@ export const testStoredDagNodeRecordCanBeProjectedToTypescript = async () => {
     ...normalized.node,
     id: await hashStoredGraphNodeSource(normalized.source),
   })
-  assert(saved.file.source.startsWith('export default {'), 'Expected standalone TypeScript source')
+  assert(saved.file.source.includes('export default {'), 'Expected standalone TypeScript source')
   assert(
     saved.file.path === `${saved.hash.replace(':', '_')}.ts`,
     'Expected the stored filename to be addressable from its hash alone',

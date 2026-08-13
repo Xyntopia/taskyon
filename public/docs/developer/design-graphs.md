@@ -16,6 +16,16 @@ Both compile to the same `DagNode` execution type. Stored nodes are content addr
 through immutable replacement; imported bundles and Git repositories are import sources, not a
 third read-only node category.
 
+Stored source may use static imports when the node references an immutable module lock. The lock
+maps every referrer/specifier pair to an exact content-addressed module object, so browser, CLI,
+Git, and StorageClient execution use the same dependency closure without storing `node_modules`.
+Import-free nodes do not carry an empty lock.
+
+`use.<alias>` is reserved for declared DAG dependencies. Network access is exposed as
+`services.fetch`; the host mediates HTTPS requests and authorizes them by node hash, origin, and
+read/write access. A compiled node reuses the authorization for repeated rows in that execution
+context.
+
 Definition origin is independent from execution effect. A `pure` node computes only from declared
 inputs, while a `source` node observes an external environment. A stored node may be pure or a
 source, and a hard-coded node may be pure or a source. Graph presentations therefore carry both
@@ -45,6 +55,8 @@ The StorageClient-backed design repository stores one shared immutable object po
 
 ```text
 nodes/<content-hash>.ts
+modules/<content-hash>.json
+module-locks/<content-hash>.json
 graph-revisions/<content-hash>.json
 project-revisions/<content-hash>.json
 invocations/<content-hash>.json
@@ -80,6 +92,9 @@ Imports validate paths, schemas, content hashes, and closure references. Immutab
 written before refs, and refs use expected-current conditional writes. Synchronization only
 fast-forwards: equal histories are unchanged, an ahead side is pushed or pulled, and divergent
 histories return `conflict` without an automatic merge.
+
+Node and graph snapshots include the transitive module-lock/module closure of every imported
+stored node.
 
 The browser adapter uses isomorphic-git with a private IndexedDB working tree. The Node adapter
 uses a normal Git working directory. Both implement the same `DesignGraphGitSynchronizer` contract

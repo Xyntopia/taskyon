@@ -1,6 +1,13 @@
 import { canonicalHash, canonicalJson } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
 import {
+  parseDagModuleArtifact,
+  parseDagModuleLock,
+  getDagModuleLockModuleIds,
+  type DagModuleArtifact,
+  type DagModuleLock,
+} from './dagModule.ts'
+import {
   parseDesignGraphRef,
   parseExecutionAttempt,
   parseGraphRevision,
@@ -161,6 +168,23 @@ const normalizeRefName = (name: string, prefix: 'graph/' | 'projects/') => {
 }
 
 export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
+  const putModule = async (artifact: DagModuleArtifact) => {
+    const parsed = parseDagModuleArtifact(artifact)
+    await putImmutable(store, objectPath('modules', parsed.id), parsed)
+    return parsed.id
+  }
+  const getModule = async (id: Hash) =>
+    parseDagModuleArtifact(await readJson(store, objectPath('modules', id)))
+
+  const putModuleLock = async (record: DagModuleLock) => {
+    const parsed = parseDagModuleLock(record)
+    await Promise.all(getDagModuleLockModuleIds(parsed).map(getModule))
+    await putImmutable(store, objectPath('module-locks', parsed.id), parsed)
+    return parsed.id
+  }
+  const getModuleLock = async (id: Hash) =>
+    parseDagModuleLock(await readJson(store, objectPath('module-locks', id)))
+
   const putGraphRevision = async (record: GraphRevision) => {
     const parsed = parseGraphRevision(record)
     await putImmutable(store, objectPath('graph-revisions', parsed.id), parsed)
@@ -297,6 +321,10 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
 
   return {
     store,
+    putModule,
+    getModule,
+    putModuleLock,
+    getModuleLock,
     putGraphRevision,
     getGraphRevision,
     putInvocation,

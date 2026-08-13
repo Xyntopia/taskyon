@@ -54,7 +54,10 @@ import {
   registerToolRpcBroker,
   registerToolRpcExecutor,
 } from './toolRpc'
-import { createMediatedFetch, type FetchCapability } from '../security/mediatedFetch'
+import {
+  createMediatedFetch,
+  type FetchCapability,
+} from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { createToolManager, type ToolManager } from './toolManager'
 import {
   createInvocationRevisionResolver,

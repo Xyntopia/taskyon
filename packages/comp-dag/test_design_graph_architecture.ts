@@ -8,6 +8,10 @@ import {
   deriveInvocationCategory,
 } from './designGraphModel.ts'
 import { createDesignGraphRepository } from './designGraphRepository.ts'
+import { projectDesignGraphSnapshot } from './dagGitProjection.ts'
+import { createDagModuleArtifact, createDagModuleLock } from './dagModule.ts'
+import { SELF_HASH_PLACEHOLDER, hashFilePart } from './dagNodeIdentity.ts'
+import { saveStoredGraphNodeSource } from './dagNodeLoader.ts'
 import { createDerivedExpression, evaluateDerivedExpression } from './derivedExpression.ts'
 import {
   executeInvocation,
@@ -169,6 +173,50 @@ export const testUnifiedProjectRepositoryKeepsRefsAndRunsSeparate = async () => 
 
 testUnifiedProjectRepositoryKeepsRefsAndRunsSeparate.description =
   'Stores graph, project, invocation, extension, and run records in one repository with typed refs.'
+
+export const testNodeGitProjectionIncludesLockedModuleClosure = async () => {
+  const memory = createMemoryStore()
+  const repository = createDesignGraphRepository(memory.store)
+  const module = createDagModuleArtifact({
+    mediaType: 'text/typescript',
+    source: 'export const value = 1',
+  })
+  const lock = createDagModuleLock({ imports: { $node: { './value.ts': module.id } } })
+  const node = await saveStoredGraphNodeSource(`import { value } from './value.ts'
+export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'LockedProjectionNode',
+  label: 'Locked projection node',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: {},
+  moduleLockId: '${lock.id}',
+  run: () => value,
+}`)
+  await repository.putModule(module)
+  await repository.putModuleLock(lock)
+  await memory.store.writeText(`nodes/${hashFilePart(node.hash)}.ts`, node.file.source)
+
+  const projection = await projectDesignGraphSnapshot({
+    store: memory.store,
+    selector: { kind: 'node', nodeId: node.hash },
+  })
+  const paths = projection.map(({ path }) => path)
+  assert(paths.includes(`nodes/${hashFilePart(node.hash)}.ts`), 'Expected projected node source')
+  assert(
+    paths.includes(`module-locks/${hashFilePart(lock.id)}.json`),
+    'Expected projected module lock',
+  )
+  assert(
+    paths.includes(`modules/${hashFilePart(module.id)}.json`),
+    'Expected projected module object',
+  )
+}
+
+testNodeGitProjectionIncludesLockedModuleClosure.description =
+  'Projects imported stored nodes with their exact module lock and module objects.'
 
 export const testProjectSaveUsesConditionalWritesAndExplicitParents = async () => {
   const repository = createDesignGraphRepository(createMemoryStore().store)

@@ -20,6 +20,10 @@ import {
 } from '@taskyon/common/modules/sandbox/frpSandbox'
 import { createExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import { z } from 'zod'
+import {
+  createMediatedFetch,
+  type FetchAuthorization,
+} from '@taskyon/common/modules/webFetching/mediatedFetch'
 
 const dagNodeUseProtocol = defineFrpServiceProtocol({
   service: 'dagNodeUse',
@@ -63,6 +67,25 @@ const dagNodeUseProtocol = defineFrpServiceProtocol({
       }),
       response: z.unknown(),
     },
+    fetch: {
+      request: z.object({
+        input: z.string(),
+        init: z
+          .object({
+            method: z.string().optional(),
+            headers: z.array(z.tuple([z.string(), z.string()])).optional(),
+            body: z.string().optional(),
+          })
+          .optional(),
+      }),
+      response: z.object({
+        status: z.number(),
+        statusText: z.string(),
+        headers: z.array(z.tuple([z.string(), z.string()])),
+        body: z.string(),
+        bodyBytes: z.custom<Uint8Array>((value) => value instanceof Uint8Array),
+      }),
+    },
   },
 })
 
@@ -79,6 +102,42 @@ const buildSandboxRunModule = (runCode: string): string => {
           'dagNodeUse',
           sandboxApi.signal,
         );
+        const normalizeHeaders = (headers) => {
+          if (Array.isArray(headers)) return headers.map(([key, value]) => [String(key), String(value)]);
+          if (headers && typeof headers.forEach === 'function') {
+            const entries = [];
+            headers.forEach((value, key) => entries.push([String(key), String(value)]));
+            return entries;
+          }
+          return Object.entries(headers || {}).map(([key, value]) => [key, String(value)]);
+        };
+        const sandboxFetch = async (input, init = {}) => {
+          const response = await client.call('fetch', {
+            input: input && typeof input === 'object' && 'url' in input
+              ? String(input.url)
+              : String(input),
+            init: {
+              ...(init.method === undefined ? {} : { method: String(init.method) }),
+              ...(init.headers === undefined
+                ? {}
+                : { headers: normalizeHeaders(init.headers) }),
+              ...(init.body === undefined ? {} : { body: String(init.body) }),
+            },
+          });
+          const bodyBytes = response.bodyBytes;
+          return {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.status >= 200 && response.status < 300,
+            headers: response.headers,
+            arrayBuffer: async () => bodyBytes.buffer.slice(
+              bodyBytes.byteOffset,
+              bodyBytes.byteOffset + bodyBytes.byteLength,
+            ),
+            text: async () => response.body,
+            json: async () => JSON.parse(response.body),
+          };
+        };
         const use = Object.fromEntries(aliases.map((alias) => {
           const input = (inputParams) => client.call('resolve', {
               alias,
@@ -108,7 +167,7 @@ const buildSandboxRunModule = (runCode: string): string => {
           };
           return [alias, input];
         }));
-        return await run({ params, use });
+        return await run({ params, use, services: { fetch: sandboxFetch } });
       };
     })()
   `
@@ -132,6 +191,7 @@ export const executeDagNodeRun = async (args: {
   run: DagNodeRunFunction | undefined
   params: Record<string, unknown>
   use: Record<string, DagInputAccessor>
+  fetch?: typeof fetch
 }) => {
   const timeoutMs = Math.max(100, Math.min(args.timeoutMs ?? 5_000, 60_000))
   const timeout = createTimeoutSignal(args.id, timeoutMs)
@@ -140,6 +200,11 @@ export const executeDagNodeRun = async (args: {
       return await args.run({
         params: args.params,
         use: args.use,
+        services: {
+          fetch:
+            args.fetch ??
+            (() => Promise.reject(new Error(`DAG node ${args.id}: fetch is unavailable`))),
+        },
       })
     }
     if (!args.runCode) throw new Error(`DAG node ${args.id}: missing runCode`)
@@ -196,6 +261,24 @@ export const executeDagNodeRun = async (args: {
               ? await query.map(target, bindings as Record<string, DagQueryBinding>)
               : await query.apply(target, bindings as Record<string, DagQueryBinding>)
           },
+          fetch: async ({ input, init }) => {
+            if (!args.fetch) throw new Error(`DAG node ${args.id}: fetch is unavailable`)
+            const response = await args.fetch(input, {
+              ...(init?.method ? { method: init.method } : {}),
+              ...(init?.headers ? { headers: init.headers } : {}),
+              ...(init?.body ? { body: init.body } : {}),
+            })
+            const headers: [string, string][] = []
+            response.headers.forEach((value, key) => headers.push([key, value]))
+            const bodyBytes = new Uint8Array(await response.arrayBuffer())
+            return {
+              status: response.status,
+              statusText: response.statusText,
+              headers,
+              body: new TextDecoder().decode(bodyBytes),
+              bodyBytes,
+            }
+          },
         },
       },
     })
@@ -235,6 +318,8 @@ export const createLazyDagUse = (
 export const compileDagNodeRecord = (args: {
   record: DagNodeRecord
   nodeById: Record<string, DagNode>
+  authorizeFetch?: FetchAuthorization
+  fetch?: typeof fetch
 }): DagNode => {
   const runtimeInputs = recordInputsToRuntimeInputs(args.record)
   const hiddenInputs: Record<string, DagNode> = {}
@@ -284,6 +369,13 @@ export const compileDagNodeRecord = (args: {
     })
   }
 
+  const mediatedFetch = args.authorizeFetch
+    ? createMediatedFetch({
+        authorize: args.authorizeFetch,
+        ...(args.fetch ? { fetch: args.fetch } : {}),
+      })
+    : undefined
+
   return createNode<
     DagJsonSchema,
     DagJsonSchema,
@@ -311,6 +403,7 @@ export const compileDagNodeRecord = (args: {
         run: args.record.run,
         params,
         use: createLazyDagUse(runtimeInputs, use),
+        ...(mediatedFetch ? { fetch: mediatedFetch } : {}),
       })
     },
   })

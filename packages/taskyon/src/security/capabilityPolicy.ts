@@ -1,5 +1,5 @@
 import type { ToolIdentity } from '../types/tools'
-import type { FetchCapability } from './mediatedFetch'
+import type { FetchCapability } from '@taskyon/common/modules/webFetching/mediatedFetch'
 
 export type PopupCapability = {
   action: 'popup'
