@@ -46,17 +46,13 @@ const PARCELS_PM_URL =
 let resizeObserver: ResizeObserver | null = null
 
 interface GenericMapProps {
-  // eslint-disable-next-line vue/require-default-prop
   storageClient?: TaskyonStorageClient
   initialCenter?: [number, number]
   initialZoom?: number
   useDefaultTileLayer?: boolean
   mapStyle?: string | StyleSpecification
-  // eslint-disable-next-line vue/require-default-prop
   tileLayerUrl?: string
-  // eslint-disable-next-line vue/require-default-prop
   tileLayerOptions?: Record<string, unknown>
-  // eslint-disable-next-line vue/require-default-prop
   placeName?: string
   worldPmtilesUrl?: string
   parcelsPmtilesUrl?: string

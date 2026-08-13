@@ -58,11 +58,8 @@ interface GenericMapProps {
   initialCenter?: [number, number]
   initialZoom?: number
   useDefaultTileLayer?: boolean
-  // eslint-disable-next-line vue/require-default-prop
   tileLayerUrl?: string
-  // eslint-disable-next-line vue/require-default-prop
   tileLayerOptions?: L.TileLayerOptions
-  // eslint-disable-next-line vue/require-default-prop
   placeName?: string
   preferCanvas?: boolean
 }

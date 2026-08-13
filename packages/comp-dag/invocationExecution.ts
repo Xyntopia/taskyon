@@ -103,9 +103,9 @@ const candidateProduct = function* (
   }
 }
 
-export const iterateInvocationCandidates = async function* (
+export const iterateInvocationCandidates = function* (
   invocation: Pick<InvocationDefinition, 'variables'>,
-): AsyncIterable<Record<string, unknown>> {
+): Iterable<Record<string, unknown>> {
   const entries = Object.entries(invocation.variables)
   if (entries.length === 0) {
     yield {}
@@ -274,7 +274,7 @@ export const executeInvocation = async (args: {
   }
 
   try {
-    for await (const params of iterateInvocationCandidates(args.invocation)) {
+    for (const params of iterateInvocationCandidates(args.invocation)) {
       if (args.signal?.aborted) {
         terminalStatus = 'cancelled'
         terminalError = 'Invocation cancelled.'

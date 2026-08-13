@@ -14,6 +14,7 @@ import {
   createProtocolStorageCrudWrapper,
   createStorageProtocolServer,
   createStorageRecordBackend,
+  getLogicalStorageNamespace,
   type StorageBlobBackend,
   type StorageRecordBackend,
   type StorageRecordCrud,
@@ -150,6 +151,7 @@ export const connectTaskManagerStorageFromProtocol = (
 
 export const createPgLiteTaskManagerStorageService = (
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>,
+  namespacePrefix: string,
   getDb: (sessionId: string) => Promise<TyPGDB>,
   resolveFallback?: (namespace: string) => Promise<StorageRecordBackend> | StorageRecordBackend,
   resolveBlobBackend?: (namespace: string) => Promise<StorageBlobBackend> | StorageBlobBackend,
@@ -175,23 +177,29 @@ export const createPgLiteTaskManagerStorageService = (
       backendCache.set(namespace, fallback)
       return await fallback
     }
-    const created = storageForSession(parseTaskManagerStorageNamespace(namespace).sessionId).then(
-      (storage) => {
-        const { table } = parseTaskManagerStorageNamespace(namespace)
-        switch (table) {
-          case 'taskyonNodes':
-            return createStorageRecordBackend(storage.tasks, TaskNodeRecord)
-          case 'taskyonContents':
-            return createStorageRecordBackend(storage.contents, TaskContentRecord)
-          case 'metaDb':
-            return createStorageRecordBackend(storage.meta, TaskNodeMeta)
-          case 'toolRegistry':
-            return createStorageRecordBackend(storage.tools, ToolStorageRecordSchema)
-          case 'toolSettings':
-            return createStorageRecordBackend(storage.toolSettings, ToolSettingsRecord)
-        }
-      },
-    )
+    const logicalNamespace = getLogicalStorageNamespace(namespace, namespacePrefix)
+    if (logicalNamespace === null) {
+      throw new Error(
+        `Taskyon storage namespace "${namespace}" is outside prefix "${namespacePrefix}".`,
+      )
+    }
+    const created = storageForSession(
+      parseTaskManagerStorageNamespace(logicalNamespace).sessionId,
+    ).then((storage) => {
+      const { table } = parseTaskManagerStorageNamespace(logicalNamespace)
+      switch (table) {
+        case 'taskyonNodes':
+          return createStorageRecordBackend(storage.tasks, TaskNodeRecord)
+        case 'taskyonContents':
+          return createStorageRecordBackend(storage.contents, TaskContentRecord)
+        case 'metaDb':
+          return createStorageRecordBackend(storage.meta, TaskNodeMeta)
+        case 'toolRegistry':
+          return createStorageRecordBackend(storage.tools, ToolStorageRecordSchema)
+        case 'toolSettings':
+          return createStorageRecordBackend(storage.toolSettings, ToolSettingsRecord)
+      }
+    })
     backendCache.set(namespace, created)
     return created
   }

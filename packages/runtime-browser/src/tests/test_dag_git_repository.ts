@@ -23,10 +23,15 @@ export const testBrowserDagGitRepositoryCommitsAndChecksOutDefinitions = async (
   ])
   const firstCommit = await repository.commit({ author, message: 'Store first definition' })
   await repository.branch('experiment', true)
-  await repository.writeProjection([
-    { path: 'refs/graph/main.json', content: '{"schemaVersion":2,"revisionId":"second"}\n' },
-  ])
-  await repository.commit({ author, message: 'Store experimental definition' })
+  await repository.writeProjection(
+    [{ path: 'refs/graph/main.json', content: '{"schemaVersion":2,"revisionId":"second"}\n' }],
+    'experiment',
+  )
+  const secondCommit = await repository.commit({
+    author,
+    message: 'Store experimental definition',
+  })
+  assert(secondCommit !== firstCommit, 'Expected the experimental definition to create a commit')
   await repository.checkout('main')
   const restored = await repository.readText('refs/graph/main.json')
   const projection = await repository.readProjection()
@@ -39,7 +44,7 @@ export const testBrowserDagGitRepositoryCommitsAndChecksOutDefinitions = async (
   assert(firstCommit.length === 40, 'Expected an isomorphic-git commit id')
   assert(
     restored === '{"schemaVersion":2,"revisionId":"first"}\n',
-    'Expected checkout to restore the main graph ref',
+    `Expected checkout to restore the main graph ref, received ${JSON.stringify(restored)}`,
   )
   assert(projection.length === 1, 'Expected the managed Git projection to be readable for import')
   assert(unchangedCommit === firstCommit, 'Expected an unchanged projection to reuse HEAD')

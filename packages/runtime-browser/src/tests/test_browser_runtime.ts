@@ -15,6 +15,7 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
   const cryptoSession = await createCryptoSession()
   const sessionId = await cryptoSession.getSessionId()
   const createdRuntimes: ReturnType<typeof createTaskyonBrowserCoreRuntime>[] = []
+  const storageNamespacePrefix = 'taskyon'
   const createRuntime = () => {
     const runtime = createTaskyonBrowserCoreRuntime({
       llmSettings: () => ({
@@ -30,9 +31,11 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
         chatCompletionToolName: 'chatCompletion',
         createSessionTools: () => ({ tools: [] }),
       },
+      storageNamespacePrefix,
       storage: {
         kind: 'service',
-        createService: (port) => createPgLiteTaskManagerStorageService(port, getDatabase),
+        createService: (port) =>
+          createPgLiteTaskManagerStorageService(port, storageNamespacePrefix, getDatabase),
       },
     })
     createdRuntimes.push(runtime)

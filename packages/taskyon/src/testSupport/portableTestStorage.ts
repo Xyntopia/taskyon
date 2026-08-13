@@ -9,6 +9,7 @@ import {
 import { connectTaskManagerStorageFromProtocol } from '../core/taskManager'
 
 export const createPortableTestStorage = () => {
+  const namespacePrefix = 'taskyon-test'
   const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
   const backends = new Map<string, StorageRecordBackend>()
   const destroy = createStorageProtocolServer(
@@ -23,7 +24,7 @@ export const createPortableTestStorage = () => {
     { mode: 'trusted-local' },
   )
   const storage = createStorageClient(clientPort, {
-    namespacePrefix: 'taskyon-test',
+    namespacePrefix,
     distribution: 'local-only',
   })
 

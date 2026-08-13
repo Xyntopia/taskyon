@@ -30,6 +30,14 @@ const storageNamespace = storagePath
 const storageValue = z.unknown()
 const storageContentHash = z.string().startsWith('sha256:')
 export type StorageDistribution = 'local-only' | 'remote-allowed'
+
+export const getLogicalStorageNamespace = (namespace: string, namespacePrefix: string) => {
+  const physicalPrefix = `${storagePath.parse(namespacePrefix)}/`
+  const physicalNamespace = storagePath.parse(namespace)
+  return physicalNamespace.startsWith(physicalPrefix)
+    ? physicalNamespace.slice(physicalPrefix.length)
+    : null
+}
 const storageDistribution = z.enum(['local-only', 'remote-allowed'])
 const storagePolicy = { distribution: storageDistribution }
 const blobId = z

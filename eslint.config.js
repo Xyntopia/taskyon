@@ -59,6 +59,13 @@ export default defineConfigWithVueTs(
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
     },
   },
+  {
+    files: ['**/*.vue'],
+    rules: {
+      // Optional typed props intentionally preserve property omission under exactOptionalPropertyTypes.
+      'vue/require-default-prop': 'off',
+    },
+  },
   // https://github.com/vuejs/eslint-config-typescript
   vueTsConfigs.recommendedTypeChecked,
 

@@ -37,6 +37,7 @@ import {
   getDatabase,
   getDefaultParametersForTool,
   generateSecretId,
+  getLogicalStorageNamespace,
   isTaskyonKey,
   latestOnly,
   fetchModelsForProvider,
@@ -1317,6 +1318,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     }
   })()
   const opfsStorageBackend = createOpfsStorageBackendResolver()
+  const storageNamespacePrefix = 'taskyon'
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({
       ...stateRefs.llmSettings,
@@ -1333,14 +1335,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       }),
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
     authorizePopup: authorizeBrowserPopup,
+    storageNamespacePrefix,
     storage: {
       kind: 'service',
       createService: (port) =>
         createPgLiteTaskManagerStorageService(
           port,
+          storageNamespacePrefix,
           getDatabase,
           (namespace) => {
-            if (!isBrowserRecordNamespace(namespace)) {
+            const logicalNamespace = getLogicalStorageNamespace(namespace, storageNamespacePrefix)
+            if (logicalNamespace === null || !isBrowserRecordNamespace(logicalNamespace)) {
               throw new Error(
                 `No browser storage backend is configured for namespace "${namespace}".`,
               )

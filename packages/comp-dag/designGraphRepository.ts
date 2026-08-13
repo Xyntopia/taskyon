@@ -122,10 +122,7 @@ const readJson = async (store: DesignGraphObjectStore, path: string): Promise<un
   }
 }
 
-const readOptionalJson = async (
-  store: DesignGraphObjectStore,
-  path: string,
-): Promise<unknown | null> => {
+const readOptionalJson = async (store: DesignGraphObjectStore, path: string): Promise<unknown> => {
   try {
     return await readJson(store, path)
   } catch (error) {

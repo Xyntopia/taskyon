@@ -20,13 +20,15 @@ function assert(condition: unknown, message: string): asserts condition {
 
 export const testTaskManagerCanUseProtocolBackedStorage = async () => {
   const sessionId = `storage-service-diagnostic-${Date.now()}`
+  const namespacePrefix = 'taskyon-test'
   const { x: storageClientPort, y: storageServicePort } = createProtocolPort(taskyonStorageProtocol)
   const unsubscribeStorageService = createPgLiteTaskManagerStorageService(
     storageServicePort,
+    namespacePrefix,
     getDatabase,
   )
   const storage = createStorageClient(storageClientPort, {
-    namespacePrefix: 'taskyon-test',
+    namespacePrefix,
     distribution: 'local-only',
   })
 
@@ -38,6 +40,10 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
     const reader = await useTyTaskManager(await getDatabase(`${sessionId}-reader`), {
       indexTaskVectors: false,
       storage: connectTaskManagerStorageFromProtocol(storage, sessionId),
+    })
+    const otherSession = await useTyTaskManager(await getDatabase(`${sessionId}-other`), {
+      indexTaskVectors: false,
+      storage: connectTaskManagerStorageFromProtocol(storage, `${sessionId}-other`),
     })
     const missingTask = await reader.getTask('missing-task')
 
@@ -58,6 +64,7 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
       priorID: task.id,
     })
     const storedContents = await writer.getJsonTaskBackup()
+    const taskFromOtherSession = await otherSession.getTask(task.id)
 
     assert(loadedTask?.id === task.id, 'Expected second task manager to load the stored task')
     assert(
@@ -93,6 +100,7 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
       declarationChain.length === 3,
       'Expected persistence to preserve the submitted task-chain topology',
     )
+    assert(taskFromOtherSession === null, 'Expected task records to remain isolated by session')
   } finally {
     unsubscribeStorageService()
   }

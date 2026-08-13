@@ -2865,8 +2865,9 @@ async function main(host: InteractiveCliHost) {
     dataDirectory: dataDir,
     selection: storageSelection,
   })
+  const storageNamespace = host.storageNamespace ?? 'taskyon'
   const storageClient = createStorageClient(taskStorageClientPort, {
-    namespacePrefix: host.storageNamespace ?? 'taskyon',
+    namespacePrefix: storageNamespace,
     distribution: 'local-only',
   })
   const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
@@ -2972,7 +2973,7 @@ async function main(host: InteractiveCliHost) {
   const conversationPersistence = await createConversationPersistence({
     taskyon,
     ...(storageSelection.blobs === 'files' ? { storageRoot } : {}),
-    ...(host.storageNamespace ? { storageNamespace: host.storageNamespace } : {}),
+    storageNamespace,
     storageClient,
     startedAt: sessionStartedAt,
   })
@@ -4105,13 +4106,13 @@ async function main(host: InteractiveCliHost) {
         currentLeafId,
       )
       currentLeafId = taskChain[taskChain.length - 1]?.id ?? currentLeafId
-      queueConversationPersist(currentLeafId)
 
       await taskyonApi.task.createChain({
         tasks: taskChain,
         execute: true,
         show: true,
       })
+      queueConversationPersist(currentLeafId)
       writeDebug(`queued task chain: ${taskChain.map((task) => task.id).join(', ')}`)
       try {
         waitingForTask = true

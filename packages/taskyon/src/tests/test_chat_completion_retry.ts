@@ -76,7 +76,7 @@ export const testChatCompletionRetryBackoffCapsAndExpires = () => {
     'Expected every retry to preserve the first failure deadline',
   )
   assert(
-    buildNextChatCompletionRetry(state, state!.retryDeadlineAt) === undefined,
+    buildNextChatCompletionRetry(state, state.retryDeadlineAt) === undefined,
     'Expected no retry after the 24-hour deadline',
   )
 }
@@ -141,7 +141,7 @@ export const testChatCompletionRetryDelayReportsProgressAndReplaysExactCall = as
     },
   })
 
-  const result = await tool.function!(retryArguments, {
+  const result = await tool.function(retryArguments, {
     getExecutionTaskChain: () => Promise.resolve(tasks),
     createSubtasksResult,
     getSecret: () => Promise.resolve(null),
@@ -200,7 +200,7 @@ export const testChatCompletionRetryDelayStopsImmediatelyWhenCancelled = async (
   ]
 
   try {
-    await tool.function!(args, {
+    await tool.function(args, {
       getExecutionTaskChain: () => Promise.resolve(tasks),
       createSubtasksResult,
       getSecret: () => Promise.resolve(null),

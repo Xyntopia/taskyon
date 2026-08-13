@@ -78,10 +78,14 @@ export const testLockedDagModulesCompileWithoutAmbientPackageResolution = async 
     lock,
     modules: { [helper.id]: helper },
   })
-  const run = Function(`return ${runCode}`)() as (ctx: {
-    params: Record<string, unknown>
-  }) => unknown
-  assert(run({ params: { value: 4 } }) === 8, 'Expected the locked helper module to execute')
+  const value = await executeDagNodeRun({
+    id: 'locked-module-test',
+    runCode,
+    run: undefined,
+    params: { value: 4 },
+    use: {},
+  })
+  assert(value === 8, 'Expected the locked helper module to execute')
 }
 
 testLockedDagModulesCompileWithoutAmbientPackageResolution.description =

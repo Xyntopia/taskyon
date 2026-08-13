@@ -21,7 +21,7 @@ export type DerivedExpression = {
 }
 
 export type DerivedResultCache = {
-  get: (key: Hash) => Promise<unknown | null>
+  get: (key: Hash) => Promise<{ hit: false } | { hit: true; value: unknown }>
   set: (key: Hash, value: unknown) => Promise<void>
 }
 
@@ -119,7 +119,7 @@ const requireNumber = (value: unknown, reducer: string): number => {
 }
 
 const reduceStream = async (
-  values: AsyncIterable<unknown>,
+  values: AsyncIterable<unknown> | Iterable<unknown>,
   reducer: Extract<DerivedOperation, { kind: 'reduce' }>['reducer'],
 ): Promise<unknown> => {
   let count = 0
@@ -145,7 +145,7 @@ const reduceStream = async (
   return reducer === 'argmin' || reducer === 'argmax' ? extremeSource : extreme
 }
 
-const arrayValues = async function* (value: unknown): AsyncIterable<unknown> {
+const arrayValues = function* (value: unknown): Iterable<unknown> {
   if (!Array.isArray(value)) throw new Error('Derived reducer input must be an array.')
   yield* value
 }
@@ -171,7 +171,7 @@ export const evaluateDerivedExpression = async (args: {
   cache: DerivedResultCache
 }): Promise<unknown> => {
   const cached = await args.cache.get(args.expression.id)
-  if (cached !== null) return cached
+  if (cached.hit) return cached.value
   const reducer = args.expression.operations.at(-1)
   if (reducer?.kind !== 'reduce') {
     throw new Error('A materialized derived expression must end with a reducer.')

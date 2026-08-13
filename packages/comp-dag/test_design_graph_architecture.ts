@@ -290,7 +290,7 @@ testProjectSaveUsesConditionalWritesAndExplicitParents.description =
   'Advances stable project refs only when unchanged while keeping revision ancestry immutable.'
 
 export const testInvocationRunRejectsApproximationUntilAvailable = () => {
-  const invocationId = canonicalHash('approximation') as Hash
+  const invocationId = canonicalHash('approximation')
   let rejected = false
   try {
     createInvocationRun({
@@ -315,7 +315,7 @@ export const testInvocationRunRejectsApproximationUntilAvailable = () => {
 testInvocationRunRejectsApproximationUntilAvailable.description =
   'Rejects explicit approximate execution until an estimator capability exists.'
 
-export const testInvocationCandidatesRemainPullBased = async () => {
+export const testInvocationCandidatesRemainPullBased = () => {
   const invocation = createInvocationDefinition({
     rootNodeId: canonicalHash('pull-root'),
     variables: {
@@ -327,10 +327,10 @@ export const testInvocationCandidatesRemainPullBased = async () => {
     policy: { accuracy: 'auto' },
     reducerOverrides: {},
   })
-  const iterator = iterateInvocationCandidates(invocation)[Symbol.asyncIterator]()
-  const first = await iterator.next()
-  const second = await iterator.next()
-  await iterator.return?.()
+  const iterator = iterateInvocationCandidates(invocation)[Symbol.iterator]()
+  const first = iterator.next()
+  const second = iterator.next()
+  iterator.return?.()
   assert(first.value?.first === 1 && first.value?.second === 'a', 'Expected first candidate')
   assert(second.value?.first === 1 && second.value?.second === 'b', 'Expected second candidate')
 }
@@ -354,11 +354,12 @@ export const testDerivedReducerSharesCanonicalCache = async () => {
       expression,
       readRows: async function* () {
         reads += 1
-        yield { cost: 2 }
+        yield await Promise.resolve({ cost: 2 })
         yield { cost: 4 }
       },
       cache: {
-        get: (key) => Promise.resolve(cache.get(key) ?? null),
+        get: (key) =>
+          Promise.resolve(cache.has(key) ? { hit: true, value: cache.get(key) } : { hit: false }),
         set: (key, value) => {
           cache.set(key, value)
           return Promise.resolve()
@@ -385,9 +386,9 @@ export const testInvocationExecutionUsesCanonicalObjectivesAndConstraints = asyn
   })
   await repository.putInvocation(invocation)
   const artifacts = new Map<Hash, Uint8Array<ArrayBuffer>>()
-  const begin = async (mediaType: string): Promise<StagedArtifactWriter> => {
+  const begin = (mediaType: string): Promise<StagedArtifactWriter> => {
     const chunks: Uint8Array[] = []
-    return {
+    return Promise.resolve({
       write: (chunk) => {
         chunks.push(new Uint8Array(chunk))
         return Promise.resolve()
@@ -405,7 +406,7 @@ export const testInvocationExecutionUsesCanonicalObjectivesAndConstraints = asyn
         return Promise.resolve({ id, size, mediaType })
       },
       abort: () => Promise.resolve(),
-    }
+    })
   }
   let observed: unknown
   const completed = await executeInvocation({

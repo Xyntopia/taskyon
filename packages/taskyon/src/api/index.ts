@@ -79,6 +79,7 @@ export {
   createProtocolStorageCrudWrapper,
   createProtocolStorageBlobBackend,
   createStorageClient,
+  getLogicalStorageNamespace,
   createStorageProtocolServer,
   createStorageRecordBackend,
   taskyonStorageProtocol,

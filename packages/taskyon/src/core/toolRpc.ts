@@ -2,7 +2,6 @@ import type { RpcMessagePort } from '@taskyon/common/modules/frpBus'
 import { createPortClient, createStreamRpcRequest } from '@taskyon/common/modules/frpBus'
 import type { ReadonlyDeep } from 'type-fest'
 import {
-  MAX_REMOTE_FUNCTION_TIMEOUT_MS,
   MAX_EXPLICIT_REMOTE_FUNCTION_TIMEOUT_MS,
   REMOTE_FUNCTION_TIMEOUT_MS,
   taskyonProtocol,

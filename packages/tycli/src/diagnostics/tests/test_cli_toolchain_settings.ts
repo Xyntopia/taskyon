@@ -22,7 +22,7 @@ export const testCliUsesCompleteCliFlowToolchainSettings = () => {
       !Array.isArray(cliFlow.prompt_templates),
     'Expected CLI prompt templates in the shipped toolchain declaration',
   )
-  const promptTemplates = cliFlow.prompt_templates as Record<string, unknown>
+  const promptTemplates = cliFlow.prompt_templates
   for (const field of [
     'basePrompt',
     'message',
