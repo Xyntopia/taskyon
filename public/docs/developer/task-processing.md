@@ -20,7 +20,7 @@ positions without being stored repeatedly.
 | `toolresult`     | A plain tool result                                       |
 | `error`          | A processing or tool failure                              |
 | `files`          | File IDs registered with the file service                 |
-| `tooldefinition` | A stored tool contract                                    |
+| `tooldefinition` | A sandboxed tool scoped to its following task lineage     |
 | `return`         | Explicit completion of one child chain                    |
 
 `priorID` links the previous task at the same sequential level. `parentID` links a child task to the
@@ -30,9 +30,31 @@ them.
 
 ## Worker flow
 
-Only `functioncall` tasks execute. The task worker waits for the prior chain to finish, resolves the
-tool, applies schema defaults and configured tool settings, materializes task-variable references,
-and executes the tool through the appropriate local, sandbox, or remote boundary.
+Only `functioncall` tasks execute. Before a draft chain is persisted, trusted core compiles its
+links and IDs. Each registry call receives a pinned `toolRevision` and, when configured, an opaque
+per-tool `settingsRevision`; settings values are not copied into the task or returned to the
+calling tool.
+
+At execution, core loads the exact pinned tool and settings snapshots, applies schema defaults,
+then settings, then explicit and materialized task-variable arguments. It does not fall back to
+the receiver's current ambient settings.
+
+Name-only calls resolve the nearest preceding `tooldefinition` in the current lineage before
+falling back to the central tool registry. Task-local definitions contain either sandboxed `code`
+or a declarative binding `implementation`; privileged native `function` values cannot be
+serialized into a task tree. Bindings derive a reduced parameter schema from a pinned target and
+may refine the public parameter descriptions and constraints. They are never installed in the
+registry. Chat completion exposes their compiled provider schema but not the definition task as a
+message.
+
+Every scoped definition occurrence remains in the task tree because its position is part of the
+call stack. Equal definition content shares one content-addressed `TaskContent` record, so storage
+deduplication does not alter chain topology.
+
+Compilation owns final task identity; persistence only verifies and stores completed nodes
+unchanged. Sandboxed tools use `ctx.createSubtasksResult(...)` to send drafts to trusted core and
+receive compiled, hashed child tasks. A tool may request the opaque revisions for one target with
+`ctx.resolveInvocation(...)`; it never receives the registry or complete settings object.
 
 A tool has two result paths:
 
@@ -155,7 +177,9 @@ result, or error. The standard entry node decides whether to:
 - enable configured hosted web search.
 
 Entry-node settings own prompt templates, default tools, tool-choice behavior, reasoning,
-multimodal input, and web-search flags. `chatCompletion` remains the model gateway.
+multimodal input, and web-search flags. The implementation selects a template for the current
+message, tool result, error, chooser, or exhausted-retry mode and appends only runtime-specific
+context. `chatCompletion` remains the model gateway.
 
 The shortlist router and the selected executor receive the same stable leading base/project
 instructions and tree-selected lineage. Role-specific routing text stays after that shared prefix.
@@ -163,10 +187,11 @@ Their tool declarations intentionally differ, so provider cache reuse must be me
 assumed.
 
 When tool choosing is enabled and the available tool count exceeds `tool_chooser_min_tools`, the
-shortlist phase runs a `chatCompletion` that exposes and forces only the current entry node. The
-model calls that entry node with a narrowed `allowedTools` list. The new entry node inherits the
-preceding entry node's other deterministic settings and performs the next tool-selection step; no
-intermediate structured routing result is added to the task chain.
+shortlist phase creates a scoped `selectTaskyonTools` binding and runs a `chatCompletion` that
+exposes and forces only that reduced tool signature. The binding calls the current entry node with
+a narrowed `allowedTools` list. The new entry node inherits the preceding entry node's other
+deterministic settings and performs the next tool-selection step; the internal binding definition
+is hidden from model-facing and copied chat text.
 
 Use a custom entry node when a page needs domain context, deterministic routing, or a deliberately
 narrow tool set. Keep its top-level branch visible in the tool function rather than hiding the

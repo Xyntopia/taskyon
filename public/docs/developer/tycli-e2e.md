@@ -105,7 +105,7 @@ the hotkey menu is disabled or the command is submitted as a normal line.
 
 The tree export is intentionally structure-only: task ids, roles, task content types, function/tool
 names, and branch nesting. It must not include full messages, tool parameters, tool results, or
-large LLM outputs. Use it to inspect whether `taskPlanner`, `entryNode`, tool calls, terminal
+large LLM outputs. Use it to inspect whether `taskPlanner`, `cliFlow`, tool calls, terminal
 returns, and re-entry chains are represented in the Taskyon tree as expected.
 
 ## LLM Request Tracing
@@ -116,7 +116,7 @@ returns, and re-entry chains are represented in the Taskyon tree as expected.
 - `TYCLI_CHAT_COMPLETION_TRACE_LABEL`: optional task label included in file names.
 
 The chatCompletion tool also has a `trace` parameter with `enabled` and optional `label` fields.
-When entryNode tracing is enabled, every LLM request gets one redacted record like:
+When `cliFlow` tracing is enabled, every LLM request gets one redacted record like:
 
 - `0001_task-08_<task-id>_record.json`
 

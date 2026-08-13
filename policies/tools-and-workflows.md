@@ -33,6 +33,9 @@ or tool-visible capabilities.
 - Callable tool declarations use `longDescription` when present and otherwise fall back to
   `description`; catalog projection always remains concise.
 - The tool parameter schema owns tool arguments, defaults, and tool-specific settings.
+- A tool declaration's description owns when the tool should be selected and its observable
+  behavior. Parameter descriptions own argument semantics. Do not duplicate tool-specific
+  selection rules in an entry-node catalog prompt.
 - Settings interfaces must read runtime tool schemas rather than import a parallel settings
   schema.
 - When settings ownership moves, update defaults, configuration, and every settings surface
@@ -57,6 +60,24 @@ or tool-visible capabilities.
 - Apply the same schema, sandbox, capability, replacement, and verification rules to agent-authored
   tools as to human-authored tools. Installation alone is not successful verification.
 
+## Prompt Ownership
+
+- Reusable model instructions belong to the owning tool's configurable prompt templates. Shipped
+  browser defaults belong in `src/assets/taskyon_settings.json`; CLI defaults belong in
+  `packages/tycli/src/taskyon_settings.json`. Every host must supply a complete prompt declaration
+  through `ToolchainProfiles` rather than relying on prose embedded in tool code.
+- Mark required prompt-template objects and fields as required in the owning tool schema. Prompt
+  values belong in host settings, not schema defaults or runtime fallback constants; missing
+  templates are configuration errors.
+- Tool code may select a prompt mode and interpolate runtime context. Do not hardcode reusable
+  prose in routing branches.
+- Keep stable instructions in prepended prompts and append dynamic context afterward so stable
+  prefixes remain reusable.
+- Catalog prompts describe the generic routing operation only. The catalog entries' tool
+  descriptions remain the single source of truth for individual capabilities.
+- When prompt fields change, replace the schema and every shipped host declaration together. Do
+  not retain unused legacy fields or compatibility aliases unless migration is explicitly required.
+
 ## Explicit Workflow State
 
 - Keep tools stateless wherever possible.
@@ -70,6 +91,30 @@ or tool-visible capabilities.
   extracted.
 - Use plain results for plain data and explicit task chains when workflow structure matters.
 
+## Scoped Tools And Bindings
+
+- Treat a `tooldefinition` task as a lexical definition for the following lineage. Resolve the
+  nearest preceding definition with the requested name before the central registry.
+- Never install task-tree definitions in the central tool registry. The registry owns
+  host-registered tools; the task tree owns only its scoped definitions.
+- Persist only sandboxed `code` or declarative `implementation` definitions in task trees. Native
+  `function` implementations remain privileged application code and must not cross this boundary.
+- A binding pins its registry target revision, fixes private arguments, and exposes a derived
+  subset of the target schema. It may refine public descriptions and constraints, but it must not
+  expose a fixed argument again.
+- Compile a binding's generated target call with an immutable target `toolRevision` and, when that
+  target has configuration, an opaque per-tool `settingsRevision`. Do not copy settings values into
+  the task or expose them to the calling tool.
+- At execution, apply schema defaults from the pinned tool revision, then the pinned settings
+  snapshot, then explicit and materialized call arguments. Never fall back to ambient current
+  settings when a call lacks or cannot resolve its settings revision.
+- `lambda(...)` and `bind(...)` append a scoped definition followed immediately by a chat
+  completion that exposes and forces only that tool.
+- Preserve every submitted task occurrence and its chain links. Content storage deduplicates equal
+  immutable definition content without deleting repeated definition occurrences from the tree.
+- Hide definition tasks from model messages and ordinary chat/copy output. Expert diagnostics may
+  render them for inspection without changing model context.
+
 ## Capability Isolation
 
 - Taskyon core owns neutral task storage, traversal, scheduling, and execution capabilities. Each
@@ -79,6 +124,8 @@ or tool-visible capabilities.
   that cannot safely or practically run there.
 - Keep privileged effects in narrowly scoped host tools. Sandboxed tools may compose those
   capabilities through explicit child tool calls in the task tree.
+- Let sandboxed tools call `resolveInvocation({ name, ...pins })` when they need opaque revisions
+  for one target. This capability must not return settings values or broad registry access.
 - `VITE_TASKYON_TOOL_EXECUTION=main-thread` is a browser-development override for diagnosing
   sandbox-specific failures. Never enable it in committed test commands, CI, or production;
   regression diagnostics must continue to exercise the sandboxed path.

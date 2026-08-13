@@ -16,9 +16,11 @@ OAuth tokens do not belong in the profile; they are stored through the secret bo
 
 ## Sources of truth
 
-The shipped defaults live in `src/assets/taskyon_settings.json`. Durable profile types and defaults
-are defined by `src/modules/taskyon/types.ts` and the Taskyon profile schemas. When the persisted
-shape changes, bump the profile version in both places rather than adding one-off cleanup code.
+Browser defaults live in `src/assets/taskyon_settings.json`. The CLI has its own bundled
+`packages/tycli/src/taskyon_settings.json`; both declarations use the shared `ToolchainProfiles`
+schema and resolver. Durable browser profile types and defaults are defined by
+`src/modules/taskyon/types.ts` and the Taskyon profile schemas. When the persisted browser shape
+changes, bump the profile version in both places rather than adding one-off cleanup code.
 
 Tool parameter schemas are the source of truth for tool settings. Settings UIs should read the
 runtime tool definition instead of importing a second tool-specific settings schema. The current
@@ -35,6 +37,17 @@ receives only the resolved flat configuration. Browser and CLI hosts apply that 
 `runtime.configure({ toolchainConfig })` on core's capability-scoped runtime port; the command is
 not part of the public peer protocol. It updates tool defaults and recreates tools whose immutable
 construction settings depend on the configuration.
+
+The browser persists its editable profile in browser profile storage. The CLI declaration is a
+shipped default and its config file persists only the selected provider and model. Neither is the
+same as core's immutable per-tool settings snapshots: those snapshots are written through
+`TaskManagerStorage.toolSettings` only when calls are compiled.
+
+When core compiles a call, it stores that target tool's non-secret effective settings as one
+immutable snapshot tied to the exact tool revision. The task carries only the opaque
+`settingsRevision`. Tools can request revisions for one named target on demand, but they never
+receive the complete toolchain configuration or another tool's settings values. Credentials remain
+in the secret boundary and must not be placed in tool settings snapshots.
 
 The AI Configuration page selects the runtime profile independently from the profile editors.
 Opening a named profile does not activate it. Quick Settings displays effective values and writes
@@ -57,7 +70,8 @@ profiles.
 
 ## Entry-node settings
 
-`toolchainProfiles.base.entryNode` is the primary editable owner of workflow routing:
+`toolchainProfiles.base.taskyonFlow` owns browser workflow routing. The CLI uses the same settings
+contract under `toolchainProfiles.base.cliFlow` with terminal-specific prompt values:
 
 - prompt templates and stable prompt context;
 - default and allowed tools;
@@ -73,6 +87,10 @@ that should not invalidate a reusable prompt prefix.
 Entry-node configuration owns generic routing mechanics, not named-tool playbooks. Each tool's
 short description, optional callable long description, and parameter schema own the guidance for
 when and how that tool should be selected.
+The entry-node prompt template fields are `basePrompt`, `message`, `toolResult`, `error`, `toolChooser`, and
+`retryExhausted`. Entry-node code selects the applicable template and interpolates runtime values;
+reusable wording stays in configuration. All six values are required; there are no tool-code or
+JSON-Schema prompt fallbacks.
 
 ## Research settings
 

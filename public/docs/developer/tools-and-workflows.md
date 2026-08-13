@@ -99,6 +99,40 @@ an agent can compile its stable procedure into a tool. MCP transports tool disco
 across a process or network boundary. See [Tools, Skills, and MCP](../user/tools-and-mcp.md) and
 [Agent-Authored Tools](agent-authored-tools.md).
 
+## Scoped tools, lambda, and bind
+
+A `tooldefinition` task declares a tool only for the following lineage. Name-only calls use the
+nearest preceding scoped definition before a registry tool with the same name. Scoped definitions
+are never installed in the central registry and cannot contain a privileged native `function`.
+They contain either sandboxed `code` or a declarative binding `implementation`.
+
+Use `lambda(definition, chatArgs)` to append the definition and the immediately following
+`chatCompletion`. The helper owns `allowedTools` and `toolChoice`, so the model sees and must call
+only the declared signature. Use `bind(...)` when that signature should call an existing tool with
+some fixed arguments and a smaller public schema:
+
+```ts
+bind({
+  name: 'selectTaskyonTools',
+  description: 'Select relevant tools.',
+  target: 'taskyonFlow',
+  fixedArguments: { use_tool_chooser: false },
+  publicArguments: {
+    allowedTools: {
+      description: 'Candidate tool names.',
+      maxItems: 20,
+    },
+  },
+})
+```
+
+The public argument entries refine the target's existing JSON Schema rather than replacing its
+types. Fixed arguments cannot also be public. Core compiles the generated target call with an
+immutable tool revision and an opaque per-tool settings revision. Defaults and settings are applied
+only during execution, so settings values are not exposed in the task tree. Repeated definition
+occurrences remain in the call stack while equal definition content shares storage. Definition
+tasks do not become model messages or ordinary copied chat content.
+
 ## Internal and client tools
 
 Use `createTool(...)` for tools executed by Taskyon core. Use `createClientTool(...)` for a
@@ -121,6 +155,7 @@ The execution context can provide:
 
 - `getExecutionTaskChain()` to read the chain projected for the current task;
 - `createSubtasksResult(...)` to return visible sequential or parallel workflow branches;
+- `resolveInvocation(...)` to request opaque revisions for one named target on demand;
 - `getSecret(...)` and `setSecret(...)` for the current tool's secret namespace;
 - `getCallingToolId()` when delegated work needs the resolved caller identity;
 - `stopSignal` for cancellation;

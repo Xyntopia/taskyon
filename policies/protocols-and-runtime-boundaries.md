@@ -44,9 +44,17 @@ client APIs, P2P services, and remote tool execution.
 - A derived operation belongs on a protocol only when remote execution is the intended service,
   not merely an implementation shortcut. Document its trust, authorization, and data-exposure
   boundary.
-- Treat IDs returned by task creation responses as authoritative. Persistence may resolve tool
-  revisions, apply settings, deduplicate definitions, or otherwise normalize drafts before hashing;
-  clients must not navigate to or publish locally predicted draft IDs.
+- Compile task drafts before persistence at the trusted core boundary. Compilation links the chain,
+  resolves opaque tool and per-tool settings revisions, and calculates final task IDs. Persistence
+  verifies completed task nodes and stores them unchanged; it must never strip or recompute a
+  supplied ID.
+- Protocol and UI bridges must forward drafts unchanged. They must not hash drafts independently,
+  because doing so bypasses core compilation and turns one ordered draft chain into unrelated nodes.
+- Let tools request invocation revisions for one named target through a narrow protocol capability.
+  Do not pre-supply the tool registry, toolchain configuration, or revisions for unrelated tools.
+- Keep editable host profiles separate from immutable execution snapshots. Browser and CLI hosts
+  own and resolve `ToolchainProfiles`; core persists only the effective per-tool snapshot required
+  to replay a pinned invocation.
 
 ## Service Ownership
 
@@ -98,6 +106,8 @@ client APIs, P2P services, and remote tool execution.
 - The owning service calculates canonical task, node, computation, or content hashes when those
   hashes define identity. Storage backends only map supplied keys to local database, object-store,
   filesystem, or peer operations.
+- Shared callers may use the same pure compiler and hash functions locally. A receiving service
+  still verifies every supplied content-addressed identity before storing or executing it.
 - Keep backend sharding and temporary streaming paths private. Peers exchange logical hashes and
   verified bytes, never host-specific paths.
 - Keep generic paginated catalog enumeration at the storage boundary when recovery or

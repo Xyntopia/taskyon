@@ -1,14 +1,20 @@
 # Tool sandbox security
 
-Taskyon stores each tool definition as an immutable, content-addressed revision. A function-call
-task may pin that revision. Pinned calls keep using the same implementation even after another
-revision becomes active under the same tool name. Older name-only calls continue to resolve the
-active revision.
+Taskyon stores each tool definition as an immutable, content-addressed revision. Draft compilation
+pins every function-call task to one revision before hashing it. The call keeps using that
+implementation even after another revision becomes active under the same name; persistence does
+not accept a completed executable task that omitted its tool revision.
 
 The tool manager owns manifests, active name bindings, native runtime functions, installation, and
 name-or-revision lookup. The resolved immutable identity also scopes secrets and capability
 decisions. Serializable definitions and identities can cross the Taskyon protocol; native function
 implementations remain inside the core runtime.
+
+These registry definitions are distinct from `tooldefinition` tasks. A task-tree definition is
+lexically scoped to its following lineage, is never installed in the registry, and may contain
+only sandboxed code or a declarative binding to a pinned registry revision. Chat completion can
+compile its reduced provider-facing signature, while the definition node itself stays out of model
+messages and ordinary copied chat.
 
 Tools have three execution classes:
 
@@ -54,6 +60,10 @@ boundary on Linux, remains future hardening.
 
 Sandboxed code does not receive a generic parent RPC channel. Taskyon supplies narrow, typed
 capabilities. Both global `fetch` and `context.fetch` use the same mediated network implementation:
+
+- `createSubtasksResult(...)` sends child drafts to trusted core and returns compiled, hashed tasks.
+- `resolveInvocation(...)` returns only opaque tool and per-tool settings revisions for one named
+  target; it does not expose registry contents or settings values.
 
 1. Taskyon resolves the exact immutable tool identity.
 2. It accepts HTTPS only, rejects URL credentials, and blocks obvious local, private-network, and

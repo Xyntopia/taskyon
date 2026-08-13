@@ -92,9 +92,7 @@ function addTaskNodeMeta(
 
 export const createTaskNode = async (
   task: partialTaskDraft,
-  options: {
-    createMeta?: 'missing' | 'overwrite' | undefined
-  } = { createMeta: 'missing' },
+  options: { createMeta?: 'missing' | 'overwrite' | undefined } = { createMeta: 'missing' },
 ): Promise<TaskNode> => {
   // if task already has an id, do nothing and only ensure, that the id is valid!
   if (!task.id) {

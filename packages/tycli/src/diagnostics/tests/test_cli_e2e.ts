@@ -25,7 +25,7 @@ const forbiddenStartupRegressions = [
   'does not provide an export named',
   'getExecutionTaskChain is not implemented',
   'getExecutionTaskChain is not available for this external tool client',
-  '[function|functioncall]\n  name: entryNode',
+  '[function|functioncall]\n  name: cliFlow',
 ]
 
 export const testCliBracketedPastePreservesMultilinePrompt =

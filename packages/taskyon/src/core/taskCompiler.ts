@@ -1,6 +1,6 @@
 import type { TaskNode, partialTaskDraft } from '../types/taskNode'
 import { createSubtasksResult, taskResult } from '../types/toolApi'
-import { createTaskNode } from './createTasks'
+import { createTaskNode, ensureValidTaskId } from './createTasks'
 import { prepareToolTaskDraft } from './scopedTools'
 import type { ToolManager } from './toolManager'
 import type { InvocationRevisionResolver } from './toolSettings'
@@ -42,6 +42,55 @@ export const compileTaskChain = async (
 
   return compiled
 }
+
+export const createTaskCompiler = (dependencies: {
+  getTaskLineage: (id: string) => Promise<TaskNode[]>
+  toolManager: ToolManager
+  resolveInvocationRevisions: InvocationRevisionResolver
+}) => {
+  const compileDraftChain = async (
+    drafts: readonly partialTaskDraft[],
+    links: {
+      parentID?: string | undefined
+      priorID?: string | undefined
+    } = {},
+  ) => {
+    const lineageId = links.priorID ?? links.parentID
+    const lineage = lineageId ? await dependencies.getTaskLineage(lineageId) : []
+    return await compileTaskChain(drafts, {
+      lineage,
+      ...(links.parentID !== undefined ? { parentID: links.parentID } : {}),
+      ...(links.priorID !== undefined ? { priorID: links.priorID } : {}),
+      toolManager: dependencies.toolManager,
+      resolveInvocationRevisions: dependencies.resolveInvocationRevisions,
+    })
+  }
+
+  const compileOrVerifyChain = async (
+    tasks: readonly partialTaskDraft[],
+    links: Parameters<typeof compileDraftChain>[1] = {},
+  ) => {
+    const suppliedIds = tasks.map((task) => task.id !== undefined)
+    if (suppliedIds.some(Boolean) && !suppliedIds.every(Boolean)) {
+      throw new Error('A task chain cannot mix completed task nodes with unhashed drafts.')
+    }
+    const rootTask = tasks[0]
+    const effectiveLinks =
+      links.parentID === undefined && links.priorID === undefined && rootTask
+        ? {
+            ...(rootTask.parentID !== undefined ? { parentID: rootTask.parentID } : {}),
+            ...(rootTask.priorID !== undefined ? { priorID: rootTask.priorID } : {}),
+          }
+        : links
+    return suppliedIds.every(Boolean)
+      ? await Promise.all(tasks.map(ensureValidTaskId))
+      : await compileDraftChain(tasks, effectiveLinks)
+  }
+
+  return { compileDraftChain, compileOrVerifyChain }
+}
+
+export type TaskCompiler = ReturnType<typeof createTaskCompiler>
 
 export const createCompiledSubtasksResult = async (
   tasks: Parameters<typeof createSubtasksResult>[0],

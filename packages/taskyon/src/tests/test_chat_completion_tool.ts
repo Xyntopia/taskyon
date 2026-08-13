@@ -3,6 +3,7 @@ import {
   createChatCompletionTool,
   getCommandFromStructuredResponse,
   prepareChatCompletionContext,
+  resolveToolDefinitionsForTaskChain,
 } from '../tools/chatCompletionTool'
 import { createChatCompletionRecordingFetch } from '../tools/chatCompletionTrace'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
@@ -87,6 +88,73 @@ export const testNativeStructuredOutputSchemaRejectsPermissiveOrOptionalObjects 
 }
 
 const task = (node: TaskNode) => node
+
+export const testChatCompletionDiscoversScopedToolsWithoutRenderingTheirDefinitions = async () => {
+  const hiddenReferencedTask = task({
+    id: 'hidden-definition-reference',
+    role: 'system',
+    content: { type: 'message', data: 'PRIVATE DEFINITION IMPLEMENTATION INPUT' },
+  })
+  const scopedToolTask = task({
+    id: 'scoped-tool-definition',
+    role: 'system',
+    content: {
+      type: 'tooldefinition',
+      data: {
+        name: 'localClock',
+        description: 'Read a local clock.',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+        code: `() => '_t:${hiddenReferencedTask.id}'`,
+      },
+    },
+  })
+  const userTask = task({
+    id: 'scoped-tool-user',
+    role: 'user',
+    priorID: scopedToolTask.id,
+    content: { type: 'message', data: 'What time is it?' },
+  })
+  const registeredClock: ToolBase = {
+    name: 'localClock',
+    description: 'Read the registered clock.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+  }
+  const definitions = await resolveToolDefinitionsForTaskChain([scopedToolTask, userTask], {
+    localClock: registeredClock,
+  })
+  const prepared = await prepareChatCompletionContext({
+    taskChain: [scopedToolTask, userTask],
+    allowedTools: ['localClock'],
+    toolDefinitions: definitions,
+    appendSystemPrompts: [],
+    prependSystemPrompts: [],
+    useVisionModels: false,
+    getTaskById: (id) =>
+      Promise.resolve(id === hiddenReferencedTask.id ? hiddenReferencedTask : null),
+  })
+  const renderedMessages = JSON.stringify(prepared.messages)
+
+  assert(
+    definitions.localClock?.description === 'Read a local clock.',
+    'Expected the nearest scoped definition to shadow the registered definition',
+  )
+  assert('localClock' in prepared.tools, 'Expected the scoped public contract in provider tools')
+  assert(
+    !renderedMessages.includes('Read a local clock.'),
+    'Expected no definition metadata in messages',
+  )
+  assert(
+    !renderedMessages.includes('PRIVATE DEFINITION'),
+    'Expected definition refs to stay hidden',
+  )
+  assert(
+    !renderedMessages.includes(hiddenReferencedTask.id),
+    'Expected definition IDs to stay hidden',
+  )
+}
+
+testChatCompletionDiscoversScopedToolsWithoutRenderingTheirDefinitions.description =
+  'Discovers lineage-scoped tools while excluding their metadata, code, and references from provider messages.'
 
 export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
   const providerSettings = {

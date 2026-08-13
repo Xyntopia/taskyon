@@ -32,7 +32,6 @@ import {
   createTypeFilteredPort,
   cryptoKeyToBase64,
   deriveKeyFromPwd,
-  ensureValidTaskId,
   exclusive,
   getToolchainProviderProfiles,
   getDatabase,
@@ -543,7 +542,7 @@ function defineTyGuiTools(
               toolchainProfiles: {
                 type: 'object',
                 description:
-                  'Partial toolchain profiles patch. For base prompt templates, patch toolchainProfiles.base.entryNode.prompt_templates.',
+                  'Partial toolchain profiles patch. For base prompt templates, patch toolchainProfiles.base.taskyonFlow.prompt_templates.',
                 additionalProperties: true,
               },
               selectedToolchainProfile: {
@@ -766,8 +765,10 @@ const useApiManagement = (
   })
 
   const updateModelList = async () => {
+    const configuredModel = selectedProviderProfile.value?.model
+    llmModelsInternal.value = configuredModel ? { [configuredModel]: { id: configuredModel } } : {}
     const models = await loadLatestModelList()
-    if (models) llmModelsInternal.value = models
+    if (models && Object.keys(models).length > 0) llmModelsInternal.value = models
   }
 
   // TODO: add apis to model history as well!
@@ -1631,23 +1632,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     uiApiInside.receive((msg) => {
       if (msg.type === 'configureTaskyonRequest' || msg.type === 'pasteClipboardRequest') return
       if (msg.type === 'task.createRequest') {
-        void ensureValidTaskId(msg.task)
-          .then(() => ty.port.send(msg))
-          .catch((error) => {
-            console.error('an error occured during handling of the createTask command', error)
-          })
+        ty.port.send(msg)
         return
       }
       if (msg.type === 'task.createChainRequest') {
-        void Promise.all(msg.tasks.map((task) => ensureValidTaskId(task)))
-          .then((tasks) => {
-            trackShownTaskChainRequest(shownCreateChainRequests, msg.requestId, msg.show)
-            ty.port.send({ ...msg, tasks })
-          })
-          .catch((error) => {
-            shownCreateChainRequests.delete(msg.requestId)
-            console.error('an error occured during handling of the createTaskChain command', error)
-          })
+        trackShownTaskChainRequest(shownCreateChainRequests, msg.requestId, msg.show)
+        ty.port.send(msg)
         return
       }
       const parsed = taskyonProtocol.message.safeParse(msg)

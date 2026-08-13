@@ -113,10 +113,10 @@ import {
   setProviderModel,
   setSelectedProvider,
   type CliLlmState,
-  type CliProviderIdentity,
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS, isInteractiveTaskResult } from './cli/taskWait'
+import type { ToolchainProfiles } from '@taskyon/taskyon'
 import { createNativePythonTool, findNativePythonExecutable } from './cli/nativePythonTool'
 import { applyCliRuntimeConfig, syncProviderRuntimeConfig } from './cli/runtime'
 import { runBashCommand } from './cli/bash'
@@ -182,18 +182,6 @@ type ParsedClientInvocation =
       arguments: unknown
     }
 
-const DEFAULT_PROMPT_TEMPLATES = {
-  basePrompt:
-    'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
-  instruction:
-    'Complete the task accurately. If structured output is requested, follow the required format exactly.',
-  toolResult: 'Evaluate the following tool result and respond in {format}:\\n\\n{message}',
-  task: 'Complete this task:\\n\\n{message}',
-  evaluate: 'Evaluate this message and respond in {format}:\\n\\n{message}',
-  schemaReminder:
-    'Output must strictly match {format} and this schema:\\n\\n{schema}\\n\\nDo not add extra text.',
-  tools: 'Available tools:\\n\\n${tools}',
-}
 let debugLogsEnabled = false
 const FILE_PICKER_MAX_DEPTH = 3
 const FILE_PICKER_MAX_ENTRIES = 5000
@@ -234,12 +222,11 @@ export type InteractiveCliHost = {
   environmentPrefix: string
   entryNodeName: string
   oauthSecretId: string
-  providerIdentity: CliProviderIdentity
+  toolchainProfiles: ToolchainProfiles
   storagePaths: CliStoragePaths
   storageNamespace?: string
   versionFileUrl: URL
   buildStableContext: (projectInstructions: string) => string
-  promptTemplates?: typeof DEFAULT_PROMPT_TEMPLATES
   defaultAllowedTools?: string[]
   unavailableToolNames?: ReadonlySet<string>
   additionalTools?: readonly InternalTool[]
@@ -1195,32 +1182,14 @@ export const DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES = new Set([
 
 const INTERACTIVE_PROMPT_TOOL_NAMES = new Set<string>([CLARIFICATION_TOOL_NAME])
 
-export function buildDeveloperCliStableContext(
-  productContext: string,
-  projectInstructions: string,
-) {
+export function buildDeveloperCliStableContext(projectInstructions: string) {
   const shell = process.env.SHELL ?? process.env.ComSpec ?? 'unknown'
   return [
     projectInstructions,
     [
-      productContext,
-      'This is a terminal-focused environment. Be concise, actionable, and explicit.',
-      '',
       '## Stable Runtime Context',
       `Current Working Directory: ${process.cwd()}`,
       `Shell: ${shell}`,
-      '',
-      '## Stable Workflow Rules',
-      '1. Prefer answering directly when no tool action is needed.',
-      '2. Select the narrowest available capability that performs the required action.',
-      '3. Keep destructive or risky commands clearly justified and minimal.',
-      '4. After a tool result, continue the task: call one next tool when more work is needed, otherwise answer concisely.',
-      "5. If verification fails because a local dependency command is missing, inspect the project's package metadata and try the normal install/setup command once before treating it as blocked.",
-      '6. For project tasks that create, change, or document a runnable result, leave a project-local README or documentation note with one simple command a human can run from the project root to verify the result.',
-      '7. Match verification scope to the change: for documentation-only or task-discovery changes, prefer the smallest command that validates the documented workflow over a full dependency-installing test suite.',
-      '8. In Ruby/Rake projects, when `ruby -S rake` is available, use it for focused task-discovery verification before trying `bundle exec` or dependency setup.',
-      '9. After editing source files, inspect the resulting diff for accidental formatting noise; when the project exposes a focused formatter or tidy command, run it before final verification.',
-      '10. Treat exact product names, provider names, domains, and URLs supplied by the user as constraints. Preserve them verbatim through planning and execution; never silently substitute a similar service.',
     ].join('\n'),
   ]
     .filter(Boolean)
@@ -2817,7 +2786,22 @@ async function main(host: InteractiveCliHost) {
   const explorationContextFiles: Record<string, string> = {}
   const explorationTool = createExplorationTool(explorationContextFiles)
 
-  const llmState = createCliLlmState(config, host.providerIdentity)
+  const toolchainProfiles = chatCompletionTrace
+    ? {
+        ...host.toolchainProfiles,
+        base: {
+          ...host.toolchainProfiles.base,
+          [host.entryNodeName]: {
+            ...host.toolchainProfiles.base[host.entryNodeName],
+            trace: {
+              enabled: true,
+              ...(chatCompletionTrace.label ? { label: chatCompletionTrace.label } : {}),
+            },
+          },
+        },
+      }
+    : host.toolchainProfiles
+  const llmState = createCliLlmState(config, toolchainProfiles, host.entryNodeName)
   const uiSettings = {
     showRoleTag: stored.cliUi?.showRoleTag ?? true,
     showFullFunctionResults: false,
@@ -2871,23 +2855,6 @@ async function main(host: InteractiveCliHost) {
   llmState.settings = {
     ...llmState.settings,
     entryFunction: host.entryNodeName,
-  }
-  llmState.toolchainProfiles.base = {
-    entryNode: {
-      providerToolCalling: true,
-      use_baseprompt: true,
-      use_multimodal: true,
-      max_error_retries: 3,
-      ...(chatCompletionTrace
-        ? {
-            trace: {
-              enabled: true,
-              ...(chatCompletionTrace.label ? { label: chatCompletionTrace.label } : {}),
-            },
-          }
-        : {}),
-      prompt_templates: host.promptTemplates ?? DEFAULT_PROMPT_TEMPLATES,
-    },
   }
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)

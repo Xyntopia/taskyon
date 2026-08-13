@@ -39,6 +39,7 @@ export type ToolExecutionCallOptions = {
   stopSignal?: AbortSignal
   taskId?: string | undefined
   toolRevision?: ContentHash | undefined
+  settingsRevision?: ContentHash | undefined
   requestIdPrefix?: string
   defaultTimeoutMs?: number
   onProgress?: (progress: ToolProgress) => Promise<void> | void
@@ -95,6 +96,7 @@ export async function callToolOverRpc(
     requestId,
     taskId: options?.taskId,
     toolRevision: func.toolRevision ?? options?.toolRevision,
+    settingsRevision: func.settingsRevision ?? options?.settingsRevision,
     arguments: func.arguments,
   })
   return await createStreamRpcRequest<

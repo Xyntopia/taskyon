@@ -31,6 +31,7 @@ export {
   resolveInitialAgentToolCatalog,
   searchAgentToolCatalog,
 } from './toolTools'
+export * from './lambdaTool'
 
 export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>
@@ -63,6 +64,8 @@ export const createDefaultTaskyonToolSetup = (options?: {
         getTask: (id) => taskManager.getTask(id, { contentMode: 'hydrated' }),
         ...(artifactStore ? { getArtifact: artifactStore.get } : {}),
         listToolDefinitions: () => toolManager.listToolDefinitions(true),
+        resolveToolDefinition: async (name, revision) =>
+          (await toolManager.resolveTool(name, revision)).tool,
         metaUpsert: taskManager.metaUpsert,
       })
     const chatCompletion = createChatCompletion(toolchainConfig)

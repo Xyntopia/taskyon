@@ -13,6 +13,15 @@ orchestrate a fully agentic workflow.
 | Taskyon tool | A typed executable capability with explicit inputs, behavior, and results                 | No; the implementation chooses whether to call a model | No                                         |
 | MCP          | A protocol for discovering and invoking capabilities across a process or network boundary | No                                                     | Usually an MCP-speaking process or service |
 
+Workflows can also declare temporary scoped tools in their task tree. These definitions apply only
+to the following branch, do not appear in the saved Tools registry, and stay out of normal model
+and copied-chat messages. A scoped binding can present a smaller, better-described argument schema
+to the model while calling an existing registered tool with fixed arguments.
+
+Open **Add MCP Tools** to fetch or paste an MCP `tools/list` response, review the mapped Taskyon
+definition, and save selected tools. A saved MCP definition records the remote server information;
+it does not make an untrusted server safe.
+
 These concepts can work together. An agent can learn a procedure from a skill and turn its stable
 steps into a Taskyon tool. Taskyon can import an MCP capability as a tool, and the Taskyon MCP
 bridge can expose Taskyon tools to another MCP client. MCP defines how a capability crosses a

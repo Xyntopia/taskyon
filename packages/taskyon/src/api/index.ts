@@ -1,6 +1,5 @@
 // TODO: we want to reduce dependencies to this file here!
 // TODO: maybe move the "Api" into its own package?
-import { forgeTaskChain } from '../core/createTasks'
 import { createMarkdownTaskChain } from '../core/markdownTaskIO'
 import { createToolExecutionClient, type ToolRpcCallerPort } from '../core/toolRpc'
 import type { ChatCompletionArgs } from '../tools/chatCompletionTool'
@@ -440,7 +439,7 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
   })
   const toolExecutionClient = createToolExecutionClient(tyPort)
   const send: SendTasksFunction = async (taskList, opts) => {
-    const tasks = await forgeTaskChain(taskList)
+    const tasks = taskList.flat()
     const show = opts.show ?? opts.display !== 'background'
 
     const created = await protocolClient.task.createChain({
@@ -524,7 +523,7 @@ const createRunTasksSender = <T extends { type: string }>(
 ): SendTasksFunction => {
   const protocolClient = createPortClient(tyPort, taskyonProtocol)
   return async (taskList, opts) => {
-    const tasks = await forgeTaskChain(taskList)
+    const tasks = taskList.flat()
     const show = opts.show ?? opts.display !== 'background'
 
     const created = await protocolClient.task.createChain({

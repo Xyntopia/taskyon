@@ -35,12 +35,10 @@ import {
   getProviderSettings,
   getSelectedToolchainConfig,
   type CliLlmState,
-  type CliProviderIdentity,
 } from './models'
+import { CLI_FLOW_TOOL_NAME, cliToolchainProfiles } from './toolchainSettings'
 import { readProviderOauthAccountId, resolveCachedProviderOauthSession } from '../oauthLogin'
 import type { CliOauthStorage } from '../oauthLogin'
-
-const DIAGNOSTICS_ENTRY_NODE_NAME = 'entryNode'
 
 const runtimeDirectoryName = () => {
   const now = new Date()
@@ -101,7 +99,6 @@ export async function bootstrapCliTaskyon(args?: {
   selectedApi?: string
   model?: string
   storagePaths?: CliStoragePaths
-  providerIdentity?: CliProviderIdentity
   oauthSecretId?: string
   environmentPrefix?: string
   storageNamespace?: string
@@ -144,7 +141,7 @@ export async function bootstrapCliTaskyon(args?: {
     ...(envProviderKey ? { key: envProviderKey } : {}),
   }
 
-  const llmState = createCliLlmState(config, args?.providerIdentity)
+  const llmState = createCliLlmState(config, cliToolchainProfiles, CLI_FLOW_TOOL_NAME)
   const { x: taskStorageClientPort, y: taskStorageServicePort } =
     createProtocolPort(taskyonStorageProtocol)
   await createCliSelectedStorageService({
@@ -160,7 +157,7 @@ export async function bootstrapCliTaskyon(args?: {
     () => llmState.settings,
     () =>
       toolCall({
-        name: DIAGNOSTICS_ENTRY_NODE_NAME,
+        name: CLI_FLOW_TOOL_NAME,
         arguments: {},
       }),
     getSelectedToolchainConfig(llmState),

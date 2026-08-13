@@ -1,0 +1,120 @@
+{
+  "base": {
+    "chatCompletion": {
+      "timeouts": {
+        "totalMs": 600000,
+        "stepMs": 600000
+      }
+    },
+    "cliFlow": {
+      "providerToolCalling": true,
+      "use_baseprompt": true,
+      "use_tool_chooser": true,
+      "tool_chooser_min_tools": 5,
+      "max_error_retries": 3,
+      "use_multimodal": true,
+      "reasoning_effort": "low",
+      "websearch": {
+        "enabled": false,
+        "max_results": 5
+      },
+      "prompt_templates": {
+        "basePrompt": "You are the Taskyon CLI assistant. This is a terminal-focused environment. Be concise, actionable, and explicit.\n\nPrefer answering directly when no tool action is needed. For repository exploration, use the exploration tool first for listing, searching, grepping, and focused file views. Use bash only when command execution is required beyond file discovery, text search, or file viewing. Keep destructive or risky shell commands clearly justified and minimal. Use dagGraphProject for reproducible design and optimization workflows: create TypeScript DAG nodes, patch roots, run studies over variants, and report the best root or hash-backed result.\n\nAfter a tool result, continue the task: call one next tool when more work is needed; otherwise answer concisely. If verification fails because a local dependency command is missing, inspect the project package metadata and try the normal setup command once before treating the task as blocked. For project tasks that create, change, or document a runnable result, leave a project-local README or documentation note with one simple verification command. Match verification scope to the change; documentation-only and task-discovery changes should use the smallest useful check. In Ruby or Rake projects, prefer `ruby -S rake` for focused task discovery when it is available. After editing source files, inspect the diff for accidental formatting noise and run the focused formatter when the project provides one. Treat exact product names, provider names, domains, and URLs supplied by the user as constraints; preserve them verbatim and never silently substitute a similar service.",
+        "message": "Continue the current terminal task. Use a tool only when it is needed to produce or verify the result.",
+        "toolResult": "Continue from the previous tool result. Use one next tool when more work is needed; otherwise return the concise result.",
+        "error": "A tool failed. Retry once with corrected arguments when the error is recoverable; otherwise explain the failure and the next actionable step.",
+        "toolChooser": "Route only the current task. Select up to {maxTools} relevant tools from the catalog below. Use toolSearch only when the required capability is missing. If no tool is needed, call {selectorTool} with an empty allowedTools list. Do not answer the user yet.\n\n{toolCatalog}",
+        "retryExhausted": "The same tool call has failed {retryCount} times. Do not retry it. Explain what failed and give the next actionable step."
+      }
+    }
+  },
+  "profiles": {
+    "taskyon": {
+      "chatCompletion": {
+        "provider": "taskyon",
+        "name": "taskyon",
+        "baseURL": "https://share.taskyon.space",
+        "model": "google/gemini-2.5-flash-lite",
+        "streamSupport": true,
+        "defaultHeaders": {
+          "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm",
+          "HTTP-Referer": "https://tycli.local",
+          "X-Title": "tycli"
+        },
+        "routes": {
+          "chatCompletion": "/chatCompletion/api/v1/",
+          "models": "/chatCompletion/api/v1/models"
+        }
+      }
+    },
+    "openai": {
+      "chatCompletion": {
+        "provider": "openai",
+        "name": "openai",
+        "baseURL": "https://api.openai.com",
+        "model": "gpt-5.1",
+        "streamSupport": true,
+        "routes": {
+          "chatCompletion": "/v1/",
+          "models": "/v1/models"
+        }
+      }
+    },
+    "chatgpt-codex": {
+      "chatCompletion": {
+        "provider": "chatgpt-codex",
+        "name": "chatgpt-codex",
+        "baseURL": "https://chatgpt.com/backend-api/codex",
+        "model": "gpt-5.4",
+        "streamSupport": true,
+        "auth": {
+          "type": "oauth",
+          "oauth": {
+            "authorizationUrl": "https://auth.openai.com/oauth/authorize",
+            "tokenUrl": "https://auth.openai.com/oauth/token",
+            "clientId": "app_EMoamEEZ73f0CkXaXp7hrann",
+            "scope": "openid profile email offline_access",
+            "authorizeQuery": {
+              "id_token_add_organizations": "true",
+              "codex_cli_simplified_flow": "true"
+            }
+          }
+        },
+        "routes": {
+          "chatCompletion": "/responses",
+          "models": "/models"
+        }
+      }
+    },
+    "openrouter.ai": {
+      "chatCompletion": {
+        "provider": "openrouter.ai",
+        "name": "openrouter.ai",
+        "baseURL": "https://openrouter.ai",
+        "model": "google/gemini-2.5-flash-lite",
+        "streamSupport": true,
+        "defaultHeaders": {
+          "HTTP-Referer": "https://tycli.local",
+          "X-Title": "tycli"
+        },
+        "routes": {
+          "chatCompletion": "/api/v1/",
+          "models": "/api/v1/models"
+        }
+      }
+    },
+    "local": {
+      "chatCompletion": {
+        "provider": "local",
+        "name": "local LLM server",
+        "baseURL": "http://localhost:8080",
+        "model": "qwen3-4b",
+        "streamSupport": true,
+        "routes": {
+          "chatCompletion": "/v1/",
+          "models": "/v1/models"
+        }
+      }
+    }
+  }
+}

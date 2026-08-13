@@ -62,6 +62,7 @@ async function safeExecuteTask(
     return await toolExecutionClient.callTool(func.name, func.arguments, {
       taskId: task.id,
       toolRevision: func.toolRevision,
+      settingsRevision: func.settingsRevision,
       signal: stopSignal,
       requestIdPrefix: `${func.name}-${task.id}`,
       defaultTimeoutMs: MAX_REMOTE_FUNCTION_TIMEOUT_MS,
@@ -304,6 +305,10 @@ function createHandleError(
   taskManager: TyTaskManager,
   currentTaskCtrl: AbortController,
   queueTask: (id: string) => void,
+  compileSubtaskChain: (
+    drafts: readonly partialTaskDraft[],
+    parentTask: TaskNode,
+  ) => Promise<TaskNode[]>,
 ) {
   const autonomousErrorAttemptsBySignature = new Map<string, number>()
 
@@ -326,28 +331,30 @@ function createHandleError(
     // we are adding the error task chain as a subtaskchain with the parentID of this
     // particular task.
     const errorTaskId = (
-      await taskManager.addTaskChain(
-        errorHandlingDecision.mode === 'retry'
-          ? [
-              {
-                role: 'system',
-                content: {
-                  type: 'error',
-                  data: serializeForJson(error),
+      await taskManager.addTaskNodes(
+        await compileSubtaskChain(
+          errorHandlingDecision.mode === 'retry'
+            ? [
+                {
+                  role: 'system',
+                  content: {
+                    type: 'error',
+                    data: serializeForJson(error),
+                  },
                 },
-              },
-              errorhandlerTask,
-            ]
-          : [
-              {
-                role: 'system',
-                content: {
-                  type: 'error',
-                  data: serializeForJson(error),
+                errorhandlerTask,
+              ]
+            : [
+                {
+                  role: 'system',
+                  content: {
+                    type: 'error',
+                    data: serializeForJson(error),
+                  },
                 },
-              },
-            ],
-        undefined,
+              ],
+          task,
+        ),
         task.id,
       )
     ).at(-1)?.id // get lasttask id so that we can query it for execution!
@@ -390,9 +397,18 @@ const createTaskProcessor = (
   toolExecutionClient: ToolExecutionClient,
   repeatedCallDetectionIgnoredToolNames: ReadonlySet<string>,
   markTaskFinished: (taskId: string) => void,
+  compileSubtaskChain: (
+    drafts: readonly partialTaskDraft[],
+    parentTask: TaskNode,
+  ) => Promise<TaskNode[]>,
 ) => {
   // this is uses to track how long a list of tasks has been processing
-  const handleError = createHandleError(taskManager, currentTaskCtrl, queueTask)
+  const handleError = createHandleError(
+    taskManager,
+    currentTaskCtrl,
+    queueTask,
+    compileSubtaskChain,
+  )
 
   return async (
     taskId: string,
@@ -461,7 +477,9 @@ const createTaskProcessor = (
         // we can immediately persist all of our tasks here to the taskManager, as
         // they're immutable and won't change anymore..
         newTasks = await Promise.all(
-          partialTasks.map((taskChain) => taskManager.addTaskChain(taskChain, undefined, task.id)),
+          partialTasks.map(async (taskChain) =>
+            taskManager.addTaskNodes(await compileSubtaskChain(taskChain, task), task.id),
+          ),
         )
         // If this tool emitted error tasks, copy error debug metadata from the source task
         // so error nodes can be inspected directly in the debug panel.
@@ -545,6 +563,10 @@ const setupRun = (
   rpcPort: FunctionRpcWorkerPort,
   maxConcurrency: number,
   repeatedCallDetectionIgnoredToolNames: ReadonlySet<string>,
+  compileSubtaskChain: (
+    drafts: readonly partialTaskDraft[],
+    parentTask: TaskNode,
+  ) => Promise<TaskNode[]>,
 ) => {
   const currentTaskCtrl: AbortController = new AbortController()
   const toolExecutionClient = createToolExecutionClient(rpcPort)
@@ -632,6 +654,7 @@ const setupRun = (
     toolExecutionClient,
     repeatedCallDetectionIgnoredToolNames,
     taskTracker.setTaskFinished,
+    compileSubtaskChain,
   )
 
   const releaseTasksWaitingFor = (taskId: string) => {
@@ -758,6 +781,10 @@ export function runTaskWorker(
   taskManager: TyTaskManager,
   defaultTask: partialTaskDraft,
   errorTask: partialTaskDraft,
+  compileSubtaskChain: (
+    drafts: readonly partialTaskDraft[],
+    parentTask: TaskNode,
+  ) => Promise<TaskNode[]>,
   maxConcurrency = 4,
   repeatedCallDetectionIgnoredToolNames: ReadonlySet<string> = new Set([
     'chatCompletion',
@@ -798,6 +825,7 @@ export function runTaskWorker(
         workerRpcPort,
         maxConcurrency,
         repeatedCallDetectionIgnoredToolNames,
+        compileSubtaskChain,
       )
       currentTaskCtrl = newTaskCtrl
       queueTask = newQueueTask

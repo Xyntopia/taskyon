@@ -1,6 +1,6 @@
 <template>
   <template v-if="buttons">
-    <CopyTaskChatButton class="gt-xs" v-bind="$attrs" :tasks="selectedTaskList">
+    <CopyTaskChatButton class="gt-xs" v-bind="$attrs" :tasks="copyableTaskList">
       <slot name="tt-cp-btn">
         <q-tooltip>Copy entire chat as markdown</q-tooltip>
       </slot>
@@ -126,7 +126,7 @@ No one else can access or remove your files without your permission.`"
             class="lt-sm"
             outline
             label="Copy to clipboard"
-            :tasks="selectedTaskList"
+            :tasks="copyableTaskList"
           />
           <template v-if="download">
             <q-btn
@@ -168,6 +168,7 @@ import {
 import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import QrCode from '@taskyon/ui/components/QrCode.vue'
 import CopyTaskChatButton from '@taskyon/ui/components/taskyon/CopyTaskChatButton.vue'
+import { selectTasksForChatCopy } from '@taskyon/ui/components/taskyon/taskChatVisibility'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
 import { exportFile, useQuasar } from 'quasar'
@@ -240,6 +241,13 @@ const selectedTaskList = asyncComputed(
   },
   [],
   [taskId],
+)
+const copyableTaskList = computed(() =>
+  selectTasksForChatCopy(
+    selectedTaskList.value,
+    tystate.allTools,
+    state.appConfiguration.expertMode,
+  ),
 )
 
 // Watch for taskId changes and reset warning dismissal

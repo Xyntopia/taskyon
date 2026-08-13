@@ -6,12 +6,101 @@ import type { ToolRpcCallMessage, ToolRpcResponderMessage } from '../core/toolRp
 import type { TaskyonMessage } from '../api/taskyonProtocol'
 import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
+import { toolDefinitionTask } from '../tools/lambdaTool'
 import { createCryptoSession } from '../utils/cryptoSession'
 import { createPortableTestStorage } from '../testSupport/portableTestStorage'
+import type { JSONSchema7 } from 'json-schema'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
+
+export const testTaskScopedCodeToolExecutesWithoutRegistryInstallation = async () => {
+  const storage = createPortableTestStorage()
+  const registeredEcho = createTool({
+    name: 'scopedEcho',
+    description: 'Registered fallback echo.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['message'],
+      properties: { message: { type: 'string' } },
+    } satisfies JSONSchema7,
+    code: `({ message }) => ({ source: 'registered', message })`,
+  })
+  const continuationTool = createTool({
+    name: 'entryNode',
+    description: 'Test continuation tool.',
+    parameters: { type: 'object', additionalProperties: false },
+    function: () => undefined,
+  })
+  const ty = await tyCore(
+    () => ({ entryFunction: 'entryNode' }),
+    () => toolCall({ name: 'entryNode', arguments: {} }),
+    {},
+    undefined,
+    {
+      indexTaskVectors: false,
+      taskManagerStorageFactory: storage.taskManagerStorageFactory,
+      toolSetup: {
+        baseTools: [registeredEcho, continuationTool],
+        chatCompletionToolName: 'chatCompletion',
+        createSessionTools: () => ({ tools: [] }),
+      },
+    },
+  )
+
+  try {
+    const result = await processTasksDetailed(ty.port)(
+      [
+        [
+          toolDefinitionTask({
+            name: 'scopedEcho',
+            description: 'Echo through a task-scoped sandbox.',
+            parameters: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['message'],
+              properties: { message: { type: 'string' } },
+            },
+            code: `({ message }) => ({ source: 'scoped', message })`,
+          }),
+          toolCall({ name: 'scopedEcho', arguments: { message: 'hello' } }),
+        ],
+      ],
+      'toolresult',
+      {
+        timeoutMs: 10_000,
+        interruptOnSettle: (reason) => ty.cancelCurrentRun(reason),
+      },
+    )
+    const response =
+      result.status === 'matched' && result.result.content.type === 'toolresult'
+        ? result.result.content.data
+        : undefined
+    const registeredTools = await createTaskyonClient(ty.port).tools.list({ includeHidden: true })
+
+    assert(
+      typeof response === 'object' &&
+        response !== null &&
+        'source' in response &&
+        response.source === 'scoped' &&
+        'message' in response &&
+        response.message === 'hello',
+      `Expected the scoped sandbox result, got ${JSON.stringify(response)}`,
+    )
+    assert(
+      registeredTools.scopedEcho?.description === 'Registered fallback echo.',
+      'Expected the scoped definition not to replace the registered tool with the same name',
+    )
+  } finally {
+    await ty.dispose('task-scoped code tool diagnostic complete')
+    storage.destroy()
+  }
+}
+
+testTaskScopedCodeToolExecutesWithoutRegistryInstallation.description =
+  'Resolves and executes a code-backed tool from the current task lineage without installing it.'
 
 export const testRemoteFunctionBridgeHonorsToolTimeoutMs = async () => {
   const { x: workerPort, y: remotePort } = createDuplexChannel<

@@ -12,7 +12,7 @@ import type { TyToolchainConfig } from '../types/profiles'
 import { createCryptoSession } from '../utils/cryptoSession'
 import { getInMemoryDatabase } from '../utils/pglite.api'
 
-const assert = (condition: unknown, message: string) => {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
@@ -108,6 +108,12 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
       initial.configuredTool?.description === 'Configured value: initial',
       'Expected the tool to capture the initial configuration',
     )
+    const initialInvocation = await client.tools.resolveInvocation({ name: 'configuredTool' })
+    assert(initialInvocation, 'Expected the configured tool invocation to resolve')
+    assert(
+      initialInvocation.settingsRevision !== undefined,
+      'Expected on-demand lookup to return an opaque settings revision',
+    )
     emitStreamValue('initial', 'initial stream')
 
     await runtimeClient.runtime.configure({
@@ -122,6 +128,11 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     assert(
       updated.configuredTool?.description === 'Configured value: updated',
       'Expected runtime.configure to recreate the configured tool',
+    )
+    const updatedInvocation = await client.tools.resolveInvocation({ name: 'configuredTool' })
+    assert(
+      updatedInvocation?.settingsRevision !== initialInvocation.settingsRevision,
+      'Expected changed settings to receive a different per-tool revision',
     )
     emitStreamValue('initial', 'disconnected stream')
     emitStreamValue('updated', 'replacement stream')

@@ -8,7 +8,13 @@ import type { Sha256Hash } from '@taskyon/common/modules/canonicalHash'
 import { z } from 'zod'
 import { FileAttachment, partialTaskDraft, TaskNode } from '../types/taskNode'
 import { ToolProgress } from '../types/toolApi'
-import { ContentHash, FunctionArguments, ToolBase, ToolIdentity } from '../types/tools'
+import {
+  ContentHash,
+  FunctionArguments,
+  ToolBase,
+  ToolIdentity,
+  ToolInvocationRevisions,
+} from '../types/tools'
 import { TyToolchainConfig } from '../types/profiles'
 
 export const REMOTE_FUNCTION_TIMEOUT_MS = 30_000
@@ -144,6 +150,9 @@ const functionCall = remoteFunctionBase
     }),
     toolRevision: ContentHash.optional().meta({
       description: 'Immutable tool revision selected for this execution.',
+    }),
+    settingsRevision: ContentHash.optional().meta({
+      description: 'Immutable per-tool settings revision selected for this execution.',
     }),
   })
   .meta({
@@ -286,6 +295,19 @@ export const taskyonToolsProtocol = defineFrpServiceProtocol({
         .object({ tool: ToolBase, identity: ToolIdentity })
         .nullable()
         .describe('The exact immutable tool definition and identity, when available.'),
+      defaultTimeoutMs: 30_000,
+    },
+    resolveInvocation: {
+      request: z
+        .object({
+          name: z.string(),
+          toolRevision: ContentHash.optional(),
+          settingsRevision: ContentHash.optional(),
+        })
+        .describe('Resolve immutable tool and per-tool settings revisions for one invocation.'),
+      response: ToolInvocationRevisions.nullable().describe(
+        'Opaque immutable revisions for the requested invocation, when available.',
+      ),
       defaultTimeoutMs: 30_000,
     },
     register: {

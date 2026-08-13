@@ -2,6 +2,7 @@ import { defineFrpServiceProtocol } from '@taskyon/common/modules/frpBus'
 import { z } from 'zod'
 import { TaskNode } from '../types/taskNode.ts'
 import { taskResult } from '../types/toolApi.ts'
+import { ContentHash, ToolInvocationRevisions } from '../types/tools.ts'
 
 export const toolContextProtocol = defineFrpServiceProtocol({
   service: 'toolContext',
@@ -25,6 +26,14 @@ export const toolContextProtocol = defineFrpServiceProtocol({
     createSubtasksResult: {
       request: z.object({ tasks: z.unknown() }),
       response: taskResult,
+    },
+    resolveInvocation: {
+      request: z.object({
+        name: z.string(),
+        toolRevision: ContentHash.optional(),
+        settingsRevision: ContentHash.optional(),
+      }),
+      response: ToolInvocationRevisions.nullable(),
     },
     waitForInteraction: {
       request: z.object({

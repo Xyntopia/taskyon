@@ -86,6 +86,7 @@ for (const document of documents) {
     if (!href || /^(https?:|mailto:|#|data:)/.test(href)) continue
     const withoutAnchor = decodeURIComponent(href.split('#')[0]?.split('?')[0] ?? '')
     if (withoutAnchor.startsWith('/docs/')) {
+      if (withoutAnchor.startsWith('/docs/taskyon/openapi/')) continue
       if (!resolveDocumentationDocumentId(documents, withoutAnchor.slice('/docs/'.length))) {
         failures.push(`${document.path}: unresolved documentation link ${href}.`)
       }

@@ -27,7 +27,7 @@ export {
   chatCompletionProviderSettings,
   type ChatCompletionProviderSettings,
 } from './types/chatCompletion'
-export { resolveToolchainConfig, type llmSettings, type ToolchainProfiles } from './types/profiles'
+export { resolveToolchainConfig, ToolchainProfiles, type llmSettings } from './types/profiles'
 export { partialTaskDraft, TaskNode } from './types/taskNode'
 export type { ClientTool } from './types/toolApi'
 export { createClientTool, InternalTool, toolCall } from './types/toolApi'

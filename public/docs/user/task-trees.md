@@ -40,6 +40,8 @@ projection, such as the current lineage plus visible terminal results from direc
 For delegated branches, `chatCompletion` receives a bounded handoff containing the objective,
 terminal status, and visible result; intermediate tool chains stay out of that handoff. Render
 options can also hide internal tasks from chat or model context.
+Scoped tool definitions are always omitted from model context and ordinary copied chat; expert
+mode may show them only for debugging.
 
 Task nodes include optional author, ACL, and signature fields, but their presence in the schema does
 not by itself guarantee that a runtime enforces distributed authorization. Treat P2P verification

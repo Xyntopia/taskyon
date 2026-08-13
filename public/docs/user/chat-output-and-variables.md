@@ -13,6 +13,10 @@ Taskyon renders ordinary Markdown plus several technical extensions:
 Generated HTML and scripts should be treated as code. Rendering isolation limits ambient access,
 but the content still needs review before it is trusted or connected to host capabilities.
 
+Normal chat copying follows the same visibility rules as the displayed conversation and omits
+internal function calls and scoped tool definitions. Expert mode can expose internal task records
+for debugging; model requests still omit scoped definition nodes.
+
 ## Files and multimodal input
 
 Files can be attached to a task and stored through the active file service. Taskyon includes

@@ -32,10 +32,14 @@ The client also exposes:
 - `sendFiles(files)` for file registration;
 - `waitUntilReady(options)` for explicit startup coordination.
 
-Task creation responses contain the authoritative persisted IDs. A submitted draft may receive
-resolved settings, a pinned tool revision, or deduplication before its final hash is known. UI and
-protocol clients must therefore select the last returned `task.createChain` ID instead of
-calculating a draft ID locally.
+`tools.resolveInvocation({ name, toolRevision?, settingsRevision? })` returns the opaque immutable
+revisions for one target. It does not return settings values. Sandboxed tools receive the same
+narrow operation as `context.resolveInvocation(...)`.
+
+Task creation compiles unhashed drafts into linked nodes with pinned invocation revisions before
+persistence. The response contains those final IDs. Callers can also resolve every invocation
+revision and use the shared hashing functions to submit completed, pre-hashed nodes; core verifies
+their IDs and stores them unchanged. A chain must not mix drafts and completed nodes.
 
 `createTaskChainFromMarkdown(client, markdown, options)` imports portable Taskyon Markdown and
 returns the new leaf ID. Import does not execute by default.

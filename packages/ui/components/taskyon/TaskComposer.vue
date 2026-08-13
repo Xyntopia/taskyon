@@ -206,7 +206,7 @@ import { matAttachment, matChat, matSend, matUploadFile } from '@quasar/extras/m
 import { symOutlinedCancel } from '@quasar/extras/material-symbols-outlined'
 import { mdiFunctionVariant } from '@quasar/extras/mdi-v6'
 import {
-  createNewTaskChain,
+  buildCreateNewTaskChain,
   getDefaultParametersForTool,
   partialTaskDraft,
   type FunctionArguments,
@@ -367,7 +367,7 @@ const submitTask = async (
 ) => {
   const storedAttachments = await props.client.sendFiles(submittedAttachments)
   const previousTaskId = props.selectedTaskId
-  const { createdTasks } = await createNewTaskChain({
+  const taskChain = buildCreateNewTaskChain({
     currentTask: props.currentTask,
     draftTask: submittedTask,
     entryNode: props.entryNode
@@ -378,7 +378,7 @@ const submitTask = async (
     priorTaskId: previousTaskId,
   })
   const { ids: storedTaskIds } = await props.client.task.createChain({
-    tasks: createdTasks,
+    tasks: taskChain,
     execute: true,
     show: true,
   })

@@ -165,7 +165,7 @@ export function testTaskyonProfileSettingsHelpers() {
     selectedToolchainProfile: 'taskyon',
     toolchainProfiles: {
       base: {
-        entryNode: {
+        taskyonFlow: {
           prompt_templates: {
             basePrompt: 'Diagnostic base prompt',
           },
@@ -183,14 +183,14 @@ export function testTaskyonProfileSettingsHelpers() {
     'Expected the patch to select the taskyon provider profile',
   )
   assert(
-    patched.toolchainProfiles?.base.entryNode?.prompt_templates !== undefined &&
-      patched.toolchainProfiles.base.entryNode.prompt_templates !== null &&
-      typeof patched.toolchainProfiles.base.entryNode.prompt_templates === 'object' &&
-      !Array.isArray(patched.toolchainProfiles.base.entryNode.prompt_templates) &&
-      'basePrompt' in patched.toolchainProfiles.base.entryNode.prompt_templates &&
-      patched.toolchainProfiles.base.entryNode.prompt_templates.basePrompt ===
+    patched.toolchainProfiles?.base.taskyonFlow?.prompt_templates !== undefined &&
+      patched.toolchainProfiles.base.taskyonFlow.prompt_templates !== null &&
+      typeof patched.toolchainProfiles.base.taskyonFlow.prompt_templates === 'object' &&
+      !Array.isArray(patched.toolchainProfiles.base.taskyonFlow.prompt_templates) &&
+      'basePrompt' in patched.toolchainProfiles.base.taskyonFlow.prompt_templates &&
+      patched.toolchainProfiles.base.taskyonFlow.prompt_templates.basePrompt ===
         'Diagnostic base prompt',
-    'Expected toolchainProfiles patch to update base entryNode prompt templates',
+    'Expected toolchainProfiles patch to update base taskyonFlow prompt templates',
   )
 
   const withDiagnosticProfile = validateTaskyonProfileSettingsPatch(current, {

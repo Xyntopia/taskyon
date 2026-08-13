@@ -129,6 +129,26 @@ export const testCreateNewTaskChainUsesTextRankNameFromFirstHundredWords = () =>
   return { name }
 }
 
+export const testCreateNewTaskChainRetainsTheConversationLeaf = () => {
+  const taskChain = buildCreateNewTaskChain({
+    currentTask: null,
+    draftTask: {
+      role: 'user',
+      content: { type: 'message', data: 'Continue this conversation.' },
+    },
+    mode: 'message',
+    priorTaskId: 'conversation-leaf',
+  })
+
+  assert(
+    taskChain[0]?.priorID === 'conversation-leaf',
+    'Expected the first draft to retain the selected conversation leaf',
+  )
+}
+
+testCreateNewTaskChainRetainsTheConversationLeaf.description =
+  'Links the first unhashed UI draft to the selected conversation leaf for trusted core compilation.'
+
 export const testGenerateTaskKeywordsDoesNotNeedPyodide = async () => {
   const task: partialTaskDraft = {
     role: 'user',

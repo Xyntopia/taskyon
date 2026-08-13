@@ -25,10 +25,13 @@ import {
 import type { Annotation, partialTaskDraft, TaskGetter, TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
-import type { ToolBase } from '../types/tools'
+import type { ContentHash, ToolBase } from '../types/tools'
 import { humanizeError, serializeError } from '../utils/error'
 import { createDotPathTransformer } from '../utils/objHelpers'
-import { prepareChatCompletionContext } from './chatCompletion/context'
+import {
+  prepareChatCompletionContext,
+  resolveToolDefinitionsForTaskChain,
+} from './chatCompletion/context'
 import {
   buildChatProviderRequest,
   normalizeNativeStructuredOutputSchema,
@@ -49,6 +52,7 @@ import {
 export {
   convertTaskNodesToOpenAIChat,
   prepareChatCompletionContext,
+  resolveToolDefinitionsForTaskChain,
 } from './chatCompletion/context'
 export { convertFunctionCall, getCommandFromStructuredResponse } from './chatCompletion/response'
 
@@ -105,6 +109,7 @@ export function createChatCompletionTool(
     getTask: TaskGetter
     getArtifact?: ArtifactStore['get']
     listToolDefinitions: () => Promise<Record<string, ToolBase>>
+    resolveToolDefinition?: (name: string, revision?: ContentHash) => Promise<ToolBase | undefined>
     metaUpsert: TyTaskManager['metaUpsert']
   },
 ) {
@@ -348,7 +353,7 @@ export function createChatCompletionTool(
       const executionTaskChain = await context.getExecutionTaskChain()
       const currentTask = executionTaskChain.at(-1)
 
-      const toolDefs = await capabilities.listToolDefinitions()
+      const registeredToolDefs = await capabilities.listToolDefinitions()
 
       //////////// END INITIALIZATION
 
@@ -364,6 +369,11 @@ export function createChatCompletionTool(
           )
         : { tasks: [], includedSubtaskTaskIds: [] }
       const taskChain = selectedTaskChain.tasks
+      const toolDefs = await resolveToolDefinitionsForTaskChain(
+        taskChain,
+        registeredToolDefs,
+        capabilities.resolveToolDefinition,
+      )
       const chatInfo = await prepareChatCompletionContext({
         taskChain,
         allowedTools: tools,

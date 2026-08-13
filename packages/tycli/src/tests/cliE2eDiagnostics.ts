@@ -804,7 +804,7 @@ export function testDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls() {
       content: {
         type: 'functioncall',
         data: {
-          name: 'entryNode',
+          name: 'cliFlow',
           arguments: { taskContract: { objective: 'Inspect the repository' } },
         },
       },
@@ -826,7 +826,7 @@ export function testDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls() {
       id: 'nested-tool',
       parentID: 'subtask-tool',
       role: 'function',
-      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+      content: { type: 'functioncall', data: { name: 'cliFlow', arguments: {} } },
     },
     {
       id: 'unrelated-tool',

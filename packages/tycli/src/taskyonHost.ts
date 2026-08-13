@@ -7,22 +7,19 @@ import {
   type InteractiveCliHost,
 } from './cli'
 import { resolveTaskyonCliStoragePaths } from './cli/storagePaths'
+import { CLI_FLOW_TOOL_NAME, cliToolchainProfiles } from './cli/toolchainSettings'
 
 export function createTaskyonInteractiveCliHost(): InteractiveCliHost {
   return {
     commandName: 'tycli',
     productName: 'Taskyon',
     environmentPrefix: 'TYCLI',
-    entryNodeName: 'entryNode',
+    entryNodeName: CLI_FLOW_TOOL_NAME,
     oauthSecretId: 'taskyon-cli:oauth',
-    providerIdentity: {
-      referer: 'https://tycli.local',
-      title: 'tycli',
-    },
+    toolchainProfiles: cliToolchainProfiles,
     storagePaths: resolveTaskyonCliStoragePaths(),
     versionFileUrl: new URL('../package.json', import.meta.url),
-    buildStableContext: (projectInstructions) =>
-      buildDeveloperCliStableContext('You are the Taskyon CLI assistant.', projectInstructions),
+    buildStableContext: buildDeveloperCliStableContext,
     unavailableToolNames: DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES,
     documentation: {
       baseId: 'taskyon',

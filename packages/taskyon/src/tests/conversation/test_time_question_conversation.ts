@@ -56,13 +56,11 @@ const taskyonFlowToolchainConfig = {
     prompt_templates: {
       basePrompt:
         'You are a helpful assistant called **Taskyon**.\nReturn answers in **Markdown**.',
-      instruction: 'You are a helpful assistant tasked with accurately completing the given task.',
-      toolResult:
-        '**Instruction:**\n\nPlease evaluate the tool/function result.\n\n```\n{message}\n```',
-      task: 'COMPLETE THE FOLLOWING TASK:\n\n```\n{message}\n```',
-      schemaReminder:
-        'Your output must strictly follow these rules and match the requested {format} schema.\n\nSchema:\n\n{schema}',
-      tools: 'Choose one of the following tools if it helps you to complete the task:\n\n${tools}',
+      message: 'Continue the conversation. Use a tool only when needed.',
+      toolResult: 'Continue from the previous tool result.',
+      error: 'Retry a recoverable tool error once.',
+      toolChooser: 'Choose up to {maxTools} tools via {selectorTool}:\n\n{toolCatalog}',
+      retryExhausted: 'Do not retry after {retryCount} failures.',
     },
   },
 } as const

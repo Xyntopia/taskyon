@@ -134,7 +134,9 @@ export const selectLlmModel = async (page: Page, provider?: string, modelId = ''
   if (modelId) {
     const modelSelect = dataCy(page, 'model-select')
     const modelIds =
-      provider && !modelId.includes('/') ? [modelId, `${provider}/${modelId}`] : [modelId]
+      provider && provider !== 'openai' && !modelId.includes('/')
+        ? [modelId, `${provider}/${modelId}`]
+        : [modelId]
     if (!modelIds.includes(await modelSelect.inputValue())) {
       const field = modelField(page)
       await field.click()

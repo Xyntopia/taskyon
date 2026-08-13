@@ -63,8 +63,8 @@ export const createInvocationRevisionResolver =
   }) =>
   async (request: {
     name: string
-    toolRevision?: ContentHash
-    settingsRevision?: ContentHash
+    toolRevision?: ContentHash | undefined
+    settingsRevision?: ContentHash | undefined
   }): Promise<ToolInvocationRevisions | null> => {
     const resolved = await dependencies.resolveTool(request.name, request.toolRevision)
     if (!resolved.identity) return null

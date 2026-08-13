@@ -1,4 +1,3 @@
-import { forgeTaskChain } from './createTasks'
 import type { FileAttachment, partialTaskDraft, TaskNode } from '../types/taskNode'
 import { textRankTaskName } from './taskNaming'
 
@@ -11,11 +10,7 @@ type BuildCreateNewTaskChainArgs = {
   fileAttachments?: readonly (FileAttachment | string)[] | undefined
   keyword?: string | null | undefined
   mode: MessageExecutionMode
-}
-
-type CreatedTaskChain = {
-  taskChain: partialTaskDraft[]
-  createdTasks: TaskNode[]
+  priorTaskId?: string | undefined
 }
 
 const cloneTaskDraft = (task: partialTaskDraft): partialTaskDraft => structuredClone(task)
@@ -102,6 +97,7 @@ export const buildCreateNewTaskChain = ({
   fileAttachments,
   keyword,
   mode,
+  priorTaskId,
 }: BuildCreateNewTaskChainArgs): partialTaskDraft[] => {
   const newTaskChain: partialTaskDraft[] = []
   const fileTask = createFileTaskDraft(fileAttachments)
@@ -134,16 +130,8 @@ export const buildCreateNewTaskChain = ({
     )
   }
 
-  return newTaskChain
-}
-
-export const createNewTaskChain = async ({
-  priorTaskId,
-  ...args
-}: BuildCreateNewTaskChainArgs & {
-  priorTaskId?: string | undefined
-}): Promise<CreatedTaskChain> => {
-  const taskChain = buildCreateNewTaskChain(args)
-  const createdTasks = await forgeTaskChain([taskChain], [priorTaskId])
-  return { taskChain, createdTasks }
+  const firstTask = newTaskChain[0]
+  return priorTaskId && firstTask
+    ? [{ ...firstTask, priorID: priorTaskId }, ...newTaskChain.slice(1)]
+    : newTaskChain
 }

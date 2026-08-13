@@ -236,6 +236,7 @@ function buildToolSandboxCode(userCode: string): string {
             waitForInteraction: (request) => call('waitForInteraction', request || {}),
             toolCall,
             createSubtasksResult: (tasks) => call('createSubtasksResult', { tasks }),
+            resolveInvocation: (request) => call('resolveInvocation', request),
             createChatCompletionTask,
             fetch: sandboxFetch,
           };
@@ -276,6 +277,12 @@ function buildContextHandlers(
       getExecutionTaskChain: () => context.getExecutionTaskChain(),
       createSubtasksResult: ({ tasks }) =>
         context.createSubtasksResult(parseCreateSubtasksResultInput(tasks)),
+      resolveInvocation: (request) => {
+        if (!context.resolveInvocation) {
+          throw new Error('Invocation revision lookup is unavailable.')
+        }
+        return context.resolveInvocation(request)
+      },
       waitForInteraction: ({ tool, token }) => {
         if (!context.waitForInteraction) {
           throw new Error('Tool interaction capability is unavailable.')

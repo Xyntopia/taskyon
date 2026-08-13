@@ -889,7 +889,9 @@ export async function useTyTaskManager(
         throw new Error(`Compiled task parent mismatch for ${task.id}.`)
       }
       if (index > 0 && task.priorID !== priorID) {
-        throw new Error(`Compiled task chain linkage mismatch for ${task.id}.`)
+        throw new Error(
+          `Compiled task chain linkage mismatch at index ${index} (${task.content.type}, ${task.id}): expected priorID ${String(priorID)}, got ${String(task.priorID)}.`,
+        )
       }
       priorID = task.id
     }

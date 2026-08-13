@@ -89,6 +89,9 @@ sharing, and persistence.
 - Store a task occurrence separately from its immutable content: the occurrence retains call-stack
   links and a `contentRef`, while the content store deduplicates identical `TaskContent` values.
   Hydrate only at boundaries that need the full content.
+- Store immutable settings snapshots per exact tool name and tool revision. Calls carry only the
+  opaque settings revision; never place secret values in these snapshots or expose the complete
+  toolchain configuration to tools.
 - Store filesystem records under fixed-length hash-only paths. Backends may shard hashes into
   prefix directories but must not expose serialized keys or domain names as final filenames.
 - Present large immutable artifacts to consumers as whole content-addressed blobs. Streaming pieces

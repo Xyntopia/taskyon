@@ -603,7 +603,7 @@ async function main() {
   process.once('unhandledRejection', handleUnhandledRejection)
 
   try {
-    const [{ getSelectedProviderSettings }, { bootstrapCliTaskyon }] = await Promise.all([
+    const [{ getSelectedToolchainConfig }, { bootstrapCliTaskyon }] = await Promise.all([
       import('../cli/models'),
       import('../cli/runtime'),
     ])
@@ -648,9 +648,7 @@ async function main() {
       allowLongRun: opts.allowLongRun,
       selectedApi: runtime.selectedApi,
       llmSettings: runtime.llmState.settings,
-      toolchainConfig: {
-        chatCompletion: getSelectedProviderSettings(runtime.llmState),
-      },
+      toolchainConfig: getSelectedToolchainConfig(runtime.llmState),
       ...(runtime.model ? { model: runtime.model } : {}),
       ...(runtime.providerKey ? { providerKey: runtime.providerKey } : {}),
       ...(runtime.oauthSession?.accessToken

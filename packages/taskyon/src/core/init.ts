@@ -1,7 +1,7 @@
 import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import { TyToolchainConfig, type llmSettings } from '../types/profiles'
-import { createSubtasksResult, type InternalTool } from '../types/toolApi'
-import { FunctionArguments } from '../types/tools'
+import type { InternalTool } from '../types/toolApi'
+import type { FunctionArguments } from '../types/tools'
 import { ToolBase, type ToolIdentity } from '../types/tools'
 import { partialTaskDraft } from '../types/taskNode'
 import {
@@ -41,19 +41,27 @@ import { createTaskyonApiDescription } from '../api/taskyonOpenApi'
 import type { TaskManagerStorage, TyTaskManager } from './taskManager'
 import { createPgLiteTaskManagerStorage, useTyTaskManager } from './taskManager'
 import type { ArtifactStore } from './artifactStore'
-import { findCallingToolReference, generateSecretId } from './taskFunctionExecutor'
+import {
+  createInvocationToolResolver,
+  findCallingToolReference,
+  generateSecretId,
+  prepareInvocationToolCall,
+} from './taskFunctionExecutor'
 import { runTaskWorker, type TyTaskStreamData } from './taskWorker'
 import { summarizeProtocolMessageForLog } from './protocolLogging'
 import {
   createToolExecutionClient,
   registerToolRpcBroker,
   registerToolRpcExecutor,
-  type ToolRpcFunctionCallMessage,
 } from './toolRpc'
-import { materializeTaskyonFunctionArguments } from './taskVariables'
 import { createMediatedFetch, type FetchCapability } from '../security/mediatedFetch'
 import { createToolManager, type ToolManager } from './toolManager'
-import { createWithDefaults } from './tools'
+import {
+  createInvocationRevisionResolver,
+  createToolSettingsManager,
+  type InvocationRevisionResolver,
+} from './toolSettings'
+import { createCompiledSubtasksResult, createTaskCompiler, type TaskCompiler } from './taskCompiler'
 import type { ReadonlyDeep } from 'type-fest'
 
 type TaskyonProtocolMessage = ProtocolMessage<typeof taskyonProtocol>
@@ -102,6 +110,8 @@ function createApi(
   toolManager: ToolManager,
   artifactStore: ArtifactStore | undefined,
   queueTask: (id: string) => void,
+  resolveInvocationRevisions: InvocationRevisionResolver,
+  taskCompiler: TaskCompiler,
 ) {
   const unsubscribeApiServer = createPortServer(
     insidePort,
@@ -122,10 +132,11 @@ function createApi(
       },
       task: {
         create: async (msg) => {
-          const tn = await taskManagerInstance.addPartialTask2Tree({
-            ...msg.task,
-            //label: msg.origin ? [msg.origin] : undefined,
-          })
+          const compiledTasks = await taskCompiler.compileOrVerifyChain([msg.task])
+          const compiled = compiledTasks[0]
+          if (!compiled) throw new Error('Task compilation produced no task.')
+          const [tn] = await taskManagerInstance.addTaskNodes([compiled])
+          if (!tn) throw new Error('Task persistence produced no task.')
           // push the last task to execution queue right away...
           if (msg.execute) {
             queueTask(tn.id)
@@ -133,7 +144,9 @@ function createApi(
         },
         createChain: async (msg) => {
           console.log('received tasks:', msg)
-          const ts = await taskManagerInstance.addTaskChain(msg.tasks)
+          const ts = await taskManagerInstance.addTaskNodes(
+            await taskCompiler.compileOrVerifyChain(msg.tasks),
+          )
           console.log('executing tasks', ts)
           if (msg.execute) ts.forEach((t) => queueTask(t.id))
           return { ids: ts.map((task) => task.id) }
@@ -164,6 +177,7 @@ function createApi(
           const { tool, identity } = await toolManager.resolveTool(name, revision)
           return tool && identity ? { tool: ToolBase.parse(tool), identity } : null
         },
+        resolveInvocation: resolveInvocationRevisions,
       },
       files: {
         add: async ({ file }) => {
@@ -274,6 +288,15 @@ const dynamicContext =
       ? await options.taskManagerStorageFactory({ sessionId: sessionKeyId, db })
       : await createPgLiteTaskManagerStorage(db)
     const toolManager = createToolManager(storage.tools)
+    const runtimeConfiguration = {
+      toolchainConfig: initialToolchainConfig,
+    }
+    const toolSettingsManager = createToolSettingsManager(storage.toolSettings)
+    const resolveInvocationRevisions = createInvocationRevisionResolver({
+      resolveTool: toolManager.resolveTool,
+      getToolSettings: (name) => runtimeConfiguration.toolchainConfig[name],
+      settingsManager: toolSettingsManager,
+    })
     const artifactStore = options.artifactStoreFactory
       ? await options.artifactStoreFactory({ sessionId: sessionKeyId })
       : undefined
@@ -282,6 +305,15 @@ const dynamicContext =
       taskSearchVectorizer: options.taskSearchVectorizer,
       storage,
       resolveTool: toolManager.resolveTool,
+    })
+    const taskCompiler = createTaskCompiler({
+      getTaskLineage: (id) =>
+        taskManagerInstance.getTaskChain(id, 1e9, {
+          method: 'lineage',
+          includeSubtaskResults: 'none',
+        }),
+      toolManager,
+      resolveInvocationRevisions,
     })
     console.log('tycore finished taskManager initialization')
     const secretStore =
@@ -300,9 +332,6 @@ const dynamicContext =
         },
       )
 
-    const runtimeConfiguration = {
-      toolchainConfig: initialToolchainConfig,
-    }
     const sessionTools = toolSetup.createSessionTools({
       db,
       taskManager: taskManagerInstance,
@@ -368,21 +397,37 @@ const dynamicContext =
       'functionCancel',
     ])
     const coreToolRpcPort = coreToolRpcPortFilter.port
+    const resolveInvocationTool = createInvocationToolResolver({
+      getExecutionTask: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
+      getTaskLineage: (id) =>
+        taskManagerInstance.getTaskChain(id, 1e9, {
+          method: 'lineage',
+          includeSubtaskResults: 'none',
+        }),
+      resolveRegisteredTool: toolManager.resolveTool,
+    })
     const coreToolExecutor = registerToolRpcExecutor({
       port: coreToolRpcPort,
       getTool: async (name, call) => {
-        const { tool } = await toolManager.resolveTool(name, call?.toolRevision)
-        if (tool?.function || tool?.code) return tool
+        const { tool } = await resolveInvocationTool(name, call)
+        if (tool?.code) return tool
+        if (tool && 'function' in tool && tool.function) return tool
         return undefined
       },
+      prepareFunctionCall: (call) =>
+        prepareInvocationToolCall(call, {
+          resolveInvocationTool,
+          getTaskById: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
+          resolveToolSettings: async (name, toolRevision, settingsRevision) =>
+            (await toolSettingsManager.resolve(name, toolRevision, settingsRevision))?.settings,
+        }),
       createContext: async (call, stopSignal) => {
-        const { tool, identity } = await toolManager.resolveTool(
-          call.functionName,
-          call.toolRevision,
-        )
+        const { tool, identity } = await resolveInvocationTool(call.functionName, call)
         if (!tool) throw new Error(`Tool not found: ${call.functionName}`)
         const toolId = await generateSecretId(identity?.revision, tool)
-        const executionTask = call.taskId ? await taskManagerInstance.getTask(call.taskId) : null
+        const executionTask = call.taskId
+          ? await taskManagerInstance.getTask(call.taskId, { contentMode: 'hydrated' })
+          : null
         const interactionIds = new Set(
           [executionTask?.parentID, executionTask?.priorID].filter(
             (id): id is string => typeof id === 'string',
@@ -403,15 +448,26 @@ const dynamicContext =
               const chain = await taskManagerInstance.getTaskChain(call.taskId)
               const caller = findCallingToolReference(chain, call.functionName)
               if (!caller) return null
-              const { tool: callerTool, identity: callerIdentity } = await toolManager.resolveTool(
+              const { tool: callerTool, identity: callerIdentity } = await resolveInvocationTool(
                 caller.name,
-                caller.revision,
+                {
+                  taskId: caller.taskId,
+                  ...(caller.revision ? { toolRevision: caller.revision } : {}),
+                },
               )
               return callerTool
                 ? await generateSecretId(callerIdentity?.revision, callerTool)
                 : null
             },
-            createSubtasksResult,
+            createSubtasksResult: async (tasks) => {
+              if (!call.taskId) {
+                throw new Error('Task compilation requires the calling task id.')
+              }
+              return await createCompiledSubtasksResult(tasks, (chain) =>
+                taskCompiler.compileOrVerifyChain(chain, { parentID: call.taskId }),
+              )
+            },
+            resolveInvocation: resolveInvocationRevisions,
             getSecret: async (name, askNew, saveNew = true) => {
               console.log('get secret name', name)
               const secr = await secretStore.getSecret(toolId, name, askNew, saveNew)
@@ -453,30 +509,6 @@ const dynamicContext =
         }
       },
     })
-    const prepareToolCall = async (call: ToolRpcFunctionCallMessage) => {
-      const { tool, identity } = await toolManager.resolveTool(call.functionName, call.toolRevision)
-      if (!tool) {
-        throw new Error(
-          `The function '${call.functionName}' is not available in tools. Please select a valid toolname.`,
-        )
-      }
-      const rawArguments = call.arguments ?? {}
-      const funcSettings = runtimeConfiguration.toolchainConfig[call.functionName]
-      const materializedArguments = await materializeTaskyonFunctionArguments(rawArguments, {
-        surface: 'execution',
-        getTaskById: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
-      })
-      return {
-        name: call.functionName,
-        ...(identity ? { toolRevision: identity.revision } : {}),
-        arguments: FunctionArguments.parse({
-          ...createWithDefaults(tool.parameters),
-          ...(funcSettings || {}),
-          ...rawArguments,
-          ...materializedArguments,
-        }),
-      }
-    }
     const continuationTask = partialTaskDraft.parse(entryNode())
     const entryNodeToolName =
       continuationTask.content.type === 'functioncall'
@@ -487,13 +519,37 @@ const dynamicContext =
       taskManagerInstance,
       continuationTask,
       continuationTask,
+      (tasks, parentTask) => taskCompiler.compileOrVerifyChain(tasks, { parentID: parentTask.id }),
       taskWorkerConfig?.maxConcurrency ?? 4,
       new Set([toolSetup.chatCompletionToolName, entryNodeToolName]),
     )
     const workerToolBroker = registerToolRpcBroker({
       workerPort: toolRpcPort,
       toolPort: workerport,
-      prepareFunctionCall: prepareToolCall,
+      prepareFunctionCall: async (call) => {
+        const revisions = call.taskId
+          ? undefined
+          : await resolveInvocationRevisions({
+              name: call.functionName,
+              ...(call.toolRevision ? { toolRevision: call.toolRevision } : {}),
+              ...(call.settingsRevision ? { settingsRevision: call.settingsRevision } : {}),
+            })
+        if (!call.taskId && !revisions) {
+          throw new Error(`Tool not found: ${call.functionName}`)
+        }
+        return await prepareInvocationToolCall(
+          {
+            ...call,
+            ...(revisions ?? {}),
+          },
+          {
+            resolveInvocationTool,
+            getTaskById: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
+            resolveToolSettings: async (name, toolRevision, settingsRevision) =>
+              (await toolSettingsManager.resolve(name, toolRevision, settingsRevision))?.settings,
+          },
+        )
+      },
       defaultTimeoutMs: MAX_REMOTE_FUNCTION_TIMEOUT_MS,
     })
     const toolExecutionClient = createToolExecutionClient(workerport)
@@ -504,6 +560,8 @@ const dynamicContext =
       toolManager,
       artifactStore,
       (id: string) => queueTask(id),
+      resolveInvocationRevisions,
+      taskCompiler,
     )
     let disposed = false
     const unsubscribeTaskStreamBridge = taskManagerInstance.taskStream(
@@ -542,7 +600,11 @@ const dynamicContext =
     ]
     //##################### END INIT CTX #################
     return {
-      callTool: (name: string, args: FunctionArguments) => toolExecutionClient.callTool(name, args),
+      callTool: async (name: string, args: FunctionArguments) => {
+        const revisions = await resolveInvocationRevisions({ name })
+        if (!revisions) throw new Error(`Tool not found: ${name}`)
+        return await toolExecutionClient.callTool(name, args, revisions)
+      },
       runtimeConfiguration,
       cancelCurrentRun: (message: string) => {
         console.log('tycore stopping all tasks:', message)

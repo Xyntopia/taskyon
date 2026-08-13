@@ -62,6 +62,7 @@ export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
 export * from './core/markdownTaskIO'
 export * from './core/taskManager'
+export * from './core/scopedTools'
 export * from './core/taskFunctionExecutor'
 export * from './core/taskNaming'
 export { findContinuationLeafTaskIds } from './core/taskChainSelection'
@@ -83,12 +84,14 @@ export * from './tools/chatCompletionTool'
 export * from './tools/chatCompletionTrace'
 export * from './tools/clarificationTool'
 export * from './tools/entryNode'
+export * from './tools/lambdaTool'
 export { convertTaskNodesToOpenAIChat } from './tools/chatCompletionTool'
 export * from './types/chatCompletion'
 export * from './types/chatCompletionService'
 export * from './types/taskContract'
 export type * from './types/taskNode'
 export {
+  BindingImplementation,
   FileAttachment,
   partialTaskDraft,
   TaskContent,

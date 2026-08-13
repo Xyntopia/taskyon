@@ -22,9 +22,10 @@ import {
 import { mapFunctionNames } from '../../core/tools'
 import { toPromptMessages, type PromptInjection } from '../../llm/promptMessages'
 import type { FileAttachment, TaskGetter, TaskNode } from '../../types/taskNode'
-import type { ToolBase } from '../../types/tools'
+import type { ContentHash, ToolBase } from '../../types/tools'
 import { charHash } from '../../utils/crypto'
 import { humanizeError } from '../../utils/error'
+import { deriveBindingParameters } from '../../core/scopedTools'
 import { convertFileToText } from '../../utils/loadFiles'
 import { isEmpty } from '../../utils/objHelpers'
 
@@ -66,6 +67,34 @@ const generateToolDeclarations = (
     }),
     {},
   )
+
+export const resolveToolDefinitionsForTaskChain = async (
+  taskChain: readonly TaskNode[],
+  registeredDefinitions: Readonly<Record<string, ToolBase>>,
+  resolveToolDefinition?: (name: string, revision?: ContentHash) => Promise<ToolBase | undefined>,
+): Promise<Record<string, ToolBase>> => {
+  const definitions = { ...registeredDefinitions }
+  for (const task of taskChain) {
+    if (task.content.type !== 'tooldefinition') continue
+    const definition = task.content.data
+    if (!('implementation' in definition)) {
+      definitions[definition.name] = definition
+      continue
+    }
+    const target =
+      (await resolveToolDefinition?.(
+        definition.implementation.target,
+        definition.implementation.targetRevision,
+      )) ?? definitions[definition.implementation.target]
+    if (!target) throw new Error(`Binding target not found: ${definition.implementation.target}`)
+    definitions[definition.name] = {
+      name: definition.name,
+      description: definition.description,
+      parameters: deriveBindingParameters(definition, target),
+    }
+  }
+  return definitions
+}
 
 export const prepareChatCompletionContext = async (input: {
   taskChain: TaskNode[]
@@ -179,6 +208,10 @@ export async function convertTaskNodesToOpenAIChat(
   const handoffTaskIds = new Set(handoffGroups.flatMap((group) => group.map((task) => task.id)))
 
   for (const task of taskChain) {
+    if (task.content.type === 'tooldefinition') {
+      renderedTaskIds.add(task.id)
+      continue
+    }
     const handoffGroup = handoffByFirstTaskId.get(task.id)
     if (handoffGroup) {
       messages.push(renderSubtaskHandoff(handoffGroup))
@@ -308,6 +341,7 @@ const renderMissingReferencedTasksForLlm = async (
     }
     tasksById.set(taskId, referencedTask)
     injectedTaskIds.add(taskId)
+    if (referencedTask.content.type === 'tooldefinition') continue
     injectedMessages.push({
       role: 'system',
       content: renderTaskContentForLlm(referencedTask, tasksById, variableService),

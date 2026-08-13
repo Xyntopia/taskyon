@@ -31,6 +31,9 @@ Apply this policy to Vue components, stores, routes, styling, and user interacti
   boundary.
 - Navigate to newly created task chains only from the authoritative IDs in the core creation
   response. Do not retain or select IDs predicted from pre-persistence drafts.
+- Reuse the shared chat-visibility selectors for rendering and copy/export surfaces so hidden
+  workflow nodes do not leak through a second presentation path. Model-context filtering remains
+  an independent core concern and must always exclude scoped tool definitions.
 - Keep Taskyon-owned interfaces in Taskyon-owned UI modules instead of duplicating them in a host
   application.
 - Keep generic DAG canvas, tree, list, search, filtering, selection, context-menu, and editor

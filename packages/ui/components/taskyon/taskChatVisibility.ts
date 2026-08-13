@@ -6,6 +6,7 @@ export const isTaskVisibleInChat = (
   expertMode: boolean,
 ) => {
   if (task.content.type === 'return') return false
+  if (task.content.type === 'tooldefinition') return expertMode
   if (task.content.type === 'functioncall') {
     return tools[task.content.data.name]?.renderOptions?.hideChat !== true
   }

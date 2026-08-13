@@ -6,6 +6,7 @@ import {
   readOnlineEnv,
   selectLlmModel,
   waitForTaskyonSession,
+  writeMessage,
 } from '../support/taskyon'
 
 const diagnosticsTimeoutMs = 200_000
@@ -52,6 +53,71 @@ test.describe('diagnostics page', () => {
     expect(diagnosticsText).not.toContain('status: ERROR')
   })
 
+  test('simple chat completes without routing errors', async ({ page, context }) => {
+    test.info().annotations.push({
+      type: 'model-based',
+      description: 'Replays the routing-error transcript through the browser UI runtime.',
+    })
+    if (!onlineEnv) throw new Error('online env missing')
+
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.goto('/')
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
+    await waitForTaskyonSession(page)
+    await addAiServices(page, onlineEnv)
+    await page.getByLabel('go to chat').click()
+    await waitForTaskyonSession(page)
+    await selectLlmModel(page, 'openai', 'gpt-5.1')
+
+    const assistantMessages = page.locator('.assistant.message')
+    const initialAssistantMessageCount = await assistantMessages.count()
+    const submissionOutcomePromise = Promise.race([
+      expect(page.locator('.user.message').last())
+        .toContainText('what happened?')
+        .then(() => ({ type: 'created' as const })),
+      page
+        .waitForEvent('pageerror')
+        .then((error) => ({ type: 'error' as const, message: error.stack ?? error.message })),
+    ])
+    await writeMessage(page, 'what happened?')
+    const submissionOutcome = await submissionOutcomePromise
+    expect(
+      submissionOutcome.type,
+      submissionOutcome.type === 'error' ? submissionOutcome.message : undefined,
+    ).toBe('created')
+    const routingErrors = page.locator('.task-container.error, .task-container:has(.text-negative)')
+    const clarificationDialog = page.getByRole('dialog').filter({ hasText: 'Clarify Request' })
+    const outcome = await Promise.race([
+      expect(assistantMessages)
+        .toHaveCount(initialAssistantMessageCount + 1, { timeout: diagnosticsTimeoutMs })
+        .then(() => ({ type: 'assistant' as const })),
+      clarificationDialog
+        .waitFor({ state: 'visible', timeout: diagnosticsTimeoutMs })
+        .then(() => ({ type: 'clarification' as const })),
+      routingErrors
+        .first()
+        .waitFor({ state: 'visible', timeout: diagnosticsTimeoutMs })
+        .then(async () => ({
+          type: 'error' as const,
+          message: await routingErrors.first().innerText(),
+        })),
+    ])
+    expect(outcome.type, outcome.type === 'error' ? outcome.message : undefined).not.toBe('error')
+    await expect(routingErrors).toHaveCount(0)
+    if (outcome.type === 'clarification') {
+      await clarificationDialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await expect(clarificationDialog).toBeHidden()
+    }
+
+    await page.getByLabel('copy entire chat as markdown').click()
+    const copiedChat = await page.evaluate(() => navigator.clipboard.readText())
+    expect(copiedChat).not.toContain('Invalid arguments for tool')
+    expect(copiedChat).not.toContain('type: tooldefinition')
+    expect(copiedChat).not.toContain('prompt_templates')
+    expect(copiedChat).not.toContain('use_baseprompt')
+    expect(copiedChat).not.toContain('tool_chooser_min_tools')
+  })
+
   test('plans separate tool tasks and opens the animated clock popup', async ({
     page,
     context,
@@ -96,7 +162,9 @@ test.describe('diagnostics page', () => {
         outcome.diagnosticsText.includes('status: MODEL MISS'),
         'The selected model did not satisfy this capability evaluation.',
       )
-      throw new Error(`Diagnostic failed before opening the clock popup:\n${outcome.diagnosticsText}`)
+      throw new Error(
+        `Diagnostic failed before opening the clock popup:\n${outcome.diagnosticsText}`,
+      )
     }
     const { clockPopup } = outcome
 

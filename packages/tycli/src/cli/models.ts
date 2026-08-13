@@ -10,94 +10,7 @@ import {
 import { asyncTimeLruCache } from '@taskyon/taskyon/utils/caching'
 import type { CliApiConfig, LlmModel } from './types'
 
-export const DEFAULT_PROMPT_TEMPLATES = {
-  basePrompt:
-    'You are a helpful assistant called Taskyon. Return concise and correct Markdown answers.',
-  instruction:
-    'Complete the task accurately. If structured output is requested, follow the required format exactly.',
-  toolResult: 'Evaluate the following tool result and respond in {format}:\\n\\n{message}',
-  task: 'Complete this task:\\n\\n{message}',
-  evaluate: 'Evaluate this message and respond in {format}:\\n\\n{message}',
-  schemaReminder:
-    'Output must strictly match {format} and this schema:\\n\\n{schema}\\n\\nDo not add extra text.',
-  tools: 'Available tools:\\n\\n${tools}',
-}
-
 const CODEX_MODELS_CLIENT_VERSION = '0.144.5'
-
-export const baseProviderProfiles: Record<string, ChatCompletionProviderSettings> = {
-  taskyon: {
-    provider: 'taskyon',
-    name: 'taskyon',
-    baseURL: 'https://share.taskyon.space',
-    model: 'google/gemini-2.5-flash-lite',
-    streamSupport: true,
-    defaultHeaders: {
-      apiKey: 'sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm',
-    },
-    routes: {
-      chatCompletion: '/chatCompletion/api/v1/',
-      models: '/chatCompletion/api/v1/models',
-    },
-  },
-  openai: {
-    provider: 'openai',
-    name: 'openai',
-    baseURL: 'https://api.openai.com',
-    model: 'gpt-5.1',
-    streamSupport: true,
-    routes: {
-      chatCompletion: '/v1/',
-      models: '/v1/models',
-    },
-  },
-  'chatgpt-codex': {
-    provider: 'chatgpt-codex',
-    name: 'chatgpt-codex',
-    baseURL: 'https://chatgpt.com/backend-api/codex',
-    model: 'gpt-5.4',
-    streamSupport: true,
-    auth: {
-      type: 'oauth',
-      oauth: {
-        authorizationUrl: 'https://auth.openai.com/oauth/authorize',
-        tokenUrl: 'https://auth.openai.com/oauth/token',
-        clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
-        scope: 'openid profile email offline_access',
-        authorizeQuery: {
-          id_token_add_organizations: 'true',
-          codex_cli_simplified_flow: 'true',
-        },
-      },
-    },
-    routes: {
-      chatCompletion: '/responses',
-      models: '/models',
-    },
-  },
-  'openrouter.ai': {
-    provider: 'openrouter.ai',
-    name: 'openrouter.ai',
-    baseURL: 'https://openrouter.ai',
-    model: 'google/gemini-2.5-flash-lite',
-    streamSupport: true,
-    routes: {
-      chatCompletion: '/api/v1/',
-      models: '/api/v1/models',
-    },
-  },
-  local: {
-    provider: 'local',
-    name: 'local LLM server',
-    baseURL: 'http://localhost:8080',
-    model: 'qwen3-4b',
-    streamSupport: true,
-    routes: {
-      chatCompletion: '/v1/',
-      models: '/v1/models',
-    },
-  },
-}
 
 export type CliLlmState = {
   settings: llmSettings
@@ -105,51 +18,22 @@ export type CliLlmState = {
   selectedToolchainProfile: string
 }
 
-export type CliProviderIdentity = {
-  referer: string
-  title: string
-}
-
-const TASKYON_CLI_PROVIDER_IDENTITY: CliProviderIdentity = {
-  referer: 'https://tycli.local',
-  title: 'tycli',
-}
-
 export function createCliLlmState(
   config: CliApiConfig,
-  providerIdentity: CliProviderIdentity = TASKYON_CLI_PROVIDER_IDENTITY,
+  toolchainProfiles: ToolchainProfiles,
+  entryFunction: string,
 ): CliLlmState {
-  const selectedProviderSettings = baseProviderProfiles[config.selectedApi]
-  if (!selectedProviderSettings) {
+  const profiles = structuredClone(toolchainProfiles)
+  const selectedProfile = profiles.profiles[config.selectedApi]
+  if (!selectedProfile?.chatCompletion) {
     throw new Error(`Unsupported provider: ${config.selectedApi}`)
   }
+  if (config.model) {
+    selectedProfile.chatCompletion = { ...selectedProfile.chatCompletion, model: config.model }
+  }
   return {
-    settings: {
-      entryFunction: 'entryNode',
-    },
-    toolchainProfiles: {
-      base: {},
-      profiles: Object.fromEntries(
-        Object.entries(baseProviderProfiles).map(([provider, settings]) => [
-          provider,
-          {
-            chatCompletion: {
-              ...settings,
-              ...(['taskyon', 'openrouter.ai'].includes(provider)
-                ? {
-                    defaultHeaders: {
-                      ...(settings.defaultHeaders ?? {}),
-                      'HTTP-Referer': providerIdentity.referer,
-                      'X-Title': providerIdentity.title,
-                    },
-                  }
-                : {}),
-              ...(provider === config.selectedApi && config.model ? { model: config.model } : {}),
-            },
-          },
-        ]),
-      ),
-    },
+    settings: { entryFunction },
+    toolchainProfiles: profiles,
     selectedToolchainProfile: config.selectedApi,
   }
 }

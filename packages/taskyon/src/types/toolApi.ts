@@ -2,7 +2,7 @@ import type { JSONSchema, FromSchema } from 'json-schema-to-ts'
 import z from 'zod'
 import type { WithRequired } from '../utils/tsHelpers'
 import { partialTaskDraft, type TaskNode } from './taskNode'
-import type { FunctionCall } from './tools'
+import type { FunctionCall, ToolInvocationRevisions } from './tools'
 import { ToolBase, taskMarker } from './tools'
 
 export const ToolProgress = z.object({
@@ -39,7 +39,14 @@ export type ToolInteractionRequest = {
 export type toolContext = {
   getExecutionTaskChain: () => Promise<TaskNode[]>
   getCallingToolId?: () => Promise<string | null>
-  createSubtasksResult: typeof createSubtasksResult
+  createSubtasksResult: (
+    tasks: Parameters<typeof createSubtasksResult>[0],
+  ) => taskResult | Promise<taskResult>
+  resolveInvocation?: (request: {
+    name: string
+    toolRevision?: FunctionCall['toolRevision']
+    settingsRevision?: FunctionCall['settingsRevision']
+  }) => Promise<ToolInvocationRevisions | null>
   getSecret: (name: string, askNew: boolean | string, saveNew?: boolean) => Promise<string | null>
   setSecret: (name: string, value: string) => Promise<void>
   stopSignal: AbortSignal
