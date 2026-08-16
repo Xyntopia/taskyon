@@ -1,0 +1,7 @@
+export { recordConversationHistory, resolveConversationTitle } from './core/conversationHistory'
+export { buildCreateNewTaskChain } from './core/createNewTaskChain'
+export type { MessageExecutionMode } from './core/createNewTaskChain'
+export { chat2Md } from './core/markdownTaskIO'
+export { getDefaultParametersForTool } from './core/tools'
+export { taskRefToTaskId } from './core/taskVariables'
+export { partialTaskDraft } from './types/taskNode'

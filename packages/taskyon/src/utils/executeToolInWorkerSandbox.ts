@@ -326,10 +326,16 @@ function buildContextHandlers(
   }
 }
 
-const shouldExecuteToolInMainThread = () =>
-  typeof window !== 'undefined' &&
-  import.meta.env?.DEV === true &&
-  import.meta.env.VITE_TASKYON_TOOL_EXECUTION === 'main-thread'
+const shouldExecuteToolInMainThread = () => {
+  const environment = Reflect.get(import.meta, 'env')
+  return (
+    typeof window !== 'undefined' &&
+    environment !== null &&
+    typeof environment === 'object' &&
+    Reflect.get(environment, 'DEV') === true &&
+    Reflect.get(environment, 'VITE_TASKYON_TOOL_EXECUTION') === 'main-thread'
+  )
+}
 
 const executeToolInMainThread = async (
   code: string,

@@ -4,8 +4,8 @@ import type { TaskyonCoreRuntimeStage } from './core'
 export type TaskyonBrowserWorkerInitMessage = {
   type: 'init'
   corePort: MessagePort
-  storagePort: MessagePort
   hostPort: MessagePort
+  storagePort: MessagePort
   llmSettings: llmSettings
   entryNode?: partialTaskDraft
   toolchainConfig?: Record<string, FunctionArguments>

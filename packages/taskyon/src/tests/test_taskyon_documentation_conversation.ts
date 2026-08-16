@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url'
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { createDocumentationBaseStore } from '@taskyon/common/modules/documentationBases'
 import type { DocumentationManifest } from '@taskyon/common/modules/resourceFiles'
-import { createTaskyonClient, processTasksDetailed } from '../api'
+import {
+  createTaskyonClient,
+  createTaskyonHostClient,
+  processTasksDetailed,
+  setTaskyonProviderCredential,
+} from '../api'
 import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { createDefaultTaskyonToolSetup } from '../tools'
@@ -125,7 +130,13 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     },
   )
   taskyonRef.current = ty
-  if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+  const host = createTaskyonHostClient(ty.hostPort)
+  if (
+    !(await authenticateDiagnosticsRuntime(context, {
+      updateChatCompletionApiKey: (provider, value) =>
+        setTaskyonProviderCredential(host, provider, value),
+    }))
+  ) {
     return { skipped: true, reason: 'The saved provider session is unavailable.' }
   }
 

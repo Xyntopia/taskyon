@@ -1,0 +1,22 @@
+{
+  "name": "@taskyon/sdk",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@taskyon/common": "workspace:*",
+    "@taskyon/runtime-browser": "workspace:*",
+    "@taskyon/taskyon": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0"
+  },
+  "scripts": {
+    "build": "tsup --config tsup.config.ts"
+  }
+}

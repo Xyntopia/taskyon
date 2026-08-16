@@ -57,7 +57,7 @@ export {
   TyToolchainConfig,
 } from '../types/profiles'
 export type { ClientTool, ClientToolContext, toolContext } from '../types/toolApi'
-export type { FileAttachment, TaskNode } from '../types/taskNode'
+export type { Annotation, FileAttachment, TaskNode } from '../types/taskNode'
 export { FunctionArguments } from '../types/tools'
 export type { FunctionCall, ToolBase } from '../types/tools'
 export { sha256UrlSafeHashFromFile } from '../utils/encoding'
@@ -520,11 +520,10 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
   }
 }
 
-export type TaskyonClient = ReturnType<typeof createTaskyonClient>
-
 export const createTaskyonHostClient = (port: Port<TaskyonHostMessage, TaskyonHostMessage>) =>
   createPortClient(port, taskyonHostProtocol)
 
+export type TaskyonClient = ReturnType<typeof createTaskyonClient>
 export type TaskyonHostClient = ReturnType<typeof createTaskyonHostClient>
 
 export const setTaskyonProviderCredential = async (

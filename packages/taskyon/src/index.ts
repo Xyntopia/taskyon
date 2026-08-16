@@ -17,8 +17,8 @@ export {
   observeSubTaskStream,
   observeSubTaskStreamDetailed,
   processTasksDetailed,
-  createTaskyonClient,
   createTaskyonHostClient,
+  createTaskyonClient,
   createProtocolStorageCrudWrapper,
   createProtocolStorageBlobBackend,
   createStorageClient,
@@ -36,6 +36,7 @@ export {
   hasTaskyonProviderCredential,
   setTaskyonProviderCredential,
   taskyonStorageProtocol,
+  type TaskyonHostClient,
   taskyonLoggingProtocol,
   TaskyonMessage,
   type StorageBlobBackend,
@@ -63,7 +64,7 @@ export { createTaskNode, ensureValidTaskId, forgeTaskChain } from './core/create
 export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export * from './core/createNewTaskChain'
 export * from './core/conversationHistory'
-export { tyCore } from './core/init'
+export { tyCore, type TyCoreToolSetup } from './core/init'
 export type { Taskyon } from './core/init'
 export * from './core/markdownTaskIO'
 export * from './core/taskManager'

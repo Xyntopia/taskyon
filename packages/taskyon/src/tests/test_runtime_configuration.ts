@@ -1,10 +1,5 @@
 import { createStream } from '@taskyon/common/modules/frpBus'
-import {
-  createPortClient,
-  createTaskyonClient,
-  taskyonProtocol,
-  taskyonRuntimeProtocol,
-} from '../api'
+import { createPortClient, createTaskyonClient, taskyonHostProtocol, taskyonProtocol } from '../api'
 import { tyCore, type TyCoreToolSetup } from '../core/init'
 import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
 import { createTool, toolCall } from '../types/toolApi'
@@ -84,7 +79,7 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     },
   )
   const client = createTaskyonClient(ty.port)
-  const runtimeClient = createPortClient(ty.hostPort, taskyonRuntimeProtocol)
+  const hostClient = createPortClient(ty.hostPort, taskyonHostProtocol)
   const streamedValues: string[] = []
   const unsubscribeChatCompletion = ty.chatCompletionStream(({ chunk }) => {
     if (chunk.type === 'text-delta') streamedValues.push(chunk.text)
@@ -116,7 +111,7 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     )
     emitStreamValue('initial', 'initial stream')
 
-    await runtimeClient.runtime.configure({
+    await hostClient.runtime.configure({
       toolchainConfig: {
         configuredTool: {
           value: 'updated',
@@ -141,7 +136,7 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
       'Expected runtime.configure to disconnect the old tool stream and connect its replacement',
     )
 
-    const rejected = await runtimeClient.runtime.configure({
+    const rejected = await hostClient.runtime.configure({
       toolchainConfig: {
         configuredTool: {
           value: 42,
@@ -157,14 +152,14 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     )
 
     await Promise.all([
-      runtimeClient.runtime.configure({
+      hostClient.runtime.configure({
         toolchainConfig: {
           configuredTool: {
             value: 'first queued update',
           },
         },
       }),
-      runtimeClient.runtime.configure({
+      hostClient.runtime.configure({
         toolchainConfig: {
           configuredTool: {
             value: 'last queued update',
@@ -233,3 +228,75 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
 
 testRuntimeConfigurationRecreatesConfiguredTools.description =
   'Applies runtime configuration across sessions while keeping external tool registrations session-scoped.'
+
+export const testHostProviderCredentialsRemainPrivateAndPersistInTheSecretStore = async () => {
+  assert(
+    !taskyonProtocol.message.safeParse({
+      type: 'providerCredentials.setRequest',
+      requestId: 'public-peer-must-not-set-provider-credentials',
+      provider: 'openai',
+      key: 'public-leak',
+    }).success,
+    'Expected provider credentials to remain outside the public peer protocol',
+  )
+
+  const ty = await tyCore(
+    () => ({ entryFunction: 'entryNode' }),
+    () => toolCall({ name: 'entryNode', arguments: {} }),
+    {},
+    undefined,
+    {
+      indexTaskVectors: false,
+      databaseFactory: getInMemoryDatabase,
+      toolSetup: {
+        baseTools: [],
+        chatCompletionToolName: 'chatCompletion',
+        createSessionTools: () => ({
+          tools: [
+            createTool({
+              name: 'chatCompletion',
+              description: 'Credential owner used by the host protocol diagnostic.',
+              parameters: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {},
+              } as const,
+            }),
+          ],
+        }),
+      },
+    },
+  )
+  const hostClient = createPortClient(ty.hostPort, taskyonHostProtocol)
+
+  try {
+    assert(
+      !('updateChatCompletionApiKey' in ty),
+      'Expected provider credential mutation to be available only through the host protocol',
+    )
+    const setResult = await hostClient.providerCredentials.set({
+      provider: 'openai',
+      key: 'private-provider-key',
+    })
+    assert(setResult.ok, 'Expected the private host credential command to succeed')
+
+    const secretIds = await ty.listSecretIds()
+    assert(secretIds.length === 1, 'Expected the provider key to use the chat tool secret owner')
+    assert(
+      (await ty.getSecret(secretIds[0]!, 'openai', false)) === 'private-provider-key',
+      'Expected the provider credential to be stored through Taskyon secret storage',
+    )
+
+    const deleteResult = await hostClient.providerCredentials.set({ provider: 'openai' })
+    assert(deleteResult.ok, 'Expected deleting a provider key through the host protocol to succeed')
+    assert(
+      (await ty.getSecret(secretIds[0]!, 'openai', false)) === null,
+      'Expected the provider credential to be removed from Taskyon secret storage',
+    )
+  } finally {
+    await ty.dispose('host provider credential diagnostic complete')
+  }
+}
+
+testHostProviderCredentialsRemainPrivateAndPersistInTheSecretStore.description =
+  'Stores provider credentials through the private host protocol without widening the public peer API.'

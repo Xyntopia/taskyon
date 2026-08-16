@@ -1,4 +1,5 @@
-import { recordConversationHistory, type TaskNode, type TaskyonClient } from '@taskyon/taskyon'
+import { recordConversationHistory } from '@taskyon/taskyon/chat-ui'
+import type { TaskNode, TaskyonClient } from '@taskyon/taskyon/api'
 import type { Ref } from 'vue'
 
 export const useConversationHistory = (options: {

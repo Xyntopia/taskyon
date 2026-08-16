@@ -15,7 +15,8 @@
 <script setup lang="ts">
 import { matCopyAll } from '@quasar/extras/material-icons'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
-import { chat2Md, type TaskNode } from '@taskyon/taskyon'
+import { chat2Md } from '@taskyon/taskyon/chat-ui'
+import type { TaskNode } from '@taskyon/taskyon/api'
 
 defineOptions({ inheritAttrs: false })
 

@@ -20,6 +20,11 @@ inside the workspace.
 - Do not move a change across an ownership or release boundary merely because the code applies
   cleanly.
 - Preserve authorship and history intent when rebasing, backporting, or splitting changes.
+- When a rebase conflict is limited to `yarn.lock`, apply the package manifests
+  first and use the repository's configured `yarn install` to update the
+  lockfile from the authoritative base lockfile. Do not hand-merge lockfile
+  entries or regenerate the lockfile from scratch; inspect and stage the
+  generated result, and pause if installation fails.
 
 ## Commits And Verification
 

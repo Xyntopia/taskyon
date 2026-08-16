@@ -26,7 +26,7 @@ import {
   mdiMessageTextOutline,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
-import type { TaskNode } from '@taskyon/taskyon'
+import type { TaskNode } from '@taskyon/taskyon/api'
 import {
   resolveTaskChatPresentation,
   type TaskChatPresentation,

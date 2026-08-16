@@ -1,10 +1,14 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createPortClient, createProtocolPort } from '@taskyon/common/modules/frpBus'
+import { createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBusWeb'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
 import { CODEX_PROVIDER_NAME, resolveProviderAccessToken } from '@taskyon/taskyon'
-import { taskyonRuntimeProtocol } from '@taskyon/taskyon/api'
+import {
+  createTaskyonHostClient,
+  setTaskyonProviderCredential,
+  type TaskyonHostClient,
+} from '@taskyon/taskyon/api'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
 import { connectTaskManagerStorageFromProtocol } from '../../../taskyon/src/core/taskManager'
@@ -97,7 +101,8 @@ export async function resolveProviderCredential(
 }
 
 export async function syncProviderRuntimeConfig(
-  ty: Taskyon,
+  ty: Pick<Taskyon, 'getSecret' | 'setSecret'>,
+  host: TaskyonHostClient,
   llmState: CliLlmState,
   providerId: string,
   oauthStorage: CliOauthStorage,
@@ -111,13 +116,16 @@ export async function syncProviderRuntimeConfig(
       return true
     },
   }
-  const authenticated = await providerSession.authenticate(ty)
-  await applyCliRuntimeConfig(ty, llmState)
+  const authenticated = await providerSession.authenticate({
+    updateChatCompletionApiKey: (provider, value) =>
+      setTaskyonProviderCredential(host, provider, value),
+  })
+  await applyCliRuntimeConfig(host, llmState)
   return authenticated ? providerSession : undefined
 }
 
-export async function applyCliRuntimeConfig(ty: Taskyon, llmState: CliLlmState) {
-  const result = await createPortClient(ty.hostPort, taskyonRuntimeProtocol).runtime.configure({
+export async function applyCliRuntimeConfig(host: TaskyonHostClient, llmState: CliLlmState) {
+  const result = await host.runtime.configure({
     toolchainConfig: getSelectedToolchainConfig(llmState),
   })
   if (!result.ok) throw new Error(`Could not configure Taskyon runtime: ${result.error}`)
@@ -133,6 +141,7 @@ export async function bootstrapCliTaskyon(args?: {
   storageNamespace?: string
 }): Promise<{
   taskyon: Taskyon
+  host: TaskyonHostClient
   llmState: CliLlmState
   configDir: string
   selectedApi: string
@@ -205,9 +214,11 @@ export async function bootstrapCliTaskyon(args?: {
         ),
     },
   )
+  const host = createTaskyonHostClient(taskyon.hostPort)
 
   const providerSession = await syncProviderRuntimeConfig(
     taskyon,
+    host,
     llmState,
     selectedApi,
     oauthStorage,
@@ -216,6 +227,7 @@ export async function bootstrapCliTaskyon(args?: {
 
   return {
     taskyon,
+    host,
     llmState,
     configDir,
     selectedApi,

@@ -10,6 +10,9 @@
     "./storage": {
       "import": "./src/storage.ts"
     },
+    "./core": {
+      "import": "./src/core.ts"
+    },
     "./crypto-session": {
       "import": "./src/persistentCryptoSession.ts"
     },

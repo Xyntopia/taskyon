@@ -29,7 +29,7 @@
 import { ref } from 'vue'
 import { dump } from 'js-yaml'
 import { watch } from 'vue'
-import type { FileAttachment } from '@taskyon/taskyon'
+import type { FileAttachment } from '@taskyon/taskyon/api'
 
 // Store the props in a variable for easy access
 const props = defineProps<{

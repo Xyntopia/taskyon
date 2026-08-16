@@ -62,12 +62,15 @@ import {
   createProtocolStorageBlobBackend,
   createStorageClient,
   createTaskChainFromMarkdown,
+  createTaskyonHostClient,
   createTaskyonClient,
+  setTaskyonProviderCredential,
   taskyonProtocol,
   taskyonStorageProtocol,
   taskyonSearchProtocol,
   taskyonLoggingProtocol,
   createPgLiteSearchIndexBackend,
+  type TaskyonHostClient,
 } from '@taskyon/taskyon/api'
 import { getInMemoryDatabase } from '@taskyon/taskyon/db'
 import {
@@ -1760,14 +1763,14 @@ async function setSelectedApi(
   llmState: CliLlmState,
   nextApi: string,
   persistence: CliPersistence,
-  runtime?: Taskyon,
+  host?: TaskyonHostClient,
 ) {
   await persistence.configStore.persistConfigPatch({ selectedApi: nextApi })
   const stored = await persistence.configStore.loadStoredConfig()
   const configuredModel = resolveStoredModel(stored, nextApi)
   setSelectedProvider(llmState, nextApi)
   if (configuredModel) setProviderModel(llmState, nextApi, configuredModel)
-  if (runtime) await syncProviderRuntimeConfig(runtime, llmState, nextApi, persistence.oauthStorage)
+  if (host) await syncProviderRuntimeConfig(ty, host, llmState, nextApi, persistence.oauthStorage)
 }
 
 async function loginProvider(
@@ -1776,7 +1779,7 @@ async function loginProvider(
   selectedApi: string,
   forceLogin: boolean,
   persistence: CliPersistence,
-  runtime?: Taskyon,
+  host?: TaskyonHostClient,
 ) {
   const { oauthStorage, environmentPrefix } = persistence
   const api = getProviderSettings(llmState, selectedApi)
@@ -1808,8 +1811,11 @@ async function loginProvider(
     })
     accessToken = await resolveProviderAccessToken(credentials, api)
   }
-  await runtime?.updateChatCompletionApiKey(selectedApi, accessToken)
-  if (runtime) await applyCliRuntimeConfig(runtime, llmState)
+  await ty.setSecret(API_KEY_STORE_NAME, selectedApi, accessToken)
+  if (host) {
+    await setTaskyonProviderCredential(host, selectedApi, accessToken)
+    await applyCliRuntimeConfig(host, llmState)
+  }
 }
 
 async function hasStoredOauthLogin(
@@ -2167,7 +2173,7 @@ async function handleKeysCommand(
   ty: CliProviderSecrets,
   llmState: CliLlmState,
   persistence: CliPersistence,
-  runtime?: Taskyon,
+  host?: TaskyonHostClient,
 ) {
   const providers = [...SUPPORTED_PROVIDERS]
   while (true) {
@@ -2192,15 +2198,15 @@ async function handleKeysCommand(
         continue
       }
       await ty.setSecret(API_KEY_STORE_NAME, provider, key)
-      await runtime?.updateChatCompletionApiKey(provider, key)
-      await setSelectedApi(ty, llmState, provider, persistence, runtime)
+      if (host) await setTaskyonProviderCredential(host, provider, key)
+      await setSelectedApi(ty, llmState, provider, persistence, host)
       writeNotice('success', `Saved key for ${provider}.`)
       writeNotice('info', `Selected provider: ${provider}`)
     }
 
     if (action === 1) {
       await ty.deleteSecret(API_KEY_STORE_NAME, provider)
-      await runtime?.updateChatCompletionApiKey(provider, undefined)
+      if (host) await setTaskyonProviderCredential(host, provider)
       writeNotice('success', `Removed key for ${provider}.`)
     }
   }
@@ -2211,7 +2217,7 @@ async function handleModelCommand(
   ty: CliProviderSecrets,
   llmState: CliLlmState,
   persistence: CliPersistence,
-  runtime?: Taskyon,
+  host?: TaskyonHostClient,
 ) {
   const selectedApi = llmState.selectedToolchainProfile
   const selectedSettings = getSelectedProviderSettings(llmState)
@@ -2282,7 +2288,7 @@ async function handleModelCommand(
     }
     setProviderModel(llmState, selectedApi, model)
     await persistence.configStore.persistProviderModel(selectedApi, model)
-    if (runtime) await applyCliRuntimeConfig(runtime, llmState)
+    if (host) await applyCliRuntimeConfig(host, llmState)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
     return
   }
@@ -2297,7 +2303,7 @@ async function handleModelCommand(
     }
     setProviderModel(llmState, selectedApi, model)
     await persistence.configStore.persistProviderModel(selectedApi, model)
-    if (runtime) await applyCliRuntimeConfig(runtime, llmState)
+    if (host) await applyCliRuntimeConfig(host, llmState)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
   }
 
@@ -2317,7 +2323,7 @@ async function handleModelCommand(
     if (!effort) return
     setReasoningEffort(llmState, effort)
     await persistence.configStore.persistReasoningEffort(effort)
-    if (runtime) await applyCliRuntimeConfig(runtime, llmState)
+    if (host) await applyCliRuntimeConfig(host, llmState)
     writeNotice('success', `Selected thinking effort: ${effort}`)
   }
 }
@@ -2327,7 +2333,7 @@ async function handleProviderCommand(
   ty: CliProviderSecrets,
   llmState: CliLlmState,
   persistence: CliPersistence,
-  runtime?: Taskyon,
+  host?: TaskyonHostClient,
 ) {
   const providerIds = [...SUPPORTED_PROVIDERS].filter((providerId) =>
     getProviderSettings(llmState, providerId),
@@ -2373,13 +2379,13 @@ async function handleProviderCommand(
   const action = await selectFromList(rl, `\nProvider: ${nextApi}`, actionOptions)
   if (action === null) return
   if (action === 0) {
-    await setSelectedApi(ty, llmState, nextApi, persistence, runtime)
+    await setSelectedApi(ty, llmState, nextApi, persistence, host)
     writeNotice('success', `Selected provider: ${nextApi}`)
     return
   }
   if (hasOauth && action === 1) {
     try {
-      await loginProvider(ty, llmState, nextApi, oauthLoggedIn, persistence, runtime)
+      await loginProvider(ty, llmState, nextApi, oauthLoggedIn, persistence, host)
       writeNotice('success', `OAuth login complete for provider '${nextApi}'.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -2792,6 +2798,7 @@ async function handleSlashCommand(
   rl: ReturnType<typeof createInterface>,
   chatView: { detailed: boolean },
   ty: Taskyon,
+  host: TaskyonHostClient,
   taskyonClient: TaskyonClientInvoker,
   taskPort: Parameters<typeof waitForTaskResult>[0],
   llmState: CliLlmState,
@@ -2808,17 +2815,17 @@ async function handleSlashCommand(
   unavailableToolNames: ReadonlySet<string>,
 ): Promise<boolean> {
   if (parsed.name === 'keys') {
-    await handleKeysCommand(rl, ty, llmState, persistence, ty)
+    await handleKeysCommand(rl, ty, llmState, persistence, host)
     return true
   }
 
   if (parsed.name === 'model') {
-    await handleModelCommand(rl, ty, llmState, persistence, ty)
+    await handleModelCommand(rl, ty, llmState, persistence, host)
     return true
   }
 
   if (parsed.name === 'provider') {
-    await handleProviderCommand(rl, ty, llmState, persistence, ty)
+    await handleProviderCommand(rl, ty, llmState, persistence, host)
     return true
   }
 
@@ -3387,6 +3394,7 @@ async function main(host: InteractiveCliHost) {
       },
     ),
   )
+  const taskyonHost = createTaskyonHostClient(taskyon.hostPort)
   taskyonRef.current = taskyon
   const taskSearchIndex = 'tasks'
   let stopTaskSearchService: (() => void) | undefined
@@ -3421,6 +3429,7 @@ async function main(host: InteractiveCliHost) {
   await timeStartup('cli.provider-credentials', () =>
     syncProviderRuntimeConfig(
       taskyon,
+      taskyonHost,
       llmState,
       llmState.selectedToolchainProfile,
       persistence.oauthStorage,
@@ -4610,6 +4619,7 @@ async function main(host: InteractiveCliHost) {
           rl,
           chatView,
           taskyon,
+          taskyonHost,
           taskyonApi,
           clientPort as Parameters<typeof waitForTaskResult>[0],
           llmState,
@@ -4633,6 +4643,7 @@ async function main(host: InteractiveCliHost) {
       if (
         !(await syncProviderRuntimeConfig(
           taskyon,
+          taskyonHost,
           llmState,
           currentProvider,
           persistence.oauthStorage,

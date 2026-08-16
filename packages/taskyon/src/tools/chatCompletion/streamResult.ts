@@ -81,6 +81,23 @@ export const classifyStreamingFailure = (error: unknown, aborted: boolean) => {
   }
 }
 
+export type ChatCompletionStreamResult =
+  | {
+      ok: true
+      completion: ReturnType<typeof streamTextType>
+      response: Awaited<ReturnType<typeof streamTextType>['response']>
+      rawOutput: string
+      partialTextOutput: string
+    }
+  | {
+      ok: false
+      completion: ReturnType<typeof streamTextType>
+      error: unknown
+      failure: ReturnType<typeof classifyStreamingFailure>
+      rawOutput: string
+      partialTextOutput: string
+    }
+
 export const runChatCompletionStream = async (input: {
   streamText: typeof streamTextType
   streamOptions: Parameters<typeof streamTextType>[0]
@@ -92,7 +109,7 @@ export const runChatCompletionStream = async (input: {
   useArtificialStreaming: boolean
   abortSignal?: AbortSignal
   onChunk: (chunk: ChatCompletionStreamChunk) => void
-}) => {
+}): Promise<ChatCompletionStreamResult> => {
   let rawOutput = ''
   let partialTextOutput = ''
   let capturedError: unknown

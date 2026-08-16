@@ -3,7 +3,7 @@ import {
   mcpCapableWebProviderIds,
   proxyWebReaderProviderIds,
   resolveProxyWebReaderArgs,
-} from '@taskyon/common/modules/webFetching'
+} from '@taskyon/common/modules/webFetching/index'
 import { DEFAULT_POLITE_HTTP_MIN_DELAY_MS } from '../utils/politeHttp'
 import { processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'

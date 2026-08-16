@@ -20,6 +20,7 @@
     "packages/taskyon-mcp",
     "packages/taskyon-vscode",
     "packages/runtime-browser",
+    "packages/sdk",
     "packages/tycli",
     "packages/tyclient",
     "packages/ui"
@@ -44,6 +45,7 @@
     "modelica:baseline:update": "node ./packages/modelica/modelica_compare_cli.mjs baseline-update",
     "modelica:baseline:update:native": "node ./packages/modelica/modelica_compare_cli.mjs baseline-update --candidate-file packages/modelica/compare/run_latest_msl_native.json",
     "pack:tyclient": "mkdir -p public/lib && yarn workspace @taskyon/tyclient pack --filename ../../public/lib/tyclient-$npm_package_version.tgz && cp packages/tyclient/dist/tyclient.* public/lib/",
+    "pack:integrations": "node scripts/pack-integration-packages.mjs",
     "dev": "yarn run quasar dev",
     "dev:http": "TASKYON_HTTP=1 yarn run quasar dev",
     "docs:check": "node --experimental-strip-types scripts/check-documentation.mjs",

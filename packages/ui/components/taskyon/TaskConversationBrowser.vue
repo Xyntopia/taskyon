@@ -68,7 +68,8 @@
 <script setup lang="ts">
 import { matAutorenew } from '@quasar/extras/material-icons'
 import { mdiForum, mdiForumPlus } from '@quasar/extras/mdi-v6'
-import { resolveConversationTitle, type TaskyonClient } from '@taskyon/taskyon'
+import { resolveConversationTitle } from '@taskyon/taskyon/chat-ui'
+import type { TaskyonClient } from '@taskyon/taskyon/api'
 import {
   resolveTaskChatPresentation,
   type TaskChatPresentation,

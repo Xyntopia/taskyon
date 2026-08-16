@@ -1,15 +1,15 @@
 import {
   createProtocolPort,
-  getDatabase,
-  getInMemoryDatabase,
   taskyonStorageProtocol,
   toolCall,
   type llmSettings,
   type partialTaskDraft,
-} from '@taskyon/taskyon'
+} from '@taskyon/taskyon/api'
+import { getDatabase, getInMemoryDatabase } from '@taskyon/taskyon/db'
 import { MessageChannelBridge } from '@taskyon/common/modules/frpBusWeb'
 import { createTaskyonBrowserCoreRuntime } from './core'
 import { initCryptoSessionFromBrowser } from './persistentCryptoSession'
+import { createDefaultTaskyonToolSetup } from '@taskyon/taskyon/tools'
 import type { TaskyonBrowserWorkerInitMessage, TaskyonBrowserWorkerMessage } from './workerProtocol'
 
 let stopCurrentRuntime: ((reason: string) => Promise<void>) | undefined
@@ -24,8 +24,8 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
   if (event.data.type !== 'init') return
   const {
     corePort,
-    storagePort,
     hostPort,
+    storagePort,
     llmSettings,
     entryNode,
     toolchainConfig = {},
@@ -63,10 +63,11 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
         kind: 'client',
         port: storageBridge.x,
       },
+      toolSetup: (storageClient) => createDefaultTaskyonToolSetup({ storageClient }),
     })
-    const core = await runtime.taskyon
+    await runtime.taskyon
     const coreMessageBridge = MessageChannelBridge(runtime.port, corePort)
-    const hostMessageBridge = MessageChannelBridge(core.hostPort, hostPort)
+    const hostMessageBridge = MessageChannelBridge(runtime.hostPort, hostPort)
     stopCurrentRuntime = async (reason: string) => {
       await runtime.stop(reason)
       coreMessageBridge.destroy()

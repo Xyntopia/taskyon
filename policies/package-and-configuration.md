@@ -27,6 +27,9 @@ packages, generated configuration, persisted schemas, or configuration ownership
   not scattered cleanup in consumers.
 - Keep runtime-specific configuration in the runtime adapter instead of threading it through
   shared core as ambient state.
+- Treat `package.json` and workspace package manifests as the source of truth for Yarn dependency
+  resolution. After applying manifest changes, update an existing `yarn.lock` with the configured
+  `yarn install`; do not hand-edit lockfile conflicts or regenerate the lockfile from scratch.
 
 ## Generated And Published Surfaces
 

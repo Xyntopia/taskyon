@@ -2,7 +2,7 @@ import {
   createCryptoSession,
   type CryptoSession,
   type CryptoSessionOptions,
-} from '@taskyon/taskyon'
+} from '@taskyon/taskyon/runtime-core'
 
 const DEVICE_KEY_RECORD = 'deviceKeyPair'
 const DEVICE_KEY_STORE = 'keys'

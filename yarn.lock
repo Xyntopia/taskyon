@@ -4848,6 +4848,17 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/sdk@workspace:packages/sdk":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/sdk@workspace:packages/sdk"
+  dependencies:
+    "@taskyon/common": "workspace:*"
+    "@taskyon/runtime-browser": "workspace:*"
+    "@taskyon/taskyon": "workspace:*"
+    tsup: "npm:^8.5.0"
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/secure-tunnel@workspace:*, @taskyon/secure-tunnel@workspace:packages/secure-tunnel":
   version: 0.0.0-use.local
   resolution: "@taskyon/secure-tunnel@workspace:packages/secure-tunnel"
@@ -4894,6 +4905,7 @@ __metadata:
     "@ai-sdk/openai-compatible": "npm:^2.0.16"
     "@electric-sql/pglite": "npm:0.4.5"
     "@huggingface/transformers": "npm:^4.0.1"
+    "@mozilla/readability": "npm:^0.5.0"
     "@msgpack/msgpack": "npm:^3.1.2"
     "@noble/ed25519": "npm:^2.1.0"
     "@openrouter/ai-sdk-provider": "npm:^2.9.1"
@@ -4905,10 +4917,12 @@ __metadata:
     "@taskyon/secure-tunnel": "workspace:*"
     "@tauri-apps/api": "npm:^2.10.1"
     "@tauri-apps/plugin-http": "npm:^2.5.7"
+    "@types/json-schema": "npm:^7.0.15"
     "@types/stopword": "npm:^2.0.3"
     ai: "npm:^6.0.42"
     ajv: "npm:^8.17.1"
     axios: "npm:^1.15.0"
+    buffer: "npm:^6.0.3"
     comlink: "npm:^4.4.1"
     fast-equals: "npm:^5.0.1"
     fflate: "npm:^0.8.2"
@@ -4923,11 +4937,13 @@ __metadata:
     mammoth: "npm:^1.6.0"
     openai: "npm:^6.16.0"
     pdfjs-dist: "npm:^5.2.133"
+    pyodide: "npm:^0.29.3"
     stopword: "npm:^2.0.8"
     ts-pattern: "npm:^5.6.2"
     type-fest: "npm:^4.30.1"
     uuid: "npm:^11.1.0"
     wasmagic: "npm:^1.0.3"
+    wavefunctioncollapse: "npm:^2.1.0"
     xlsx: "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
     zod: "npm:^4.0.0"
   languageName: unknown

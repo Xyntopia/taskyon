@@ -1,4 +1,4 @@
-import type { TaskNode, ToolBase } from '@taskyon/taskyon'
+import type { TaskNode, ToolBase } from '@taskyon/taskyon/api'
 
 export const isTaskVisibleInChat = (
   task: TaskNode,

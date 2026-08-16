@@ -178,7 +178,7 @@ export const buildChatProviderRequest = async (input: {
   toolChoice?: ToolChoice<ToolSet>
   providerRequest?: ProviderRequestTrace
   promptCacheRootId?: string
-}) => {
+}): Promise<Parameters<typeof streamText>[0]> => {
   console.log('Creating chat completion request', {
     webSearch: input.webSearch,
     reasoning_effort: input.reasoningEffort,

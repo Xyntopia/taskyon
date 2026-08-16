@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import type { partialTaskDraft, TaskyonClient, ToolBase } from '@taskyon/taskyon'
+import type { partialTaskDraft, TaskyonClient, ToolBase } from '@taskyon/taskyon/api'
 import type { TaskChatPresentation } from '../modules/taskChatPresentation'
 import TaskChatWindow from './taskyon/TaskChatWindow.vue'
 

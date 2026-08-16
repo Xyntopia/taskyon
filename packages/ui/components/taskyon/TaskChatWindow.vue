@@ -96,7 +96,7 @@ import {
   type TaskNode,
   type TaskyonClient,
   type ToolBase,
-} from '@taskyon/taskyon'
+} from '@taskyon/taskyon/api'
 import { useConversationHistory } from '@taskyon/ui/modules/useConversationHistory'
 import {
   resolveTaskChatPresentation,

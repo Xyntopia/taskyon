@@ -78,11 +78,11 @@ export const createTaskyonBrowserRuntime = async (
     options.storage ?? { kind: 'browser' },
   )
   const coreChannel = new MessageChannel()
-  const storageChannel = new MessageChannel()
   const hostChannel = new MessageChannel()
+  const storageChannel = new MessageChannel()
   const coreBridge = MessageChannelBridge(runtimePort.y, coreChannel.port1)
-  const storageBridge = MessageChannelBridge(storagePort.x, storageChannel.port1)
   const hostBridge = MessageChannelBridge(hostPort.y, hostChannel.port1)
+  const storageBridge = MessageChannelBridge(storagePort.x, storageChannel.port1)
   const worker = options.createWorker ? options.createWorker() : createDefaultWorker()
   let resolveWorkerInitialization: () => void = () => {}
   let rejectWorkerInitialization: (reason: Error) => void = () => {}
@@ -111,8 +111,8 @@ export const createTaskyonBrowserRuntime = async (
   const initMessage: TaskyonBrowserWorkerInitMessage = {
     type: 'init',
     corePort: coreChannel.port2,
-    storagePort: storageChannel.port2,
     hostPort: hostChannel.port2,
+    storagePort: storageChannel.port2,
     llmSettings: options.llmSettings,
     ...(options.entryNode ? { entryNode: options.entryNode } : {}),
     toolchainConfig: options.toolchainConfig ?? {},
@@ -162,8 +162,8 @@ export const createTaskyonBrowserRuntime = async (
     worker.removeEventListener('message', onWorkerMessage)
     worker.removeEventListener('error', onWorkerError)
     coreBridge.destroy()
-    storageBridge.destroy()
     hostBridge.destroy()
+    storageBridge.destroy()
     if (typeof storageStop === 'function') storageStop()
     worker.terminate()
     throw new Error(`Taskyon browser worker failed during "${workerStage}".`, { cause: error })
@@ -179,8 +179,8 @@ export const createTaskyonBrowserRuntime = async (
     stop: (reason = 'stopping Taskyon browser runtime') => {
       toolExecutor.destroy()
       coreBridge.destroy()
-      storageBridge.destroy()
       hostBridge.destroy()
+      storageBridge.destroy()
       if (typeof storageStop === 'function') storageStop()
       worker.terminate()
       void reason

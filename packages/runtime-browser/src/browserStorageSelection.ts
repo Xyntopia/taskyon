@@ -1,4 +1,4 @@
-import { getDatabase } from '@taskyon/taskyon'
+import { getDatabase } from '@taskyon/taskyon/db'
 import {
   createPgLiteStorageBlobBackend,
   createPgLiteStorageRecordBackend,

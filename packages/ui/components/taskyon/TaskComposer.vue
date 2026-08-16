@@ -209,11 +209,9 @@ import {
   buildCreateNewTaskChain,
   getDefaultParametersForTool,
   partialTaskDraft,
-  type FunctionArguments,
   type MessageExecutionMode,
-  type TaskyonClient,
-} from '@taskyon/taskyon'
-import type { TaskNode, ToolBase } from '@taskyon/taskyon'
+} from '@taskyon/taskyon/chat-ui'
+import type { FunctionArguments, TaskNode, TaskyonClient, ToolBase } from '@taskyon/taskyon/api'
 import { QSelect, useQuasar } from 'quasar'
 import { computed, ref, toRaw } from 'vue'
 import FileDropzone from '../FileDropzone.vue'

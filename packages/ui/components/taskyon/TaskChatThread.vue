@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import type { TaskNode, ToolBase } from '@taskyon/taskyon'
+import type { TaskNode, ToolBase } from '@taskyon/taskyon/api'
 import type { TaskChatPresentation } from '@taskyon/ui/modules/taskChatPresentation'
 import { computed } from 'vue'
 import TyMarkdown from '../tyMarkdown.vue'

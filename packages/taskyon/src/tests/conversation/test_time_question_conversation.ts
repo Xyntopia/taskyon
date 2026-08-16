@@ -1,5 +1,9 @@
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
-import { createTaskyonClient } from '../../api'
+import {
+  createTaskyonClient,
+  createTaskyonHostClient,
+  setTaskyonProviderCredential,
+} from '../../api'
 import { buildCreateNewTaskChain } from '../../core/createNewTaskChain'
 import { tyCore, type Taskyon } from '../../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../../core/toolRpc'
@@ -593,7 +597,13 @@ export const testTimeQuestionConversationUsesClockTool = async (
     runtimeConfig.providerSettings,
   )
   try {
-    if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+    const host = createTaskyonHostClient(ty.hostPort)
+    if (
+      !(await authenticateDiagnosticsRuntime(context, {
+        updateChatCompletionApiKey: (provider, value) =>
+          setTaskyonProviderCredential(host, provider, value),
+      }))
+    ) {
       return { skipped: true, reason: 'The saved provider session is unavailable.' }
     }
     return await runTimeQuestionConversationUsesClockToolScenario(ty)

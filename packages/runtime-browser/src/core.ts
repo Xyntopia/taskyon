@@ -4,7 +4,7 @@ import {
   createCryptoSession,
   tyCore,
   type CryptoSession,
-} from '@taskyon/taskyon'
+} from '@taskyon/taskyon/runtime-core'
 import {
   createProtocolPort,
   createProtocolStorageBlobBackend,
@@ -15,9 +15,12 @@ import {
   taskyonProtocol,
   taskyonStorageProtocol,
   type Port,
+  type TaskyonClient,
+  type TaskyonHostMessage,
+  type TaskyonMessageType,
+  type TaskyonStorageClient,
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
-import { createDefaultTaskyonToolSetup } from '@taskyon/taskyon/tools'
 import { startBrowserStorageService, type BrowserRuntimeStorageService } from './storage'
 
 type TyCoreToolSetup = NonNullable<NonNullable<Parameters<typeof tyCore>[4]>['toolSetup']>
@@ -43,7 +46,7 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   storageNamespacePrefix?: string
   storageSessionId?: string
   storage: TaskyonCoreStorage
-  toolSetup?:
+  toolSetup:
     | TyCoreToolSetup
     | ((storageClient: ReturnType<typeof createStorageClient>) => TyCoreToolSetup)
 }
@@ -54,6 +57,16 @@ export type TaskyonCoreRuntimeStage =
   | 'creating-core'
   | 'connecting-core-protocol'
   | 'ready'
+
+export type TaskyonBrowserCoreRuntime = {
+  taskyon: ReturnType<typeof tyCore>
+  client: TaskyonClient
+  host: ReturnType<typeof createTaskyonHostClient>
+  hostPort: Port<TaskyonHostMessage>
+  storageClient: TaskyonStorageClient
+  port: Port<TaskyonMessageType>
+  stop: (reason?: string) => Promise<void>
+}
 
 const createStorageConnection = (storage: TaskyonCoreStorage) => {
   if (storage.kind === 'client') {
@@ -73,7 +86,9 @@ const createStorageConnection = (storage: TaskyonCoreStorage) => {
   }
 }
 
-export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRuntimeOptions) => {
+export const createTaskyonBrowserCoreRuntime = (
+  options: TaskyonBrowserCoreRuntimeOptions,
+): TaskyonBrowserCoreRuntime => {
   const { x: clientPort, y: corePort } = createProtocolPort(taskyonProtocol)
   const client = createTaskyonClient(clientPort, { taskCacheSize: 0 })
   const { x: hostPort, y: coreHostPort } = createProtocolPort(taskyonHostProtocol)
@@ -125,7 +140,7 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
           toolSetup:
             typeof options.toolSetup === 'function'
               ? options.toolSetup(storageClient)
-              : (options.toolSetup ?? createDefaultTaskyonToolSetup({ storageClient })),
+              : options.toolSetup,
           ...(options.databaseFactory ? { databaseFactory: options.databaseFactory } : {}),
           ...(options.indexTaskVectors !== undefined
             ? { indexTaskVectors: options.indexTaskVectors }
@@ -179,5 +194,3 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
     },
   }
 }
-
-export type TaskyonBrowserCoreRuntime = ReturnType<typeof createTaskyonBrowserCoreRuntime>

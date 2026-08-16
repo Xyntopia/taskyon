@@ -1,7 +1,7 @@
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
-import { createTaskyonClient } from '../api'
+import { createTaskyonClient, createTaskyonHostClient, setTaskyonProviderCredential } from '../api'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import type { partialTaskDraft, TaskNode } from '../types/taskNode'
 import {
@@ -1587,7 +1587,13 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
   })
 
   try {
-    if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+    const host = createTaskyonHostClient(ty.hostPort)
+    if (
+      !(await authenticateDiagnosticsRuntime(context, {
+        updateChatCompletionApiKey: (provider, value) =>
+          setTaskyonProviderCredential(host, provider, value),
+      }))
+    ) {
       return { skipped: true, reason: 'The saved provider session is unavailable.' }
     }
 

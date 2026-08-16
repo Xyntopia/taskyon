@@ -1,6 +1,6 @@
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { tyCore } from '../core/init'
-import { createTaskyonClient } from '../api'
+import { createTaskyonClient, createTaskyonHostClient, setTaskyonProviderCredential } from '../api'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
 import {
@@ -95,7 +95,13 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
   })
 
   try {
-    if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+    const host = createTaskyonHostClient(ty.hostPort)
+    if (
+      !(await authenticateDiagnosticsRuntime(context, {
+        updateChatCompletionApiKey: (provider, value) =>
+          setTaskyonProviderCredential(host, provider, value),
+      }))
+    ) {
       return { skipped: true, reason: 'The saved provider session is unavailable.' }
     }
 

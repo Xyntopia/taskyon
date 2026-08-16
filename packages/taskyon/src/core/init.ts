@@ -833,14 +833,6 @@ export async function tyCore(
       insidePort.send({ type: 'status', data: { type: 'newtool', id: identity.name } })
       return identity
     },
-    updateChatCompletionApiKey: async (key: string, value?: string) => {
-      const { tool, identity } = await ctx.toolManager.resolveTool(toolSetup.chatCompletionToolName)
-      if (tool) {
-        const toolId = await generateSecretId(identity?.revision, tool)
-        if (!value) await ctx.secretStore.deleteSecret(toolId, key)
-        else await ctx.secretStore.setSecret(toolId, key, value)
-      }
-    },
     // we are creating the proxyApi here so that from the outside every function always gets proxied
     // to the most up-to-date taskmanager instance... We are also flattening it at the same time!
     ...createProxyApi(
