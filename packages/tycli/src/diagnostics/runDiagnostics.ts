@@ -552,7 +552,7 @@ function applyDiagnosticsEnvironment(context: DiagnosticsTestContext) {
   }
 }
 
-async function main() {
+async function main(): Promise<number> {
   const opts = parseArgs(process.argv.slice(2))
 
   if (opts.listOnly) {
@@ -576,7 +576,7 @@ async function main() {
     for (const file of discoveredFiles) console.log(`- ${file}`)
     console.log('')
     listTests(defaultTests, experimentalTests)
-    return
+    return 0
   }
 
   if (opts.verbose) process.env.TASKYON_CLI_VERBOSE = '1'
@@ -633,8 +633,7 @@ async function main() {
     if (selectedNames.length === 0) {
       output.status('[tycli-diagnostics] no tests matched the current selection', 'stderr')
       output.status(`[tycli-diagnostics] log file: ${output.logFile}`, 'stderr')
-      process.exitCode = 1
-      return
+      return 1
     }
 
     const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
@@ -706,13 +705,13 @@ async function main() {
     }
     output.status(`[tycli-diagnostics] log file: ${output.logFile}`)
 
-    process.exitCode = summary.ok ? 0 : 1
+    return summary.ok ? 0 : 1
   } catch (error) {
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error)
     output.log('fatal', `${message}\n`)
     output.status(`[tycli-diagnostics] fatal: ${toErrorMessage(error)}`, 'stderr')
     output.status(`[tycli-diagnostics] log file: ${output.logFile}`, 'stderr')
-    process.exitCode = 1
+    return 1
   } finally {
     process.removeListener('uncaughtException', handleUncaughtException)
     process.removeListener('unhandledRejection', handleUnhandledRejection)
@@ -720,11 +719,13 @@ async function main() {
   }
 }
 
-try {
-  await main()
-} finally {
-  await closeDatabases()
-}
+const diagnosticsExitCode = await (async () => {
+  try {
+    return await main()
+  } finally {
+    await closeDatabases()
+  }
+})()
 await Promise.all(
   [process.stdout, process.stderr].map(
     (stream) =>
@@ -733,4 +734,4 @@ await Promise.all(
       }),
   ),
 )
-process.exit(process.exitCode ?? 0)
+process.exit(diagnosticsExitCode)

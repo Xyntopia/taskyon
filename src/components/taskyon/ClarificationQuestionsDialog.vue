@@ -21,13 +21,14 @@
             type="radio"
             dense
           />
-          <q-input
-            v-model="customAnswers[question.id]"
-            dense
-            outlined
-            class="q-mt-sm"
-            placeholder="Custom answer"
-          />
+            <q-input
+              v-model="customAnswers[question.id]"
+              dense
+              outlined
+              class="q-mt-sm"
+              placeholder="Custom answer"
+              @update:model-value="() => { selectedAnswers[question.id] = '' }"
+            />
         </div>
       </q-card-section>
 
@@ -57,10 +58,9 @@ defineEmits([...useDialogPluginComponent.emits])
 
 const { dialogRef, onDialogHide, onDialogOK, onDialogCancel } = useDialogPluginComponent()
 const selectedAnswers = reactive<Record<string, string>>(
-  Object.fromEntries(
-    props.request.questions.map((question) => [question.id, question.options[0]?.label ?? '']),
-  ),
+  Object.fromEntries(props.request.questions.map((question) => [question.id, ''])),
 )
+
 const customAnswers = reactive<Record<string, string>>({})
 
 const optionsFor = (question: ClarificationQuestion) =>

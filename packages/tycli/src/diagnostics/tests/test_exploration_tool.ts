@@ -21,6 +21,16 @@ export const testExplorationScopesDiscoveryToRequestedPath = async () => {
     const tool = createExplorationTool({})
     const listed = await tool.function({ action: 'list', path: 'inside' })
     const searched = await tool.function({ action: 'search', path: 'inside', query: 'target' })
+    const searchedFile = await tool.function({
+      action: 'search',
+      path: 'inside/target.ts',
+      query: 'target',
+    })
+    const unmatchedFileSearch = await tool.function({
+      action: 'search',
+      path: 'inside/target.ts',
+      query: 'missing',
+    })
     const grepped = await tool.function({ action: 'grep', path: 'inside', query: 'marker' })
     const greppedFile = await tool.function({
       action: 'grep',
@@ -35,6 +45,14 @@ export const testExplorationScopesDiscoveryToRequestedPath = async () => {
     assert(
       JSON.stringify(searched) === JSON.stringify({ files: ['inside/target.ts'], count: 1 }),
       'Expected search to apply its query only below the requested path',
+    )
+    assert(
+      JSON.stringify(searchedFile) === JSON.stringify({ files: ['inside/target.ts'], count: 1 }),
+      'Expected search to accept a matching single-file path',
+    )
+    assert(
+      JSON.stringify(unmatchedFileSearch) === JSON.stringify({ files: [], count: 0 }),
+      'Expected search to omit a single file whose path does not match the query',
     )
     assert(
       'matches' in grepped && Array.isArray(grepped.matches),

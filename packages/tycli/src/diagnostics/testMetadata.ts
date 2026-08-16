@@ -68,7 +68,6 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   },
   testCliHelloWorldProducesAssistantResponse: {
     requiresNetwork: true,
-    modelBased: true,
   },
   testCliListsAndUsesAvailableTools: {
     requiresNetwork: true,

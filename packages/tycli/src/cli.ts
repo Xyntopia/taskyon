@@ -24,7 +24,6 @@ import {
   firstWordsTaskName,
   processMarkdown,
   textRankTaskName,
-  createTaskNode,
   createStandardEntryNodeTool,
   getTaskQueueLabel,
   getProviderOauthConfig,
@@ -36,7 +35,6 @@ import {
   tyCore,
   type ClientTool,
   type InternalTool,
-  type partialTaskDraft,
   TaskNode,
   type Taskyon,
   type TaskyonMessage,
@@ -1010,20 +1008,20 @@ async function invokeTaskyonToolTask(
   const returnsRawToolResult =
     isDagNode || (invocation.toolName === 'toolSearcher' && invocation.arguments.analyze === false)
 
-  const taskChain = await createPreparedTaskChain([
-    toolCall({
-      name: invocation.toolName,
-      arguments: invocation.arguments,
-    }),
-  ])
-  await runtime.client.task.createChain({
-    tasks: taskChain,
+  const { ids: taskIds } = await runtime.client.task.createChain({
+    tasks: [
+      toolCall({
+        name: invocation.toolName,
+        arguments: invocation.arguments,
+      }),
+    ],
     execute: true,
     show: true,
   })
+  if (taskIds.length === 0) throw new Error(`Tool '${invocation.toolName}' created no tasks.`)
   const result = await waitForTaskResult(
     runtime.taskPort,
-    taskChain.map((task) => task.id),
+    taskIds,
     returnsRawToolResult ? ['toolresult', 'return', 'error'] : ['message', 'return', 'error'],
     10 * 60 * 1000,
     undefined,
@@ -1256,23 +1254,6 @@ function isTaskCreatedMessage(
     typeof msg.task === 'object' &&
     msg.task !== null
   )
-}
-
-async function createPreparedTaskChain(
-  tasks: partialTaskDraft[],
-  priorID?: string,
-): Promise<TaskNode[]> {
-  const prepared: TaskNode[] = []
-  let currentPriorId = priorID
-  for (const task of tasks) {
-    const nextTask = await createTaskNode(
-      currentPriorId ? { ...task, priorID: currentPriorId } : task,
-      { createMeta: 'missing' },
-    )
-    prepared.push(nextTask)
-    currentPriorId = nextTask.id
-  }
-  return prepared
 }
 
 async function waitForTaskResult(
@@ -4089,31 +4070,29 @@ async function main(host: InteractiveCliHost) {
       pendingHiddenNodeMarkers.length = 0
       completedSubtaskSummaryIds.clear()
 
-      const taskChain = await createPreparedTaskChain(
-        [
+      const { ids: taskIds } = await taskyonApi.task.createChain({
+        tasks: [
           {
             role: 'user',
             content: {
               type: 'message',
               data: input,
             },
+            ...(currentLeafId ? { priorID: currentLeafId } : {}),
           },
           toolCall({
             name: host.entryNodeName,
             arguments: {},
           }),
         ],
-        currentLeafId,
-      )
-      currentLeafId = taskChain[taskChain.length - 1]?.id ?? currentLeafId
-
-      await taskyonApi.task.createChain({
-        tasks: taskChain,
         execute: true,
         show: true,
       })
+      const entryTaskId = taskIds.at(-1)
+      if (!entryTaskId) throw new Error('CLI message submission created no tasks.')
+      currentLeafId = entryTaskId
       queueConversationPersist(currentLeafId)
-      writeDebug(`queued task chain: ${taskChain.map((task) => task.id).join(', ')}`)
+      writeDebug(`queued task chain: ${taskIds.join(', ')}`)
       try {
         waitingForTask = true
         interruptedCurrentTask = false
@@ -4128,7 +4107,7 @@ async function main(host: InteractiveCliHost) {
         activeTaskWaitController = new AbortController()
         const result = await waitForTaskResult(
           clientPort as Parameters<typeof waitForTaskResult>[0],
-          taskChain.map((task) => task.id),
+          taskIds,
           ['message', 'error', 'return'],
           TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS,
           activeTaskWaitController.signal,

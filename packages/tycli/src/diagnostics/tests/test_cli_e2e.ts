@@ -58,6 +58,7 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
       },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
+    isolateHome: false,
     timeoutMs: 90_000,
     runner: 'pty',
   })
@@ -80,6 +81,10 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
   assert(
     markdown.includes('role: assistant'),
     `Expected the saved conversation to contain the displayed assistant response.\n${markdown}`,
+  )
+  assert(
+    !markdown.includes('type: error'),
+    `Expected the saved conversation not to contain errors.\n${markdown}`,
   )
 
   return { success: true }

@@ -344,6 +344,16 @@ export function createExplorationTool(contextFiles: ExplorationContext) {
         return { matches, count: matches.length }
       }
       const scope = resolveWorkspaceScope(cwd, path)
+      const scopeStat = await stat(scope.full)
+      if (scopeStat.isFile()) {
+        const normalizedQuery = query?.trim().toLowerCase()
+        const files =
+          !normalizedQuery || scope.rel.toLowerCase().includes(normalizedQuery) ? [scope.rel] : []
+        return { files, count: files.length }
+      }
+      if (!scopeStat.isDirectory()) {
+        throw new Error(`Path is not a file or directory: ${path ?? '.'}`)
+      }
       const files = (
         await listWorkspaceFiles(scope.full, limit, action === 'search' ? query : undefined)
       ).map((file) => toWorkspaceRelativePath(scope.rel, file))
