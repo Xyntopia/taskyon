@@ -17,7 +17,8 @@
     "fflate": "^0.8.2",
     "js-yaml": "^4.1.0",
     "mathjs": "^11.8.2",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "vue": "^3.4.0"
   },
   "peerDependencies": {
     "vue": "^3.4.0"
