@@ -122,18 +122,13 @@ export const createBrowserDagGitRepository = async (args: {
   }
 
   const listProjectionPaths = async () => {
-    const nested = (
+    return (
       await Promise.all(
         DESIGN_GRAPH_GIT_DIRECTORIES.map(async (directory) => await listFiles(directory)),
       )
-    ).flat()
-    try {
-      await promises.stat(`${dir}/runtime-requirements.json`)
-      nested.push('runtime-requirements.json')
-    } catch {
-      // Runtime requirements are optional.
-    }
-    return nested.sort()
+    )
+      .flat()
+      .sort()
   }
 
   const init = async (defaultBranch = 'main') => {

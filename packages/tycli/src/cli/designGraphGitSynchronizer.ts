@@ -144,11 +144,6 @@ export const createNodeDesignGraphGitSynchronizer = async (args: {
           }),
         )
       ).flat()
-      const runtimeRequirements = resolve(directory, 'runtime-requirements.json')
-      await readFile(runtimeRequirements, 'utf8').then(
-        () => paths.push('runtime-requirements.json'),
-        () => undefined,
-      )
       paths.sort()
       return await Promise.all(
         paths.map(async (path) => ({
