@@ -1,19 +1,21 @@
 import { join } from 'node:path'
-import type { Port } from '@taskyon/common/modules/frpBus'
+import { createProtocolPort, type Port } from '@taskyon/common/modules/frpBus'
 import {
   createPgLiteDatabase,
   createPgLiteStorageBlobBackend,
   createPgLiteStorageRecordBackend,
 } from '@taskyon/taskyon'
 import {
+  createStorageClient,
   createStorageProtocolServer,
+  taskyonStorageProtocol,
   type StorageBackendProvider,
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
-import type { CliConfigStore } from './config'
-import type { StoredConfig } from './types'
-import { createCliFileBlobStorageBackend, createCliFileStorageBackend } from './fileStorage'
-import { createCliSqliteStorageProvider } from './sqliteStorage'
+import { createCliConfigStore, type CliConfigStore } from './config.ts'
+import { createCliFileBlobStorageBackend, createCliFileStorageBackend } from './fileStorage.ts'
+import type { CliStoragePaths } from './storagePaths.ts'
+import type { StoredConfig } from './types.ts'
 
 export type CliStorageBackendKind = 'files' | 'sqlite' | 'pglite'
 
@@ -39,7 +41,9 @@ export const createCliSelectedStorageService = async (options: {
   const needsSqlite = options.selection.records === 'sqlite' || options.selection.blobs === 'sqlite'
   const needsPgLite = options.selection.records === 'pglite' || options.selection.blobs === 'pglite'
   const sqlite = needsSqlite
-    ? await createCliSqliteStorageProvider(join(options.dataDirectory, 'storage.sqlite'))
+    ? await (
+        await import('./sqliteStorage.ts')
+      ).createCliSqliteStorageProvider(join(options.dataDirectory, 'storage.sqlite'))
     : undefined
   const pglite = needsPgLite
     ? await createPgLiteDatabase(join(options.dataDirectory, 'storage-pglite'))
@@ -73,5 +77,25 @@ export const createCliSelectedStorageService = async (options: {
     stop()
     sqlite?.close()
     void pglite?.close()
+  }
+}
+
+export const openCliStorageClient = async (options: {
+  paths: CliStoragePaths
+  namespacePrefix: string
+}) => {
+  const stored = await createCliConfigStore(options.paths).loadStoredConfig()
+  const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
+  const close = await createCliSelectedStorageService({
+    port: servicePort,
+    dataDirectory: options.paths.dataDir,
+    selection: resolveCliStorageSelection(stored),
+  })
+  return {
+    storageClient: createStorageClient(clientPort, {
+      namespacePrefix: options.namespacePrefix,
+      distribution: 'local-only',
+    }),
+    close,
   }
 }

@@ -140,7 +140,6 @@ import { updateFilesTool } from './tools/patchTool'
 import { downloadFileTool } from './tools/downloadFileTool'
 import { githubIssuesTool } from './tools/githubIssuesTool'
 import { gitlabTool } from './tools/gitlabTool'
-import { createDagGraphProjectTool } from './tools/dagGraphProjectTool'
 import type { CliOauthStorage } from './oauthLogin'
 
 type BashToolArgs = {
@@ -228,6 +227,7 @@ export type InteractiveCliHost = {
   defaultAllowedTools?: string[]
   unavailableToolNames?: ReadonlySet<string>
   additionalTools?: readonly InternalTool[]
+  initializeStorage?: (storageClient: ReturnType<typeof createStorageClient>) => Promise<void>
   documentation?: InteractiveCliDocumentation
 }
 
@@ -2851,6 +2851,7 @@ async function main(host: InteractiveCliHost) {
     namespacePrefix: storageNamespace,
     distribution: 'local-only',
   })
+  await host.initializeStorage?.(storageClient)
   const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
   const directRuntimeLog = runtimeLog
   const stopLoggingService = directRuntimeLog
@@ -3037,7 +3038,6 @@ async function main(host: InteractiveCliHost) {
     overpassMapTool,
     githubIssuesTool,
     gitlabTool,
-    createDagGraphProjectTool(storageClient),
     cliBashTool,
     ...(nativePythonExecutable
       ? [

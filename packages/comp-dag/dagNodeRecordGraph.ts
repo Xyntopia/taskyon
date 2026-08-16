@@ -1,12 +1,20 @@
 import type { Hash } from './caching.ts'
 import type { DagNode } from './dagCore.ts'
 import {
+  createDagModuleArtifact,
+  createDagModuleLock,
+  type DagModuleArtifact,
+  type DagModuleLock,
+  type StoredDagPackageName,
+} from './dagModule.ts'
+import {
   defineDagNodeRecord,
   getDagNodeRecordInputHashes,
   recordInputsToRuntimeInputs,
   type DagNodeRecord,
 } from './dagNodeRecord.ts'
 import { compileDagNodeRecord } from './dagNodeRecordCompiler.ts'
+import type { FetchCapability } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { objectSchema, oneOfSchema, type DagJsonSchema } from './dagSchema.ts'
 import {
   loadStoredGraphNodeFiles,
@@ -192,6 +200,134 @@ export const rewriteDagNodeRecordGraphInputHashes = async (
   return Object.values(definitionsByName)
 }
 
+export const replaceDagNodeRecordModuleSource = async (args: {
+  definitions: readonly DagNodeRecord[]
+  locks: Readonly<Record<Hash, DagModuleLock>>
+  modules: Readonly<Record<Hash, DagModuleArtifact>>
+  moduleId: Hash
+  source: string
+  redefine?: (definition: DagNodeRecord) => Promise<DagNodeRecord>
+}) => {
+  const previousModule = args.modules[args.moduleId]
+  if (!previousModule) throw new Error(`Stored DAG module ${args.moduleId} is unavailable.`)
+  const module = createDagModuleArtifact({
+    mediaType: previousModule.mediaType,
+    source: args.source,
+  })
+  const lockReplacements = new Map<Hash, DagModuleLock>()
+  for (const lock of Object.values(args.locks)) {
+    const affectsLock = Object.entries(lock.imports).some(
+      ([referrer, imports]) =>
+        referrer === args.moduleId ||
+        Object.values(imports).some(
+          (target) => target.kind === 'module' && target.id === args.moduleId,
+        ),
+    )
+    if (!affectsLock) continue
+    const imports = Object.fromEntries(
+      Object.entries(lock.imports).map(([referrer, mappings]) => [
+        referrer === args.moduleId ? module.id : referrer,
+        Object.fromEntries(
+          Object.entries(mappings).map(([specifier, target]) => [
+            specifier,
+            target.kind === 'module' && target.id === args.moduleId
+              ? { kind: 'module' as const, id: module.id }
+              : target,
+          ]),
+        ),
+      ]),
+    )
+    lockReplacements.set(lock.id, createDagModuleLock({ imports, packages: lock.packages }))
+  }
+  if (lockReplacements.size === 0) {
+    throw new Error(`Stored DAG module ${args.moduleId} is not referenced by the active graph.`)
+  }
+
+  const redefine = args.redefine ?? defineDagNodeRecord
+  const directUpdates = await Promise.all(
+    args.definitions.map(async (definition) => {
+      const lock = definition.moduleLockId
+        ? lockReplacements.get(definition.moduleLockId)
+        : undefined
+      if (!lock) return { definition }
+      const updated = await redefine({
+        ...definition,
+        version: definition.version + 1,
+        moduleLockId: lock.id,
+      })
+      return { definition: updated, replacement: [definition.id, updated.id] as const }
+    }),
+  )
+  const directReplacements = new Map(
+    directUpdates.flatMap(({ replacement }) => (replacement ? [replacement] : [])),
+  )
+  const definitions = await rewriteDagNodeRecordGraphInputHashes(
+    directUpdates.map(({ definition }) => definition),
+    directReplacements,
+    redefine,
+  )
+  return {
+    module,
+    locks: [...lockReplacements.values()],
+    definitions,
+    affectedNodeCount: directReplacements.size,
+  }
+}
+
+export const replaceDagNodeRecordPackageRange = async (args: {
+  definitions: readonly DagNodeRecord[]
+  locks: Readonly<Record<Hash, DagModuleLock>>
+  packageName: StoredDagPackageName
+  range: string
+  redefine?: (definition: DagNodeRecord) => Promise<DagNodeRecord>
+}) => {
+  const lockReplacements = new Map<Hash, DagModuleLock>()
+  for (const lock of Object.values(args.locks)) {
+    if (!lock.packages[args.packageName]) continue
+    lockReplacements.set(
+      lock.id,
+      createDagModuleLock({
+        imports: lock.imports,
+        packages: {
+          ...lock.packages,
+          [args.packageName]: { range: args.range },
+        },
+      }),
+    )
+  }
+  if (lockReplacements.size === 0) {
+    throw new Error(`Package ${args.packageName} is not required by the active graph.`)
+  }
+
+  const redefine = args.redefine ?? defineDagNodeRecord
+  const directUpdates = await Promise.all(
+    args.definitions.map(async (definition) => {
+      const lock = definition.moduleLockId
+        ? lockReplacements.get(definition.moduleLockId)
+        : undefined
+      if (!lock) return { definition }
+      const updated = await redefine({
+        ...definition,
+        version: definition.version + 1,
+        moduleLockId: lock.id,
+      })
+      return { definition: updated, replacement: [definition.id, updated.id] as const }
+    }),
+  )
+  const replacements = new Map(
+    directUpdates.flatMap(({ replacement }) => (replacement ? [replacement] : [])),
+  )
+  return {
+    locks: [...lockReplacements.values()],
+    definitions: await rewriteDagNodeRecordGraphInputHashes(
+      directUpdates.map(({ definition }) => definition),
+      replacements,
+      redefine,
+    ),
+    affectedNodeCount: replacements.size,
+  }
+}
+
 export const mergeDagNodeRecordDefaults = async (args: {
   local: readonly DagNodeRecord[]
   defaults: readonly DagNodeRecord[]
@@ -255,17 +391,36 @@ export const getDagNodeRecordInputSchema = (
 export const compileDagNodeRecordGraph = (args: {
   graph: DagNodeRecordGraph
   rootHash?: Hash
+  authorizeFetch?: (record: DagNodeRecord, capability: FetchCapability) => Promise<boolean>
+  fetch?: typeof fetch
+  callCapability?: (id: string, input: unknown) => Promise<unknown>
+  loadRunCode?: (record: DagNodeRecord) => Promise<string>
+  onProgress?: (event: { record: DagNodeRecord; completed: number; total: number }) => void
 }): CompiledDagNodeGraph => {
   const compiled: CompiledDagNodeGraph = {}
   const hashes = args.rootHash
     ? getDagNodeRecordClosure(args.graph, args.rootHash)
-    : Object.keys(args.graph)
+    : [
+        ...new Set(
+          (Object.keys(args.graph) as Hash[])
+            .sort()
+            .flatMap((hash) => getDagNodeRecordClosure(args.graph, hash)),
+        ),
+      ]
 
-  for (const hash of hashes as Hash[]) {
+  for (const [index, hash] of (hashes as Hash[]).entries()) {
+    const record = args.graph[hash]!
     compiled[hash] = compileDagNodeRecord({
-      record: args.graph[hash]!,
+      record,
       nodeById: compiled,
+      ...(args.authorizeFetch
+        ? { authorizeFetch: async (capability) => await args.authorizeFetch!(record, capability) }
+        : {}),
+      ...(args.fetch ? { fetch: args.fetch } : {}),
+      ...(args.callCapability ? { callCapability: args.callCapability } : {}),
+      ...(args.loadRunCode ? { loadRunCode: args.loadRunCode } : {}),
     })
+    args.onProgress?.({ record, completed: index + 1, total: hashes.length })
   }
 
   return compiled

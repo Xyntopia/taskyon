@@ -24,6 +24,7 @@ export type DagNodeRunContext = {
   use: Record<string, DagInputAccessor>
   services: {
     fetch: typeof fetch
+    callCapability: (id: string, input: unknown) => Promise<unknown>
   }
 }
 
@@ -46,12 +47,14 @@ export type DagNodeRecord = {
   structure?: DagNodeRecordStructure
   localParamsSchema: DagJsonSchema
   outputSchema: DagJsonSchema
+  capabilities?: readonly string[]
   inputs?: Record<string, DagNodeRecordInputRef>
   hiddenInputs?: Record<string, DagNodeInputRefSingle>
   exposedInputs?: Record<string, DagNodeInputRefSingle | DagNodeInputRefOneOf>
   moduleLockId?: Hash
   importsSource?: string
   importSpecifiers?: readonly string[]
+  preambleSource?: string
   runSource: string
   runCode?: string
   run?: DagNodeRunFunction
@@ -132,11 +135,13 @@ export const normalizeDagNodeRecordHashSource = (
       structure: record.structure ?? null,
       localParamsSchema: record.localParamsSchema,
       outputSchema: record.outputSchema,
+      ...(record.capabilities?.length ? { capabilities: record.capabilities } : {}),
       inputs: record.inputs ?? null,
       hiddenInputs: record.hiddenInputs ?? {},
       exposedInputs: record.exposedInputs ?? {},
       ...(record.moduleLockId ? { moduleLockId: record.moduleLockId } : {}),
       ...(record.importsSource ? { importsSource: record.importsSource } : {}),
+      ...(record.preambleSource ? { preambleSource: record.preambleSource } : {}),
       runSource: record.runSource,
       // This null slot is part of the v2 canonical identity. Module locks replace its former
       // purpose, but removing the slot would change every import-free node hash.
@@ -157,7 +162,10 @@ export const hashDagNodeRecordInput = async (
 export const defineDagNodeRecord = async (
   input: Omit<DagNodeRecord, 'id'>,
 ): Promise<DagNodeRecord> => {
-  assertDagNodeEffectSource(input.effect ?? 'pure', input.runSource)
+  assertDagNodeEffectSource(
+    input.effect ?? 'pure',
+    `${input.preambleSource ?? ''}\n${input.runSource}`,
+  )
   const hashSource = normalizeDagNodeRecordHashSource(input)
   const id = await hashCanonicalDagNodeSource(
     JSON.stringify({

@@ -1,4 +1,5 @@
 import type { Hash } from './caching.ts'
+import type { DagNode, EngineConfig, NodeContext } from './dagCore.ts'
 import {
   createInvocationRun,
   type ExecutionAttempt,
@@ -10,6 +11,7 @@ import {
 import type { DesignGraphRepository } from './designGraphRepository.ts'
 import { evaluateDerivedOperations, type DerivedOperation } from './derivedExpression.ts'
 import { getPathValue, setPathValue, type VariableSpec } from './optimization.ts'
+import { toDagExploreInputs } from './runtime/runPlanner.ts'
 
 export type InvocationRow = {
   rowId: number
@@ -59,6 +61,60 @@ export type InvocationExecutionDependencies = {
   makeAttemptId: () => string
   now?: () => number
 }
+
+export const createDagInvocationEvaluators = (args: {
+  root: DagNode
+  invocation: InvocationDefinition
+  engineConfig?: EngineConfig
+  nodeContext?: NodeContext
+}): Pick<InvocationExecutionDependencies, 'evaluate' | 'evaluateRows'> => ({
+  evaluate: async ({ params, signal }) => {
+    if (signal?.aborted) throw new Error('Invocation cancelled.')
+    const result = await args.root.call(params).run(args.nodeContext, args.engineConfig)
+    return { outputs: result.value }
+  },
+  evaluateRows: async ({ params, maxRows, signal, onRow }) => {
+    if (signal?.aborted) throw new Error('Invocation cancelled.')
+    const inputs = toDagExploreInputs(args.invocation.inputs)
+    const studyParams = Object.fromEntries(
+      Object.keys(args.invocation.inputs).map((alias) => [alias, params[alias] ?? {}]),
+    )
+    await args.root.call({ ...params, ...studyParams }).study(
+      {
+        ...(args.invocation.objectives[0]?.target.op === 'identity'
+          ? {
+              mode: 'optimize' as const,
+              objective: {
+                path: args.invocation.objectives[0].target.path,
+                direction: args.invocation.objectives[0].direction,
+              },
+            }
+          : {}),
+        ...(inputs ? { inputs } : {}),
+        capture: args.invocation.capture.map((capture) => ({
+          path: capture.path,
+          ...(capture.as === undefined ? {} : { as: capture.as }),
+        })),
+        ...(maxRows === undefined ? {} : { budget: { maxRows } }),
+        collectRows: false,
+        collectHistory: Object.values(args.invocation.inputs).some(
+          (input) => input.strategy?.id !== undefined && input.strategy.id !== 'sequential',
+        ),
+        onRow: async (row) =>
+          await onRow({
+            outputs: row.row,
+            ...(row.captured ? { captured: row.captured } : {}),
+            inputSelection: {
+              rowKey: row.rowKey,
+              sourceIndexByAlias: row.sourceIndexByAlias,
+            },
+          }),
+      },
+      args.nodeContext,
+      args.engineConfig,
+    )
+  },
+})
 
 const finiteValues = function* (variable: VariableSpec): Iterable<unknown> {
   switch (variable.kind) {
@@ -218,14 +274,17 @@ const persistAttempt = async (
 export const executeInvocation = async (args: {
   invocation: InvocationDefinition
   dependencies: InvocationExecutionDependencies
+  reuseCompletedRun?: boolean
   signal?: AbortSignal
   onRow?: (row: InvocationRow) => void | Promise<void>
 }): Promise<{ run: InvocationRun; cacheHit: boolean }> => {
   const { repository, artifacts } = args.dependencies
   const now = args.dependencies.now ?? Date.now
   const policy = resolveInvocationPolicy(args.invocation)
-  const cached = await reusableRun(repository, artifacts, args.invocation.id, policy)
-  if (cached) return { run: cached, cacheHit: true }
+  if (args.reuseCompletedRun !== false) {
+    const cached = await reusableRun(repository, artifacts, args.invocation.id, policy)
+    if (cached) return { run: cached, cacheHit: true }
+  }
 
   const startedAtMs = now()
   let attempt: ExecutionAttempt = {

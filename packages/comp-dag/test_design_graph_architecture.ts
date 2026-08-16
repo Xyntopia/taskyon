@@ -7,11 +7,19 @@ import {
   createProjectRevision,
   deriveInvocationCategory,
 } from './designGraphModel.ts'
-import { createDesignGraphRepository } from './designGraphRepository.ts'
-import { projectDesignGraphSnapshot } from './dagGitProjection.ts'
+import {
+  createDesignGraphRepository,
+  createStorageDesignGraphObjectStore,
+} from './designGraphRepository.ts'
+import { createProjectDraftStore } from './projectDraft.ts'
+import { importDesignGraphSnapshot, projectDesignGraphSnapshot } from './dagGitProjection.ts'
 import { createDagModuleArtifact, createDagModuleLock } from './dagModule.ts'
 import { SELF_HASH_PLACEHOLDER, hashFilePart } from './dagNodeIdentity.ts'
 import { saveStoredGraphNodeSource } from './dagNodeLoader.ts'
+import {
+  replaceDagNodeRecordModuleSource,
+  replaceDagNodeRecordPackageRange,
+} from './dagNodeRecordGraph.ts'
 import { createDerivedExpression, evaluateDerivedExpression } from './derivedExpression.ts'
 import {
   executeInvocation,
@@ -26,8 +34,11 @@ const assert: (condition: unknown, message: string) => asserts condition = (cond
 
 const createMemoryStore = () => {
   const values = new Map<string, string>()
+  let bulkReads = 0
+  let bulkWrites = 0
   return {
     values,
+    counts: () => ({ bulkReads, bulkWrites }),
     store: {
       readText: (path: string) => {
         const value = values.get(path)
@@ -36,6 +47,17 @@ const createMemoryStore = () => {
       },
       writeText: (path: string, value: string) => {
         values.set(path, value)
+        return Promise.resolve()
+      },
+      readManyText: (paths: readonly string[]) => {
+        bulkReads += 1
+        return Promise.resolve(
+          new Map(paths.map((path) => [path, values.get(path) ?? null] as const)),
+        )
+      },
+      writeManyText: (files: readonly { path: string; content: string }[]) => {
+        bulkWrites += 1
+        for (const file of files) values.set(file.path, file.content)
         return Promise.resolve()
       },
       writeTextIfUnchanged: (path: string, expectedContentHash: string | null, value: string) => {
@@ -59,6 +81,83 @@ const createMemoryStore = () => {
     },
   }
 }
+
+export const testDesignGraphImportBatchesImmutableObjects = async () => {
+  const memory = createMemoryStore()
+  const node = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'BatchImportNode',
+  label: 'Batch import node',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: {},
+  run: () => 1,
+}`)
+  const revision = createGraphRevision({ parents: [], nodes: { main: node.hash } })
+  await importDesignGraphSnapshot({
+    store: memory.store,
+    files: [
+      { path: `nodes/${hashFilePart(node.hash)}.ts`, content: node.file.source },
+      {
+        path: `graph-revisions/${hashFilePart(revision.id)}.json`,
+        content: `${JSON.stringify(revision)}\n`,
+      },
+      {
+        path: 'refs/graph/main.json',
+        content: `${JSON.stringify({ schemaVersion: 2, revisionId: revision.id })}\n`,
+      },
+    ],
+  })
+
+  const counts = memory.counts()
+  assert(counts.bulkReads === 1, `Expected one immutable-object bulk read, got ${counts.bulkReads}`)
+  assert(
+    counts.bulkWrites === 1,
+    `Expected one immutable-object bulk write, got ${counts.bulkWrites}`,
+  )
+}
+
+testDesignGraphImportBatchesImmutableObjects.description =
+  'Imports a stored graph closure with one bulk immutable-object read and write before advancing refs.'
+
+export const testStorageDesignGraphCacheDoesNotHideRefChanges = async () => {
+  const values = new Map<string, unknown>([['refs/graph/main.json', 'first']])
+  const store = createStorageDesignGraphObjectStore({
+    get: ({ id }) => {
+      const value = values.get(id) ?? null
+      return Promise.resolve({
+        value,
+        contentHash: value === null ? null : canonicalHash(value),
+      })
+    },
+    set: ({ id, value }) => {
+      values.set(id, value)
+      return Promise.resolve()
+    },
+    setIfUnchanged: ({ id, expectedContentHash, value }) => {
+      const current = values.get(id) ?? null
+      const currentContentHash = current === null ? null : canonicalHash(current)
+      if (currentContentHash !== expectedContentHash) {
+        return Promise.resolve({ written: false, currentContentHash })
+      }
+      values.set(id, value)
+      return Promise.resolve({ written: true, currentContentHash: canonicalHash(value) })
+    },
+    list: () => Promise.resolve({ rows: [...values].map(([id, data]) => ({ id, data })) }),
+  })
+
+  assert((await store.readText('refs/graph/main.json')) === 'first', 'Expected initial ref.')
+  values.set('refs/graph/main.json', 'second')
+  assert(
+    (await store.readText('refs/graph/main.json')) === 'second',
+    'Mutable refs must be re-read after another repository instance advances them.',
+  )
+}
+
+testStorageDesignGraphCacheDoesNotHideRefChanges.description =
+  'Caches immutable graph objects without hiding ref advances made through another repository instance.'
 
 export const testUnifiedDesignGraphIdentityAndCategories = () => {
   const nodeId = canonicalHash('unified-root')
@@ -181,7 +280,9 @@ export const testNodeGitProjectionIncludesLockedModuleClosure = async () => {
     mediaType: 'text/typescript',
     source: 'export const value = 1',
   })
-  const lock = createDagModuleLock({ imports: { $node: { './value.ts': module.id } } })
+  const lock = createDagModuleLock({
+    imports: { $node: { './value.ts': { kind: 'module', id: module.id } } },
+  })
   const node = await saveStoredGraphNodeSource(`import { value } from './value.ts'
 export default {
   formatVersion: 2,
@@ -217,6 +318,115 @@ export default {
 
 testNodeGitProjectionIncludesLockedModuleClosure.description =
   'Projects imported stored nodes with their exact module lock and module objects.'
+
+export const testStoredModuleEditRewritesEverySharingNodeAndItsDependents = async () => {
+  const module = createDagModuleArtifact({
+    mediaType: 'text/typescript',
+    source: 'export const value = 1',
+  })
+  const lock = createDagModuleLock({
+    imports: { $node: { './value.ts': { kind: 'module', id: module.id } } },
+  })
+  const first = await saveStoredGraphNodeSource(`import { value } from './value.ts'
+export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'FirstModuleConsumer',
+  label: 'First module consumer',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: {},
+  moduleLockId: '${lock.id}',
+  run: () => value,
+}`)
+  const second = await saveStoredGraphNodeSource(
+    first.file.source.replaceAll('FirstModuleConsumer', 'SecondModuleConsumer'),
+  )
+  const downstream = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'ModuleConsumerOutput',
+  label: 'Module consumer output',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: { value: { nodeId: '${first.hash}', role: 'internal' } },
+  run: ({ use }) => use.value,
+}`)
+
+  const replaced = await replaceDagNodeRecordModuleSource({
+    definitions: [first.node, second.node, downstream.node],
+    locks: { [lock.id]: lock },
+    modules: { [module.id]: module },
+    moduleId: module.id,
+    source: 'export const value = 2',
+  })
+  const replacementLock = replaced.locks[0]
+  assert(replacementLock, 'Expected a replacement module lock')
+  const firstUpdated = replaced.definitions.find(
+    ({ localName }) => localName === first.node.localName,
+  )
+  const secondUpdated = replaced.definitions.find(
+    ({ localName }) => localName === second.node.localName,
+  )
+  const downstreamUpdated = replaced.definitions.find(
+    ({ localName }) => localName === downstream.node.localName,
+  )
+  assert(
+    firstUpdated?.moduleLockId === replacementLock.id,
+    'Expected first shared lock replacement',
+  )
+  assert(
+    secondUpdated?.moduleLockId === replacementLock.id,
+    'Expected second shared lock replacement',
+  )
+  assert(firstUpdated.id !== first.node.id, 'Expected first consumer identity to change')
+  assert(secondUpdated.id !== second.node.id, 'Expected second consumer identity to change')
+  assert(
+    downstreamUpdated?.inputs?.value &&
+      !('kind' in downstreamUpdated.inputs.value) &&
+      downstreamUpdated.inputs.value.nodeId === firstUpdated.id,
+    'Expected downstream input hashes to follow the edited module consumer',
+  )
+  assert(replaced.module.source === 'export const value = 2', 'Expected replacement source')
+  assert(module.source === 'export const value = 1', 'Expected the old module to stay immutable')
+}
+
+testStoredModuleEditRewritesEverySharingNodeAndItsDependents.description =
+  'Replaces a shared stored module once, then rewrites every consuming node and dependent hash.'
+
+export const testPackageUpdateCreatesImmutableReplacementPath = async () => {
+  const lock = createDagModuleLock({
+    imports: { $node: { zod: { kind: 'package', name: 'zod' } } },
+    packages: { zod: { range: '^4.0.0' } },
+  })
+  const node = await saveStoredGraphNodeSource(`import { z } from 'zod'
+export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'PackageConsumer',
+  label: 'Package consumer',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: {},
+  moduleLockId: '${lock.id}',
+  run: () => z.number().parse(1),
+}`)
+  const updated = await replaceDagNodeRecordPackageRange({
+    definitions: [node.node],
+    locks: { [lock.id]: lock },
+    packageName: 'zod',
+    range: '^4.1.0',
+  })
+  assert(updated.locks[0]?.packages.zod?.range === '^4.1.0', 'Expected the new package range')
+  assert(updated.definitions[0]?.id !== node.hash, 'Expected a new immutable node identity')
+  assert(updated.definitions[0]?.version === 2, 'Expected an explicit node revision')
+}
+
+testPackageUpdateCreatesImmutableReplacementPath.description =
+  'Updates an incompatible package requirement by rewriting locks and node identities.'
 
 export const testProjectSaveUsesConditionalWritesAndExplicitParents = async () => {
   const repository = createDesignGraphRepository(createMemoryStore().store)
@@ -288,6 +498,60 @@ export const testProjectSaveUsesConditionalWritesAndExplicitParents = async () =
 
 testProjectSaveUsesConditionalWritesAndExplicitParents.description =
   'Advances stable project refs only when unchanged while keeping revision ancestry immutable.'
+
+export const testProjectDraftHistoryPersistsAndSavesCanonicalRevision = async () => {
+  const memory = createMemoryStore()
+  const repository = createDesignGraphRepository(memory.store)
+  const storageValues = new Map<string, unknown>()
+  const drafts = createProjectDraftStore(
+    {
+      get: ({ namespace, id }) =>
+        Promise.resolve({ value: storageValues.get(`${namespace}/${id}`) ?? null }),
+      set: ({ namespace, id, value }) => {
+        storageValues.set(`${namespace}/${id}`, value)
+        return Promise.resolve()
+      },
+      list: ({ namespace }) =>
+        Promise.resolve({
+          rows: [...storageValues.entries()]
+            .filter(([key]) => key.startsWith(`${namespace}/`))
+            .map(([key, data]) => ({ id: key.slice(namespace.length + 1), data })),
+        }),
+    },
+    3,
+  )
+  const projectRef = 'projects/draft-test'
+  const initial = createProjectRevision({
+    parents: [],
+    displayName: 'Initial',
+    invocations: {},
+    extensions: {},
+  })
+  await repository.putProjectRevision(initial)
+  await repository.advanceProjectRef({ name: projectRef, revisionId: initial.id, expected: null })
+  await drafts.create(projectRef, initial)
+  await drafts.update(projectRef, (snapshot) => ({ ...snapshot, displayName: 'First edit' }))
+  await drafts.update(projectRef, (snapshot) => ({ ...snapshot, displayName: 'Second edit' }))
+  await drafts.update(projectRef, (snapshot) => ({ ...snapshot, displayName: 'Third edit' }))
+
+  assert((await drafts.load(projectRef))?.snapshots.length === 3, 'Expected bounded history')
+  assert((await drafts.undo(projectRef)).current.displayName === 'Second edit', 'Expected undo')
+  assert((await drafts.redo(projectRef)).current.displayName === 'Third edit', 'Expected redo')
+
+  const saved = await drafts.save(projectRef, repository)
+  assert(saved.parents[0] === initial.id, 'Expected the draft base revision as parent')
+  assert(saved.displayName === 'Third edit', 'Expected the current snapshot to be saved')
+  assert(
+    (await repository.getProjectRef(projectRef))?.revisionId === saved.id,
+    'Expected save to advance the canonical project ref',
+  )
+  const reset = await drafts.load(projectRef)
+  assert(reset?.baseRevisionId === saved.id, 'Expected saved revision to become the draft base')
+  assert(reset?.snapshots.length === 1 && reset.cursor === 0, 'Expected save to reset history')
+}
+
+testProjectDraftHistoryPersistsAndSavesCanonicalRevision.description =
+  'Persists bounded project draft undo/redo and saves through canonical immutable project revisions.'
 
 export const testInvocationRunRejectsApproximationUntilAvailable = () => {
   const invocationId = canonicalHash('approximation')
@@ -409,22 +673,29 @@ export const testInvocationExecutionUsesCanonicalObjectivesAndConstraints = asyn
     })
   }
   let observed: unknown
+  let evaluations = 0
+  let attempt = 0
+  const artifactStore = {
+    begin,
+    write: async (value: unknown, mediaType: string) => {
+      const writer = await begin(mediaType)
+      await writer.write(new TextEncoder().encode(JSON.stringify(value)))
+      return await writer.commit()
+    },
+    exists: (artifact: { id: Hash }) => Promise.resolve(artifacts.has(artifact.id)),
+  }
+  const evaluate = () => {
+    evaluations += 1
+    return Promise.resolve({ outputs: { costs: [2, 3, 4], capacity: 7 } })
+  }
   const completed = await executeInvocation({
     invocation,
     dependencies: {
       repository,
-      artifacts: {
-        begin,
-        write: async (value, mediaType) => {
-          const writer = await begin(mediaType)
-          await writer.write(new TextEncoder().encode(JSON.stringify(value)))
-          return await writer.commit()
-        },
-        exists: (artifact) => Promise.resolve(artifacts.has(artifact.id)),
-      },
-      evaluate: () => Promise.resolve({ outputs: { costs: [2, 3, 4], capacity: 7 } }),
-      makeAttemptId: () => 'objective-attempt',
-      now: () => 10,
+      artifacts: artifactStore,
+      evaluate,
+      makeAttemptId: () => `objective-attempt-${attempt++}`,
+      now: () => 10 + attempt,
     },
     onRow: (row) => {
       observed = row
@@ -434,6 +705,19 @@ export const testInvocationExecutionUsesCanonicalObjectivesAndConstraints = asyn
   assert(row.objectives['objective-0'] === 9, 'Expected canonical sum objective')
   assert(row.feasible, 'Expected satisfied constraints to mark the row feasible')
   assert(completed.run.status === 'completed', 'Expected a completed immutable run')
+  const refreshed = await executeInvocation({
+    invocation,
+    reuseCompletedRun: false,
+    dependencies: {
+      repository,
+      artifacts: artifactStore,
+      evaluate,
+      makeAttemptId: () => `objective-attempt-${attempt++}`,
+      now: () => 10 + attempt,
+    },
+  })
+  assert(!refreshed.cacheHit, 'Expected explicit refresh to bypass completed invocation reuse')
+  assert(evaluations === 2, 'Expected explicit refresh to evaluate the invocation again')
 }
 
 testInvocationExecutionUsesCanonicalObjectivesAndConstraints.description =

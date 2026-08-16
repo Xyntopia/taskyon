@@ -12,17 +12,17 @@ export type DagModuleArtifact = {
   source: string
 }
 
-export type DagLockedPackage = {
-  version: string
-  integrity: string
-  moduleId: Hash
-}
+export type DagModuleImportTarget =
+  | { kind: 'module'; id: Hash }
+  | { kind: 'package'; name: StoredDagPackageName }
+
+export type DagLockedPackage = { range: string }
 
 export type DagModuleLock = {
-  schemaVersion: 1
+  schemaVersion: 2
   id: Hash
-  resolver: { id: 'taskyon'; version: 1 }
-  imports: Record<string, Record<string, Hash>>
+  resolver: { id: 'taskyon'; version: 2 }
+  imports: Record<string, Record<string, DagModuleImportTarget>>
   packages: Partial<Record<StoredDagPackageName, DagLockedPackage>>
 }
 
@@ -70,22 +70,52 @@ export const parseDagModuleArtifact = (value: unknown): DagModuleArtifact => {
 }
 
 export const createDagModuleLock = (input: {
-  imports: Record<string, Record<string, Hash>>
+  imports: Record<string, Record<string, DagModuleImportTarget>>
   packages?: Partial<Record<StoredDagPackageName, DagLockedPackage>>
 }): DagModuleLock => {
+  const importedPackages = new Set(
+    Object.values(input.imports).flatMap((imports) =>
+      Object.values(imports).flatMap((target) => (target.kind === 'package' ? [target.name] : [])),
+    ),
+  )
+  for (const name of importedPackages) {
+    if (!input.packages?.[name]) {
+      throw new Error(`Imported runtime package ${name} requires a locked compatibility range.`)
+    }
+  }
+  for (const name of Object.keys(input.packages ?? {})) {
+    if (!importedPackages.has(name as StoredDagPackageName)) {
+      throw new Error(`Locked runtime package ${name} is not imported by the module closure.`)
+    }
+  }
   const value = {
-    schemaVersion: 1 as const,
-    resolver: { id: 'taskyon' as const, version: 1 as const },
+    schemaVersion: 2 as const,
+    resolver: { id: 'taskyon' as const, version: 2 as const },
     imports: input.imports,
     packages: input.packages ?? {},
   }
-  return { ...value, id: createModuleIdentity('taskyon.dagModuleLock.v1', value) }
+  return { ...value, id: createModuleIdentity('taskyon.dagModuleLock.v2', value) }
+}
+
+const parseImportTarget = (value: unknown, label: string): DagModuleImportTarget => {
+  const target = moduleObjectAtBoundary(value, label)
+  if (target.kind === 'module') {
+    return { kind: 'module', id: moduleHashAtBoundary(target.id, `${label} module`) }
+  }
+  if (
+    target.kind === 'package' &&
+    typeof target.name === 'string' &&
+    STORED_DAG_PACKAGE_ALLOWLIST.includes(target.name as StoredDagPackageName)
+  ) {
+    return { kind: 'package', name: target.name as StoredDagPackageName }
+  }
+  throw new Error(`${label} must target an approved package or stored module.`)
 }
 
 export const parseDagModuleLock = (value: unknown): DagModuleLock => {
   const input = moduleObjectAtBoundary(value, 'DAG module lock')
   const resolver = moduleObjectAtBoundary(input.resolver, 'DAG module lock resolver')
-  if (input.schemaVersion !== 1 || resolver.id !== 'taskyon' || resolver.version !== 1) {
+  if (input.schemaVersion !== 2 || resolver.id !== 'taskyon' || resolver.version !== 2) {
     throw new Error('Unsupported DAG module lock.')
   }
   const imports = Object.fromEntries(
@@ -94,9 +124,9 @@ export const parseDagModuleLock = (value: unknown): DagModuleLock => {
         referrer,
         Object.fromEntries(
           Object.entries(moduleObjectAtBoundary(mappings, `Imports for ${referrer}`)).map(
-            ([specifier, moduleId]) => [
+            ([specifier, target]) => [
               specifier,
-              moduleHashAtBoundary(moduleId, `Import ${referrer}:${specifier}`),
+              parseImportTarget(target, `Import ${referrer}:${specifier}`),
             ],
           ),
         ),
@@ -110,17 +140,10 @@ export const parseDagModuleLock = (value: unknown): DagModuleLock => {
           throw new Error(`Stored DAG package ${name} is not in the runtime allowlist.`)
         }
         const pkg = moduleObjectAtBoundary(value, `Locked package ${name}`)
-        if (typeof pkg.version !== 'string' || typeof pkg.integrity !== 'string') {
-          throw new Error(`Locked package ${name} requires version and integrity.`)
+        if (typeof pkg.range !== 'string' || !pkg.range.trim()) {
+          throw new Error(`Locked package ${name} requires a compatibility range.`)
         }
-        return [
-          name,
-          {
-            version: pkg.version,
-            integrity: pkg.integrity,
-            moduleId: moduleHashAtBoundary(pkg.moduleId, `Locked package ${name} module`),
-          },
-        ]
+        return [name, { range: pkg.range }]
       },
     ),
   )
@@ -136,7 +159,8 @@ export const parseDagModuleLock = (value: unknown): DagModuleLock => {
 
 export const getDagModuleLockModuleIds = (lock: DagModuleLock): Hash[] => [
   ...new Set([
-    ...Object.values(lock.imports).flatMap((imports) => Object.values(imports)),
-    ...Object.values(lock.packages).map((pkg) => pkg.moduleId),
+    ...Object.values(lock.imports).flatMap((imports) =>
+      Object.values(imports).flatMap((target) => (target.kind === 'module' ? [target.id] : [])),
+    ),
   ]),
 ]

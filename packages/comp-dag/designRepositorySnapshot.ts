@@ -1,3 +1,4 @@
+import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
 import {
   parseDesignGraphRef,
@@ -18,7 +19,10 @@ import {
   type DagModuleArtifact,
   type DagModuleLock,
 } from './dagModule.ts'
-import { compileLockedDagNodeRunCode } from './dagModuleCompiler.ts'
+import {
+  createLockedDagNodeRunCodeCompiler,
+  createUncachedDagRunCodeCompiler,
+} from './dagModuleCompiler.ts'
 import {
   loadStoredGraphNodeFile,
   type SavedStoredGraphNode,
@@ -30,6 +34,10 @@ export type DesignRepositoryTextReader = (path: string) => Promise<string>
 export type DesignRepositoryCheckout =
   | { kind: 'ref'; name: string }
   | { kind: 'graphRevision'; id: Hash }
+
+export type ProjectRepositoryCheckout =
+  | { kind: 'ref'; name: string }
+  | { kind: 'projectRevision'; id: Hash }
 
 export type LoadedDesignRepositorySnapshot = {
   revision: GraphRevision
@@ -138,35 +146,203 @@ const loadModuleClosure = async (
   return { moduleLocksByHash, modulesByHash }
 }
 
-const compileImportedNodes = async (
-  nodes: Record<Hash, SavedStoredGraphNode>,
-  moduleLocksByHash: Record<Hash, DagModuleLock>,
-  modulesByHash: Record<Hash, DagModuleArtifact>,
-): Promise<Record<Hash, SavedStoredGraphNode>> =>
-  Object.fromEntries(
+export type DagResolvedPackage = {
+  name: string
+  version: string
+  integrity: string
+}
+
+export type DagCompiledNodeArtifact = {
+  schemaVersion: 1
+  cacheId: string
+  compilerAbi: string
+  nodeId: Hash
+  moduleLockId?: Hash
+  sourceBytes: number
+  outputBytes: number
+  packages: readonly DagResolvedPackage[]
+  code: string
+}
+
+export type DagRunCodeCompilerInput = {
+  nodeId: Hash
+  importsSource?: string
+  preambleSource?: string
+  runSource: string
+  lock?: DagModuleLock
+  modules: Record<Hash, DagModuleArtifact>
+}
+
+export type DagRunCodeArtifactCompiler = {
+  compilerAbi: string
+  resolvePackages: (lock: DagModuleLock | undefined) => Promise<readonly DagResolvedPackage[]>
+  compile: (
+    input: DagRunCodeCompilerInput,
+    packages: readonly DagResolvedPackage[],
+  ) => Promise<Omit<DagCompiledNodeArtifact, 'cacheId'>>
+}
+
+export type DagRunCodeCompiler = {
+  get: (input: DagRunCodeCompilerInput) => Promise<DagCompiledNodeArtifact | null>
+  compile: (input: DagRunCodeCompilerInput) => Promise<DagCompiledNodeArtifact>
+}
+
+export type DagRunCodeCache = {
+  get: (id: string) => Promise<unknown>
+  set: (id: string, value: unknown) => Promise<void>
+}
+
+export type DagRunCodeCacheEvent = {
+  status: 'hit' | 'miss' | 'compile-start' | 'compile-error'
+  cacheId: string
+  nodeId: Hash
+  durationMs: number
+  outputBytes?: number
+  message?: string
+}
+
+export const createCachedDagRunCodeCompiler = (
+  cache: DagRunCodeCache,
+  compiler: DagRunCodeArtifactCompiler,
+  onCache?: (event: DagRunCodeCacheEvent) => void,
+): DagRunCodeCompiler => {
+  const pending = new Map<string, Promise<DagCompiledNodeArtifact>>()
+  const resolveRequest = async (input: DagRunCodeCompilerInput) => {
+    const packages = [...(await compiler.resolvePackages(input.lock))].sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )
+    const cacheId = canonicalHash({
+      kind: 'taskyon.dagRunCode.v2',
+      compilerAbi: compiler.compilerAbi,
+      nodeId: input.nodeId,
+      moduleLockId: input.lock?.id ?? null,
+      packages,
+    })
+    return { cacheId, packages }
+  }
+  const read = async (
+    input: DagRunCodeCompilerInput,
+    cacheId: string,
+    packages: readonly DagResolvedPackage[],
+  ) => {
+    const startedAt = performance.now()
+    const cached = await cache.get(cacheId)
+    if (!cached || typeof cached !== 'object') return null
+    const code = Reflect.get(cached, 'code')
+    if (
+      Reflect.get(cached, 'schemaVersion') !== 1 ||
+      Reflect.get(cached, 'cacheId') !== cacheId ||
+      Reflect.get(cached, 'compilerAbi') !== compiler.compilerAbi ||
+      Reflect.get(cached, 'nodeId') !== input.nodeId ||
+      Reflect.get(cached, 'moduleLockId') !== input.lock?.id ||
+      typeof code !== 'string'
+    ) {
+      return null
+    }
+    const artifact = cached as DagCompiledNodeArtifact
+    if (JSON.stringify(artifact.packages) !== JSON.stringify(packages)) return null
+    onCache?.({
+      status: 'hit',
+      cacheId,
+      nodeId: input.nodeId,
+      durationMs: performance.now() - startedAt,
+      outputBytes: artifact.outputBytes,
+    })
+    return artifact
+  }
+  const get = async (input: DagRunCodeCompilerInput) => {
+    const { cacheId, packages } = await resolveRequest(input)
+    return await read(input, cacheId, packages)
+  }
+  const compile = async (input: DagRunCodeCompilerInput) => {
+    const { cacheId, packages } = await resolveRequest(input)
+    const existing = pending.get(cacheId)
+    if (existing) return await existing
+    const requested = (async () => {
+      const cached = await read(input, cacheId, packages)
+      if (cached) return cached
+      const startedAt = performance.now()
+      onCache?.({
+        status: 'compile-start',
+        cacheId,
+        nodeId: input.nodeId,
+        durationMs: 0,
+      })
+      let output: Omit<DagCompiledNodeArtifact, 'cacheId'>
+      try {
+        output = await compiler.compile(input, packages)
+      } catch (error) {
+        onCache?.({
+          status: 'compile-error',
+          cacheId,
+          nodeId: input.nodeId,
+          durationMs: performance.now() - startedAt,
+          message: error instanceof Error ? error.message : String(error),
+        })
+        throw error
+      }
+      const artifact: DagCompiledNodeArtifact = { ...output, cacheId }
+      await cache.set(cacheId, artifact)
+      onCache?.({
+        status: 'miss',
+        cacheId,
+        nodeId: input.nodeId,
+        durationMs: performance.now() - startedAt,
+        outputBytes: artifact.outputBytes,
+      })
+      return artifact
+    })()
+    pending.set(cacheId, requested)
+    try {
+      return await requested
+    } finally {
+      pending.delete(cacheId)
+    }
+  }
+  return { get, compile }
+}
+
+export const compileDesignRepositoryNodes = async (
+  snapshot: Pick<
+    LoadedDesignRepositorySnapshot,
+    'nodesByHash' | 'moduleLocksByHash' | 'modulesByHash'
+  >,
+  compileRunCode?: DagRunCodeCompiler,
+): Promise<Record<Hash, SavedStoredGraphNode>> => {
+  const compile =
+    compileRunCode ?? createUncachedDagRunCodeCompiler(createLockedDagNodeRunCodeCompiler())
+  return Object.fromEntries(
     await Promise.all(
-      Object.entries(nodes).map(async ([id, saved]) => {
-        if (!saved.node.importsSource || !saved.node.moduleLockId) return [id, saved]
-        const lock = moduleLocksByHash[saved.node.moduleLockId]
-        if (!lock) throw new Error(`DAG node ${id} references unavailable module lock.`)
+      Object.entries(snapshot.nodesByHash).map(async ([id, saved]) => {
+        if (saved.node.structure) return [id, saved]
+        const lock = saved.node.moduleLockId
+          ? snapshot.moduleLocksByHash[saved.node.moduleLockId]
+          : undefined
+        if (saved.node.moduleLockId && !lock) {
+          throw new Error(`DAG node ${id} references unavailable module lock.`)
+        }
+        const artifact = await compile.compile({
+          nodeId: id as Hash,
+          ...(saved.node.importsSource ? { importsSource: saved.node.importsSource } : {}),
+          ...(saved.node.preambleSource ? { preambleSource: saved.node.preambleSource } : {}),
+          runSource: saved.node.runSource,
+          ...(lock ? { lock } : {}),
+          modules: snapshot.modulesByHash,
+        })
         return [
           id,
           {
             ...saved,
             node: {
               ...saved.node,
-              runCode: await compileLockedDagNodeRunCode({
-                importsSource: saved.node.importsSource,
-                runSource: saved.node.runSource,
-                lock,
-                modules: modulesByHash,
-              }),
+              runCode: artifact.code,
             },
           },
         ]
       }),
     ),
   ) as Record<Hash, SavedStoredGraphNode>
+}
 
 export const loadDesignRepositorySnapshot = async (args: {
   readText: DesignRepositoryTextReader
@@ -178,16 +354,11 @@ export const loadDesignRepositorySnapshot = async (args: {
   )
   const nodesByHash = await loadNodeClosure(args.readText, Object.values(revision.nodes))
   const modules = await loadModuleClosure(args.readText, nodesByHash)
-  const compiledNodes = await compileImportedNodes(
-    nodesByHash,
-    modules.moduleLocksByHash,
-    modules.modulesByHash,
-  )
   return {
     revision,
-    nodesByHash: compiledNodes,
+    nodesByHash,
     ...modules,
-    files: Object.values(compiledNodes)
+    files: Object.values(nodesByHash)
       .map((node) => node.file)
       .sort((left, right) => left.path.localeCompare(right.path)),
   }
@@ -195,16 +366,23 @@ export const loadDesignRepositorySnapshot = async (args: {
 
 export const loadProjectRepositorySnapshot = async (args: {
   readText: DesignRepositoryTextReader
-  projectRef: string
+  checkout: ProjectRepositoryCheckout
 }): Promise<LoadedProjectRepositorySnapshot> => {
-  const refName = args.projectRef.startsWith('projects/')
-    ? args.projectRef
-    : `projects/${args.projectRef}`
-  const ref = parseDesignGraphRef(
-    await readJson(args.readText, `refs/${safeRefName(refName)}.json`),
-  )
+  const revisionId =
+    args.checkout.kind === 'projectRevision'
+      ? args.checkout.id
+      : parseDesignGraphRef(
+          await readJson(
+            args.readText,
+            `refs/${safeRefName(
+              args.checkout.name.startsWith('projects/')
+                ? args.checkout.name
+                : `projects/${args.checkout.name}`,
+            )}.json`,
+          ),
+        ).revisionId
   const revision = parseProjectRevision(
-    await readJson(args.readText, `project-revisions/${hashFilePart(ref.revisionId)}.json`),
+    await readJson(args.readText, `project-revisions/${hashFilePart(revisionId)}.json`),
   )
   const invocations = Object.fromEntries(
     await Promise.all(
@@ -229,18 +407,13 @@ export const loadProjectRepositorySnapshot = async (args: {
     Object.values(invocations).map((invocation) => invocation.rootNodeId),
   )
   const modules = await loadModuleClosure(args.readText, nodesByHash)
-  const compiledNodes = await compileImportedNodes(
-    nodesByHash,
-    modules.moduleLocksByHash,
-    modules.modulesByHash,
-  )
   return {
     revision,
     invocations,
     extensions,
-    nodesByHash: compiledNodes,
+    nodesByHash,
     ...modules,
-    files: Object.values(compiledNodes)
+    files: Object.values(nodesByHash)
       .map((node) => node.file)
       .sort((left, right) => left.path.localeCompare(right.path)),
   }

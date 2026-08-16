@@ -1,5 +1,27 @@
 import type { ColumnStats, FlattenInput, FlattenOutput, FlattenRunInput } from './types'
 
+export type RunRowKey = Record<string, string | number>
+
+export const runRowKeyOf = (run: unknown): RunRowKey => {
+  if (!run || typeof run !== 'object' || Array.isArray(run)) return {}
+  const rowKey = (run as Record<string, unknown>).rowKey
+  if (!rowKey || typeof rowKey !== 'object' || Array.isArray(rowKey)) return {}
+  return Object.values(rowKey).every(
+    (value) => typeof value === 'string' || typeof value === 'number',
+  )
+    ? (rowKey as RunRowKey)
+    : {}
+}
+
+export const runKeyFromRowKey = (rowKey: RunRowKey, runIndex: number): string => {
+  const entries = Object.entries(rowKey)
+  if (entries.length === 0) return `run-${runIndex}`
+  return entries
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(', ')
+    .slice(0, 180)
+}
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   return Object.prototype.toString.call(value) === '[object Object]'
@@ -147,4 +169,3 @@ export const profileColumns = (rowsInput: Array<Record<string, unknown>>) => {
     columns,
   }
 }
-

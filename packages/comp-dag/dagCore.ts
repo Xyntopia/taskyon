@@ -643,7 +643,9 @@ const selectInputNodeByParams = (
   return input.options[0] ?? null
 }
 
-const getExplodeMeta = (node: DagNode): { sourceNode: DagNode; path: string } | null => {
+export const getDagExplodeMetadata = (
+  node: DagNode,
+): { sourceNode: DagNode; path: string } | null => {
   return explodeMetaRegistry.get(node) ?? null
 }
 
@@ -671,7 +673,7 @@ export const describeExploreInputs = (node: {
     const def = exposed[alias]!
     const providers = isOneOfInput(def) ? def.options.map((p) => p.name) : [def.name]
     const firstProvider = isOneOfInput(def) ? def.options[0] : def
-    const explodeMeta = firstProvider ? getExplodeMeta(firstProvider) : null
+    const explodeMeta = firstProvider ? getDagExplodeMetadata(firstProvider) : null
     const isExploded = !!explodeMeta
     const explodeOutputDescription =
       explodeMeta &&
@@ -703,7 +705,7 @@ const resolveSourceParamsForExplodedInput = (
   parentParams: Record<string, unknown>,
   explodedNode: DagNode,
 ): Record<string, unknown> => {
-  const explodeMeta = getExplodeMeta(explodedNode)
+  const explodeMeta = getDagExplodeMetadata(explodedNode)
   if (!explodeMeta) {
     throw new Error(`Node ${explodedNode.name}: missing explode metadata.`)
   }
@@ -790,7 +792,7 @@ const getResolvedExplodedInputs = async (
           )
           .map((x) => x.name)
       : [def.name]
-    const explodeMeta = selected ? getExplodeMeta(selected) : null
+    const explodeMeta = selected ? getDagExplodeMetadata(selected) : null
     if (!selected || !explodeMeta) {
       actualCtx.log('Study input skipped (not exploded or no provider)', {
         node: node.name,
@@ -1529,10 +1531,7 @@ export function createNode<
             node.paramsSchema,
             paramsValue as Record<string, unknown>,
           )
-          const paramsHash = executionParamsHash(
-            validatedParams as Record<string, unknown>,
-            actualEngineConfig,
-          )
+          const paramsHash = executionParamsHash(validatedParams as Record<string, unknown>)
           const nodeCodeHash = getNodeCodeHash(node)
           const key = makeNodeKey(paramsHash, nodeCodeHash)
           const policy = actualEngineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
@@ -2010,7 +2009,7 @@ export async function executeNode(
 
   // TODO: it might make sense to make validation optional  for speed ups!
   const validatedParams = parseSchema<Record<string, unknown>>(node.paramsSchema, paramsValue)
-  const paramsHash = executionParamsHash(validatedParams, engineConfig)
+  const paramsHash = executionParamsHash(validatedParams)
   const nodeCodeHash = getNodeCodeHash(node)
   const key = makeNodeKey(paramsHash, nodeCodeHash)
 
@@ -2253,9 +2252,4 @@ const bindExposedInputParams = (
   }
 }
 
-const executionParamsHash = (params: Record<string, unknown>, engineConfig: EngineConfig): Hash =>
-  canonicalHash(
-    engineConfig.parameterBindings
-      ? { params, parameterBindings: engineConfig.parameterBindings }
-      : params,
-  )
+const executionParamsHash = (params: Record<string, unknown>): Hash => canonicalHash(params)

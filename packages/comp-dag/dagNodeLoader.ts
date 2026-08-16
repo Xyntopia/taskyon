@@ -11,6 +11,7 @@ import type {
 import { hashDagNodeRecordInput } from './dagNodeRecord.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
 import type { DagNodeEffect } from './dagCore.ts'
+import { assertDagNodeEffectSource } from './dagNodeEffectCheck.ts'
 
 export type StoredDagNodeDefinition = Omit<DagNodeRecord, 'id' | 'run'> & {
   id: Hash | typeof SELF_HASH_PLACEHOLDER
@@ -39,14 +40,15 @@ type ParsedNodeFields = {
   structure?: unknown
   localParamsSchema: DagJsonSchema
   outputSchema: DagJsonSchema
+  capabilities?: readonly string[]
   inputs?: unknown
   hiddenInputs?: unknown
   exposedInputs?: unknown
   moduleLockId?: Hash
   importsSource?: string
   importSpecifiers?: readonly string[]
+  preambleSource?: string
   runSource: string
-  runCode?: string
 }
 
 type PrettierPlugin = object
@@ -325,55 +327,39 @@ const parseNodeStructure = (value: unknown): DagNodeRecordStructure | undefined 
   }
 }
 
-const extractTranspiledExpression = (
-  tsModule: typeof ts,
-  source: string,
-  sourceFileName: string,
-): string => {
-  const sourceFile = tsModule.createSourceFile(
-    sourceFileName,
-    source,
-    tsModule.ScriptTarget.Latest,
-    true,
-    tsModule.ScriptKind.JS,
-  )
-  const statement = sourceFile.statements.find(tsModule.isVariableStatement)
-  const declaration = statement?.declarationList.declarations[0]
-  if (!declaration?.initializer) {
-    throw new Error('Stored graph node run function failed to transpile')
-  }
-  return stripExpression(tsModule, declaration.initializer).getText(sourceFile)
-}
-
-const transpileRunSource = (tsModule: typeof ts, runSource: string): string => {
-  const source = `const run = ${runSource}\n`
-  const transpiled = tsModule.transpileModule(source, {
-    compilerOptions: {
-      target: tsModule.ScriptTarget.ES2022,
-      module: tsModule.ModuleKind.ESNext,
-      removeComments: false,
-      typeRoots: [],
-    },
-    fileName: 'stored-graph-node-run.ts',
-  })
-  return extractTranspiledExpression(tsModule, transpiled.outputText, 'stored-graph-node-run.js')
-}
-
 const findDefaultExportObject = (
   tsModule: typeof ts,
   sourceFile: ts.SourceFile,
 ): ts.ObjectLiteralExpression => {
-  const executableStatements = sourceFile.statements.filter(
-    (statement) => !tsModule.isImportDeclaration(statement),
-  )
-  if (executableStatements.length !== 1) {
-    throw new Error('Stored graph node source must contain imports and one default export object.')
+  const exportAssignments = sourceFile.statements.filter(tsModule.isExportAssignment)
+  if (exportAssignments.length !== 1) {
+    throw new Error('Stored graph node source must contain one default export object.')
   }
-  const statement = executableStatements[0]
+  const statement = exportAssignments[0]
   if (statement && tsModule.isExportAssignment(statement)) {
     if (tsModule.isObjectLiteralExpression(statement.expression)) return statement.expression
   }
   throw new Error('Stored graph node must use "export default { ... }"')
+}
+
+const parsePreamble = (tsModule: typeof ts, sourceFile: ts.SourceFile): string | undefined => {
+  const statements = sourceFile.statements.filter(
+    (statement) =>
+      !tsModule.isImportDeclaration(statement) && !tsModule.isExportAssignment(statement),
+  )
+  if (
+    statements.some(
+      (statement) =>
+        tsModule.canHaveModifiers(statement) &&
+        tsModule
+          .getModifiers(statement)
+          ?.some((modifier) => modifier.kind === tsModule.SyntaxKind.ExportKeyword),
+    )
+  ) {
+    throw new Error('Stored graph node helper declarations cannot be exported.')
+  }
+  const source = statements.map((statement) => statement.getText(sourceFile)).join('\n')
+  return source || undefined
 }
 
 const parseStaticImports = (
@@ -413,6 +399,7 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
   )
   const object = findDefaultExportObject(tsModule, sourceFile)
   const imports = parseStaticImports(tsModule, sourceFile)
+  const preambleSource = parsePreamble(tsModule, sourceFile)
   const fields = new Map<string, ts.Expression>()
   for (const prop of object.properties) {
     if (!tsModule.isPropertyAssignment(prop)) {
@@ -439,6 +426,13 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
     throw new Error('Stored graph nodes with imports require a moduleLockId.')
   }
   const runSource = stripExpression(tsModule, run).getText(sourceFile)
+  const capabilities = parseOptionalLiteralField(tsModule, fields, 'capabilities')
+  if (
+    capabilities !== undefined &&
+    (!Array.isArray(capabilities) || capabilities.some((value) => typeof value !== 'string'))
+  ) {
+    throw new Error('Stored graph node field "capabilities" must be a string array')
+  }
   return {
     formatVersion,
     id: parseStringField(tsModule, fields, 'id'),
@@ -456,13 +450,14 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
       parseOptionalLiteralField(tsModule, fields, 'outputSchema') ?? {},
       'outputSchema',
     ),
+    ...(capabilities ? { capabilities: capabilities as string[] } : {}),
     inputs: parseOptionalLiteralField(tsModule, fields, 'inputs'),
     hiddenInputs: parseOptionalLiteralField(tsModule, fields, 'hiddenInputs'),
     exposedInputs: parseOptionalLiteralField(tsModule, fields, 'exposedInputs'),
     ...(moduleLockId ? { moduleLockId } : {}),
     ...imports,
+    ...(preambleSource ? { preambleSource } : {}),
     runSource,
-    ...(!imports.importsSource ? { runCode: transpileRunSource(tsModule, runSource) } : {}),
   }
 }
 
@@ -484,6 +479,7 @@ const emitField = (name: string, value: unknown): string => `  ${name}: ${jsLite
 
 const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
   let source = node.importsSource ? `${node.importsSource}\n\n` : ''
+  if (node.preambleSource) source += `${node.preambleSource}\n\n`
   source += `export default {\n`
   source += emitField('formatVersion', node.formatVersion)
   source += emitField('id', node.id)
@@ -495,6 +491,7 @@ const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
   if (node.structure) source += emitField('structure', node.structure)
   source += emitField('localParamsSchema', node.localParamsSchema)
   source += emitField('outputSchema', node.outputSchema)
+  if (node.capabilities?.length) source += emitField('capabilities', node.capabilities)
   if (node.inputs) {
     source += emitField('inputs', node.inputs)
   } else {
@@ -509,7 +506,7 @@ const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
 
 const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDefinition => {
   const structure = parseNodeStructure(fields.structure)
-  return {
+  const definition: StoredDagNodeDefinition = {
     formatVersion: fields.formatVersion,
     id: fields.id === SELF_HASH_PLACEHOLDER ? SELF_HASH_PLACEHOLDER : (fields.id as Hash),
     localName: fields.localName,
@@ -520,6 +517,7 @@ const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDef
     ...(structure ? { structure } : {}),
     localParamsSchema: fields.localParamsSchema,
     outputSchema: fields.outputSchema,
+    ...(fields.capabilities ? { capabilities: fields.capabilities } : {}),
     ...(fields.inputs !== undefined
       ? { inputs: parseRecordInputRefs(fields.inputs) }
       : {
@@ -529,9 +527,14 @@ const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDef
     ...(fields.moduleLockId ? { moduleLockId: fields.moduleLockId } : {}),
     ...(fields.importsSource ? { importsSource: fields.importsSource } : {}),
     ...(fields.importSpecifiers ? { importSpecifiers: fields.importSpecifiers } : {}),
+    ...(fields.preambleSource ? { preambleSource: fields.preambleSource } : {}),
     runSource: fields.runSource,
-    ...(fields.runCode ? { runCode: fields.runCode } : {}),
   }
+  assertDagNodeEffectSource(
+    definition.effect ?? 'pure',
+    `${definition.preambleSource ?? ''}\n${definition.runSource}`,
+  )
+  return definition
 }
 
 const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Promise<Hash> => {
@@ -545,11 +548,13 @@ const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Pro
     ...(node.structure ? { structure: node.structure } : {}),
     localParamsSchema: node.localParamsSchema,
     outputSchema: node.outputSchema,
+    ...(node.capabilities ? { capabilities: node.capabilities } : {}),
     ...(node.inputs ? { inputs: node.inputs } : {}),
     ...(node.hiddenInputs ? { hiddenInputs: node.hiddenInputs } : {}),
     ...(node.exposedInputs ? { exposedInputs: node.exposedInputs } : {}),
     ...(node.moduleLockId ? { moduleLockId: node.moduleLockId } : {}),
     ...(node.importsSource ? { importsSource: node.importsSource } : {}),
+    ...(node.preambleSource ? { preambleSource: node.preambleSource } : {}),
     runSource: node.runSource,
   })
 }

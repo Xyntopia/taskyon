@@ -18,7 +18,7 @@ import {
   createSandboxProtocolClient,
   serveFrpSandboxCapability,
 } from '@taskyon/common/modules/sandbox/frpSandbox'
-import { createExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
+import { acquireExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import { z } from 'zod'
 import {
   createMediatedFetch,
@@ -85,6 +85,10 @@ const dagNodeUseProtocol = defineFrpServiceProtocol({
         body: z.string(),
         bodyBytes: z.custom<Uint8Array>((value) => value instanceof Uint8Array),
       }),
+    },
+    capability: {
+      request: z.object({ id: z.string(), input: z.unknown() }),
+      response: z.unknown(),
     },
   },
 })
@@ -167,7 +171,8 @@ const buildSandboxRunModule = (runCode: string): string => {
           };
           return [alias, input];
         }));
-        return await run({ params, use, services: { fetch: sandboxFetch } });
+        const callCapability = (id, input) => client.call('capability', { id, input });
+        return await run({ params, use, services: { fetch: sandboxFetch, callCapability } });
       };
     })()
   `
@@ -188,14 +193,26 @@ export const executeDagNodeRun = async (args: {
   id: string
   timeoutMs?: number
   runCode?: string
+  loadRunCode?: () => Promise<string>
   run: DagNodeRunFunction | undefined
   params: Record<string, unknown>
   use: Record<string, DagInputAccessor>
   fetch?: typeof fetch
+  capabilities?: readonly string[]
+  callCapability?: (id: string, input: unknown) => Promise<unknown>
 }) => {
   const timeoutMs = Math.max(100, Math.min(args.timeoutMs ?? 5_000, 60_000))
   const timeout = createTimeoutSignal(args.id, timeoutMs)
   try {
+    const callCapability = async (id: string, input: unknown) => {
+      if (!args.capabilities?.includes(id)) {
+        throw new Error(`DAG node ${args.id}: undeclared capability ${id}`)
+      }
+      if (!args.callCapability) {
+        throw new Error(`DAG node ${args.id}: capability ${id} is unavailable`)
+      }
+      return await args.callCapability(id, input)
+    }
     if (args.run) {
       return await args.run({
         params: args.params,
@@ -204,92 +221,104 @@ export const executeDagNodeRun = async (args: {
           fetch:
             args.fetch ??
             (() => Promise.reject(new Error(`DAG node ${args.id}: fetch is unavailable`))),
+          callCapability,
         },
       })
     }
-    if (!args.runCode) throw new Error(`DAG node ${args.id}: missing runCode`)
+    const runCode = args.runCode ?? (await args.loadRunCode?.())
+    if (!runCode) throw new Error(`DAG node ${args.id}: missing runCode`)
     const aliases = Object.keys(args.use)
     const moduleId = `dag-node-${args.id}`
-    const sandbox = await createExecutableSandbox({
+    const lease = await acquireExecutableSandbox({
       id: moduleId,
       reuse: { mode: 'immutable', contentId: args.id },
     })
-    await sandbox.installModule(
-      moduleId,
-      buildSandboxRunModule(args.runCode),
-      `${args.id}.dag-node.js`,
-    )
-    const capability = await serveFrpSandboxCapability({
-      sandbox,
-      protocol: dagNodeUseProtocol,
-      signal: timeout.signal,
-      handlers: {
-        dagNodeUse: {
-          resolve: async ({ alias, params }) => {
-            const resolveInput = args.use[alias]
-            if (!resolveInput) throw new Error(`DAG node ${args.id}: unknown input alias ${alias}`)
-            return params === undefined ? await resolveInput() : await resolveInput(params)
-          },
-          query: async ({ alias, bindings, operation, path, slice, targetAlias }) => {
-            const resolveInput = args.use[alias]
-            if (!resolveInput) throw new Error(`DAG node ${args.id}: unknown input alias ${alias}`)
-            const query = resolveInput.slice(slice)
-            if (operation === 'collect') return await query.collect()
-            if (
-              operation === 'min' ||
-              operation === 'max' ||
-              operation === 'argmin' ||
-              operation === 'argmax' ||
-              operation === 'mean' ||
-              operation === 'sum'
-            ) {
-              if (!path) {
-                throw new Error(`DAG node ${args.id}: query operation ${operation} requires a path`)
+    const { sandbox } = lease
+    try {
+      await sandbox.installModule(
+        moduleId,
+        buildSandboxRunModule(runCode),
+        `${args.id}.dag-node.js`,
+      )
+      const capability = await serveFrpSandboxCapability({
+        sandbox,
+        protocol: dagNodeUseProtocol,
+        signal: timeout.signal,
+        handlers: {
+          dagNodeUse: {
+            resolve: async ({ alias, params }) => {
+              const resolveInput = args.use[alias]
+              if (!resolveInput)
+                throw new Error(`DAG node ${args.id}: unknown input alias ${alias}`)
+              return params === undefined ? await resolveInput() : await resolveInput(params)
+            },
+            query: async ({ alias, bindings, operation, path, slice, targetAlias }) => {
+              const resolveInput = args.use[alias]
+              if (!resolveInput)
+                throw new Error(`DAG node ${args.id}: unknown input alias ${alias}`)
+              const query = resolveInput.slice(slice)
+              if (operation === 'collect') return await query.collect()
+              if (
+                operation === 'min' ||
+                operation === 'max' ||
+                operation === 'argmin' ||
+                operation === 'argmax' ||
+                operation === 'mean' ||
+                operation === 'sum'
+              ) {
+                if (!path) {
+                  throw new Error(
+                    `DAG node ${args.id}: query operation ${operation} requires a path`,
+                  )
+                }
+                return await query[operation](path)
               }
-              return await query[operation](path)
-            }
-            if (!targetAlias || !bindings) {
-              throw new Error(
-                `DAG node ${args.id}: query operation ${operation} requires a target and bindings`,
-              )
-            }
-            const target = args.use[targetAlias]
-            if (!target) {
-              throw new Error(`DAG node ${args.id}: unknown query target alias ${targetAlias}`)
-            }
-            return operation === 'map'
-              ? await query.map(target, bindings as Record<string, DagQueryBinding>)
-              : await query.apply(target, bindings as Record<string, DagQueryBinding>)
-          },
-          fetch: async ({ input, init }) => {
-            if (!args.fetch) throw new Error(`DAG node ${args.id}: fetch is unavailable`)
-            const response = await args.fetch(input, {
-              ...(init?.method ? { method: init.method } : {}),
-              ...(init?.headers ? { headers: init.headers } : {}),
-              ...(init?.body ? { body: init.body } : {}),
-            })
-            const headers: [string, string][] = []
-            response.headers.forEach((value, key) => headers.push([key, value]))
-            const bodyBytes = new Uint8Array(await response.arrayBuffer())
-            return {
-              status: response.status,
-              statusText: response.statusText,
-              headers,
-              body: new TextDecoder().decode(bodyBytes),
-              bodyBytes,
-            }
+              if (!targetAlias || !bindings) {
+                throw new Error(
+                  `DAG node ${args.id}: query operation ${operation} requires a target and bindings`,
+                )
+              }
+              const target = args.use[targetAlias]
+              if (!target) {
+                throw new Error(`DAG node ${args.id}: unknown query target alias ${targetAlias}`)
+              }
+              return operation === 'map'
+                ? await query.map(target, bindings as Record<string, DagQueryBinding>)
+                : await query.apply(target, bindings as Record<string, DagQueryBinding>)
+            },
+            fetch: async ({ input, init }) => {
+              if (!args.fetch) throw new Error(`DAG node ${args.id}: fetch is unavailable`)
+              const response = await args.fetch(input, {
+                ...(init?.method ? { method: init.method } : {}),
+                ...(init?.headers ? { headers: init.headers } : {}),
+                ...(init?.body ? { body: init.body } : {}),
+              })
+              const headers: [string, string][] = []
+              response.headers.forEach((value, key) => headers.push([key, value]))
+              const bodyBytes = new Uint8Array(await response.arrayBuffer())
+              return {
+                status: response.status,
+                statusText: response.statusText,
+                headers,
+                body: new TextDecoder().decode(bodyBytes),
+                bodyBytes,
+              }
+            },
+            capability: async ({ id, input }) => await callCapability(id, input),
           },
         },
-      },
-    })
-    try {
-      return await sandbox.executeModule(moduleId, [args.params, aliases], {
-        signal: timeout.signal,
-        sourceURL: `${args.id}.dag-node.js`,
-        channel: capability.channel,
       })
+      try {
+        return await sandbox.executeModule(moduleId, [args.params, aliases], {
+          signal: timeout.signal,
+          sourceURL: `${args.id}.dag-node.js`,
+          channel: capability.channel,
+        })
+      } finally {
+        capability.destroy()
+      }
     } finally {
-      capability.destroy()
+      lease.release()
     }
   } finally {
     timeout.dispose()
@@ -320,6 +349,8 @@ export const compileDagNodeRecord = (args: {
   nodeById: Record<string, DagNode>
   authorizeFetch?: FetchAuthorization
   fetch?: typeof fetch
+  callCapability?: (id: string, input: unknown) => Promise<unknown>
+  loadRunCode?: (record: DagNodeRecord) => Promise<string>
 }): DagNode => {
   const runtimeInputs = recordInputsToRuntimeInputs(args.record)
   const hiddenInputs: Record<string, DagNode> = {}
@@ -400,9 +431,14 @@ export const compileDagNodeRecord = (args: {
         id: args.record.id,
         ...(typeof args.record.timeoutMs === 'number' ? { timeoutMs: args.record.timeoutMs } : {}),
         ...(args.record.runCode ? { runCode: args.record.runCode } : {}),
+        ...(args.loadRunCode
+          ? { loadRunCode: async () => await args.loadRunCode!(args.record) }
+          : {}),
         run: args.record.run,
         params,
         use: createLazyDagUse(runtimeInputs, use),
+        ...(args.record.capabilities ? { capabilities: args.record.capabilities } : {}),
+        ...(args.callCapability ? { callCapability: args.callCapability } : {}),
         ...(mediatedFetch ? { fetch: mediatedFetch } : {}),
       })
     },

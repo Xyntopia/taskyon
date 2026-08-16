@@ -46,6 +46,12 @@ exists.
   and use zero, one, or multiple parents for initial, ordinary, or merge revisions respectively.
 - Use the same graph, project, invocation, run, artifact, ref, extension, and Git-projection records
   in Taskyon and Joulios. Host applications must not introduce a parallel project or graph format.
+- Browser and CLI hosts for the same application must consume one canonical repository projection
+  and expose the same authorized graph refs, project refs, template projects, invocations, and runs.
+  Runtime-specific storage adapters may hold separate local replicas, but they must not define
+  runtime-specific examples, node catalogs, study manifests, or result schemas. Synchronization or
+  explicit repository transfer connects replicas; direct access to another runtime's private
+  filesystem is not part of the domain model.
 
 - Treat exact upstream input references as part of an immutable applied node's computation
   identity.
@@ -63,9 +69,11 @@ exists.
   through StorageClient before exposing them as stored nodes. Do not mount read-only stored nodes
   or add a separate editability capability.
 - Resolve every stored-node import through an immutable content-addressed module lock included in
-  node identity. Store the deduplicated module artifacts and lock objects in the same design-graph
-  repository and include their transitive closure in Git projections. Import-free nodes do not
-  require a meaningless empty lock.
+  node identity. A lock target is either a content-addressed first-party module or an approved
+  package requirement. Store first-party module artifacts and lock objects in the design-graph
+  repository and include only that first-party closure in Git projections. Never store third-party
+  package source, package archives, or a `node_modules` tree in graph storage. Import-free nodes do
+  not require a meaningless empty lock.
 - Keep `use.<alias>` exclusively for declared DAG dependencies. Inject network and host operations
   through separate typed services; never disguise a capability as a computational input or expose
   unrestricted host RPC.
@@ -100,6 +108,24 @@ exists.
   plots, and reports in the invocation/planner layer rather than adding an invocation input variant
   to `DagNodeRecord`.
 
+## Meaningful Editable Nodes
+
+- Every ordinary user-visible stored node must own a meaningful operation that can be understood and
+  changed in the node editor: domain validation or normalization, transformation, calculation,
+  aggregation, an explicitly declared effect, or composition that demands computational inputs.
+- Do not add a stored node whose run function only returns its parameters unchanged, forwards one
+  dependency unchanged, returns a placeholder value, or wraps a workflow solely to make the graph
+  appear decomposed. Remove that node or put the real operation at that boundary.
+- Keep ordinary first-party domain operations in their owning stored node so the node's Raw TS view
+  contains the operation users are expected to understand and edit. Use stored first-party modules
+  only for genuinely reusable low-level functions where representing the behavior as another DAG
+  node would be misleading or impractical. A wrapper around an external domain function or an
+  entire multi-stage workflow is not a substitute for representing those stages.
+- Core structural combinators such as `explode`, planner-generated reducers, and derived query
+  expressions are exempt from ordinary run-function requirements because the engine owns their
+  execution semantics. Keep them explicitly structural and do not disguise them as editable domain
+  nodes.
+
 ## Projects And Working Drafts
 
 - Persist immutable nodes, invocations, and project extensions when created, while keeping the
@@ -112,6 +138,9 @@ exists.
   unsaved association clearly.
 - Model bundled examples as ordinary template project refs. Opening one creates a new stable
   project ref at the same immutable revision; examples must not use a specialized execution path.
+- Persist CLI studies intended for later inspection as ordinary project revisions, invocations,
+  invocation runs, and named artifacts. A report directory may be an export of those records, but it
+  must not become a CLI-only authoritative project or run store.
 - Store deliberately saved workspaces, dashboards, and sandboxed views as typed, namespaced,
   content-addressed project extensions. Do not use an inline arbitrary `customSettings` object.
 
@@ -173,6 +202,24 @@ exists.
   boundaries.
 - Execute untrusted stored node code in the Taskyon sandbox with only explicitly granted
   capability-scoped protocols.
+- Accept only statically analyzable JavaScript/TypeScript imports. Resolve approved package names
+  against a host-shipped manifest; do not fetch npm packages, CDN modules, or package metadata at
+  runtime. Keep the package allowlist and resolver generic and Taskyon-owned.
+- Compile stored nodes outside the UI thread with tree shaking. Cache a self-contained executable
+  artifact through StorageClient under the node hash, module-lock hash, compiler ABI, and exact
+  resolved package identities. A package range belongs in the immutable lock; the exact provider
+  version and integrity belong in the compiled artifact and run provenance.
+- Repository loading is metadata-only. Compile on save for validation, on explicit artifact
+  inspection, or on first execution. Opening the Compiled view performs a cache-only read until the
+  user explicitly requests compilation.
+- Expose Raw TS, stored Modules, package Dependencies, and the read-only Compiled artifact for each
+  editable stored node. Never present third-party package source as an editable stored module.
+- Treat incompatible package updates as an explicit immutable graph rewrite that creates new locks,
+  node hashes, dependent paths, and refs. Do not silently reinterpret an old lock after an app
+  update.
+- Use one sandbox worker per execution isolation boundary. Hosts may retain a bounded least-recently
+  used set of idle sandboxes, but must never evict an active sandbox. Do not share a worker between
+  trusted nodes until a separately reviewed trust and failure-isolation model exists.
 - Do not expose ambient filesystem, network, UI, storage, or secret access to node code.
 - Treat content hashes as byte or computation identity, not proof of correctness, authorization,
   safety, or confidentiality.
@@ -194,11 +241,19 @@ exists.
   project run histories.
 - Before reusing a run, verify every required artifact. Rebuild derived indexes and summaries from
   rows when possible and rerun the invocation when an irreducible result artifact is missing.
+- Do not reuse a completed invocation run across a source-node observation check unless exact source
+  manifests are part of reuse identity and remain valid under the requested freshness policy.
+  Until that identity is implemented, bypass invocation-run reuse for source-node closures and let
+  the source-node/DAG cache enforce freshness.
 - Resolve `auto` and other result-affecting planner choices before cache selection. Key reusable
   runs by invocation plus resolved result-affecting planner/engine identity, not by operational
   settings that are guaranteed not to change results.
 - Make row results and indexes range-readable so plots, tables, downloads, and downstream consumers
   can stream bounded selections without loading a complete run.
+- Treat browser tables, plots, and result objects as disposable projections of invocation artifacts.
+  Do not persist a second per-project result snapshot, per-row JSON archive, or run-history pointer
+  in project state. A host may cache bounded decoded row ranges locally, but the immutable
+  `InvocationRun` and its named artifacts remain authoritative.
 
 ## Diagnostics
 

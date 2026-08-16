@@ -20,6 +20,7 @@
     "@taskyon/comp-dag": "workspace:*",
     "@taskyon/taskyon": "workspace:*",
     "buffer": "^6.0.3",
+    "esbuild-wasm": "0.28.1",
     "isomorphic-git": "^1.38.6"
   }
 }

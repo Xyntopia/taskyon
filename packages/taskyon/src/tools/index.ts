@@ -8,6 +8,7 @@ import { devTools } from './devTools'
 import { executeJavaScript } from './executeJavaScript'
 import { executePythonScript } from './executePython'
 import { createStorageTool } from './fileTools'
+import { createDagGraphProjectTool } from './dagGraphProjectTool'
 import type { TaskyonStorageClient } from '../api/storageProtocol'
 import { smallHelperTools } from './helperCollection'
 import { localVectorStore } from './localVectorStore'
@@ -44,7 +45,9 @@ export const createDefaultTaskyonToolSetup = (options?: {
     ...useFullSmallTools,
     ...devTools,
     ...testingTools,
-    ...(options?.storageClient ? [createStorageTool(options.storageClient)] : []),
+    ...(options?.storageClient
+      ? [createStorageTool(options.storageClient), createDagGraphProjectTool(options.storageClient)]
+      : []),
     ...taskOrganizationTools,
     ...webResearchTools,
     ...proceduralTools,

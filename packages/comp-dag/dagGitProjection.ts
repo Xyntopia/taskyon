@@ -200,13 +200,25 @@ export const projectDesignGraphSnapshot = async (args: {
   )
 }
 
+const assertObjectPath = (path: string, directory: string, id: Hash) => {
+  if (path !== objectPath(directory, id)) {
+    throw new Error(`Design graph object path does not match its identity: ${path}`)
+  }
+}
+
 const parseProjectedJson = (path: string, value: unknown) => {
-  if (path.startsWith('modules/')) parseDagModuleArtifact(value)
-  else if (path.startsWith('module-locks/')) parseDagModuleLock(value)
-  else if (path.startsWith('graph-revisions/')) parseGraphRevision(value)
-  else if (path.startsWith('project-revisions/')) parseProjectRevision(value)
-  else if (path.startsWith('invocations/')) parseInvocationDefinition(value)
-  else if (path.startsWith('extensions/')) parseProjectExtension(value)
+  if (path.startsWith('modules/'))
+    assertObjectPath(path, 'modules', parseDagModuleArtifact(value).id)
+  else if (path.startsWith('module-locks/'))
+    assertObjectPath(path, 'module-locks', parseDagModuleLock(value).id)
+  else if (path.startsWith('graph-revisions/'))
+    assertObjectPath(path, 'graph-revisions', parseGraphRevision(value).id)
+  else if (path.startsWith('project-revisions/'))
+    assertObjectPath(path, 'project-revisions', parseProjectRevision(value).id)
+  else if (path.startsWith('invocations/'))
+    assertObjectPath(path, 'invocations', parseInvocationDefinition(value).id)
+  else if (path.startsWith('extensions/'))
+    assertObjectPath(path, 'extensions', parseProjectExtension(value).id)
   else if (path.startsWith('refs/')) parseDesignGraphRef(value)
 }
 
@@ -214,6 +226,9 @@ const normalizeProjectedFile = async (file: DagProjectedFile): Promise<DagProjec
   normalizeProjectedPath(file.path)
   if (file.path.startsWith('nodes/')) {
     const loaded = await loadStoredGraphNodeFile({ path: file.path, source: file.content })
+    if (file.path !== `nodes/${hashFilePart(loaded.hash)}.ts`) {
+      throw new Error(`Stored graph node path does not match its identity: ${file.path}`)
+    }
     const normalized = await normalizeStoredGraphNodeSource(file.content, { id: loaded.hash })
     return { path: file.path, content: normalized.source }
   }
@@ -305,8 +320,13 @@ export const importDesignGraphSnapshot = async (args: {
   const immutable = normalized.filter((file) => !file.path.startsWith('refs/'))
   const refs = normalized.filter((file) => file.path.startsWith('refs/'))
   const missing: DagProjectedFile[] = []
+  const existingImmutable = args.store.readManyText
+    ? await args.store.readManyText(immutable.map((file) => file.path))
+    : null
   for (const file of immutable) {
-    const existing = await readOptionalText(args.store, file.path)
+    const existing = existingImmutable
+      ? (existingImmutable.get(file.path) ?? null)
+      : await readOptionalText(args.store, file.path)
     if (existing === null) missing.push(file)
     else {
       const normalizedExisting = await normalizeProjectedFile({
@@ -325,7 +345,21 @@ export const importDesignGraphSnapshot = async (args: {
       throw new Error(`Design graph ref conflict: ${file.path}`)
     }
   }
-  for (const file of missing) {
+  const batchableDirectories = [
+    'nodes/',
+    'modules/',
+    'module-locks/',
+    'graph-revisions/',
+    'project-revisions/',
+    'invocations/',
+    'extensions/',
+  ]
+  const batched = args.store.writeManyText
+    ? missing.filter((file) => batchableDirectories.some((prefix) => file.path.startsWith(prefix)))
+    : []
+  if (batched.length > 0) await args.store.writeManyText!(batched)
+  const conditional = missing.filter((file) => !batched.includes(file))
+  for (const file of conditional) {
     const result = await args.store.writeTextIfUnchanged(file.path, null, file.content)
     if (!result.written) {
       const current = await readOptionalText(args.store, file.path)

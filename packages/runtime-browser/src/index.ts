@@ -18,6 +18,7 @@ import {
   type ToolRpcCreateContext,
 } from '@taskyon/taskyon/api'
 import { startBrowserStorageService, type BrowserRuntimeStorageService } from './storage'
+import type { TaskyonCoreRuntimeStage } from './core'
 import type { TaskyonBrowserWorkerInitMessage, TaskyonBrowserWorkerMessage } from './workerProtocol'
 
 export type TaskyonBrowserRuntimeOptions = {
@@ -35,6 +36,7 @@ export type TaskyonBrowserRuntimeOptions = {
   storageNamespacePrefix?: string
   storageSessionId?: string
   createWorker?: () => Worker
+  onStage?: (stage: TaskyonCoreRuntimeStage) => void
 }
 
 export type TaskyonBrowserRuntimeServices = {
@@ -84,6 +86,7 @@ export const createTaskyonBrowserRuntime = async (
   const onWorkerMessage = (event: MessageEvent<TaskyonBrowserWorkerMessage>) => {
     if (event.data.type === 'runtimeStage') {
       workerStage = event.data.stage
+      options.onStage?.(event.data.stage)
       if (event.data.stage === 'ready') resolveWorkerInitialization()
       return
     }
@@ -203,3 +206,4 @@ export {
   type TaskyonBrowserCoreRuntimeOptions,
 } from './core'
 export type { BrowserRuntimeStorageService, OpfsStorageOptions } from './storage'
+export { createBrowserDagRunCodeCompiler } from './dagRunCodeCompiler'

@@ -5,11 +5,17 @@ import {
   saveStoredGraphNodeRecord,
   saveStoredGraphNodeSource,
 } from './dagNodeLoader.ts'
-import { loadDesignRepositorySnapshot } from './designRepositorySnapshot.ts'
+import {
+  createCachedDagRunCodeCompiler,
+  compileDesignRepositoryNodes,
+  loadDesignRepositorySnapshot,
+} from './designRepositorySnapshot.ts'
 import { createGraphRevision } from './designGraphModel.ts'
 import { createDagModuleArtifact, createDagModuleLock } from './dagModule.ts'
 import { compileLockedDagNodeRunCode } from './dagModuleCompiler.ts'
 import { executeDagNodeRun } from './dagNodeRecordCompiler.ts'
+import { defineDagNodeRecord } from './dagNodeRecord.ts'
+import { compileDagNodeRecordGraph } from './dagNodeRecordGraph.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -48,31 +54,80 @@ export default ${nodeBody
 testStoredDagNodeNormalizationAcceptsLockedImports.description =
   'Accepts explicit imports while keeping their immutable module lock in node identity.'
 
+export const testStoredDagNodeKeepsNodeOwnedHelpers = async () => {
+  const source = `const calculate = (value: number) => value * 2
+
+export default ${nodeBody.replace(
+    'run: () => ({ value: 1 })',
+    'run: ({ params }) => ({ value: calculate(Number(params.value)) })',
+  )}`
+  const saved = await saveStoredGraphNodeSource(source)
+  assert(saved.node.preambleSource?.includes('const calculate'), 'Expected the helper in the node')
+  assert(
+    saved.file.source.includes('const calculate'),
+    'Expected saved source to retain the helper',
+  )
+}
+
+testStoredDagNodeKeepsNodeOwnedHelpers.description =
+  'Keeps first-party helper logic inside the immutable stored node source.'
+
+export const testStoredDagNodeChecksEffectsInsideOwnedHelpers = async () => {
+  let caught: unknown
+  try {
+    await saveStoredGraphNodeSource(`const download = () => fetch('https://example.com')
+
+export default ${nodeBody.replace('run: () => ({ value: 1 })', 'run: () => download()')}`)
+  } catch (error) {
+    caught = error
+  }
+  assert(
+    caught instanceof Error && caught.message.includes('ambient fetch'),
+    'Expected helper effects to require a source node declaration',
+  )
+}
+
+testStoredDagNodeChecksEffectsInsideOwnedHelpers.description =
+  'Validates effects in node-owned helper declarations as part of the node source.'
+
 export const testDagModuleLockUsesExactReferrerMappings = () => {
   const moduleId = 'sha256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' as const
   const lock = createDagModuleLock({
     imports: {
-      $node: { zod: moduleId },
-      [moduleId]: { './helper.js': moduleId },
+      $node: {
+        zod: { kind: 'package', name: 'zod' },
+        './module.ts': { kind: 'module', id: moduleId },
+      },
+      [moduleId]: { './helper.js': { kind: 'module', id: moduleId } },
     },
     packages: {
-      zod: { version: '4.0.5', integrity: 'sha512-test', moduleId },
+      zod: { range: '^4.0.0' },
     },
   })
-  assert(lock.imports.$node?.zod === moduleId, 'Expected the node import to resolve exactly')
+  assert(
+    lock.imports.$node?.zod?.kind === 'package',
+    'Expected the package import to remain distinct from stored modules',
+  )
+  assert(
+    lock.imports.$node?.['./module.ts']?.kind === 'module',
+    'Expected the stored module import to resolve exactly',
+  )
   assert(lock.id.startsWith('sha256:'), 'Expected a content-addressed module lock')
 }
 
 testDagModuleLockUsesExactReferrerMappings.description =
-  'Locks imports by referrer and specifier without a node_modules installation.'
+  'Separates package requirements from content-addressed stored module imports.'
 
 export const testLockedDagModulesCompileWithoutAmbientPackageResolution = async () => {
   const helper = createDagModuleArtifact({
     mediaType: 'text/typescript',
     source: `export const double = (value: number) => value * 2`,
   })
-  const lock = createDagModuleLock({ imports: { $node: { './helper.ts': helper.id } } })
+  const lock = createDagModuleLock({
+    imports: { $node: { './helper.ts': { kind: 'module', id: helper.id } } },
+  })
   const runCode = await compileLockedDagNodeRunCode({
+    nodeId: 'sha256:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC',
     importsSource: `import { double } from './helper.ts'`,
     runSource: `({ params }) => double(Number(params.value))`,
     lock,
@@ -91,6 +146,53 @@ export const testLockedDagModulesCompileWithoutAmbientPackageResolution = async 
 testLockedDagModulesCompileWithoutAmbientPackageResolution.description =
   'Compiles a locked module closure without ambient package resolution.'
 
+export const testLockedDagModulesCompileWithBrowserProcessShim = async () => {
+  if (typeof window === 'undefined') {
+    return {
+      skipped: true,
+      reason: 'The partial process shim is a browser runtime boundary.',
+    }
+  }
+
+  const processDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process')
+  Object.defineProperty(globalThis, 'process', {
+    configurable: true,
+    value: { env: {} },
+  })
+
+  try {
+    const helper = createDagModuleArtifact({
+      mediaType: 'text/typescript',
+      source: `import type { Feature } from 'geojson'
+export const featureId = (feature: Feature) => String(feature.id)`,
+    })
+    const lock = createDagModuleLock({
+      imports: { $node: { './helper.ts': { kind: 'module', id: helper.id } } },
+    })
+    const runCode = await compileLockedDagNodeRunCode({
+      nodeId: 'sha256:DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD',
+      importsSource: `import { featureId } from './helper.ts'`,
+      runSource: `({ params }) => featureId(params.feature)`,
+      lock,
+      modules: { [helper.id]: helper },
+    })
+    const value = await executeDagNodeRun({
+      id: 'browser-process-shim-test',
+      runCode,
+      run: undefined,
+      params: { feature: { id: 'parcel-1', type: 'Feature', properties: {}, geometry: null } },
+      use: {},
+    })
+    assert(value === 'parcel-1', 'Expected type-only imports to require no browser resolution')
+  } finally {
+    if (processDescriptor) Object.defineProperty(globalThis, 'process', processDescriptor)
+    else Reflect.deleteProperty(globalThis, 'process')
+  }
+}
+
+testLockedDagModulesCompileWithBrowserProcessShim.description =
+  'Compiles type-only locked imports with the partial process shim provided by browser hosts.'
+
 export const testStoredDagNodeReceivesFetchAsASeparateService = async () => {
   const value = await executeDagNodeRun({
     id: 'stored-fetch-service-test',
@@ -108,6 +210,45 @@ export const testStoredDagNodeReceivesFetchAsASeparateService = async () => {
 
 testStoredDagNodeReceivesFetchAsASeparateService.description =
   'Keeps network access separate from use, which remains reserved for DAG dependencies.'
+
+export const testDagNodeRecordGraphCompilesStoredClosureInDependencyOrder = async () => {
+  const upstream = await defineDagNodeRecord({
+    formatVersion: 2,
+    localName: 'upstream',
+    label: 'Upstream',
+    version: 1,
+    localParamsSchema: {},
+    outputSchema: { type: 'number' },
+    runSource: '() => 2',
+    run: () => 2,
+  })
+  const downstream = await defineDagNodeRecord({
+    formatVersion: 2,
+    localName: 'downstream',
+    label: 'Downstream',
+    version: 1,
+    localParamsSchema: {},
+    outputSchema: { type: 'number' },
+    inputs: { value: { nodeId: upstream.id, role: 'internal' } },
+    runSource: '({ use }) => Number(use.value) * 3',
+    run: ({ use }) => Number(use.value) * 3,
+  })
+  const compiledNames: string[] = []
+  const compiled = compileDagNodeRecordGraph({
+    graph: { [downstream.id]: downstream, [upstream.id]: upstream },
+    onProgress: ({ record, completed, total }) => {
+      compiledNames.push(`${record.localName}:${completed}/${total}`)
+    },
+  })
+  assert(
+    compiledNames.join(',') === 'upstream:1/2,downstream:2/2',
+    `Expected deterministic dependency order, received ${compiledNames.join(',')}`,
+  )
+  assert(compiled[upstream.id] && compiled[downstream.id], 'Expected the complete stored graph')
+}
+
+testDagNodeRecordGraphCompilesStoredClosureInDependencyOrder.description =
+  'Compiles stored graph revisions deterministically and reports each compiler phase.'
 
 export const testStoredDagNodeNormalizationAcceptsNegativeSchemaNumbers = async () => {
   const normalized = await normalizeStoredGraphNodeSource(
@@ -179,6 +320,181 @@ export const testDesignRepositoryLoadsSavedNodeByHashPath = async () => {
 
 testDesignRepositoryLoadsSavedNodeByHashPath.description =
   'Loads a saved graph node through the same hash-only path used by design revisions.'
+
+export const testDesignRepositoryCompilesImportedNodesOnlyOnDemand = async () => {
+  const module = createDagModuleArtifact({
+    mediaType: 'text/typescript',
+    source: 'export const double = (value: number) => value * 2',
+  })
+  const lock = createDagModuleLock({
+    imports: { $node: { './double': { kind: 'module', id: module.id } } },
+  })
+  const saved = await saveStoredGraphNodeRecord(
+    await defineDagNodeRecord({
+      formatVersion: 2,
+      localName: 'lazy_compilation',
+      label: 'Lazy compilation',
+      version: 1,
+      importsSource: "import { double } from './double'",
+      moduleLockId: lock.id,
+      runSource: '({ params }) => double(Number(params.value))',
+      localParamsSchema: {},
+      outputSchema: {},
+    }),
+  )
+  const revision = createGraphRevision({ parents: [], nodes: { main: saved.hash } })
+  const files = new Map([
+    [`nodes/${saved.file.path}`, saved.file.source],
+    [`modules/${hashFilePart(module.id)}.json`, JSON.stringify(module)],
+    [`module-locks/${hashFilePart(lock.id)}.json`, JSON.stringify(lock)],
+    [`graph-revisions/${hashFilePart(revision.id)}.json`, JSON.stringify(revision)],
+    ['refs/graph/main.json', JSON.stringify({ schemaVersion: 2, revisionId: revision.id })],
+  ])
+  const snapshot = await loadDesignRepositorySnapshot({
+    readText: async (path) => {
+      const content = files.get(path)
+      if (content === undefined) throw new Error(`Missing test repository file ${path}`)
+      return content
+    },
+    checkout: { kind: 'ref', name: 'graph/main' },
+  })
+  assert(
+    snapshot.nodesByHash[saved.hash]?.node.runCode === undefined,
+    'Repository loading must not compile imported node code.',
+  )
+  let compilationCount = 0
+  const compiled = await compileDesignRepositoryNodes(snapshot, {
+    get: () => Promise.resolve(null),
+    compile: (input) => {
+      compilationCount += 1
+      const code = '({ params }) => Number(params.value) * 2'
+      return Promise.resolve({
+        schemaVersion: 1,
+        cacheId: 'direct-test',
+        compilerAbi: 'test-compiler-v1',
+        nodeId: input.nodeId,
+        ...(input.lock ? { moduleLockId: input.lock.id } : {}),
+        sourceBytes: 1,
+        outputBytes: code.length,
+        packages: [],
+        code,
+      })
+    },
+  })
+  assert(compilationCount === 1, 'Expected the imported node to compile exactly once on demand.')
+  assert(
+    compiled[saved.hash]?.node.runCode === '({ params }) => Number(params.value) * 2',
+    'Expected explicit compilation to attach deterministic run code.',
+  )
+  const cache = new Map<string, unknown>()
+  const cachedCompiler = createCachedDagRunCodeCompiler(
+    {
+      get: async (id) => cache.get(id) ?? null,
+      set: async (id, value) => {
+        cache.set(id, value)
+      },
+    },
+    {
+      compilerAbi: 'test-compiler-v1',
+      resolvePackages: () => Promise.resolve([]),
+      compile: (input) => {
+        compilationCount += 1
+        const code = '({ params }) => Number(params.value) * 3'
+        return Promise.resolve({
+          schemaVersion: 1,
+          compilerAbi: 'test-compiler-v1',
+          nodeId: input.nodeId,
+          ...(input.lock ? { moduleLockId: input.lock.id } : {}),
+          sourceBytes: 1,
+          outputBytes: code.length,
+          packages: [],
+          code,
+        })
+      },
+    },
+  )
+  const compilerInput = {
+    nodeId: saved.hash,
+    importsSource: saved.node.importsSource!,
+    runSource: saved.node.runSource,
+    lock,
+    modules: { [module.id]: module },
+  }
+  const [firstCached, concurrentCached] = await Promise.all([
+    cachedCompiler.compile(compilerInput),
+    cachedCompiler.compile(compilerInput),
+  ])
+  const persistedCached = await createCachedDagRunCodeCompiler(
+    {
+      get: async (id) => cache.get(id) ?? null,
+      set: async (id, value) => {
+        cache.set(id, value)
+      },
+    },
+    {
+      compilerAbi: 'test-compiler-v1',
+      resolvePackages: () => Promise.resolve([]),
+      compile: () => {
+        throw new Error('The persisted compiler cache should have been reused.')
+      },
+    },
+  ).compile(compilerInput)
+  const observedCompilationCount = Number(compilationCount)
+  assert(
+    observedCompilationCount === 2 &&
+      firstCached.code === concurrentCached.code &&
+      concurrentCached.code === persistedCached.code,
+    'Expected concurrent and persisted compiler cache hits to reuse one compilation.',
+  )
+}
+
+testDesignRepositoryCompilesImportedNodesOnlyOnDemand.description =
+  'Keeps repository reads lightweight and compiles imported stored-node code only on demand.'
+
+export const testCompilerCacheIncludesExactPackageProvider = async () => {
+  const cache = new Map<string, unknown>()
+  let version = '4.0.5'
+  let compilationCount = 0
+  const compiler = createCachedDagRunCodeCompiler(
+    {
+      get: async (id) => cache.get(id) ?? null,
+      set: async (id, value) => {
+        cache.set(id, value)
+      },
+    },
+    {
+      compilerAbi: 'package-cache-test-v1',
+      resolvePackages: () =>
+        Promise.resolve([{ name: 'zod', version, integrity: `sha256:${version}` }]),
+      compile: (input, packages) => {
+        compilationCount += 1
+        const code = `() => ${JSON.stringify(packages[0]?.version)}`
+        return Promise.resolve({
+          schemaVersion: 1,
+          compilerAbi: 'package-cache-test-v1',
+          nodeId: input.nodeId,
+          sourceBytes: input.runSource.length,
+          outputBytes: code.length,
+          packages,
+          code,
+        })
+      },
+    },
+  )
+  const input = {
+    nodeId: 'sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' as const,
+    runSource: '() => 1',
+    modules: {},
+  }
+  const first = await compiler.compile(input)
+  version = '4.1.0'
+  const second = await compiler.compile(input)
+  assert(compilationCount === 2, 'Expected the provider change to invalidate the artifact cache')
+  assert(first.cacheId !== second.cacheId, 'Expected exact providers in compiled artifact identity')
+}
+
+testCompilerCacheIncludesExactPackageProvider.description =
+  'Keys compiled artifacts by exact resolved package version and integrity.'
 
 export const testStoredDagNodeNormalizationRunsWithoutBrowserProcess = async () => {
   if (typeof window === 'undefined') {

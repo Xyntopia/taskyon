@@ -1,4 +1,4 @@
-import { createTool } from '@taskyon/taskyon/api'
+import { createTool } from '../types/toolApi'
 import type { Hash } from '@taskyon/comp-dag/caching'
 import {
   compileDagNodeRecordGraph,
@@ -20,14 +20,16 @@ import {
   createStorageDesignGraphObjectStore,
   type DesignGraphStorageClient,
 } from '@taskyon/comp-dag/designGraphRepository'
-import { executeInvocation } from '@taskyon/comp-dag/invocationExecution'
+import {
+  createDagInvocationEvaluators,
+  executeInvocation,
+} from '@taskyon/comp-dag/invocationExecution'
 import type {
   Objective,
   OptimizationCaptureSpec,
   OptimizationInputSpec,
   VariableSpec,
 } from '@taskyon/comp-dag/optimization'
-import { toDagExploreInputs } from '@taskyon/comp-dag/runtime/runPlanner'
 import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import {
   createStorageInvocationArtifactStore,
@@ -125,7 +127,7 @@ export const createDagGraphProjectTool = (
             'saveInvocation',
             'runInvocation',
             'inspectProject',
-          ],
+          ] as GraphProjectAction[],
           description:
             'Operation to perform: add a global graph node, create a project, save a new invocation revision, run a named invocation, or inspect a project.',
         },
@@ -149,7 +151,7 @@ export const createDagGraphProjectTool = (
             "Full standalone TypeScript source for createNode. Export one default formatVersion 2 object with id '__TASKYON_SELF_HASH__', localName, label, version, localParamsSchema, outputSchema, optional hashed inputs, and an async run({ params, use }) function. Do not import application types.",
           examples: [
             "export default { formatVersion: 2, id: '__TASKYON_SELF_HASH__', localName: 'score', label: 'Score', version: 1, localParamsSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] }, outputSchema: { type: 'number' }, inputs: {}, async run({ params }) { return params.value } }",
-          ],
+          ] as string[],
         },
         rootNodeId: {
           type: 'string',
@@ -279,56 +281,14 @@ export const createDagGraphProjectTool = (
             repository,
             artifacts: artifactStore,
             makeAttemptId: () => crypto.randomUUID(),
-            evaluate: async ({ params, signal }) => {
-              if (signal?.aborted) throw new Error('Invocation cancelled.')
-              const evaluated = await root.call(params).run(undefined, {
+            ...createDagInvocationEvaluators({
+              root,
+              invocation,
+              engineConfig: {
                 execution: { mode: 'local' },
                 storageBackend: dagBackend,
-              })
-              return { outputs: evaluated.value }
-            },
-            evaluateRows: async ({ params, maxRows, signal, onRow }) => {
-              if (signal?.aborted) throw new Error('Invocation cancelled.')
-              const inputs = toDagExploreInputs(invocation.inputs)
-              const studyParams = Object.fromEntries(
-                Object.keys(invocation.inputs).map((alias) => [alias, params[alias] ?? {}]),
-              )
-              await root.call({ ...params, ...studyParams }).study(
-                {
-                  ...(invocation.objectives[0]?.target.op === 'identity'
-                    ? {
-                        mode: 'optimize' as const,
-                        objective: {
-                          path: invocation.objectives[0].target.path,
-                          direction: invocation.objectives[0].direction,
-                        },
-                      }
-                    : {}),
-                  ...(inputs ? { inputs } : {}),
-                  capture: invocation.capture.map((capture) => ({
-                    path: capture.path,
-                    ...(capture.as === undefined ? {} : { as: capture.as }),
-                  })),
-                  ...(maxRows === undefined ? {} : { budget: { maxRows } }),
-                  collectRows: false,
-                  collectHistory: Object.values(invocation.inputs).some(
-                    (input) =>
-                      input.strategy?.id !== undefined && input.strategy.id !== 'sequential',
-                  ),
-                  onRow: async (row) =>
-                    await onRow({
-                      outputs: row.row,
-                      ...(row.captured ? { captured: row.captured } : {}),
-                      inputSelection: {
-                        rowKey: row.rowKey,
-                        sourceIndexByAlias: row.sourceIndexByAlias,
-                      },
-                    }),
-                },
-                undefined,
-                { execution: { mode: 'local' }, storageBackend: dagBackend },
-              )
-            },
+              },
+            }),
           },
         })
         return { type: 'designInvocationRun' as const, projectId, invocationName, ...result }

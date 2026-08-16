@@ -9,6 +9,7 @@
     "./interactive": "./src/cli.ts",
     "./register": "./src/register.ts",
     "./storagePaths": "./src/cli/storagePaths.ts",
+    "./storageService": "./src/cli/storageService.ts",
     "./toolchainSettings": "./src/cli/toolchainSettings.ts",
     "./testing/cliE2e": "./src/tests/cliE2eDiagnostics.ts"
   },

@@ -29,7 +29,10 @@ export const variableSpecSchema = z
           .optional()
           .describe('Human-readable variable description shown in the optimization UI.'),
         kind: z.literal('constant').describe('Use a constant value for this parameter.'),
-        value: z.unknown().optional().describe('Constant value. If omitted, the parameter is missing.'),
+        value: z
+          .unknown()
+          .optional()
+          .describe('Constant value. If omitted, the parameter is missing.'),
       })
       .describe('Constant value'),
 
@@ -216,10 +219,7 @@ export type OptimizationCaptureSpec = z.infer<typeof optimizationCaptureSpecSche
 
 export const optimizationConfigSchema = z
   .object({
-    mode: z
-      .enum(['explore', 'optimize'])
-      .default('explore')
-      .describe('Study mode.'),
+    mode: z.enum(['explore', 'optimize']).default('explore').describe('Study mode.'),
     objective: objectiveSchema
       .optional()
       .describe('Single optimization objective used by study(mode=optimize).'),
@@ -260,18 +260,11 @@ const isExplodedAliasPath = (path: string, aliases: string[]) =>
 
 export const schemaAtPath = jsonSchemaAtPath
 
-export type SchemaPathKind =
-  | 'number_scalar'
-  | 'number_array'
-  | 'object'
-  | 'feature'
-  | 'other'
+export type SchemaPathKind = 'number_scalar' | 'number_array' | 'object' | 'feature' | 'other'
 
 type DagJsonSchemaObject = Extract<DagJsonSchema, Record<string, unknown>>
 
-const isObjectSchema = (
-  schema: DagJsonSchema | null | undefined,
-): schema is DagJsonSchemaObject =>
+const isObjectSchema = (schema: DagJsonSchema | null | undefined): schema is DagJsonSchemaObject =>
   typeof schema === 'object' && schema !== null && !Array.isArray(schema)
 
 const schemaTypes = (schema: DagJsonSchema): string[] => {
@@ -453,7 +446,10 @@ const zodForJsonLeaf = (schema: DagJsonSchema | null): z.ZodTypeAny => {
   return z.unknown()
 }
 
-const variableSpecSchemaForParam = (paramLeaf: DagJsonSchema | null, path: string): z.ZodTypeAny => {
+const variableSpecSchemaForParam = (
+  paramLeaf: DagJsonSchema | null,
+  path: string,
+): z.ZodTypeAny => {
   const leaf = zodForJsonLeaf(paramLeaf)
   const isNumeric = paramLeaf ? leafKindOf(paramLeaf) === 'number' : false
   const paramDescription = (schemaDescription(paramLeaf) ?? '').trim()
@@ -463,7 +459,9 @@ const variableSpecSchemaForParam = (paramLeaf: DagJsonSchema | null, path: strin
 
   const constant = z.object({
     kind: z.literal('constant').describe('Use a constant value.'),
-    value: leaf.optional().describe('Constant value. Leave empty to mark this parameter as missing.'),
+    value: leaf
+      .optional()
+      .describe('Constant value. Leave empty to mark this parameter as missing.'),
   })
 
   const grid = z.object({
@@ -627,7 +625,10 @@ export const createOptimizationConfigUiJsonSchema = (args: {
     const objectiveProperties = (schema.properties ?? {}) as Record<string, JSONSchema7Definition>
     const targetSchema = objectiveProperties.target
     if (!isJsonSchemaObject(targetSchema)) continue
-    const targetProperties = (targetSchema.properties ?? {}) as Record<string, JSONSchema7Definition>
+    const targetProperties = (targetSchema.properties ?? {}) as Record<
+      string,
+      JSONSchema7Definition
+    >
     const pathSchema = targetProperties.path
     if (!isJsonSchemaObject(pathSchema)) continue
     pathSchema.title = 'Output Variable'
@@ -641,7 +642,9 @@ export const createOptimizationConfigUiJsonSchema = (args: {
     // additionalProperties:false and required arrays that list all property keys.
     props.variables.additionalProperties = false
     strictifyObjectSchemas(props.variables)
-    const variableProps = props.variables.properties as Record<string, JSONSchema7Definition> | undefined
+    const variableProps = props.variables.properties as
+      | Record<string, JSONSchema7Definition>
+      | undefined
     if (variableProps) {
       for (const [path, description] of Object.entries(variableDescriptionsByPath)) {
         const schema = variableProps[path]
@@ -854,6 +857,11 @@ export const optimizationRunRecordSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe('Explicitly captured internal values requested by the execution config.'),
+  rowKey: z
+    .record(z.string(), z.union([z.string(), z.number()]))
+    .optional()
+    .describe('Stable source-row identity for an explored input combination.'),
+  status: z.string().optional().describe('Transient presentation status for this result row.'),
 })
 export type OptimizationRunRecord = z.infer<typeof optimizationRunRecordSchema>
 
@@ -863,6 +871,10 @@ export const optimizationResultsSchema = z.object({
   mode: runModeSchema.describe('Run mode.'),
   runs: z.array(optimizationRunRecordSchema).describe('All explored or optimized runs.'),
   bestIndex: z.number().nullable().describe('Index into runs for the best run, if applicable.'),
+  meta: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Transient execution metadata projected from the canonical invocation run.'),
 })
 export type OptimizationResults = z.infer<typeof optimizationResultsSchema>
 
@@ -909,10 +921,9 @@ export const createOptimizationResultsUiJsonSchema = (args: {
   })
 
   const json = z.toJSONSchema(uiSchema, { unrepresentable: 'any' }) as JSONSchema7
-  const runSchema = (
-    ((json.properties?.runs as JSONSchema7 | undefined)?.items as JSONSchema7 | undefined)
-      ?.properties ?? {}
-  ) as Record<string, JSONSchema7Definition>
+  const runSchema = ((
+    (json.properties?.runs as JSONSchema7 | undefined)?.items as JSONSchema7 | undefined
+  )?.properties ?? {}) as Record<string, JSONSchema7Definition>
   runSchema.params = {
     ...(args.nodeParamsSchema as JSONSchema7),
     description: 'Params used for this run.',

@@ -26,7 +26,9 @@ import {
 
 export type DesignGraphObjectStore = {
   readText: (path: string) => Promise<string>
+  readManyText?: (paths: readonly string[]) => Promise<Map<string, string | null>>
   writeText: (path: string, content: string) => Promise<void>
+  writeManyText?: (files: readonly { path: string; content: string }[]) => Promise<void>
   writeTextIfUnchanged: (
     path: string,
     expectedContentHash: string | null,
@@ -41,6 +43,13 @@ export type DesignGraphStorageClient = {
     id: string
   }) => Promise<{ value: unknown; contentHash: string | null }>
   set: (request: { namespace: string; id: string; value: unknown }) => Promise<unknown>
+  getMany?: (request: { namespace: string; ids: (string | number)[] }) => Promise<{
+    rows: Array<{ id: string | number; data: unknown }>
+  }>
+  setMany?: (request: {
+    namespace: string
+    rows: { id: string | number; data: unknown }[]
+  }) => Promise<unknown>
   setIfUnchanged: (request: {
     namespace: string
     id: string
@@ -73,40 +82,97 @@ const missingObject = (path: string) => new Error(`Design graph object not found
 export const createStorageDesignGraphObjectStore = (
   storage: DesignGraphStorageClient,
   namespace = 'design-graph/v2',
-): DesignGraphObjectStore => ({
-  readText: async (path) => {
-    const id = safePath(path, 'Repository path')
-    const value = (await storage.get({ namespace, id })).value
-    if (value === null || value === undefined) throw missingObject(id)
+): DesignGraphObjectStore => {
+  const cache = new Map<string, string>()
+  const isImmutablePath = (id: string) => !id.startsWith('refs/')
+  const readStoredText = (id: string, value: unknown) => {
     if (typeof value !== 'string') throw new Error(`Design graph object is not text: ${id}`)
+    if (isImmutablePath(id)) cache.set(id, value)
     return value
-  },
-  writeText: async (path, content) => {
-    await storage.set({
-      namespace,
-      id: safePath(path, 'Repository path'),
-      value: content,
-    })
-  },
-  writeTextIfUnchanged: async (path, expectedContentHash, content) => {
-    const id = safePath(path, 'Repository path')
-    const result = await storage.setIfUnchanged({
-      namespace,
-      id,
-      expectedContentHash,
-      value: content,
-    })
-    return result
-  },
-  list: async (directory) => {
-    const prefix = `${safePath(directory, 'Repository directory')}/`
-    return (await storage.list({ namespace })).rows
-      .map((row) => String(row.id))
-      .filter((id) => id.startsWith(prefix))
-      .map((id) => id.slice(prefix.length))
-      .sort()
-  },
-})
+  }
+  const readMany = async (ids: string[]) => {
+    if (storage.getMany) return await storage.getMany({ namespace, ids })
+    const rows = await Promise.all(
+      ids.map(async (id) => ({ id, data: (await storage.get({ namespace, id })).value })),
+    )
+    return { rows }
+  }
+  const writeMany = async (rows: { id: string; data: string }[]) => {
+    if (storage.setMany) {
+      await storage.setMany({ namespace, rows })
+      return
+    }
+    await Promise.all(rows.map(({ id, data }) => storage.set({ namespace, id, value: data })))
+  }
+  return {
+    readText: async (path) => {
+      const id = safePath(path, 'Repository path')
+      const cached = cache.get(id)
+      if (cached !== undefined) return cached
+      const value = (await storage.get({ namespace, id })).value
+      if (value === null || value === undefined) throw missingObject(id)
+      return readStoredText(id, value)
+    },
+    readManyText: async (paths) => {
+      const ids = paths.map((path) => safePath(path, 'Repository path'))
+      const values = new Map<string, string | null>()
+      const missing = ids.filter((id) => {
+        const cached = cache.get(id)
+        if (cached === undefined) return true
+        values.set(id, cached)
+        return false
+      })
+      if (missing.length === 0) return values
+      const rows = await readMany(missing)
+      const byId = new Map(rows.rows.map((row) => [String(row.id), row.data]))
+      for (const id of missing) {
+        const value = byId.get(id)
+        values.set(id, value === undefined ? null : readStoredText(id, value))
+      }
+      return values
+    },
+    writeText: async (path, content) => {
+      const id = safePath(path, 'Repository path')
+      await storage.set({
+        namespace,
+        id,
+        value: content,
+      })
+      if (isImmutablePath(id)) cache.set(id, content)
+    },
+    writeManyText: async (files) => {
+      const rows = files.map(({ path, content }) => ({
+        id: safePath(path, 'Repository path'),
+        data: content,
+      }))
+      await writeMany(rows)
+      for (const row of rows) {
+        if (isImmutablePath(row.id)) cache.set(row.id, row.data)
+      }
+    },
+    writeTextIfUnchanged: async (path, expectedContentHash, content) => {
+      const id = safePath(path, 'Repository path')
+      const result = await storage.setIfUnchanged({
+        namespace,
+        id,
+        expectedContentHash,
+        value: content,
+      })
+      if (result.written && isImmutablePath(id)) cache.set(id, content)
+      return result
+    },
+    list: async (directory) => {
+      const prefix = `${safePath(directory, 'Repository directory')}/`
+      const rows = await storage.list({ namespace })
+      for (const row of rows.rows) readStoredText(String(row.id), row.data)
+      return rows.rows
+        .map((row) => String(row.id))
+        .filter((id) => id.startsWith(prefix))
+        .map((id) => id.slice(prefix.length))
+        .sort()
+    },
+  }
+}
 
 const hashFilePart = (id: Hash) => id.replace(':', '_')
 const objectPath = (kind: string, id: Hash) => `${kind}/${hashFilePart(id)}.json`

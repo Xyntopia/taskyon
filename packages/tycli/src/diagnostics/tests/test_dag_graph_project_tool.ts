@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { createAiWorkstationExample } from '@taskyon/taskyon'
-import { createDagGraphProjectTool } from '../../tools/dagGraphProjectTool'
+import { createDagGraphProjectTool } from '@taskyon/taskyon/tools/dagGraphProjectTool'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)

@@ -1,5 +1,10 @@
 import type { GraphData } from '@taskyon/common/modules/graph/types'
-import { describeExploreInputs, type DagExposedInputDef, type DagNode } from './dagCore.ts'
+import {
+  describeExploreInputs,
+  getDagExplodeMetadata,
+  type DagExposedInputDef,
+  type DagNode,
+} from './dagCore.ts'
 import { dagNodeId } from './dagEnvironment.ts'
 
 export type DagNodeDefinitionOrigin = 'hard-coded' | 'stored'
@@ -31,7 +36,7 @@ const isOneOf = (
 ): value is Extract<DagExposedInputDef, { kind: 'oneOf' }> =>
   typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'oneOf'
 
-const isExplodedNode = (node: DagNode): boolean => node.name.includes('__explode__')
+const isExplodedNode = (node: DagNode): boolean => getDagExplodeMetadata(node) !== null
 
 const toTitleCaseToken = (token: string): string => {
   if (!token) return token
