@@ -21,7 +21,12 @@ export type OrganicLayoutState = {
   particles: OrganicParticle[]
   links: OrganicLink[]
   center: { x: number; y: number }
+  temperature: number
 }
+
+const COOLING_RATE = 0.985
+const DRAG_TEMPERATURE = 0.35
+export const organicLayoutIterationsPerFrame = 6
 
 const clampMagnitude = (value: number, limit: number): number =>
   Math.max(-limit, Math.min(limit, value))
@@ -67,18 +72,22 @@ export const createOrganicLayoutState = (
           x: particles.reduce((sum, particle) => sum + particle.x, 0) / particles.length,
           y: particles.reduce((sum, particle) => sum + particle.y, 0) / particles.length,
         }
-  return { particles, links, center }
+  return { particles, links, center, temperature: 1 }
 }
 
 const applyPairForces = (
   state: OrganicLayoutState,
   forces: Array<{ x: number; y: number }>,
+  activeNodeIds?: ReadonlySet<string>,
 ): void => {
   const particles = state.particles
   for (let first = 0; first < particles.length; first += 1) {
     const a = particles[first]!
     for (let second = first + 1; second < particles.length; second += 1) {
       const b = particles[second]!
+      const firstIsActive = !activeNodeIds || activeNodeIds.has(a.id)
+      const secondIsActive = !activeNodeIds || activeNodeIds.has(b.id)
+      if (!firstIsActive && !secondIsActive) continue
       let dx = b.x - a.x
       let dy = b.y - a.y
       if (Math.abs(dx) + Math.abs(dy) < 0.001) {
@@ -90,10 +99,14 @@ const applyPairForces = (
       const unitX = dx / distance
       const unitY = dy / distance
       const repulsion = Math.min(5, 120_000 / (distance * distance + 400))
-      forces[first]!.x -= unitX * repulsion
-      forces[first]!.y -= unitY * repulsion
-      forces[second]!.x += unitX * repulsion
-      forces[second]!.y += unitY * repulsion
+      if (firstIsActive) {
+        forces[first]!.x -= unitX * repulsion
+        forces[first]!.y -= unitY * repulsion
+      }
+      if (secondIsActive) {
+        forces[second]!.x += unitX * repulsion
+        forces[second]!.y += unitY * repulsion
+      }
 
       const overlapX = (a.width + b.width) / 2 + 18 - Math.abs(dx)
       const overlapY = (a.height + b.height) / 2 + 18 - Math.abs(dy)
@@ -101,13 +114,13 @@ const applyPairForces = (
       if (overlapX / Math.max(1, a.width + b.width) < overlapY / Math.max(1, a.height + b.height)) {
         const push = overlapX * 0.09 + 0.8
         const sign = dx >= 0 ? 1 : -1
-        forces[first]!.x -= sign * push
-        forces[second]!.x += sign * push
+        if (firstIsActive) forces[first]!.x -= sign * push
+        if (secondIsActive) forces[second]!.x += sign * push
       } else {
         const push = overlapY * 0.09 + 0.8
         const sign = dy >= 0 ? 1 : -1
-        forces[first]!.y -= sign * push
-        forces[second]!.y += sign * push
+        if (firstIsActive) forces[first]!.y -= sign * push
+        if (secondIsActive) forces[second]!.y += sign * push
       }
     }
   }
@@ -116,31 +129,49 @@ const applyPairForces = (
 const applyLinkForces = (
   state: OrganicLayoutState,
   forces: Array<{ x: number; y: number }>,
+  activeNodeIds?: ReadonlySet<string>,
 ): void => {
   for (const link of state.links) {
     const source = state.particles[link.source]!
     const target = state.particles[link.target]!
+    const sourceIsActive = !activeNodeIds || activeNodeIds.has(source.id)
+    const targetIsActive = !activeNodeIds || activeNodeIds.has(target.id)
+    if (!sourceIsActive && !targetIsActive) continue
     const dx = target.x - source.x
     const dy = target.y - source.y
     const distance = Math.max(1, Math.hypot(dx, dy))
     const spring = clampMagnitude((distance - link.length) * 0.012, 5)
     const forceX = (dx / distance) * spring
     const forceY = (dy / distance) * spring
-    forces[link.source]!.x += forceX
-    forces[link.source]!.y += forceY
-    forces[link.target]!.x -= forceX
-    forces[link.target]!.y -= forceY
+    if (sourceIsActive) {
+      forces[link.source]!.x += forceX
+      forces[link.source]!.y += forceY
+    }
+    if (targetIsActive) {
+      forces[link.target]!.x -= forceX
+      forces[link.target]!.y -= forceY
+    }
   }
 }
 
-export const stepOrganicLayout = (state: OrganicLayoutState, iterations = 1): number => {
+export const stepOrganicLayout = (
+  state: OrganicLayoutState,
+  iterations = 1,
+  activeNodeIds?: ReadonlySet<string>,
+): number => {
   let maximumSpeed = 0
   for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const temperature = state.temperature
     const forces = state.particles.map(() => ({ x: 0, y: 0 }))
-    applyPairForces(state, forces)
-    applyLinkForces(state, forces)
+    applyPairForces(state, forces, activeNodeIds)
+    applyLinkForces(state, forces, activeNodeIds)
     maximumSpeed = 0
     state.particles.forEach((particle, index) => {
+      if (activeNodeIds && !activeNodeIds.has(particle.id)) {
+        particle.vx = 0
+        particle.vy = 0
+        return
+      }
       if (particle.pinned) {
         particle.vx = 0
         particle.vy = 0
@@ -148,12 +179,19 @@ export const stepOrganicLayout = (state: OrganicLayoutState, iterations = 1): nu
       }
       const centerForceX = (state.center.x - particle.x) * 0.0015
       const centerForceY = (state.center.y - particle.y) * 0.0015
-      particle.vx = clampMagnitude((particle.vx + forces[index]!.x + centerForceX) * 0.82, 18)
-      particle.vy = clampMagnitude((particle.vy + forces[index]!.y + centerForceY) * 0.82, 18)
+      particle.vx = clampMagnitude(
+        (particle.vx + (forces[index]!.x + centerForceX) * temperature) * 0.82,
+        18,
+      )
+      particle.vy = clampMagnitude(
+        (particle.vy + (forces[index]!.y + centerForceY) * temperature) * 0.82,
+        18,
+      )
       particle.x += particle.vx
       particle.y += particle.vy
       maximumSpeed = Math.max(maximumSpeed, Math.hypot(particle.vx, particle.vy))
     })
+    state.temperature *= COOLING_RATE
   }
   return maximumSpeed
 }
@@ -170,16 +208,23 @@ export const moveOrganicNode = (
   particle.vx = 0
   particle.vy = 0
   particle.pinned = true
+  state.temperature = Math.max(state.temperature, DRAG_TEMPERATURE)
 }
 
 export const releaseOrganicNode = (state: OrganicLayoutState, id: string): void => {
   const particle = state.particles.find((candidate) => candidate.id === id)
   if (particle) particle.pinned = false
+  state.temperature = Math.max(state.temperature, DRAG_TEMPERATURE)
 }
 
-export const applyOrganicLayout = (state: OrganicLayoutState, nodes: LayoutNode[]): void => {
+export const applyOrganicLayout = (
+  state: OrganicLayoutState,
+  nodes: LayoutNode[],
+  activeNodeIds?: ReadonlySet<string>,
+): void => {
   const particleById = new Map(state.particles.map((particle) => [particle.id, particle]))
   nodes.forEach((node) => {
+    if (activeNodeIds && !activeNodeIds.has(node.id)) return
     const particle = particleById.get(node.id)
     if (!particle) return
     node.x = particle.x - node.width / 2

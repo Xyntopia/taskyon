@@ -1,11 +1,5 @@
 import { clamp } from './graphUtils'
-import type { LayoutGraph } from './types'
-
-export type ViewportState = {
-  scale: number
-  tx: number
-  ty: number
-}
+import type { LayoutGraph, ViewportState } from './types'
 
 export const initialViewportState = (): ViewportState => ({
   scale: 1,

@@ -29,6 +29,7 @@
 import {
   createGraphController,
   filterVisibleGraph,
+  findUpstreamGraphSelection,
   graphViewLayoutOptions,
   type GraphData,
   type GraphPresentationState,
@@ -37,6 +38,7 @@ import {
   type LayoutEdge,
   type LayoutNode,
   type RenderOptions,
+  type ViewportState,
 } from '@taskyon/common/modules/graph'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import GraphCanvasControls from './GraphCanvasControls.vue'
@@ -80,6 +82,9 @@ const panZoomEnabled = ref(
 const nodeDragEnabled = ref(
   props.presentation?.nodeDragEnabled ?? props.options?.enableNodeDrag !== false,
 )
+const viewport = ref<ViewportState | undefined>(
+  props.presentation?.viewport ?? props.options?.initialViewport,
+)
 const internalSelectedNodeId = ref<string>()
 const copying = ref(false)
 let controller: ReturnType<typeof createGraphController<N, E>> | null = null
@@ -90,23 +95,36 @@ const nodeOptions = computed(() =>
   props.graph.nodes.map(({ id, label }) => ({ id, label: label ?? id })),
 )
 const visibleGraph = computed(() => filterVisibleGraph(props.graph, new Set(visibleNodeIds.value)))
+const upstreamSelection = computed(() => {
+  const selectedNodeId = effectiveSelectedNodeId.value
+  if (!selectedNodeId || !props.options?.upstreamSelectionStyles) return undefined
+  return findUpstreamGraphSelection(visibleGraph.value, selectedNodeId)
+})
 const updatePresentation = (patch: Partial<GraphPresentationState>) => {
   if (patch.layout !== undefined) layout.value = patch.layout
   if (patch.panZoomEnabled !== undefined) panZoomEnabled.value = patch.panZoomEnabled
   if (patch.nodeDragEnabled !== undefined) nodeDragEnabled.value = patch.nodeDragEnabled
+  if (patch.viewport !== undefined) viewport.value = patch.viewport
   emit('update:presentation', {
     layout: layout.value,
     panZoomEnabled: panZoomEnabled.value,
     nodeDragEnabled: nodeDragEnabled.value,
+    ...(viewport.value ? { viewport: viewport.value } : {}),
   })
 }
 const makeRuntimeOptions = (): RenderOptions<N, E> => {
   const base = props.options ?? {}
+  const selectionStyles = base.upstreamSelectionStyles
   return {
     ...base,
     ...(props.showLayoutControls ? graphViewLayoutOptions(layout.value) : {}),
     enablePanZoom: panZoomEnabled.value,
     enableNodeDrag: nodeDragEnabled.value,
+    ...(viewport.value ? { initialViewport: viewport.value } : {}),
+    onViewportChange: (nextViewport) => {
+      updatePresentation({ viewport: nextViewport })
+      base.onViewportChange?.(nextViewport)
+    },
     nodeTooltipHtml:
       base.nodeTooltipHtml ??
       ((node: LayoutNode<N>) =>
@@ -115,6 +133,27 @@ const makeRuntimeOptions = (): RenderOptions<N, E> => {
       base.edgeTooltipHtml ??
       ((edge: LayoutEdge<E>) =>
         edge.label ? `<div><strong>${edge.label}</strong></div>` : `<div>${edge.id}</div>`),
+    nodeStyle: (node) => {
+      const baseStyle = base.nodeStyle?.(node)
+      const selection = upstreamSelection.value
+      if (!selection || !selectionStyles) return baseStyle
+      const selectionStyle =
+        node.id === effectiveSelectedNodeId.value
+          ? selectionStyles.selectedNode
+          : selection.nodeIds.has(node.id)
+            ? selectionStyles.upstreamNode
+            : selectionStyles.unrelatedNode
+      return baseStyle || selectionStyle ? { ...baseStyle, ...selectionStyle } : undefined
+    },
+    edgeStyle: (edge) => {
+      const baseStyle = base.edgeStyle?.(edge)
+      const selection = upstreamSelection.value
+      if (!selection || !selectionStyles) return baseStyle
+      const selectionStyle = selection.edgeIds.has(edge.id)
+        ? selectionStyles.upstreamEdge
+        : selectionStyles.unrelatedEdge
+      return baseStyle || selectionStyle ? { ...baseStyle, ...selectionStyle } : undefined
+    },
     onNodeClick: (node) => {
       internalSelectedNodeId.value = node.id
       emit('selectNode', node.id)
@@ -177,10 +216,13 @@ watch(
     layout.value = presentation.layout
     panZoomEnabled.value = presentation.panZoomEnabled
     nodeDragEnabled.value = presentation.nodeDragEnabled
+    viewport.value = presentation.viewport
+    if (presentation.viewport) controller?.setViewport(presentation.viewport)
   },
   { deep: true },
 )
 watch(visibleGraph, (next) => controller?.setGraph(next))
+watch(effectiveSelectedNodeId, () => controller?.redraw())
 watch(
   () => [props.options, layout.value, panZoomEnabled.value, nodeDragEnabled.value] as const,
   () => controller?.setOptions(makeRuntimeOptions()),

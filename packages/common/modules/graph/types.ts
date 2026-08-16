@@ -1,6 +1,12 @@
 export type GraphDirection = 'TB' | 'LR'
 export type GraphLayoutMode = 'hierarchical' | 'organic'
 
+export type ViewportState = {
+  scale: number
+  tx: number
+  ty: number
+}
+
 export type GraphNode<T = unknown> = {
   id: string
   type?: string
@@ -81,6 +87,14 @@ export type GraphTheme = {
   edgeStyles?: Record<string, EdgeStyle>
 }
 
+export type UpstreamSelectionStyles = {
+  selectedNode?: NodeStyle
+  upstreamNode?: NodeStyle
+  unrelatedNode?: NodeStyle
+  upstreamEdge?: EdgeStyle
+  unrelatedEdge?: EdgeStyle
+}
+
 export type LayoutOptions = {
   layoutMode?: GraphLayoutMode
   direction?: GraphDirection
@@ -128,9 +142,11 @@ export type LayoutOptions = {
 export type InteractionOptions<N = unknown, E = unknown> = {
   enablePanZoom?: boolean
   enableNodeDrag?: boolean
+  initialViewport?: ViewportState
   minZoom?: number
   maxZoom?: number
   zoomStep?: number
+  onViewportChange?: (viewport: ViewportState) => void
   onNodeClick?: (node: LayoutNode<N>) => void
   onNodeDoubleClick?: (node: LayoutNode<N>) => void
   onNodeContextMenu?: (node: LayoutNode<N>, location: { clientX: number; clientY: number }) => void
@@ -146,6 +162,7 @@ export type RenderOptions<N = unknown, E = unknown> = LayoutOptions &
     nodeStyle?: (node: LayoutNode<N>) => NodeStyle | undefined
     nodeHoverStyle?: (node: LayoutNode<N>) => NodeStyle | undefined
     edgeStyle?: (edge: LayoutEdge<E>) => EdgeStyle | undefined
+    upstreamSelectionStyles?: UpstreamSelectionStyles
     showDefaultNodeLabel?: boolean
     nodeHtmlPointerEvents?: 'none' | 'auto'
   }

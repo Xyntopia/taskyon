@@ -2,6 +2,7 @@ import {
   applyOrganicLayout,
   createOrganicLayoutState,
   moveOrganicNode,
+  organicLayoutIterationsPerFrame,
   releaseOrganicNode,
   stepOrganicLayout,
 } from './graph/organicLayout'
@@ -56,5 +57,65 @@ export const testOrganicLayoutSeparatesNodesAndRespondsToDragging = () => {
   )
   releaseOrganicNode(state, 'middle')
 
+  return { success: true }
+}
+
+export const testOrganicLayoutCoolsWithinInteractiveFrameBudget = () => {
+  const nodeCount = 46
+  const nodes = Array.from({ length: nodeCount }, (_, index) =>
+    createNode(`node-${index}`, (index % 8) * 190, Math.floor(index / 8) * 110),
+  )
+  const edges: GraphEdge[] = Array.from({ length: nodeCount - 1 }, (_, index) => ({
+    id: `edge-${index}`,
+    source: `node-${index}`,
+    target: `node-${index + 1}`,
+  }))
+  const state = createOrganicLayoutState(nodes, edges)
+
+  stepOrganicLayout(state, 90)
+  let stableFrames = 0
+  let renderedFrames = 0
+  while (stableFrames < 12 && renderedFrames < 72) {
+    const speed = stepOrganicLayout(state, organicLayoutIterationsPerFrame)
+    stableFrames = speed < 0.08 ? stableFrames + 1 : 0
+    renderedFrames += 1
+  }
+
+  assert(
+    stableFrames === 12,
+    `Expected the 46-node organic layout to settle within 72 frames, received ${renderedFrames}.`,
+  )
+  return { success: true }
+}
+
+export const testOrganicLayoutRestrictsDraggingToActiveNodes = () => {
+  const nodes = [
+    createNode('dragged', 0, 0),
+    createNode('neighbor', 220, 0),
+    createNode('inactive', 440, 0),
+  ]
+  const edges: GraphEdge[] = [
+    { id: 'dragged-neighbor', source: 'dragged', target: 'neighbor' },
+    { id: 'neighbor-inactive', source: 'neighbor', target: 'inactive' },
+  ]
+  const state = createOrganicLayoutState(nodes, edges)
+
+  stepOrganicLayout(state, 90)
+  applyOrganicLayout(state, nodes)
+  const neighborBeforeDrag = { x: nodes[1]!.x, y: nodes[1]!.y }
+  const inactiveBeforeDrag = { x: nodes[2]!.x, y: nodes[2]!.y }
+
+  moveOrganicNode(state, 'dragged', { x: 600, y: 300 })
+  stepOrganicLayout(state, 30, new Set(['dragged', 'neighbor']))
+  applyOrganicLayout(state, nodes, new Set(['dragged', 'neighbor']))
+
+  assert(
+    Math.hypot(nodes[1]!.x - neighborBeforeDrag.x, nodes[1]!.y - neighborBeforeDrag.y) > 5,
+    'Expected an active neighbor to settle while dragging.',
+  )
+  assert(
+    nodes[2]!.x === inactiveBeforeDrag.x && nodes[2]!.y === inactiveBeforeDrag.y,
+    'Expected inactive nodes to remain stationary during local drag settling.',
+  )
   return { success: true }
 }

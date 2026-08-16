@@ -44,7 +44,10 @@
     "mermaid": "^11.6.0",
     "pmtiles": "^4.4.1",
     "prismjs": "^1.30.0",
-    "vue-codemirror": "^6.1.1"
+    "quasar": "^2.16.0",
+    "vue": "^3.4.0",
+    "vue-codemirror": "^6.1.1",
+    "zod": "^4.0.0"
   },
   "peerDependencies": {
     "quasar": "^2.16.0",

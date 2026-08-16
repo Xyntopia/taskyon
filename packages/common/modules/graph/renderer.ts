@@ -1,8 +1,10 @@
 import { computeLayoutBounds, layoutGraph, routeLayoutEdges, routeOrganicEdges } from './layout'
+import { findUndirectedGraphNeighborhood } from './graphView'
 import {
   applyOrganicLayout,
   createOrganicLayoutState,
   moveOrganicNode,
+  organicLayoutIterationsPerFrame,
   releaseOrganicNode,
   stepOrganicLayout,
   type OrganicLayoutState,
@@ -13,7 +15,6 @@ import {
   fitGraphToViewport,
   initialViewportState,
   viewportTransform,
-  type ViewportState,
 } from './interactions'
 import type {
   EdgeStyle,
@@ -24,9 +25,12 @@ import type {
   LayoutNode,
   NodeStyle,
   RenderOptions,
+  ViewportState,
 } from './types'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
+const ORGANIC_DRAG_NEIGHBORHOOD_HOPS = 2
+const ORGANIC_DRAG_ITERATIONS_PER_FRAME = 2
 
 const createSvgEl = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] =>
   document.createElementNS(SVG_NS, tag)
@@ -121,9 +125,11 @@ export type GraphSvgExportOptions = {
 type GraphController<N = unknown, E = unknown> = {
   setGraph: (graph: GraphData<N, E>) => void
   setOptions: (options: RenderOptions<N, E>) => void
+  redraw: () => void
   resize: () => void
   fit: () => void
   focusNode: (nodeId: string) => boolean
+  setViewport: (viewport: ViewportState) => void
   copyAsPng: (options?: GraphPngExportOptions) => Promise<boolean>
   exportSvgString: (options?: GraphSvgExportOptions) => string
   downloadSvg: (fileName?: string) => void
@@ -138,10 +144,11 @@ export const createGraphController = <N = unknown, E = unknown>(
   let graph = initialGraph
   let options = initialOptions
   let layout: LayoutGraph<N, E> = layoutGraph(graph, options)
-  let viewport: ViewportState = initialViewportState()
+  let viewport: ViewportState = initialOptions.initialViewport ?? initialViewportState()
   let isDragging = false
   let dragStart = { x: 0, y: 0, tx: 0, ty: 0 }
   let draggedNodeId: string | null = null
+  let draggedOrganicNodeIds: ReadonlySet<string> | undefined
   let suppressClickForNodeId: string | null = null
   let draggedNodeMoved = false
   let nodeDragStart = { x: 0, y: 0, nodeX: 0, nodeY: 0 }
@@ -200,6 +207,13 @@ export const createGraphController = <N = unknown, E = unknown>(
     htmlLayer.style.transformOrigin = '0 0'
   }
 
+  const setViewport = (nextViewport: ViewportState) => {
+    viewport = nextViewport
+    updateTransforms()
+  }
+
+  const emitViewportChange = () => options.onViewportChange?.({ ...viewport })
+
   const getSize = () => ({
     width: Math.max(1, container.clientWidth),
     height: Math.max(1, container.clientHeight),
@@ -209,6 +223,7 @@ export const createGraphController = <N = unknown, E = unknown>(
     const { width, height } = getSize()
     viewport = fitGraphToViewport(layout, width, height, 24)
     updateTransforms()
+    emitViewportChange()
   }
 
   const focusNode = (nodeId: string): boolean => {
@@ -221,6 +236,7 @@ export const createGraphController = <N = unknown, E = unknown>(
       ty: height / 2 - (node.y + node.height / 2) * viewport.scale,
     }
     updateTransforms()
+    emitViewportChange()
     return true
   }
 
@@ -444,6 +460,9 @@ export const createGraphController = <N = unknown, E = unknown>(
           }
           evt.stopPropagation()
           draggedNodeId = node.id
+          draggedOrganicNodeIds = organicState
+            ? findUndirectedGraphNeighborhood(graph, node.id, ORGANIC_DRAG_NEIGHBORHOOD_HOPS)
+            : undefined
           draggedNodeMoved = false
           nodeDragStart = { x: evt.clientX, y: evt.clientY, nodeX: node.x, nodeY: node.y }
           group.style.cursor = 'grabbing'
@@ -542,12 +561,13 @@ export const createGraphController = <N = unknown, E = unknown>(
     updateTransforms()
   }
 
-  const syncRenderedOrganicLayout = () => {
+  const syncRenderedOrganicLayout = (activeNodeIds?: ReadonlySet<string>) => {
     const nodeById = new Map(layout.nodes.map((node) => [node.id, node]))
     for (const element of nodeLayer.children) {
       if (!(element instanceof SVGGElement)) continue
       const node = nodeById.get(element.dataset.graphNodeId ?? '')
       if (!node) continue
+      if (activeNodeIds && !activeNodeIds.has(node.id)) continue
       const renderedX = Number(element.dataset.renderedX ?? node.x)
       const renderedY = Number(element.dataset.renderedY ?? node.y)
       setAttrs(element, { transform: `translate(${node.x - renderedX} ${node.y - renderedY})` })
@@ -556,12 +576,17 @@ export const createGraphController = <N = unknown, E = unknown>(
     for (const element of edgeLayer.children) {
       if (!(element instanceof SVGPathElement)) continue
       const edge = edgeById.get(element.dataset.graphEdgeId ?? '')
-      if (edge) setAttrs(element, { d: edge.path })
+      if (!edge) continue
+      if (activeNodeIds && !activeNodeIds.has(edge.source) && !activeNodeIds.has(edge.target)) {
+        continue
+      }
+      setAttrs(element, { d: edge.path })
     }
     for (const element of htmlLayer.children) {
       if (!(element instanceof HTMLElement)) continue
       const node = nodeById.get(element.dataset.graphNodeId ?? '')
       if (!node) continue
+      if (activeNodeIds && !activeNodeIds.has(node.id)) continue
       element.style.left = `${node.x}px`
       element.style.top = `${node.y}px`
     }
@@ -691,14 +716,15 @@ export const createGraphController = <N = unknown, E = unknown>(
 
   const stopOrganicLayout = () => {
     organicState = null
+    draggedOrganicNodeIds = undefined
     organicIdleFrames = 0
     if (organicFrame !== null) cancelAnimationFrame(organicFrame)
     organicFrame = null
   }
 
-  const syncOrganicLayout = () => {
+  const syncOrganicLayout = (activeNodeIds?: ReadonlySet<string>) => {
     if (!organicState) return
-    applyOrganicLayout(organicState, layout.nodes)
+    applyOrganicLayout(organicState, layout.nodes, activeNodeIds)
     const edges = routeOrganicEdges<N, E>(layout.nodes, graph.edges)
     layout = {
       ...layout,
@@ -712,11 +738,22 @@ export const createGraphController = <N = unknown, E = unknown>(
     organicFrame = requestAnimationFrame(() => {
       organicFrame = null
       if (!organicState) return
-      const speed = stepOrganicLayout(organicState, 2)
+      if (draggedNodeId && draggedOrganicNodeIds) {
+        const speed = stepOrganicLayout(
+          organicState,
+          ORGANIC_DRAG_ITERATIONS_PER_FRAME,
+          draggedOrganicNodeIds,
+        )
+        syncOrganicLayout(draggedOrganicNodeIds)
+        syncRenderedOrganicLayout(draggedOrganicNodeIds)
+        if (speed >= 0.08) scheduleOrganicLayout()
+        return
+      }
+      const speed = stepOrganicLayout(organicState, organicLayoutIterationsPerFrame)
       syncOrganicLayout()
       syncRenderedOrganicLayout()
-      organicIdleFrames = speed < 0.08 && !draggedNodeId ? organicIdleFrames + 1 : 0
-      if (organicIdleFrames < 12 || draggedNodeId) scheduleOrganicLayout()
+      organicIdleFrames = speed < 0.08 ? organicIdleFrames + 1 : 0
+      if (organicIdleFrames < 12) scheduleOrganicLayout()
     })
   }
 
@@ -793,9 +830,6 @@ export const createGraphController = <N = unknown, E = unknown>(
           x: node.x + node.width / 2,
           y: node.y + node.height / 2,
         })
-        stepOrganicLayout(organicState, 3)
-        syncOrganicLayout()
-        syncRenderedOrganicLayout()
         organicIdleFrames = 0
         scheduleOrganicLayout()
         return
@@ -820,6 +854,7 @@ export const createGraphController = <N = unknown, E = unknown>(
         suppressClickForNodeId = draggedNodeId
       }
       draggedNodeId = null
+      draggedOrganicNodeIds = undefined
       draggedNodeMoved = false
       if (organicState) {
         releaseOrganicNode(organicState, releasedNodeId)
@@ -836,6 +871,7 @@ export const createGraphController = <N = unknown, E = unknown>(
     if (!isDragging) return
     isDragging = false
     svg.releasePointerCapture(evt.pointerId)
+    emitViewportChange()
   }
 
   const onWheel = (evt: WheelEvent) => {
@@ -851,6 +887,7 @@ export const createGraphController = <N = unknown, E = unknown>(
       step: options.zoomStep ?? 0.12,
     })
     updateTransforms()
+    emitViewportChange()
   }
 
   svg.addEventListener('pointerdown', onPointerDown)
@@ -859,15 +896,18 @@ export const createGraphController = <N = unknown, E = unknown>(
   svg.addEventListener('wheel', onWheel, { passive: false })
 
   relayout()
-  fit()
+  if (initialOptions.initialViewport) updateTransforms()
+  else fit()
   render()
 
   return {
     setGraph,
     setOptions,
+    redraw: render,
     resize,
     fit,
     focusNode,
+    setViewport,
     copyAsPng,
     exportSvgString,
     downloadSvg,
