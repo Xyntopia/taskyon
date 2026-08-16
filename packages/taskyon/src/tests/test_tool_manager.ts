@@ -233,6 +233,47 @@ export async function tool_managerDoesNotRewriteUnchangedDefaultTools() {
 tool_managerDoesNotRewriteUnchangedDefaultTools.description =
   'Reloading Taskyon restores unchanged default tools in memory without rewriting their persisted manifests and active revisions.'
 
+export async function tool_managerBatchesDefaultToolPersistence() {
+  const records = new Map<string, ToolStorageRecord>()
+  const storage = createMapCrudWrapper<ToolStorageRecord>(records)
+  let individualWrites = 0
+  let batchWrites = 0
+  const toolManager = createToolManager({
+    get: storage.get,
+    set: async (id, record) => {
+      individualWrites += 1
+      await storage.set(id, record)
+    },
+    setMany: async (rows) => {
+      batchWrites += 1
+      await Promise.all(rows.map(({ id, data }) => storage.set(id, data)))
+    },
+    list: storage.list,
+  })
+
+  await toolManager.addDefaultTools([
+    {
+      name: 'firstDefaultTool',
+      description: 'First default tool',
+      parameters: { type: 'object' },
+      function: () => 'first',
+    },
+    {
+      name: 'secondDefaultTool',
+      description: 'Second default tool',
+      parameters: { type: 'object' },
+      function: () => 'second',
+    },
+  ])
+
+  assert(batchWrites === 1, `Expected one batch write, received ${batchWrites}`)
+  assert(individualWrites === 0, `Expected no individual writes, received ${individualWrites}`)
+  assert(records.size === 4, `Expected two manifests and two active revisions, got ${records.size}`)
+}
+
+tool_managerBatchesDefaultToolPersistence.description =
+  'Cold-start default tool registration persists manifests and active revisions in one storage batch.'
+
 export async function tool_managerNameOnlyCallersResolveSecretIdentity() {
   const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
   const active = await toolManager.installManifest({

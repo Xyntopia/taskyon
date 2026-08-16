@@ -106,7 +106,9 @@ function manifestIdentity(manifest: ToolManifest, revision: ContentHash): ToolId
 }
 
 export function createToolManager(
-  storage: Pick<CrudWrapper<ToolStorageRecord>, 'get' | 'set' | 'list'>,
+  storage: Pick<CrudWrapper<ToolStorageRecord>, 'get' | 'set' | 'list'> & {
+    setMany?: (rows: readonly { id: string | number; data: ToolStorageRecord }[]) => Promise<void>
+  },
 ) {
   const runtimeTools = new Map<ContentHash, InternalTool>()
   let catalogRevision = 0
@@ -169,22 +171,39 @@ export function createToolManager(
     const activeRevisions = new Map(
       (await listActiveRevisions()).map(({ name, revision }) => [name, revision]),
     )
-    await Promise.all(
-      defaultTools.map(async (tool) => {
-        const toolDef = ToolBase.safeParse(tool)
-        if (!toolDef.success) {
-          console.warn(`Tool ${tool.name} is not a valid ToolBase!`, toolDef.error)
-          return
-        }
-        const manifest = createManifest(tool)
-        const revision = toolRevisionHash(manifest)
-        if (activeRevisions.get(tool.name) === revision) {
-          if (tool.function) runtimeTools.set(revision, tool)
-          return
-        }
-        await installTool(tool, { approveReplacement: true })
-      }),
+    const changed: { tool: InternalTool; manifest: ToolManifest; revision: ContentHash }[] = []
+    for (const tool of defaultTools) {
+      const toolDef = ToolBase.safeParse(tool)
+      if (!toolDef.success) {
+        console.warn(`Tool ${tool.name} is not a valid ToolBase!`, toolDef.error)
+        continue
+      }
+      const manifest = createManifest(tool)
+      const revision = toolRevisionHash(manifest)
+      if (activeRevisions.get(tool.name) === revision) {
+        if (tool.function) runtimeTools.set(revision, tool)
+      } else {
+        changed.push({ tool, manifest, revision })
+      }
+    }
+    if (changed.length === 0) return
+    if (!storage.setMany) {
+      await Promise.all(changed.map(({ tool }) => installTool(tool, { approveReplacement: true })))
+      return
+    }
+    await storage.setMany(
+      changed.flatMap(({ manifest, revision }) => [
+        { id: definitionKey(revision), data: { type: 'manifest', manifest } as const },
+        {
+          id: activeKey(manifest.name),
+          data: { type: 'active-revision', revision } as const,
+        },
+      ]),
     )
+    for (const { tool, revision } of changed) {
+      if (tool.function) runtimeTools.set(revision, tool)
+    }
+    catalogRevision += changed.length
   }
 
   async function getToolByRevision(
