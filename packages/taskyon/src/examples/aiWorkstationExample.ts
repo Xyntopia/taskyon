@@ -1,5 +1,6 @@
 import type { Hash } from '@taskyon/comp-dag/caching'
 import {
+  compileDesignRepositoryNodes,
   createUrlDesignRepositoryReader,
   loadProjectRepositorySnapshot,
   type DesignRepositoryTextReader,
@@ -28,14 +29,16 @@ export const createAiWorkstationExample = async (options?: {
 }): Promise<AiWorkstationExample> => {
   const snapshot = await loadProjectRepositorySnapshot({
     readText: options?.readText ?? browserRepositoryReader(),
-    projectRef: 'projects/template',
+    checkout: { kind: 'ref', name: 'projects/template' },
   })
   const invocationId = snapshot.revision.invocations.main
   const invocation = invocationId ? snapshot.invocations[invocationId] : undefined
   if (!invocation) throw new Error('AI workstation project has no main invocation.')
+  const nodesByHash = await compileDesignRepositoryNodes(snapshot)
   return {
     ...snapshot,
-    nodes: Object.values(snapshot.nodesByHash),
+    nodesByHash,
+    nodes: Object.values(nodesByHash),
     rootHash: invocation.rootNodeId,
   }
 }

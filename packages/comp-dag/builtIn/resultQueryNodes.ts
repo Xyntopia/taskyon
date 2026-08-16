@@ -95,7 +95,6 @@ export const queryOptimizationRows = (
 }
 
 export type OptimizationResultsLoadRowsRunRef = {
-  path?: string | undefined
   params?: unknown
   outputs?: unknown
   captured?: unknown
@@ -325,7 +324,6 @@ export const OptimizationResultsQueryNode = createNode<
 const optimizationResultsRunRefJsonSchema = {
   type: 'object',
   properties: {
-    path: { type: 'string' },
     params: {},
     outputs: {},
     captured: {},

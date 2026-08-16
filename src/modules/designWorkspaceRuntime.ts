@@ -164,7 +164,10 @@ export const prepareBundledDesignProject = async (args: {
   })
   const [graphSnapshot, projectSnapshot] = await Promise.all([
     loadDesignRepositorySnapshot({ readText, checkout: { kind: 'ref', name: 'graph/main' } }),
-    loadProjectRepositorySnapshot({ readText, projectRef: 'projects/template' }),
+    loadProjectRepositorySnapshot({
+      readText,
+      checkout: { kind: 'ref', name: 'projects/template' },
+    }),
   ])
   for (const file of graphSnapshot.files) await args.store.writeText(file.path, file.source)
   await args.repository.putGraphRevision(graphSnapshot.revision)
