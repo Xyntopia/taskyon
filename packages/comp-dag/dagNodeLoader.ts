@@ -654,11 +654,7 @@ export const loadStoredGraphNodeFile = async (
 
 export const loadStoredGraphNodeFiles = async (
   files: readonly StoredGraphNodeFile[],
-): Promise<Record<Hash, SavedStoredGraphNode>> => {
-  const out: Record<Hash, SavedStoredGraphNode> = {}
-  for (const file of files) {
-    const loaded = await loadStoredGraphNodeFile(file)
-    out[loaded.hash] = loaded
-  }
-  return out
-}
+): Promise<Record<Hash, SavedStoredGraphNode>> =>
+  Object.fromEntries(
+    (await Promise.all(files.map(loadStoredGraphNodeFile))).map((loaded) => [loaded.hash, loaded]),
+  ) as Record<Hash, SavedStoredGraphNode>

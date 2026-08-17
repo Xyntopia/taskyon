@@ -207,3 +207,4 @@ export {
 } from './core'
 export type { BrowserRuntimeStorageService, OpfsStorageOptions } from './storage'
 export { createBrowserDagRunCodeCompiler } from './dagRunCodeCompiler'
+export { createBrowserStoredGraphNodeLoader } from './storedGraphNodeLoader'

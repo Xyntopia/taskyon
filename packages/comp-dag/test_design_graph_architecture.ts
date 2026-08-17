@@ -27,6 +27,11 @@ import {
   type StagedArtifactWriter,
 } from './invocationExecution.ts'
 import { iterateInvocationRowRange } from './storageInvocationRows.ts'
+import {
+  loadDesignRepositorySnapshot,
+  loadProjectRepositoryPresentation,
+  loadProjectRevisionSnapshot,
+} from './designRepositorySnapshot.ts'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(message)
@@ -121,6 +126,107 @@ export const testDesignGraphImportBatchesImmutableObjects = async () => {
 
 testDesignGraphImportBatchesImmutableObjects.description =
   'Imports a stored graph closure with one bulk immutable-object read and write before advancing refs.'
+
+export const testDesignGraphSnapshotBulkLoadsRevisionNodes = async () => {
+  const memory = createMemoryStore()
+  const first = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'BulkFirstNode',
+  label: 'Bulk first node',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: {},
+  run: () => 1,
+}`)
+  const second = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'BulkSecondNode',
+  label: 'Bulk second node',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: { value: { nodeId: '${first.hash}', role: 'internal' } },
+  run: ({ use }) => use.value,
+}`)
+  const revision = createGraphRevision({
+    parents: [],
+    nodes: { first: first.hash, second: second.hash },
+  })
+  memory.values.set(`nodes/${hashFilePart(first.hash)}.ts`, first.file.source)
+  memory.values.set(`nodes/${hashFilePart(second.hash)}.ts`, second.file.source)
+  memory.values.set(`graph-revisions/${hashFilePart(revision.id)}.json`, JSON.stringify(revision))
+
+  await loadDesignRepositorySnapshot({
+    readText: memory.store.readText,
+    readManyText: memory.store.readManyText,
+    checkout: { kind: 'graphRevision', id: revision.id },
+  })
+
+  assert(memory.counts().bulkReads === 1, 'Expected graph nodes to use one bulk read.')
+}
+
+testDesignGraphSnapshotBulkLoadsRevisionNodes.description =
+  'Bulk-loads the node files named by one immutable graph revision.'
+
+export const testProjectPresentationDoesNotLoadUpstreamClosure = async () => {
+  const memory = createMemoryStore()
+  const upstream = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2, id: '${SELF_HASH_PLACEHOLDER}', localName: 'PresentationUpstream',
+  label: 'Presentation upstream', version: 1, localParamsSchema: {}, outputSchema: {},
+  inputs: {}, run: () => 1,
+}`)
+  const root = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2, id: '${SELF_HASH_PLACEHOLDER}', localName: 'PresentationRoot',
+  label: 'Presentation root', version: 1, localParamsSchema: {}, outputSchema: {},
+  inputs: { value: { nodeId: '${upstream.hash}', role: 'internal' } },
+  run: ({ use }) => use.value,
+}`)
+  const invocation = createInvocationDefinition({
+    rootNodeId: root.hash,
+    variables: {},
+    objectives: [],
+    constraints: [],
+    policy: { accuracy: 'auto' },
+    reducerOverrides: {},
+  })
+  const extension = createProjectExtension({ namespace: 'test', value: {} })
+  const revision = createProjectRevision({
+    parents: [],
+    displayName: 'Presentation project',
+    invocations: { main: invocation.id },
+    extensions: { test: extension.id },
+  })
+  memory.values.set(`nodes/${hashFilePart(root.hash)}.ts`, root.file.source)
+  memory.values.set(`nodes/${hashFilePart(upstream.hash)}.ts`, upstream.file.source)
+  memory.values.set(`invocations/${hashFilePart(invocation.id)}.json`, JSON.stringify(invocation))
+  memory.values.set(`extensions/${hashFilePart(extension.id)}.json`, JSON.stringify(extension))
+  memory.values.set(`project-revisions/${hashFilePart(revision.id)}.json`, JSON.stringify(revision))
+
+  const presentation = await loadProjectRepositoryPresentation({
+    readText: memory.store.readText,
+    readManyText: memory.store.readManyText,
+    checkout: { kind: 'projectRevision', id: revision.id },
+  })
+  assert(Object.keys(presentation.nodesByHash).length === 1, 'Expected only the root node.')
+  assert(Boolean(presentation.nodesByHash[root.hash]), 'Expected the invocation root node.')
+
+  const executable = await loadProjectRevisionSnapshot({
+    readText: memory.store.readText,
+    readManyText: memory.store.readManyText,
+    revision,
+  })
+  assert(
+    Object.keys(executable.nodesByHash).length === 2,
+    'Expected the executable project snapshot to load the upstream closure.',
+  )
+  assert(Boolean(executable.nodesByHash[upstream.hash]), 'Expected the upstream node.')
+}
+
+testProjectPresentationDoesNotLoadUpstreamClosure.description =
+  'Loads project presentation records without traversing the upstream computational closure.'
 
 export const testStorageDesignGraphCacheDoesNotHideRefChanges = async () => {
   const values = new Map<string, unknown>([['refs/graph/main.json', 'first']])

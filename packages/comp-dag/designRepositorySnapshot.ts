@@ -24,12 +24,16 @@ import {
   createUncachedDagRunCodeCompiler,
 } from './dagModuleCompiler.ts'
 import {
-  loadStoredGraphNodeFile,
+  loadStoredGraphNodeFiles,
   type SavedStoredGraphNode,
   type StoredGraphNodeFile,
 } from './dagNodeLoader.ts'
 
 export type DesignRepositoryTextReader = (path: string) => Promise<string>
+export type DesignRepositoryBulkTextReader = (
+  paths: readonly string[],
+) => Promise<Map<string, string | null>>
+export type DesignRepositoryNodeFileLoader = typeof loadStoredGraphNodeFiles
 
 export type DesignRepositoryCheckout =
   | { kind: 'ref'; name: string }
@@ -57,6 +61,11 @@ export type LoadedProjectRepositorySnapshot = {
   modulesByHash: Record<Hash, DagModuleArtifact>
 }
 
+export type LoadedProjectRepositoryPresentation = Pick<
+  LoadedProjectRepositorySnapshot,
+  'revision' | 'invocations' | 'extensions' | 'nodesByHash'
+>
+
 const safeRefName = (name: string): string => {
   if (
     !name ||
@@ -70,9 +79,9 @@ const safeRefName = (name: string): string => {
   return name
 }
 
-const readJson = async (readText: DesignRepositoryTextReader, path: string): Promise<unknown> => {
+const parseJson = (source: string, path: string): unknown => {
   try {
-    return JSON.parse(await readText(path)) as unknown
+    return JSON.parse(source) as unknown
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(`Invalid JSON in design repository object ${path}`, { cause: error })
@@ -81,7 +90,30 @@ const readJson = async (readText: DesignRepositoryTextReader, path: string): Pro
   }
 }
 
+const readJson = async (readText: DesignRepositoryTextReader, path: string): Promise<unknown> =>
+  parseJson(await readText(path), path)
+
 const hashFilePart = (id: Hash) => id.replace(':', '_')
+
+const readRequiredTexts = async (
+  readText: DesignRepositoryTextReader,
+  paths: readonly string[],
+  readManyText?: DesignRepositoryBulkTextReader,
+): Promise<Map<string, string>> => {
+  if (paths.length === 0) return new Map()
+  const values = readManyText
+    ? await readManyText(paths)
+    : new Map(await Promise.all(paths.map(async (path) => [path, await readText(path)] as const)))
+  return new Map(
+    paths.map((path) => {
+      const value = values.get(path)
+      if (value === null || value === undefined) {
+        throw new Error(`Design graph object not found: ${path}`)
+      }
+      return [path, value]
+    }),
+  )
+}
 
 const resolveRevisionId = async (
   readText: DesignRepositoryTextReader,
@@ -94,29 +126,105 @@ const resolveRevisionId = async (
   return ref.revisionId
 }
 
+const resolveProjectRevisionId = async (
+  readText: DesignRepositoryTextReader,
+  checkout: ProjectRepositoryCheckout,
+): Promise<Hash> => {
+  if (checkout.kind === 'projectRevision') return checkout.id
+  const name = checkout.name.startsWith('projects/') ? checkout.name : `projects/${checkout.name}`
+  return parseDesignGraphRef(await readJson(readText, `refs/${safeRefName(name)}.json`)).revisionId
+}
+
+const loadProjectRevisionDefinition = async (
+  readText: DesignRepositoryTextReader,
+  revision: ProjectRevision,
+): Promise<{
+  revision: ProjectRevision
+  invocations: Record<Hash, InvocationDefinition>
+  extensions: Record<Hash, ProjectExtension>
+}> => {
+  const invocations = Object.fromEntries(
+    await Promise.all(
+      Object.values(revision.invocations).map(async (id) => [
+        id,
+        parseInvocationDefinition(await readJson(readText, `invocations/${hashFilePart(id)}.json`)),
+      ]),
+    ),
+  ) as Record<Hash, InvocationDefinition>
+  const extensions = Object.fromEntries(
+    await Promise.all(
+      Object.values(revision.extensions).map(async (id) => [
+        id,
+        parseProjectExtension(await readJson(readText, `extensions/${hashFilePart(id)}.json`)),
+      ]),
+    ),
+  ) as Record<Hash, ProjectExtension>
+  return { revision, invocations, extensions }
+}
+
+const loadProjectDefinition = async (
+  readText: DesignRepositoryTextReader,
+  checkout: ProjectRepositoryCheckout,
+) => {
+  const revisionId = await resolveProjectRevisionId(readText, checkout)
+  const revision = parseProjectRevision(
+    await readJson(readText, `project-revisions/${hashFilePart(revisionId)}.json`),
+  )
+  return await loadProjectRevisionDefinition(readText, revision)
+}
+
 const loadNodeClosure = async (
   readText: DesignRepositoryTextReader,
   rootHashes: readonly Hash[],
+  readManyText?: DesignRepositoryBulkTextReader,
+  loadNodeFiles?: DesignRepositoryNodeFileLoader,
 ): Promise<Record<Hash, SavedStoredGraphNode>> => {
-  const pending = [...new Set(rootHashes)]
+  let pending = [...new Set(rootHashes)]
   const nodesByHash: Record<Hash, SavedStoredGraphNode> = {}
   while (pending.length > 0) {
-    const expectedHash = pending.pop()!
-    if (nodesByHash[expectedHash]) continue
-    const path = `nodes/${hashFilePart(expectedHash)}.ts`
-    const saved = await loadStoredGraphNodeFile({ path, source: await readText(path) })
+    const batch = [...new Set(pending)].filter((id) => !nodesByHash[id])
+    pending = []
+    if (batch.length === 0) continue
+    const loaded = await loadDirectNodes(readText, batch, readManyText, loadNodeFiles)
+    for (const saved of Object.values(loaded)) {
+      nodesByHash[saved.hash] = saved
+      pending.push(...getDagNodeRecordInputHashes(saved.node))
+    }
+  }
+  return nodesByHash
+}
+
+const loadDirectNodes = async (
+  readText: DesignRepositoryTextReader,
+  hashes: readonly Hash[],
+  readManyText?: DesignRepositoryBulkTextReader,
+  loadNodeFiles: DesignRepositoryNodeFileLoader = loadStoredGraphNodeFiles,
+): Promise<Record<Hash, SavedStoredGraphNode>> => {
+  const ids = [...new Set(hashes)]
+  const paths = ids.map((id) => `nodes/${hashFilePart(id)}.ts`)
+  const sources = await readRequiredTexts(readText, paths, readManyText)
+  const loaded = await loadNodeFiles(paths.map((path) => ({ path, source: sources.get(path)! })))
+  const nodes = ids.map((expectedHash, index) => {
+    const path = paths[index]!
+    const saved = loaded[expectedHash]
+    if (!saved) {
+      throw new Error(`Design repository node loader omitted ${path}`)
+    }
     if (saved.hash !== expectedHash) {
       throw new Error(`Design repository node ${path} resolved to unexpected hash ${saved.hash}`)
     }
-    nodesByHash[saved.hash] = saved
-    pending.push(...getDagNodeRecordInputHashes(saved.node))
-  }
-  return nodesByHash
+    return saved
+  })
+  return Object.fromEntries(nodes.map((saved) => [saved.hash, saved])) as Record<
+    Hash,
+    SavedStoredGraphNode
+  >
 }
 
 const loadModuleClosure = async (
   readText: DesignRepositoryTextReader,
   nodes: Record<Hash, SavedStoredGraphNode>,
+  readManyText?: DesignRepositoryBulkTextReader,
 ): Promise<{
   moduleLocksByHash: Record<Hash, DagModuleLock>
   modulesByHash: Record<Hash, DagModuleArtifact>
@@ -128,20 +236,24 @@ const loadModuleClosure = async (
       Object.values(nodes).flatMap(({ node }) => (node.moduleLockId ? [node.moduleLockId] : [])),
     ),
   ]
-  for (const lockId of lockIds) {
-    const lock = parseDagModuleLock(
-      await readJson(readText, `module-locks/${hashFilePart(lockId)}.json`),
-    )
+  const lockPaths = lockIds.map((id) => `module-locks/${hashFilePart(id)}.json`)
+  const lockSources = await readRequiredTexts(readText, lockPaths, readManyText)
+  for (const [index, lockId] of lockIds.entries()) {
+    const path = lockPaths[index]!
+    const lock = parseDagModuleLock(parseJson(lockSources.get(path)!, path))
     if (lock.id !== lockId) throw new Error(`Module lock ${lockId} has unexpected identity.`)
     moduleLocksByHash[lock.id] = lock
-    for (const moduleId of getDagModuleLockModuleIds(lock)) {
-      if (modulesByHash[moduleId]) continue
-      const artifact = parseDagModuleArtifact(
-        await readJson(readText, `modules/${hashFilePart(moduleId)}.json`),
-      )
-      if (artifact.id !== moduleId) throw new Error(`Module ${moduleId} has unexpected identity.`)
-      modulesByHash[artifact.id] = artifact
-    }
+  }
+  const moduleIds = [
+    ...new Set(Object.values(moduleLocksByHash).flatMap(getDagModuleLockModuleIds)),
+  ]
+  const modulePaths = moduleIds.map((id) => `modules/${hashFilePart(id)}.json`)
+  const moduleSources = await readRequiredTexts(readText, modulePaths, readManyText)
+  for (const [index, moduleId] of moduleIds.entries()) {
+    const path = modulePaths[index]!
+    const artifact = parseDagModuleArtifact(parseJson(moduleSources.get(path)!, path))
+    if (artifact.id !== moduleId) throw new Error(`Module ${moduleId} has unexpected identity.`)
+    modulesByHash[artifact.id] = artifact
   }
   return { moduleLocksByHash, modulesByHash }
 }
@@ -346,14 +458,21 @@ export const compileDesignRepositoryNodes = async (
 
 export const loadDesignRepositorySnapshot = async (args: {
   readText: DesignRepositoryTextReader
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
   checkout: DesignRepositoryCheckout
 }): Promise<LoadedDesignRepositorySnapshot> => {
   const revisionId = await resolveRevisionId(args.readText, args.checkout)
   const revision = parseGraphRevision(
     await readJson(args.readText, `graph-revisions/${hashFilePart(revisionId)}.json`),
   )
-  const nodesByHash = await loadNodeClosure(args.readText, Object.values(revision.nodes))
-  const modules = await loadModuleClosure(args.readText, nodesByHash)
+  const nodesByHash = await loadNodeClosure(
+    args.readText,
+    Object.values(revision.nodes),
+    args.readManyText,
+    args.loadNodeFiles,
+  )
+  const modules = await loadModuleClosure(args.readText, nodesByHash, args.readManyText)
   return {
     revision,
     nodesByHash,
@@ -364,59 +483,102 @@ export const loadDesignRepositorySnapshot = async (args: {
   }
 }
 
-export const loadProjectRepositorySnapshot = async (args: {
-  readText: DesignRepositoryTextReader
-  checkout: ProjectRepositoryCheckout
-}): Promise<LoadedProjectRepositorySnapshot> => {
-  const revisionId =
-    args.checkout.kind === 'projectRevision'
-      ? args.checkout.id
-      : parseDesignGraphRef(
-          await readJson(
-            args.readText,
-            `refs/${safeRefName(
-              args.checkout.name.startsWith('projects/')
-                ? args.checkout.name
-                : `projects/${args.checkout.name}`,
-            )}.json`,
-          ),
-        ).revisionId
-  const revision = parseProjectRevision(
-    await readJson(args.readText, `project-revisions/${hashFilePart(revisionId)}.json`),
-  )
-  const invocations = Object.fromEntries(
-    await Promise.all(
-      Object.values(revision.invocations).map(async (id) => [
-        id,
-        parseInvocationDefinition(
-          await readJson(args.readText, `invocations/${hashFilePart(id)}.json`),
-        ),
-      ]),
-    ),
-  ) as Record<Hash, InvocationDefinition>
-  const extensions = Object.fromEntries(
-    await Promise.all(
-      Object.values(revision.extensions).map(async (id) => [
-        id,
-        parseProjectExtension(await readJson(args.readText, `extensions/${hashFilePart(id)}.json`)),
-      ]),
-    ),
-  ) as Record<Hash, ProjectExtension>
+const loadProjectDefinitionSnapshot = async (
+  readText: DesignRepositoryTextReader,
+  definition: Awaited<ReturnType<typeof loadProjectRevisionDefinition>>,
+  readManyText?: DesignRepositoryBulkTextReader,
+  loadNodeFiles?: DesignRepositoryNodeFileLoader,
+): Promise<LoadedProjectRepositorySnapshot> => {
   const nodesByHash = await loadNodeClosure(
-    args.readText,
-    Object.values(invocations).map((invocation) => invocation.rootNodeId),
+    readText,
+    Object.values(definition.invocations).map((invocation) => invocation.rootNodeId),
+    readManyText,
+    loadNodeFiles,
   )
-  const modules = await loadModuleClosure(args.readText, nodesByHash)
+  const modules = await loadModuleClosure(readText, nodesByHash, readManyText)
   return {
-    revision,
-    invocations,
-    extensions,
+    ...definition,
     nodesByHash,
     ...modules,
     files: Object.values(nodesByHash)
       .map((node) => node.file)
       .sort((left, right) => left.path.localeCompare(right.path)),
   }
+}
+
+export const loadProjectRepositorySnapshot = async (args: {
+  readText: DesignRepositoryTextReader
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
+  checkout: ProjectRepositoryCheckout
+}): Promise<LoadedProjectRepositorySnapshot> => {
+  const definition = await loadProjectDefinition(args.readText, args.checkout)
+  return await loadProjectDefinitionSnapshot(
+    args.readText,
+    definition,
+    args.readManyText,
+    args.loadNodeFiles,
+  )
+}
+
+export const loadProjectRevisionSnapshot = async (args: {
+  readText: DesignRepositoryTextReader
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
+  revision: ProjectRevision
+}): Promise<LoadedProjectRepositorySnapshot> => {
+  const definition = await loadProjectRevisionDefinition(args.readText, args.revision)
+  return await loadProjectDefinitionSnapshot(
+    args.readText,
+    definition,
+    args.readManyText,
+    args.loadNodeFiles,
+  )
+}
+
+const loadProjectDefinitionPresentation = async (
+  readText: DesignRepositoryTextReader,
+  definition: Awaited<ReturnType<typeof loadProjectRevisionDefinition>>,
+  readManyText?: DesignRepositoryBulkTextReader,
+  loadNodeFiles?: DesignRepositoryNodeFileLoader,
+): Promise<LoadedProjectRepositoryPresentation> => {
+  const nodesByHash = await loadDirectNodes(
+    readText,
+    Object.values(definition.invocations).map(({ rootNodeId }) => rootNodeId),
+    readManyText,
+    loadNodeFiles,
+  )
+  return { ...definition, nodesByHash }
+}
+
+export const loadProjectRepositoryPresentation = async (args: {
+  readText: DesignRepositoryTextReader
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
+  checkout: ProjectRepositoryCheckout
+}): Promise<LoadedProjectRepositoryPresentation> => {
+  const definition = await loadProjectDefinition(args.readText, args.checkout)
+  return await loadProjectDefinitionPresentation(
+    args.readText,
+    definition,
+    args.readManyText,
+    args.loadNodeFiles,
+  )
+}
+
+export const loadProjectRevisionPresentation = async (args: {
+  readText: DesignRepositoryTextReader
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
+  revision: ProjectRevision
+}): Promise<LoadedProjectRepositoryPresentation> => {
+  const definition = await loadProjectRevisionDefinition(args.readText, args.revision)
+  return await loadProjectDefinitionPresentation(
+    args.readText,
+    definition,
+    args.readManyText,
+    args.loadNodeFiles,
+  )
 }
 
 export const createUrlDesignRepositoryReader = (args: {
