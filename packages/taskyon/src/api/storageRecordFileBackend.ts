@@ -67,13 +67,14 @@ export const createStorageRecordFileBackend = (
   }
 
   return {
-    get: async (id) => (await readRecord(id))?.data ?? null,
-    getMany: async (ids) => {
-      const records = await Promise.all(ids.map(readRecord))
-      return records
-        .filter((record): record is StorageRecordFile => record !== null)
-        .map((record) => ({ id: record.id, data: record.data }))
-    },
+    get: async (id) => await withLock(async () => (await readRecord(id))?.data ?? null),
+    getMany: async (ids) =>
+      await withLock(async () => {
+        const records = await Promise.all(ids.map(readRecord))
+        return records
+          .filter((record): record is StorageRecordFile => record !== null)
+          .map((record) => ({ id: record.id, data: record.data }))
+      }),
     set: async (id, value) =>
       await withLock(async () => {
         await adapter.write(storageRecordFilePath(namespace, id), { id, data: value })
@@ -108,13 +109,19 @@ export const createStorageRecordFileBackend = (
       await withLock(async () => {
         await adapter.remove(storageRecordFilePath(namespace, id))
       }),
-    list: async () => (await listRecords()).map((record) => ({ id: record.id, data: record.data })),
-    listIds: async () => (await listRecords()).map((record) => record.id),
+    list: async () =>
+      await withLock(async () =>
+        (await listRecords()).map((record) => ({ id: record.id, data: record.data })),
+      ),
+    listIds: async () =>
+      await withLock(async () => (await listRecords()).map((record) => record.id)),
     find: async (query) =>
-      Object.fromEntries(
-        (await listRecords())
-          .filter((record) => storageQueryMatches(record.data, query))
-          .map((record) => [String(record.id), record.data]),
+      await withLock(async () =>
+        Object.fromEntries(
+          (await listRecords())
+            .filter((record) => storageQueryMatches(record.data, query))
+            .map((record) => [String(record.id), record.data]),
+        ),
       ),
     clear: async () =>
       await withLock(async () => {
