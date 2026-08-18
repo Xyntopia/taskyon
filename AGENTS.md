@@ -106,6 +106,13 @@ invariants and current behavior; do not add deployment-specific proposal paths o
 - Prefer composition over inheritance and functions over classes unless a class owns meaningful
   lifecycle or protocol state.
 - Keep side effects isolated at explicit runtime, storage, network, or UI boundaries.
+- Keep runtime values out of module scope by default. Declare mutable state,
+  service instances, registries, caches, and derived values inside the owning
+  function, composable, or factory, and pass dependencies explicitly. This
+  keeps initialization lazy, makes ownership visible, and supports effective
+  tree shaking. Module scope should normally contain imports, types, and pure
+  stateless functions; use a top-level immutable constant only for a genuinely
+  shared static value or public API, never for eager construction or side effects.
 - Prefer immutable values, declarative transformations, and explicit control flow.
 - Keep functions focused. Around 40 lines is a useful target; split when responsibilities become
   difficult to understand, not to manufacture abstraction.
