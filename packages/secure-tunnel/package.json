@@ -22,6 +22,9 @@
     "@reclaimprotocol/tls": "^0.1.2",
     "@taskyon/common": "workspace:*"
   },
+  "devDependencies": {
+    "vite": "^7.3.6"
+  },
   "keywords": [
     "tls",
     "https",

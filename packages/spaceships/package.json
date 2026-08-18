@@ -8,8 +8,11 @@
     "./*": "./*"
   },
   "dependencies": {
+    "@quasar/extras": "^1.17.0",
     "@taskyon/common": "workspace:*",
     "@taskyon/taskyon": "workspace:*",
-    "@taskyon/ui": "workspace:*"
+    "@taskyon/ui": "workspace:*",
+    "vue": "^3.4.0",
+    "zod": "^4.0.5"
   }
 }

@@ -12,13 +12,34 @@
     "@noble/hashes": "^2.0.1",
     "@resvg/resvg-wasm": "^2.6.2",
     "@vueuse/core": "^14.2.1",
+    "axios": "^1.11.0",
     "dompurify": "^3.4.8",
     "fast-equals": "^5.0.1",
     "fflate": "^0.8.2",
     "js-yaml": "^4.1.0",
+    "json-schema": "^0.4.0",
+    "katex": "^0.16.28",
+    "markdown-it": "^14.1.0",
+    "markdown-it-abbr": "^2.0.0",
+    "markdown-it-container": "^4.0.0",
+    "markdown-it-deflist": "^3.0.0",
+    "markdown-it-emoji": "^3.0.0",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-ins": "^4.0.0",
+    "markdown-it-mark": "^4.0.0",
+    "markdown-it-sub": "^2.0.0",
+    "markdown-it-sup": "^2.0.0",
     "mathjs": "^11.8.2",
+    "mermaid": "^11.14.0",
+    "prismjs": "^1.30.0",
     "qrcode": "^1.5.4",
-    "vue": "^3.4.0"
+    "quasar": "^2.16.0",
+    "vue": "^3.4.0",
+    "yaml": "^2.8.1",
+    "zod": "^4.0.5"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16"
   },
   "peerDependencies": {
     "vue": "^3.4.0"
