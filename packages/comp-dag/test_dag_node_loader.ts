@@ -28,7 +28,7 @@ const nodeBody = `{
   label: 'Standalone Node',
   version: 1,
   localParamsSchema: {},
-  outputSchema: {},
+  outputSchema: { description: 'Produces a stable value for stored-node tests.' },
   inputs: {},
   run: () => ({ value: 1 }),
 }`
@@ -284,6 +284,14 @@ export const testStoredDagNodeRecordCanBeProjectedToTypescript = async () => {
     id: await hashStoredGraphNodeSource(normalized.source),
   })
   assert(saved.file.source.includes('export default {'), 'Expected standalone TypeScript source')
+  const compiled = compileDagNodeRecordGraph({
+    graph: { [saved.node.id]: saved.node },
+    rootHash: saved.node.id,
+  })[saved.node.id]
+  assert(
+    compiled?.description === 'Produces a stable value for stored-node tests.',
+    'Expected the compiled node to expose its output schema description',
+  )
   assert(
     saved.file.path === `${saved.hash.replace(':', '_')}.ts`,
     'Expected the stored filename to be addressable from its hash alone',

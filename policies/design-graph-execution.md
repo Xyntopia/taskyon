@@ -110,6 +110,14 @@ exists.
 
 ## Meaningful Editable Nodes
 
+- Treat the root `outputSchema.description` as the concise semantic contract for what a node
+  produces. Root selectors, graph inspectors, compiled runtime descriptions, and agents must read
+  that standard JSON Schema field rather than a duplicate node-purpose field.
+- Describe meaningful output properties in their own JSON Schema entries so people and agents can
+  inspect the detailed output contract. Describe configurable input properties in
+  `localParamsSchema`; parameter editors must not depend on discarded authoring-library metadata.
+- Keep labels short and presentational. A label names a node; it does not replace the output
+  schema's explanation of when that node is a useful computational root.
 - Every ordinary user-visible stored node must own a meaningful operation that can be understood and
   changed in the node editor: domain validation or normalization, transformation, calculation,
   aggregation, an explicitly declared effect, or composition that demands computational inputs.

@@ -7,7 +7,7 @@ import {
   type DagNode,
   type DagQueryBinding,
 } from './dagCore.ts'
-import type { DagJsonSchema } from './dagSchema.ts'
+import { schemaDescription, type DagJsonSchema } from './dagSchema.ts'
 import {
   recordInputsToRuntimeInputs,
   type DagNodeRecord,
@@ -417,7 +417,7 @@ export const compileDagNodeRecord = (args: {
   >({
     name: args.record.id,
     localName: args.record.localName,
-    description: args.record.label,
+    description: schemaDescription(args.record.outputSchema) ?? args.record.label,
     contentHash: args.record.id,
     version: args.record.version,
     effect: args.record.effect ?? 'pure',
