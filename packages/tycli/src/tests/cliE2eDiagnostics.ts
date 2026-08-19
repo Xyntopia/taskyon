@@ -1151,7 +1151,8 @@ export async function testResumeConversationReportsStorageAndLogs() {
     homeKey: 'testResumeConversationReportsStorageAndLogs',
     steps: [
       { waitFor: 'Slash commands:', input: `/resume ${conversationPath}\n` },
-      { waitFor: 'Imported legacy conversation', input: '/exit\n' },
+      { waitFor: 'Imported legacy conversation', input: '' },
+      { waitFor: '\u001b[?2004h> ', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
     runner: 'pty',

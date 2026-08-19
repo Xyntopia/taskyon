@@ -2,12 +2,9 @@ import { createTool } from '../types/toolApi'
 import type { Hash } from '@taskyon/comp-dag/caching'
 import {
   compileDagNodeRecordGraph,
-  loadDagNodeRecordGraph,
+  savedStoredNodesToRecordGraph,
 } from '@taskyon/comp-dag/dagNodeRecordGraph'
-import {
-  saveStoredGraphNodeSource,
-  type StoredGraphNodeFile,
-} from '@taskyon/comp-dag/dagNodeLoader'
+import { saveStoredGraphNodeSource } from '@taskyon/comp-dag/dagNodeLoader'
 import {
   createGraphRevision,
   createInvocationDefinition,
@@ -20,6 +17,10 @@ import {
   createStorageDesignGraphObjectStore,
   type DesignGraphStorageClient,
 } from '@taskyon/comp-dag/designGraphRepository'
+import {
+  compileDesignRepositoryNodes,
+  loadDesignRepositoryNodeClosure,
+} from '@taskyon/comp-dag/designRepositorySnapshot'
 import {
   createDagInvocationEvaluators,
   executeInvocation,
@@ -68,18 +69,6 @@ const normalizeProjectId = (projectId: string): string => {
 }
 
 const projectRefName = (projectId: string) => `projects/${projectId}`
-
-const loadNodeFiles = async (
-  store: ReturnType<typeof createStorageDesignGraphObjectStore>,
-): Promise<StoredGraphNodeFile[]> =>
-  await Promise.all(
-    (await store.list('nodes'))
-      .filter((name) => name.endsWith('.ts') && !name.includes('/'))
-      .map(async (name) => ({
-        path: `nodes/${name}`,
-        source: await store.readText(`nodes/${name}`),
-      })),
-  )
 
 const requireInvocationFields = (args: DagGraphProjectToolArgs) => {
   if (!args.rootNodeId) throw new Error(`${args.action} requires rootNodeId.`)
@@ -271,7 +260,12 @@ export const createDagGraphProjectTool = (
         const invocationId = project.invocations[invocationName]
         if (!invocationId) throw new Error(`Project invocation not found: ${invocationName}`)
         const invocation = await repository.getInvocation(invocationId)
-        const graph = await loadDagNodeRecordGraph(await loadNodeFiles(store))
+        const snapshot = await loadDesignRepositoryNodeClosure({
+          readText: store.readText,
+          ...(store.readManyText ? { readManyText: store.readManyText } : {}),
+          rootNodeId: invocation.rootNodeId,
+        })
+        const graph = savedStoredNodesToRecordGraph(await compileDesignRepositoryNodes(snapshot))
         const compiled = compileDagNodeRecordGraph({ graph, rootHash: invocation.rootNodeId })
         const root = compiled[invocation.rootNodeId]
         if (!root) throw new Error(`Invocation root node not found: ${invocation.rootNodeId}`)

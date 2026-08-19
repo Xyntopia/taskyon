@@ -862,6 +862,30 @@ export const testChatCompletionCacheKeyAndBreakpointsFollowTaskTree = async () =
   return { success: true }
 }
 
+export const testChatCompletionCacheKeyFitsOpenAiProviderLimit = async () => {
+  const request = await buildChatProviderRequest({
+    messages: [{ role: 'user', content: 'Hello.' }],
+    tools: {},
+    selectedModel: 'gpt-5.1',
+    api: {
+      provider: 'openai',
+      name: 'openai',
+      model: 'gpt-5.1',
+      baseURL: 'https://example.test/v1',
+      streamSupport: true,
+      routes: { chatCompletion: '/responses', models: '/models' },
+    },
+    apiKey: 'diagnostic-key',
+    promptCacheRootId: 'root-task-with-a-long-identifier-that-exceeds-provider-limits',
+  })
+  const cacheKey = request.providerOptions?.openai?.promptCacheKey
+  assert(
+    typeof cacheKey === 'string' && cacheKey.length <= 64,
+    'Expected a provider-safe cache key',
+  )
+  return { success: true }
+}
+
 export const testTaskyonCostLookupOnlyForwardsAttributionHeaders = async () => {
   const originalFetch = globalThis.fetch
   let requestHeaders: Headers | undefined

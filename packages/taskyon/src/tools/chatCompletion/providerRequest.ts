@@ -51,8 +51,12 @@ const hashStringForPromptCacheKey = (value: string) => {
 const promptCacheNamespacePart = (value: string) =>
   /^[a-zA-Z0-9._-]+$/.test(value) && value.length <= 80 ? value : hashStringForPromptCacheKey(value)
 
-const buildPromptCacheKey = (provider: string, selectedModel: string, rootTaskId: string) =>
-  ['taskyon', provider, selectedModel, rootTaskId].map(promptCacheNamespacePart).join('-')
+const buildPromptCacheKey = (provider: string, selectedModel: string, rootTaskId: string) => {
+  const cacheKey = ['taskyon', provider, selectedModel, rootTaskId]
+    .map(promptCacheNamespacePart)
+    .join('-')
+  return cacheKey.length <= 64 ? cacheKey : `taskyon-${hashStringForPromptCacheKey(cacheKey)}`
+}
 
 const withOpenAIPromptCacheBreakpoints = (messages: ModelMessage[]) => {
   const eligibleIndexes = messages.flatMap((message, index) =>

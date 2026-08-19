@@ -475,6 +475,13 @@ export const testWebResearchPlannerUsesWebSearchFirstByDefault = async () => {
 }
 
 export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
+  const continuationTool = createTool({
+    name: 'entryNode',
+    description: 'Test continuation tool.',
+    parameters: { type: 'object', additionalProperties: false },
+    function: () => undefined,
+  })
+  const defaultToolSetup = createDefaultTaskyonToolSetup()
   const ty = await tyCore(
     () => ({
       entryFunction: 'entryNode',
@@ -498,7 +505,13 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
       },
     },
     undefined,
-    { toolSetup: createDefaultTaskyonToolSetup() },
+    {
+      indexTaskVectors: false,
+      toolSetup: {
+        ...defaultToolSetup,
+        baseTools: [...defaultToolSetup.baseTools, continuationTool],
+      },
+    },
   )
   const toolRpcExecutor = await registerToolRpcTools({
     port: ty.port,

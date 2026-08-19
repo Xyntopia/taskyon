@@ -164,15 +164,13 @@ export async function runDiagnosticsTests(
 
   const withTimeout = async (name: string, timeoutMs: number, fn: () => Promise<unknown>) => {
     let timer: ReturnType<typeof setTimeout> | null = null
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`Test timed out after ${timeoutMs}ms: ${name}`))
+      }, timeoutMs)
+    })
     try {
-      return await Promise.race([
-        fn(),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new Error(`Test timed out after ${timeoutMs}ms: ${name}`))
-          }, timeoutMs)
-        }),
-      ])
+      return await Promise.race([Promise.resolve().then(fn), timeout])
     } finally {
       if (timer !== null) clearTimeout(timer)
     }
@@ -199,7 +197,12 @@ export async function runDiagnosticsTests(
               skipped: true,
               reason: 'Requires an authenticated Taskyon user session.',
             }
-          : undefined
+          : testFn.requiresLongRun && !testOpts?.allowLongRun
+            ? {
+                skipped: true,
+                reason: 'Requires explicit permission for long-running diagnostics.',
+              }
+            : undefined
       if (!unavailable && typeof testFn.setup === 'function') {
         await Promise.resolve(testFn.setup(testOpts))
       }

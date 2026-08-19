@@ -93,11 +93,12 @@ const dagNodeUseProtocol = defineFrpServiceProtocol({
   },
 })
 
-const buildSandboxRunModule = (runCode: string): string => {
+const buildSandboxRunModule = (runCode: string, preambleSource = ''): string => {
   const createProtocolClientSource = createSandboxProtocolClient.toString()
   return `
     (function () {
       const createProtocolClient = ${createProtocolClientSource};
+      ${preambleSource}
       const run = ${runCode};
       return async function (params, aliases, sandboxApi) {
         if (!sandboxApi.port) throw new Error('DAG input protocol port is unavailable');
@@ -193,6 +194,7 @@ export const executeDagNodeRun = async (args: {
   id: string
   timeoutMs?: number
   runCode?: string
+  preambleSource?: string
   loadRunCode?: () => Promise<string>
   run: DagNodeRunFunction | undefined
   params: Record<string, unknown>
@@ -237,7 +239,7 @@ export const executeDagNodeRun = async (args: {
     try {
       await sandbox.installModule(
         moduleId,
-        buildSandboxRunModule(runCode),
+        buildSandboxRunModule(runCode, args.runCode ? '' : args.preambleSource),
         `${args.id}.dag-node.js`,
       )
       const capability = await serveFrpSandboxCapability({
@@ -406,6 +408,9 @@ export const compileDagNodeRecord = (args: {
         ...(args.fetch ? { fetch: args.fetch } : {}),
       })
     : undefined
+  const directRunCode =
+    !args.record.runCode && !args.record.importsSource ? args.record.runSource : undefined
+  const runCode = args.record.runCode ?? directRunCode
 
   return createNode<
     DagJsonSchema,
@@ -430,7 +435,10 @@ export const compileDagNodeRecord = (args: {
       return await executeDagNodeRun({
         id: args.record.id,
         ...(typeof args.record.timeoutMs === 'number' ? { timeoutMs: args.record.timeoutMs } : {}),
-        ...(args.record.runCode ? { runCode: args.record.runCode } : {}),
+        ...(runCode ? { runCode } : {}),
+        ...(directRunCode && args.record.preambleSource
+          ? { preambleSource: args.record.preambleSource }
+          : {}),
         ...(args.loadRunCode
           ? { loadRunCode: async () => await args.loadRunCode!(args.record) }
           : {}),

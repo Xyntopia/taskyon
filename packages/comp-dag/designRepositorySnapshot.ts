@@ -51,6 +51,11 @@ export type LoadedDesignRepositorySnapshot = {
   modulesByHash: Record<Hash, DagModuleArtifact>
 }
 
+export type LoadedDesignRepositoryNodeSnapshot = Pick<
+  LoadedDesignRepositorySnapshot,
+  'files' | 'nodesByHash' | 'moduleLocksByHash' | 'modulesByHash'
+>
+
 export type LoadedProjectRepositorySnapshot = {
   revision: ProjectRevision
   invocations: Record<Hash, InvocationDefinition>
@@ -257,6 +262,41 @@ const loadModuleClosure = async (
   }
   return { moduleLocksByHash, modulesByHash }
 }
+
+const loadNodeSnapshot = async (args: {
+  readText: DesignRepositoryTextReader
+  rootHashes: readonly Hash[]
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
+}): Promise<LoadedDesignRepositoryNodeSnapshot> => {
+  const nodesByHash = await loadNodeClosure(
+    args.readText,
+    args.rootHashes,
+    args.readManyText,
+    args.loadNodeFiles,
+  )
+  const modules = await loadModuleClosure(args.readText, nodesByHash, args.readManyText)
+  return {
+    nodesByHash,
+    ...modules,
+    files: Object.values(nodesByHash)
+      .map((node) => node.file)
+      .sort((left, right) => left.path.localeCompare(right.path)),
+  }
+}
+
+export const loadDesignRepositoryNodeClosure = async (args: {
+  readText: DesignRepositoryTextReader
+  rootNodeId: Hash
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
+}): Promise<LoadedDesignRepositoryNodeSnapshot> =>
+  await loadNodeSnapshot({
+    readText: args.readText,
+    rootHashes: [args.rootNodeId],
+    ...(args.readManyText ? { readManyText: args.readManyText } : {}),
+    ...(args.loadNodeFiles ? { loadNodeFiles: args.loadNodeFiles } : {}),
+  })
 
 export type DagResolvedPackage = {
   name: string
@@ -466,20 +506,15 @@ export const loadDesignRepositorySnapshot = async (args: {
   const revision = parseGraphRevision(
     await readJson(args.readText, `graph-revisions/${hashFilePart(revisionId)}.json`),
   )
-  const nodesByHash = await loadNodeClosure(
-    args.readText,
-    Object.values(revision.nodes),
-    args.readManyText,
-    args.loadNodeFiles,
-  )
-  const modules = await loadModuleClosure(args.readText, nodesByHash, args.readManyText)
+  const nodeSnapshot = await loadNodeSnapshot({
+    readText: args.readText,
+    rootHashes: Object.values(revision.nodes),
+    ...(args.readManyText ? { readManyText: args.readManyText } : {}),
+    ...(args.loadNodeFiles ? { loadNodeFiles: args.loadNodeFiles } : {}),
+  })
   return {
     revision,
-    nodesByHash,
-    ...modules,
-    files: Object.values(nodesByHash)
-      .map((node) => node.file)
-      .sort((left, right) => left.path.localeCompare(right.path)),
+    ...nodeSnapshot,
   }
 }
 

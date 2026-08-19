@@ -101,7 +101,7 @@ test.describe('documentation page', () => {
     await expect(detail.locator('.openapi-view__schema-panel .q-field')).toHaveCount(0)
 
     await page.getByText('task.createChain', { exact: true }).first().click()
-    const chainTree = page.locator('.openapi-view__detail .q-tree')
+    const chainTree = page.locator('.openapi-view__detail .q-tree').filter({ hasText: 'tasks:' })
     await expect(chainTree).toContainText('tasks:')
     await expect(chainTree).toContainText('role:')
 

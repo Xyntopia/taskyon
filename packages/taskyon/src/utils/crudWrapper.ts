@@ -326,7 +326,7 @@ export const createPgLiteCrudWrapper = async <T>(
       const sql = `
         WITH src AS (
           SELECT * FROM jsonb_to_recordset($1::jsonb)
-            AS t(id ${tableName}.${idColumn}%TYPE, ${dataColumn} jsonb)
+            AS t(id VARCHAR(64), ${dataColumn} jsonb)
         )
         INSERT INTO ${tableName} (${idColumn}, ${dataColumn})
         SELECT id, ${dataColumn} FROM src

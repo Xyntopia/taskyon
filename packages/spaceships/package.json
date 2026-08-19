@@ -12,7 +12,7 @@
     "@taskyon/common": "workspace:*",
     "@taskyon/taskyon": "workspace:*",
     "@taskyon/ui": "workspace:*",
-    "vue": "^3.4.0",
+    "vue": "^3.5.22",
     "zod": "^4.0.5"
   }
 }

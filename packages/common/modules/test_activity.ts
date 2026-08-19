@@ -33,9 +33,9 @@ export const testActivityTrackerReportsConcurrentWorkAndFailureRecovery = async 
   const value = await runActivity(
     tracker,
     { label: 'Reload graph', category: 'compiler' },
-    async (activity) => {
+    (activity) => {
       activity.progress('Loaded graph revision')
-      return 42
+      return Promise.resolve(42)
     },
   )
   if (value !== 42 || tracker.getState().status !== 'success') {

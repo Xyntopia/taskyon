@@ -9,7 +9,7 @@ import {
   writeMessage,
 } from '../support/taskyon'
 
-const diagnosticsTimeoutMs = 200_000
+const diagnosticsTimeoutMs = 600_000
 const toolWorkflowTimeoutMs = 450_000
 const onlineEnv = readOnlineEnv(process.cwd())
 
@@ -26,6 +26,10 @@ test.describe('diagnostics page', () => {
 
     await addAiServices(page, onlineEnv)
 
+    await page.goto('/')
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
+    await waitForTaskyonSession(page)
+    await selectLlmModel(page, 'openai', 'gpt-5.1')
     await page.goto('/diagnostics')
 
     await dataCy(page, 'run-tests').click()

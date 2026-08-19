@@ -13,10 +13,12 @@ import type {
   DesignGraphRepository,
 } from '@taskyon/comp-dag/designGraphRepository'
 import {
+  compileDesignRepositoryNodes,
   createUrlDesignRepositoryReader,
   loadDesignRepositorySnapshot,
   loadProjectRepositorySnapshot,
 } from '@taskyon/comp-dag/designRepositorySnapshot'
+import { createUncachedDagRunCodeCompiler } from '@taskyon/comp-dag/dagModuleCompiler'
 import {
   compileDagNodeRecordGraph,
   getDagNodeRecordClosure,
@@ -25,7 +27,10 @@ import {
   savedStoredNodesToRecordGraph,
   type DagNodeRecordGraph,
 } from '@taskyon/comp-dag/dagNodeRecordGraph'
-import { loadStoredGraphNodeFiles, type StoredGraphNodeFile } from '@taskyon/comp-dag/dagNodeLoader'
+import type {
+  loadStoredGraphNodeFiles,
+  StoredGraphNodeFile,
+} from '@taskyon/comp-dag/dagNodeLoader'
 import { recordInputsToRuntimeInputs } from '@taskyon/comp-dag/dagNodeRecord'
 import type { DagJsonSchema } from '@taskyon/comp-dag/dagSchema'
 import {
@@ -140,16 +145,6 @@ const nodeInputPorts = (records: DagNodeRecordGraph, hash: Hash): DesignGraphPor
     : [{ name: 'params', type: parameterType, role: 'parameter' }, ...dependencies]
 }
 
-const nodeFiles = async (store: DesignGraphObjectStore): Promise<StoredGraphNodeFile[]> =>
-  await Promise.all(
-    (await store.list('nodes'))
-      .filter((name) => name.endsWith('.ts'))
-      .map(async (name) => ({
-        path: `nodes/${name}`,
-        source: await store.readText(`nodes/${name}`),
-      })),
-  )
-
 const projectBaseUrl = (projectId: string) =>
   new URL(`/design-repositories/${projectId}/`, location.origin)
 
@@ -236,8 +231,24 @@ export const loadDesignWorkspaceProject = async (args: {
   const invocationId = revision.invocations[invocationName]
   if (!invocationId) throw new Error(`Project invocation not found: ${invocationName}`)
   const invocation = await args.repository.getInvocation(invocationId)
-  const files = await nodeFiles(args.store)
-  const graph = await loadStoredGraphNodeFiles(files)
+  const graphRef = await args.repository.getGraphRef('graph/main')
+  if (!graphRef) throw new Error('Design graph ref not found: graph/main')
+  const graphSnapshot = await loadDesignRepositorySnapshot({
+    readText: args.store.readText,
+    checkout: { kind: 'graphRevision', id: graphRef.revisionId },
+  })
+  const { createBrowserDagRunCodeCompiler } = await import('@taskyon/runtime-browser')
+  const browserCompiler = createBrowserDagRunCodeCompiler()
+  let graph: Awaited<ReturnType<typeof compileDesignRepositoryNodes>>
+  try {
+    graph = await compileDesignRepositoryNodes(
+      graphSnapshot,
+      createUncachedDagRunCodeCompiler(browserCompiler.compiler),
+    )
+  } finally {
+    browserCompiler.stop()
+  }
+  const files = graphSnapshot.files
   const records = savedStoredNodesToRecordGraph(graph)
   const compiled = compileDagNodeRecordGraph({ graph: records, rootHash: invocation.rootNodeId })
   const compiledRoot = compiled[invocation.rootNodeId]

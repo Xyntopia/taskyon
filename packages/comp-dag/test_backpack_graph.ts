@@ -1,10 +1,12 @@
 import type { Hash } from './caching.ts'
 import { defineDagNodeRecord, type DagNodeRecord } from './dagNodeRecord.ts'
-import { loadDesignRepositorySnapshot } from './designRepositorySnapshot.ts'
+import {
+  compileDesignRepositoryNodes,
+  loadDesignRepositorySnapshot,
+} from './designRepositorySnapshot.ts'
 import {
   canReadStoredGraphNodeDirectory,
   compileDagNodeRecordGraph,
-  loadDagNodeRecordGraph,
   savedStoredNodesToRecordGraph,
 } from './dagNodeRecordGraph.ts'
 import { createDagGraphPatchTool } from './dagGraphTool.ts'
@@ -66,7 +68,13 @@ const createStaticSummaryRecord = async (recommendationHash: Hash): Promise<DagN
 }
 
 const runBackpackRoot = async (files: readonly StoredGraphNodeFile[], rootHash: Hash) => {
-  const graph = await loadDagNodeRecordGraph(files)
+  const loadedNodes = await loadStoredGraphNodeFiles(files)
+  const compiledNodes = await compileDesignRepositoryNodes({
+    nodesByHash: loadedNodes,
+    moduleLocksByHash: {},
+    modulesByHash: {},
+  })
+  const graph = savedStoredNodesToRecordGraph(compiledNodes)
   assert(graph[rootHash], `Expected graph store to contain root ${rootHash}`)
   const compiled = compileDagNodeRecordGraph({ graph, rootHash })
   const root = compiled[rootHash]

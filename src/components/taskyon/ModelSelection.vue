@@ -57,7 +57,7 @@ import { matVisibility } from '@quasar/extras/material-icons'
 import { mdiKeyLink } from '@quasar/extras/mdi-v6'
 import ToggleButton from '@taskyon/ui/components/ToggleButton.vue'
 import { levenshteinDistance } from 'src/modules/string_utils'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
   selectedModel: string | null
@@ -132,11 +132,39 @@ function onModelSelect(value: string) {
 }
 
 const filteredOptions = ref<{ label: string; value: string }[]>([])
+const filterKeyword = ref('')
 
 type updateCallBack = (callback: () => void) => void
 
 function max(a: string, b: string) {
   return a.length > b.length ? a.length : b.length
+}
+
+const getFilteredModelOptions = (
+  keyword: string,
+  optionsRef: { label: string; value: string }[],
+) => {
+  const normalizedKeyword = keyword.toLowerCase().trim()
+  if (!normalizedKeyword) return optionsRef
+
+  const threshold = 0.7 * 1.1 // Set a threshold for what we show as an option. between 0% & 100% matching
+  const scoredOptions = optionsRef.map((option) => {
+    const optionValue = option.value
+    const distance = levenshteinDistance(normalizedKeyword, optionValue)
+    const matches = max(normalizedKeyword, optionValue) - distance
+    return {
+      ...option,
+      score:
+        matches / normalizedKeyword.length +
+        ((0.1 * normalizedKeyword.length) / optionValue.length) * (matches / optionValue.length),
+    }
+  })
+
+  return scoredOptions
+    .filter((option) => option.score > threshold)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map(({ label, value }) => ({ label, value }))
 }
 
 const filterModels = (
@@ -145,40 +173,15 @@ const filterModels = (
   abort: () => void,
   optionsRef: { label: string; value: string }[],
 ) => {
+  filterKeyword.value = val
   update(() => {
-    const keyword = val.toLowerCase().trim()
-    // 1.1 is the maximum achievable score for us..
-    const threshold = 0.7 * 1.1 // Set a threshold for what we show as an option. between 0% & 100% matching
-
-    if (keyword) {
-      const scoredOptions = optionsRef.map((option) => {
-        const optionValue = option.value
-        const distance = levenshteinDistance(keyword, optionValue)
-        // number of characters of our search query which match
-        const matches = max(keyword, optionValue) - distance
-        return {
-          ...option,
-          // we calculate the score as a mix of matches of the keyword and the entire string
-          score:
-            matches / keyword.length +
-            ((0.1 * keyword.length) / optionValue.length) * (matches / optionValue.length),
-        }
-      })
-
-      const sortedOptions = scoredOptions
-        .filter((option) => option.score > threshold)
-        .sort((a, b) => b.score - a.score)
-        .map((x) => {
-          return { ...x, label: x.label }
-        })
-        .slice(0, 20)
-
-      filteredOptions.value = sortedOptions
-    } else {
-      filteredOptions.value = optionsRef
-    }
+    filteredOptions.value = getFilteredModelOptions(val, optionsRef)
   })
 }
+
+watch(computedModelOptions, (options) => {
+  filteredOptions.value = getFilteredModelOptions(filterKeyword.value, options)
+})
 
 const abortFilterFn = () => {
   console.log('delayed filter aborted')

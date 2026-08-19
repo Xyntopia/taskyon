@@ -408,7 +408,7 @@ export const compileDagNodeRecordGraph = (args: {
         ),
       ]
 
-  for (const [index, hash] of (hashes as Hash[]).entries()) {
+  for (const [index, hash] of hashes.entries()) {
     const record = args.graph[hash]!
     compiled[hash] = compileDagNodeRecord({
       record,

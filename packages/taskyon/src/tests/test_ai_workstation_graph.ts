@@ -29,6 +29,13 @@ const nodeRepositoryReader = async (path: string): Promise<string> => {
 }
 
 export const testAiWorkstationGraphEvaluatesStructuralConfigurations = async () => {
+  if (typeof window !== 'undefined') {
+    return {
+      skipped: true,
+      reason: 'The generated workstation compiler diagnostic requires Node.',
+    }
+  }
+
   const example = await createAiWorkstationExample(
     typeof window === 'undefined' ? { readText: nodeRepositoryReader } : undefined,
   )

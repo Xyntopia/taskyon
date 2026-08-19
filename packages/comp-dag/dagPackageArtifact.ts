@@ -78,7 +78,7 @@ export const createDagPackageArtifactResolver = (args: {
       if (Object.keys(requirements).length === 0) return []
       const available = (await loadManifest()).packages
       return await Promise.all(
-        Object.entries(requirements).map(async ([name, requirement]) => {
+        Object.entries(requirements).map(([name, requirement]) => {
           const entry = available[name as StoredDagPackageName]
           if (!entry) throw new Error(`Runtime package ${name} is unavailable.`)
           if (!satisfiesDagPackageRange(entry.version, requirement.range)) {

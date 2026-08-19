@@ -1,5 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
+import { createGraphRevision } from '@taskyon/comp-dag/designGraphModel'
+import {
+  createDesignGraphRepository,
+  createStorageDesignGraphObjectStore,
+} from '@taskyon/comp-dag/designGraphRepository'
 import { createAiWorkstationExample } from '@taskyon/taskyon'
 import { createDagGraphProjectTool } from '@taskyon/taskyon/tools/dagGraphProjectTool'
 
@@ -157,6 +162,18 @@ export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async
     policy: { accuracy: 'exact', budget: { maxRows: 2 } },
   })
   assert(created.type === 'designProjectCreated', 'Expected project creation result.')
+
+  const designRepository = createDesignGraphRepository(
+    createStorageDesignGraphObjectStore(storage.client),
+  )
+  const graphRef = await designRepository.getGraphRef('graph/main')
+  const unrelatedGraph = createGraphRevision({ parents: [], nodes: {} })
+  await designRepository.putGraphRevision(unrelatedGraph)
+  await designRepository.advanceGraphRef({
+    name: 'graph/main',
+    revisionId: unrelatedGraph.id,
+    expected: graphRef?.revisionId ?? null,
+  })
 
   const inspected = await tool.function({
     action: 'inspectProject',

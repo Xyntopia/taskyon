@@ -15,6 +15,14 @@ const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
 }
 
+const createContinuationTool = () =>
+  createTool({
+    name: 'entryNode',
+    description: 'Test continuation tool.',
+    parameters: { type: 'object', additionalProperties: false },
+    function: () => undefined,
+  })
+
 export const testTaskScopedCodeToolExecutesWithoutRegistryInstallation = async () => {
   const storage = createPortableTestStorage()
   const registeredEcho = createTool({
@@ -28,12 +36,7 @@ export const testTaskScopedCodeToolExecutesWithoutRegistryInstallation = async (
     } satisfies JSONSchema7,
     code: `({ message }) => ({ source: 'registered', message })`,
   })
-  const continuationTool = createTool({
-    name: 'entryNode',
-    description: 'Test continuation tool.',
-    parameters: { type: 'object', additionalProperties: false },
-    function: () => undefined,
-  })
+  const continuationTool = createContinuationTool()
   const ty = await tyCore(
     () => ({ entryFunction: 'entryNode' }),
     () => toolCall({ name: 'entryNode', arguments: {} }),
@@ -202,6 +205,7 @@ testTyCoreStableTaskStreamSurvivesSessionSwitch.description =
 
 export const testRemoteFunctionRegistrationFollowsSessionSwitch = async () => {
   const storage = createPortableTestStorage()
+  const continuationTool = createContinuationTool()
   const ty = await tyCore(
     () => ({ entryFunction: 'entryNode' }),
     () => toolCall({ name: 'entryNode', arguments: {} }),
@@ -210,6 +214,11 @@ export const testRemoteFunctionRegistrationFollowsSessionSwitch = async () => {
     {
       indexTaskVectors: false,
       taskManagerStorageFactory: storage.taskManagerStorageFactory,
+      toolSetup: {
+        baseTools: [continuationTool],
+        chatCompletionToolName: 'chatCompletion',
+        createSessionTools: () => ({ tools: [] }),
+      },
     },
   )
   const sessionEcho = createTool({
@@ -577,6 +586,7 @@ testRemoteFunctionBridgeAllowsExplicitExternalSecretContext.description =
 
 export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => {
   const storage = createPortableTestStorage()
+  const continuationTool = createContinuationTool()
   const ty = await tyCore(
     () => ({
       entryFunction: 'entryNode',
@@ -591,6 +601,11 @@ export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => 
     {
       indexTaskVectors: false,
       taskManagerStorageFactory: storage.taskManagerStorageFactory,
+      toolSetup: {
+        baseTools: [continuationTool],
+        chatCompletionToolName: 'chatCompletion',
+        createSessionTools: () => ({ tools: [] }),
+      },
     },
   )
   const codeTool = createTool({

@@ -119,6 +119,13 @@ testDagModuleLockUsesExactReferrerMappings.description =
   'Separates package requirements from content-addressed stored module imports.'
 
 export const testLockedDagModulesCompileWithoutAmbientPackageResolution = async () => {
+  if (typeof window !== 'undefined') {
+    return {
+      skipped: true,
+      reason: 'The locked TypeScript compiler diagnostic requires Node.',
+    }
+  }
+
   const helper = createDagModuleArtifact({
     mediaType: 'text/typescript',
     source: `export const double = (value: number) => value * 2`,
@@ -157,7 +164,7 @@ export const testLockedDagModulesCompileWithBrowserProcessShim = async () => {
   const processDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process')
   Object.defineProperty(globalThis, 'process', {
     configurable: true,
-    value: { env: {} },
+    value: { env: {}, versions: {} },
   })
 
   try {
@@ -292,6 +299,11 @@ export const testStoredDagNodeRecordCanBeProjectedToTypescript = async () => {
     compiled?.description === 'Produces a stable value for stored-node tests.',
     'Expected the compiled node to expose its output schema description',
   )
+  const result = await compiled?.call({}).run()
+  assert(
+    JSON.stringify(result?.value) === JSON.stringify({ value: 1 }),
+    'Expected a stored node compiled from source to execute',
+  )
   assert(
     saved.file.path === `${saved.hash.replace(':', '_')}.ts`,
     'Expected the stored filename to be addressable from its hash alone',
@@ -359,10 +371,10 @@ export const testDesignRepositoryCompilesImportedNodesOnlyOnDemand = async () =>
     ['refs/graph/main.json', JSON.stringify({ schemaVersion: 2, revisionId: revision.id })],
   ])
   const snapshot = await loadDesignRepositorySnapshot({
-    readText: async (path) => {
+    readText: (path) => {
       const content = files.get(path)
       if (content === undefined) throw new Error(`Missing test repository file ${path}`)
-      return content
+      return Promise.resolve(content)
     },
     checkout: { kind: 'ref', name: 'graph/main' },
   })
@@ -397,9 +409,10 @@ export const testDesignRepositoryCompilesImportedNodesOnlyOnDemand = async () =>
   const cache = new Map<string, unknown>()
   const cachedCompiler = createCachedDagRunCodeCompiler(
     {
-      get: async (id) => cache.get(id) ?? null,
-      set: async (id, value) => {
+      get: (id) => Promise.resolve(cache.get(id) ?? null),
+      set: (id, value) => {
         cache.set(id, value)
+        return Promise.resolve()
       },
     },
     {
@@ -434,9 +447,10 @@ export const testDesignRepositoryCompilesImportedNodesOnlyOnDemand = async () =>
   ])
   const persistedCached = await createCachedDagRunCodeCompiler(
     {
-      get: async (id) => cache.get(id) ?? null,
-      set: async (id, value) => {
+      get: (id) => Promise.resolve(cache.get(id) ?? null),
+      set: (id, value) => {
         cache.set(id, value)
+        return Promise.resolve()
       },
     },
     {
@@ -465,9 +479,10 @@ export const testCompilerCacheIncludesExactPackageProvider = async () => {
   let compilationCount = 0
   const compiler = createCachedDagRunCodeCompiler(
     {
-      get: async (id) => cache.get(id) ?? null,
-      set: async (id, value) => {
+      get: (id) => Promise.resolve(cache.get(id) ?? null),
+      set: (id, value) => {
         cache.set(id, value)
+        return Promise.resolve()
       },
     },
     {
