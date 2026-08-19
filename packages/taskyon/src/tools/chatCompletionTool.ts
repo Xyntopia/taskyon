@@ -89,6 +89,19 @@ const normalizeProviderUsage = (
   ...(usage.totalTokens === undefined ? {} : { totalTokens: usage.totalTokens }),
 })
 
+const readProviderCosts = async (
+  chatCompletion: Awaited<ReturnType<typeof streamText>>,
+  provider: string,
+) => {
+  const providerMetadata = await chatCompletion.providerMetadata
+  const providerUsage = providerMetadata?.openrouter?.usage as { cost?: unknown } | undefined
+  return typeof providerUsage?.cost === 'number' &&
+    Number.isFinite(providerUsage.cost) &&
+    providerUsage.cost >= 0
+    ? [{ amount: providerUsage.cost, source: provider, unit: 'USD' }]
+    : []
+}
+
 export const chatCompletionToolName = 'chatCompletion'
 
 export function createChatCompletionTool(
@@ -577,6 +590,7 @@ export function createChatCompletionTool(
           delegatedTokenJti,
           capabilities.metaUpsert,
           totalUsage,
+          selectedApi,
         )
         metaInfo.providerRequest = providerRequest
         console.log('saving task metadata', {
@@ -585,7 +599,15 @@ export function createChatCompletionTool(
         })
         void capabilities.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
       } else if (currentTask) {
-        void capabilities.metaUpsert(currentTask.id, { providerRequest }, 'shallow_merge')
+        const costs = await readProviderCosts(chatCompletion, selectedApi)
+        void capabilities.metaUpsert(
+          currentTask.id,
+          {
+            providerRequest,
+            ...(costs.length > 0 ? { costs } : {}),
+          },
+          'shallow_merge',
+        )
       }
 
       // in case a schema was given, we simply use that schema and return it as a structured message
@@ -742,6 +764,7 @@ async function getMetaInfos(
   delegatedTokenJti: string | undefined,
   upsertMeta: TyTaskManager['metaUpsert'],
   totalUsage: Awaited<ReturnType<typeof streamText>['totalUsage']>,
+  provider: string,
 ) {
   // need to make sure, that we remove audio, image and file data here!
   // TODO: make sure the following works..  e.g. with adding a file..
@@ -753,7 +776,7 @@ async function getMetaInfos(
   })(chatInfo.messages)
   //const out = await chatCompletion.output // same as in messages...
   const content = await chatCompletion.content
-  // const b = await chatCompletion.providerMetadata
+  const providerCost = await readProviderCosts(chatCompletion, provider)
   // const t = await chatCompletion.usage
   const metaInfo: TaskNodeMeta = {
     streamContent: rawOutput,
@@ -763,8 +786,7 @@ async function getMetaInfos(
     promptTokens: totalUsage.inputTokens,
     resultTokens: totalUsage.outputTokens,
     taskTokens: totalUsage.totalTokens,
-    // this doesn't work correctly for taskyon.space service right now...
-    //taskCosts: (b?.openrouter?.usage as Record<string, unknown>)?.cost as number,
+    ...(providerCost.length > 0 ? { costs: providerCost } : {}),
   }
 
   const cont = res.messages[0]?.content

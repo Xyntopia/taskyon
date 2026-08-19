@@ -34,6 +34,7 @@ import {
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode, ensureValidTaskId, taskContentHash, taskNodeToRecord } from './createTasks'
 import { addMarkdownTaskChain } from './markdownTaskIO'
+import { createTaskCostService } from './taskCost'
 import {
   findContinuationLeafTaskIds,
   selectTaskChainIdSelection,
@@ -485,6 +486,7 @@ export async function useTyTaskManager(
   // taskLocks
   const { lockItem, clearLocks } = lockMap('TaskLocks')
   const execWLock = withLock(lockItem)
+  let invalidateTaskCostCache: () => void = () => undefined
   // add more enhanced, ty-specific functionality to our CRUD
   const taskDb = {
     ...tyCrud,
@@ -525,6 +527,8 @@ export async function useTyTaskManager(
         }
         // Update parent-child cache
         updateChildAndSiblingMap(completeTask)
+        invalidateTaskRelationCaches(completeTask)
+        invalidateTaskCostCache()
       }, completeTask.id)
       return completeTask
     },
@@ -533,15 +537,23 @@ export async function useTyTaskManager(
         // Delete from local record/memorydb
         const record = await tyCrud.get(id)
         const task = record ? await hydrateTaskRecord(record) : null
-        if (task) void deleteFromChildAndSiblings(task)
+        if (task) {
+          deleteFromChildAndSiblings(task)
+          invalidateTaskRelationCaches(task)
+        }
         void tyCrud.delete(id)
         void taskVectors.deleteTaskFromVectorStore(id.toString())
+        invalidateTaskCostCache()
       }, id),
     clear: async () => {
       clearLocks()
       await tyCrud.clear()
       await storage.contents.clear()
+      nextSiblingMap.clear()
+      parentToChildMap.clear()
+      immediateChildrenMap.clear()
       clearLocks()
+      invalidateTaskCostCache()
     },
   }
 
@@ -604,6 +616,14 @@ export async function useTyTaskManager(
     const tasks = await storage.tasks.find({ parentID })
     return new Set(Object.keys(tasks))
   })
+
+  const taskCostService = createTaskCostService({
+    getDirectChildren: searchAllDirectChildren,
+    getMeta: metaDb.get,
+    getNextSiblings: searchNextSibling,
+    getTask: taskDb.get,
+  })
+  invalidateTaskCostCache = taskCostService.clear
 
   async function convertTaskIDs(taskIds: string[]) {
     const taskList = await Promise.all(
@@ -874,6 +894,10 @@ export async function useTyTaskManager(
       }),
     )
     await storage.tasks.setMany(archive.tasks.map((record) => ({ id: record.id, data: record })))
+    nextSiblingMap.clear()
+    parentToChildMap.clear()
+    immediateChildrenMap.clear()
+    invalidateTaskCostCache()
   }
 
   // add a task to the db. Adding some default information such as timestamps etc...
@@ -908,7 +932,6 @@ export async function useTyTaskManager(
         createMeta: 'missing',
         vectors: options.indexTaskVectors !== false,
       })
-      invalidateTaskRelationCaches(addedTask)
       addedTaskList.push(addedTask)
     }
     return addedTaskList
@@ -926,7 +949,6 @@ export async function useTyTaskManager(
         throw new Error('addTaskChain accepts drafts without ids. Use addTaskNodes instead.')
       }
       const addedTask = await addPartialTask2Tree({ ...task, priorID: lastTaskId, parentID })
-      invalidateTaskRelationCaches(addedTask)
       lastTaskId = addedTask.id
       addedTaskList.push(addedTask)
     }
@@ -1029,6 +1051,7 @@ export async function useTyTaskManager(
     })
     try {
       const out = await metaDb.upsert(id, data, strategy)
+      invalidateTaskCostCache()
       const outKeys =
         out && typeof out === 'object' ? Object.keys(out as Record<string, unknown>) : []
       console.log('[DEBUGDB] metaUpsert:done', {
@@ -1058,6 +1081,7 @@ export async function useTyTaskManager(
     buildSiblingChain,
     buildTaskTreeNode,
     getChildChains,
+    getTaskCostSummary: taskCostService.getSummary,
     addPartialTask2Tree,
     addTaskChain,
     addTaskNodes,

@@ -777,6 +777,7 @@ export async function tyCore(
       [
         'convertTaskIDs',
         'getMeta',
+        'getTaskCostSummary',
         'metaUpsert',
         'metaLiveRead',
         // TODO: md taskchain and yaml loading might be better as "utility-functions?" without a dependency

@@ -99,6 +99,7 @@ import type { CliStoragePaths } from './cli/storagePaths'
 import { createStaticEmbeddingAssetReader } from './cli/staticEmbeddingCache'
 import { loadTaskSearchSidecars, saveTaskSearchSidecars } from './cli/searchIndexPersistence'
 import { createCliFooter } from './cli/ui'
+import { formatTaskCostFooter, formatTaskCostSummaryLines } from './cli/cost'
 import {
   applyCodexAccountHeader,
   canReachLocalApi,
@@ -2657,6 +2658,22 @@ async function handleSlashCommand(
     return true
   }
 
+  if (parsed.name === 'cost') {
+    if (!currentLeafId) {
+      writeNotice('info', 'No active chat tree yet.')
+      return true
+    }
+    try {
+      const summary = await ty.getTaskCostSummary(currentLeafId)
+      writeNote('Chat Cost', formatTaskCostSummaryLines(summary))
+    } catch (error) {
+      writeError(
+        `Could not read chat cost: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+    return true
+  }
+
   if (parsed.name === 'stop') {
     writeLine('No active task.')
     return true
@@ -2667,7 +2684,7 @@ async function handleSlashCommand(
   }
 
   writeError(
-    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /stop, /exit, /quit`,
+    `Unknown command '/${parsed.name}'. Supported: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /cost, /stop, /exit, /quit`,
   )
   return true
 }
@@ -3179,6 +3196,9 @@ async function main(host: InteractiveCliHost) {
   const taskById = new Map<string, TaskNode>()
   const workerTaskStateById = new Map<string, TyTaskStreamData['stage']>()
   const footer = await createCliFooter(host.environmentPrefix)
+  let latestCostFooter: ReturnType<typeof formatTaskCostFooter> | undefined
+  let costRefreshPromise: Promise<void> | null = null
+  let costRefreshTimer: ReturnType<typeof setTimeout> | null = null
   const workerSpinnerFrames = ['-', '\\', '|', '/']
   let workerStatusTimer: ReturnType<typeof setInterval> | null = null
   let workerStatusFrameIndex = 0
@@ -3347,9 +3367,43 @@ async function main(host: InteractiveCliHost) {
       model: providerModel.model,
       taskState: taskProcessingStatus,
       activeTasks: activeTaskCount(),
+      ...(latestCostFooter?.cost ? { cost: latestCostFooter.cost } : {}),
+      ...(latestCostFooter ? { costIncomplete: latestCostFooter.incomplete } : {}),
+      ...(latestCostFooter ? { cachePercent: latestCostFooter.cachePercent } : {}),
       ...(runtimeLog?.filePath ? { logPath: runtimeLog.filePath } : {}),
       conversationPath: conversationPersistence.filePath,
     })
+  }
+
+  const refreshCostFooter = () => {
+    const leafId = currentLeafId
+    if (!leafId) {
+      latestCostFooter = undefined
+      updateFooter()
+      return
+    }
+    if (costRefreshPromise) return
+    costRefreshPromise = (async () => {
+      try {
+        const summary = await taskyon.getTaskCostSummary(leafId)
+        if (currentLeafId === leafId) latestCostFooter = formatTaskCostFooter(summary)
+      } catch {
+        if (currentLeafId === leafId) latestCostFooter = undefined
+      } finally {
+        costRefreshPromise = null
+        updateFooter()
+        if (currentLeafId !== leafId) refreshCostFooter()
+      }
+    })()
+  }
+
+  const scheduleCostFooterRefresh = (delayMs: number) => {
+    if (costRefreshTimer !== null) clearTimeout(costRefreshTimer)
+    costRefreshTimer = setTimeout(() => {
+      costRefreshTimer = null
+      refreshCostFooter()
+    }, delayMs)
+    costRefreshTimer.unref()
   }
 
   const writePromptPrefix = () => {
@@ -3635,6 +3689,8 @@ async function main(host: InteractiveCliHost) {
       stopWorkerStatusLine()
       clearThinkingPanel()
       flushHiddenNodeMarkers()
+      refreshCostFooter()
+      scheduleCostFooterRefresh(7_000)
     }
     if (stage === 'waiting' && activeTaskCount() > 0 && workerIdleSettleTimer === null) {
       workerIdleSettleTimer = setTimeout(() => {
@@ -3645,6 +3701,7 @@ async function main(host: InteractiveCliHost) {
         clearWorkerCleanupNoticeTimer()
         stopWorkerStatusLine()
         updateFooter()
+        refreshCostFooter()
         notifyWorkerIdleWaiters()
       }, 100)
       workerIdleSettleTimer.unref()
@@ -3847,6 +3904,7 @@ async function main(host: InteractiveCliHost) {
     taskSnapshotById.set(task.id, snapshot)
     taskById.set(task.id, task)
     currentLeafId = task.id
+    refreshCostFooter()
     queueConversationPersist(task.id)
     if (suppressed) return
     scheduleThinkingRender()
@@ -3912,7 +3970,7 @@ async function main(host: InteractiveCliHost) {
   )
   writeNotice(
     'info',
-    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /exit, /quit',
+    'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /cost, /exit, /quit',
   )
   if (debugLogsEnabled) {
     writeNotice('warn', `Debug logs enabled (${host.environmentPrefix}_DEBUG=1).`)
@@ -4038,6 +4096,7 @@ async function main(host: InteractiveCliHost) {
             })
             if (resumedLeafId) {
               currentLeafId = resumedLeafId
+              refreshCostFooter()
               await flushConversationPersist()
             }
           } catch (error) {
@@ -4062,7 +4121,10 @@ async function main(host: InteractiveCliHost) {
               searchState: taskSearchState,
               uiSettings,
             })
-            if (selectedLeafId) currentLeafId = selectedLeafId
+            if (selectedLeafId) {
+              currentLeafId = selectedLeafId
+              refreshCostFooter()
+            }
           } catch (error) {
             writeError(error instanceof Error ? error.message : String(error))
           } finally {
@@ -4124,6 +4186,7 @@ async function main(host: InteractiveCliHost) {
       const entryTaskId = taskIds.at(-1)
       if (!entryTaskId) throw new Error('CLI message submission created no tasks.')
       currentLeafId = entryTaskId
+      refreshCostFooter()
       queueConversationPersist(currentLeafId)
       writeDebug(`queued task chain: ${taskIds.join(', ')}`)
       try {
@@ -4149,8 +4212,11 @@ async function main(host: InteractiveCliHost) {
           isInteractiveTaskResult,
         )
         currentLeafId = result.id
+        refreshCostFooter()
         writeDebug(`received result task: ${result.id} (${result.content.type})`)
         await waitForWorkerIdle(10 * 60 * 1000, activeTaskWaitController.signal)
+        refreshCostFooter()
+        scheduleCostFooterRefresh(7_000)
         waitingForTask = false
         activeTaskWaitController = undefined
         taskInterruptKeysCleanup?.()
@@ -4203,6 +4269,7 @@ async function main(host: InteractiveCliHost) {
     taskInterruptKeysCleanup = undefined
     clearWorkerCleanupNoticeTimer()
     stopWorkerStatusLine()
+    if (costRefreshTimer !== null) clearTimeout(costRefreshTimer)
     clearTransientStatusLine = undefined
     await flushConversationPersist().catch(() => {})
     taskyon.cancelCurrentRun(`${host.commandName} exit`)

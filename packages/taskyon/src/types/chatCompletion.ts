@@ -154,6 +154,13 @@ export const ProviderRequestTrace = z.object({
 })
 export type ProviderRequestTrace = z.infer<typeof ProviderRequestTrace>
 
+export const TaskNodeCost = z.object({
+  amount: z.number().finite().nonnegative(),
+  source: z.string().min(1),
+  unit: z.string().min(1),
+})
+export type TaskNodeCost = z.infer<typeof TaskNodeCost>
+
 export const TaskNodeMeta = z
   .object({
     threadMessage: z.any().optional(), // Replace with the correct Zod schema if available
@@ -175,6 +182,7 @@ export const TaskNodeMeta = z
     toolStreamArgsContent: z.record(z.string(), z.string()).optional(),
     streamContent: z.string().optional(),
     taskCosts: z.number().optional(),
+    costs: TaskNodeCost.array().optional(),
     rawOutput: z.unknown().optional().meta({
       description:
         'We can optionally add some raw result data for debugging purposes, e.g. chatcompletion ...',

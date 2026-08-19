@@ -5,6 +5,9 @@ export type CliFooterStatus = {
   model: string
   taskState: CliTaskState
   activeTasks: number
+  cost?: string
+  costIncomplete?: boolean
+  cachePercent?: number | null
   logPath?: string
   conversationPath?: string
 }

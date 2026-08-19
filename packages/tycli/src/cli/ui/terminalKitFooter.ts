@@ -24,6 +24,10 @@ const renderStatusLine = (status: CliFooterStatus, width: number) =>
       `model ${status.model}`,
       `tasks ${status.taskState}`,
       `active ${status.activeTasks}`,
+      ...(status.cost ? [`cost ${status.cost}${status.costIncomplete ? '*' : ''}`] : []),
+      ...(status.cachePercent === undefined || status.cachePercent === null
+        ? []
+        : [`cache ${Math.round(status.cachePercent)}%`]),
       `log ${visibleName(status.logPath)}`,
       `conversation ${visibleName(status.conversationPath)}`,
     ].join(' | '),
