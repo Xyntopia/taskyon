@@ -6,7 +6,7 @@ import { type CrudWrapper, withSecretStore } from '../../../taskyon/src/utils/cr
 import { EncryptedDataRow } from '../../../taskyon/src/utils/encrypt'
 import type { CliStoragePaths } from './storagePaths'
 import { resolveTaskyonCliStoragePaths } from './storagePaths'
-import type { StoredConfig } from './types'
+import { isReasoningEffort, type ReasoningEffort, type StoredConfig } from './types'
 
 const CONFIG_LOCK_STALE_MS = 30_000
 const CONFIG_LOCK_TIMEOUT_MS = 10_000
@@ -196,6 +196,10 @@ export function createCliConfigStore(paths: CliStoragePaths) {
     }))
   }
 
+  const persistReasoningEffort = async (reasoningEffort: ReasoningEffort) => {
+    await persistConfigPatch({ reasoningEffort })
+  }
+
   const initPersistentCryptoSession = async () =>
     await withConfigFileLock(async () => {
       const stored = await loadStoredConfig()
@@ -293,6 +297,7 @@ export function createCliConfigStore(paths: CliStoragePaths) {
     flushConfigWrites,
     persistConfigPatch,
     persistProviderModel,
+    persistReasoningEffort,
     resolveConfigDirectoryPath,
     resolveDataDirectoryPath,
   }
@@ -305,6 +310,10 @@ export function resolveStoredModel(stored: StoredConfig, provider: string): stri
   if (providerModel) return providerModel
   if (stored.selectedApi === provider) return stored.taskyonModel?.trim() || undefined
   return undefined
+}
+
+export function resolveStoredReasoningEffort(stored: StoredConfig): ReasoningEffort | undefined {
+  return isReasoningEffort(stored.reasoningEffort) ? stored.reasoningEffort : undefined
 }
 
 export function resolveProviderSelection(
@@ -355,5 +364,6 @@ export const initPersistentCryptoSession = taskyonConfigStore.initPersistentCryp
 export const loadStoredConfig = taskyonConfigStore.loadStoredConfig
 export const persistConfigPatch = taskyonConfigStore.persistConfigPatch
 export const persistProviderModel = taskyonConfigStore.persistProviderModel
+export const persistReasoningEffort = taskyonConfigStore.persistReasoningEffort
 export const resolveConfigDirectoryPath = taskyonConfigStore.resolveConfigDirectoryPath
 export const resolveDataDirectoryPath = taskyonConfigStore.resolveDataDirectoryPath

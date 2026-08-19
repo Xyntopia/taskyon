@@ -11,6 +11,7 @@ export type StoredConfig = {
     publicJwk: JsonWebKey
   }
   providerModels?: Record<string, string>
+  reasoningEffort?: ReasoningEffort
   selectedApi?: string
   taskyonModel?: string
   inputHistory?: string[]
@@ -33,8 +34,15 @@ export type TycliSessionRecord = {
 export type CliApiConfig = {
   key?: string
   model?: string
+  reasoningEffort?: ReasoningEffort
   selectedApi: string
 }
+
+export const REASONING_EFFORTS = ['none', 'low', 'medium', 'high'] as const
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number]
+
+export const isReasoningEffort = (value: unknown): value is ReasoningEffort =>
+  typeof value === 'string' && REASONING_EFFORTS.includes(value as ReasoningEffort)
 
 export const API_KEY_STORE_NAME = 'AiProviderKey'
 

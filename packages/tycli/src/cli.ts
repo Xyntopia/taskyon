@@ -86,6 +86,7 @@ import {
   resolveKeyForProvider,
   resolveProviderSelection,
   resolveStoredModel,
+  resolveStoredReasoningEffort,
   type CliConfigStore,
 } from './cli/config'
 import {
@@ -105,10 +106,13 @@ import {
   fetchProviderModels,
   getAllowedTaskyonModels,
   getProviderSettings,
+  getSelectedReasoningEffort,
   getSelectedProviderSettings,
   getSelectedToolchainConfig,
   modelOptionsForProvider,
+  reasoningEffortOptions,
   setProviderModel,
+  setReasoningEffort,
   setSelectedProvider,
   type CliLlmState,
 } from './cli/models'
@@ -2040,13 +2044,18 @@ async function handleModelCommand(
 ) {
   const selectedApi = llmState.selectedToolchainProfile
   const selectedSettings = getSelectedProviderSettings(llmState)
-  writeNote('Current Model', [`Provider: ${selectedApi}`, `Model: ${selectedSettings.model}`])
+  writeNote('Current Model', [
+    `Provider: ${selectedApi}`,
+    `Model: ${selectedSettings.model}`,
+    `Thinking effort: ${getSelectedReasoningEffort(llmState) ?? 'default'}`,
+  ])
   const action = await selectFromList(rl, '\nModel menu', [
     'select model for current provider',
     'set model id manually',
+    'set thinking effort',
     'back',
   ])
-  if (action === null || action === 2) return
+  if (action === null || action === 3) return
 
   if (action === 0) {
     const selectedApi = llmState.selectedToolchainProfile
@@ -2104,6 +2113,7 @@ async function handleModelCommand(
     }
     setProviderModel(llmState, selectedApi, model)
     await persistence.configStore.persistProviderModel(selectedApi, model)
+    await applyCliRuntimeConfig(ty, llmState)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
     return
   }
@@ -2118,7 +2128,28 @@ async function handleModelCommand(
     }
     setProviderModel(llmState, selectedApi, model)
     await persistence.configStore.persistProviderModel(selectedApi, model)
+    await applyCliRuntimeConfig(ty, llmState)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
+  }
+
+  if (action === 2) {
+    const currentEffort = getSelectedReasoningEffort(llmState)
+    const options = reasoningEffortOptions.map((option) => ({
+      ...option,
+      label: option.value === currentEffort ? `${option.label} (current)` : option.label,
+    }))
+    const selected = await selectFromList(
+      rl,
+      '\nThinking effort',
+      options.map((option) => option.label),
+    )
+    if (selected === null) return
+    const effort = options[selected]?.value
+    if (!effort) return
+    setReasoningEffort(llmState, effort)
+    await persistence.configStore.persistReasoningEffort(effort)
+    await applyCliRuntimeConfig(ty, llmState)
+    writeNotice('success', `Selected thinking effort: ${effort}`)
   }
 }
 
@@ -2753,9 +2784,11 @@ async function main(host: InteractiveCliHost) {
 
   const model = resolveStoredModel(stored, selectedApi)
   const providerKey = resolveKeyForProvider(selectedApi, host.environmentPrefix)
+  const reasoningEffort = resolveStoredReasoningEffort(stored)
   const config = {
     selectedApi,
     ...(model ? { model } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
     ...(providerKey ? { key: providerKey } : {}),
   } as CliApiConfig
   const chatCompletionTrace = resolveCliChatCompletionTrace(host.environmentPrefix)

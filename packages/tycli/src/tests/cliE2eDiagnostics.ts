@@ -536,6 +536,7 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
   assertNotContains(output, 'already echoed by readline')
   assertContains(output, 'assistant response')
   assertContains(output, '[chatgpt-codex | gpt-5.4 | processing:1]\n\n[function|functioncall]')
+  assertContains(output, 'arguments: {}\n\n[assistant|message]')
 }
 
 export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {

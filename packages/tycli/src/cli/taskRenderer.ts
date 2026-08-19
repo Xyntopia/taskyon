@@ -109,14 +109,14 @@ const supportsBrightColors = () => process.stdout.isTTY && process.env.TERM !== 
 const roleColorCode = (role: string) => {
   if (role === 'user') return '39'
   if (role === 'assistant') return supportsBrightColors() ? '97' : '37'
-  if (role === 'function') return supportsBrightColors() ? '94' : '34'
+  if (role === 'function') return supportsBrightColors() ? '96' : '36'
   if (role === 'system') return '90'
   return '37'
 }
 
-const functionCallColorCode = () => '34'
+const functionCallColorCode = () => '36'
 
-const toolResultColorCode = () => (supportsBrightColors() ? '94' : '34')
+const toolResultColorCode = () => (supportsBrightColors() ? '96' : '36')
 
 const errorColorCode = () => (supportsBrightColors() ? '91' : '31')
 

@@ -25,6 +25,7 @@ import {
   resolveKeyForProvider,
   resolveProviderSelection,
   resolveStoredModel,
+  resolveStoredReasoningEffort,
 } from './config'
 import { createCliSelectedStorageService, resolveCliStorageSelection } from './storageService'
 import type { CliStoragePaths } from './storagePaths'
@@ -135,9 +136,11 @@ export async function bootstrapCliTaskyon(args?: {
 
   const model = args?.model ?? resolveStoredModel(stored, selectedApi)
   const envProviderKey = resolveKeyForProvider(selectedApi, environmentPrefix)
+  const reasoningEffort = resolveStoredReasoningEffort(stored)
   const config: CliApiConfig = {
     selectedApi,
     ...(model ? { model } : {}),
+    ...(reasoningEffort ? { reasoningEffort } : {}),
     ...(envProviderKey ? { key: envProviderKey } : {}),
   }
 

@@ -8,7 +8,13 @@ import {
   type llmSettings,
 } from '@taskyon/taskyon'
 import { asyncTimeLruCache } from '@taskyon/taskyon/utils/caching'
-import type { CliApiConfig, LlmModel } from './types'
+import { updateToolchainConfigValue } from '../../../taskyon/src/types/profiles'
+import {
+  isReasoningEffort,
+  type CliApiConfig,
+  type LlmModel,
+  type ReasoningEffort,
+} from './types'
 
 const CODEX_MODELS_CLIENT_VERSION = '0.144.5'
 
@@ -17,6 +23,13 @@ export type CliLlmState = {
   toolchainProfiles: ToolchainProfiles
   selectedToolchainProfile: string
 }
+
+export const reasoningEffortOptions: { label: string; value: ReasoningEffort }[] = [
+  { label: 'none (fastest)', value: 'none' },
+  { label: 'low', value: 'low' },
+  { label: 'medium', value: 'medium' },
+  { label: 'high (deepest)', value: 'high' },
+]
 
 export function createCliLlmState(
   config: CliApiConfig,
@@ -31,11 +44,13 @@ export function createCliLlmState(
   if (config.model) {
     selectedProfile.chatCompletion = { ...selectedProfile.chatCompletion, model: config.model }
   }
-  return {
+  const state = {
     settings: { entryFunction },
     toolchainProfiles: profiles,
     selectedToolchainProfile: config.selectedApi,
   }
+  if (config.reasoningEffort) setReasoningEffort(state, config.reasoningEffort)
+  return state
 }
 
 export const getProviderSettings = (llmState: CliLlmState, provider: string) => {
@@ -62,6 +77,23 @@ export const setProviderModel = (llmState: CliLlmState, provider: string, model:
     ...profile,
     chatCompletion: { ...settings, model },
   }
+}
+
+export const getSelectedReasoningEffort = (
+  llmState: CliLlmState,
+): ReasoningEffort | undefined => {
+  const value = getSelectedToolchainConfig(llmState)[llmState.settings.entryFunction]
+    ?.reasoning_effort
+  return isReasoningEffort(value) ? value : undefined
+}
+
+export const setReasoningEffort = (llmState: CliLlmState, reasoningEffort: ReasoningEffort) => {
+  llmState.toolchainProfiles = updateToolchainConfigValue(
+    llmState.toolchainProfiles,
+    llmState.selectedToolchainProfile,
+    [llmState.settings.entryFunction, 'reasoning_effort'],
+    reasoningEffort,
+  )
 }
 
 export function applyCodexAccountHeader(
