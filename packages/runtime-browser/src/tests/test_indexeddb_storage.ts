@@ -1,6 +1,10 @@
 import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
 import { createIndexedDbBlobBackend, createIndexedDbRecordBackend } from '../indexedDbStorage'
-import { createOpfsBlobStorageBackend, createOpfsStorageBackendResolver } from '../storage'
+import {
+  createOpfsBlobStorageBackend,
+  createOpfsStorageBackendResolver,
+  requestBrowserStoragePersistence,
+} from '../storage'
 import { createBrowserStoragePreferenceStore } from '../browserStorageSelection'
 
 export const testIndexedDbImplementsStorageBackendContract = async () => {
@@ -51,3 +55,32 @@ export const testBrowserStorageRemembersRecordAndBlobSelectionsSeparately = () =
 
 testBrowserStorageRemembersRecordAndBlobSelectionsSeparately.description =
   'Persists browser record and blob backend choices independently.'
+
+export const testBrowserStorageRequestsPersistentStorage = async () => {
+  let persisted = false
+  let requestCount = 0
+  const storageManager = {
+    persisted: async () => persisted,
+    persist: async () => {
+      requestCount += 1
+      persisted = true
+      return true
+    },
+  }
+
+  if (!(await requestBrowserStoragePersistence(storageManager))) {
+    throw new Error('Expected the browser storage persistence request to be granted.')
+  }
+  if (requestCount !== 1) {
+    throw new Error(`Expected one persistence request, received ${requestCount}.`)
+  }
+  if (!(await requestBrowserStoragePersistence(storageManager))) {
+    throw new Error('Expected already-persistent browser storage to remain persistent.')
+  }
+  if (requestCount !== 1) {
+    throw new Error('Already-persistent browser storage must not request permission again.')
+  }
+}
+
+testBrowserStorageRequestsPersistentStorage.description =
+  'Requests browser persistent storage once and reuses an existing persistence grant.'

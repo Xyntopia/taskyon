@@ -7,7 +7,10 @@ or application tool receives the data explicitly passed to it.
 
 Task records, indexes, settings, and attached files are stored through one scoped StorageClient.
 The browser host selects record and blob providers independently from OPFS, IndexedDB, or PGlite
-where supported, remembers that selection, and exposes only logical storage operations to Taskyon.
+where supported, remembers that selection, and Taskyon requests browser-managed persistent storage
+after the first task is explicitly created or imported. The browser may grant that request
+automatically or show its own permission UI; denial leaves local storage available but without the
+browser's persistence protection. The host exposes only logical storage operations to Taskyon.
 Clearing site data, changing profiles, or using private browsing can remove locally stored
 information, so export important work.
 

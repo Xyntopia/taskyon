@@ -19,6 +19,23 @@ export type OpfsStorageOptions = {
   lockNamePrefix?: string
 }
 
+export const requestBrowserStoragePersistence = async (
+  storageManager: Pick<StorageManager, 'persisted' | 'persist'> | undefined = typeof navigator ===
+  'undefined'
+    ? undefined
+    : navigator.storage,
+) => {
+  if (
+    !storageManager ||
+    typeof storageManager.persisted !== 'function' ||
+    typeof storageManager.persist !== 'function'
+  ) {
+    return false
+  }
+  if (await storageManager.persisted()) return true
+  return await storageManager.persist()
+}
+
 export type BrowserRuntimeStorageService =
   | {
       kind: 'browser'

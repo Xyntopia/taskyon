@@ -73,6 +73,7 @@ import {
 import {
   createOpfsBlobStorageBackend,
   createOpfsStorageBackendResolver,
+  requestBrowserStoragePersistence,
 } from '@taskyon/runtime-browser/storage'
 import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import { useConversationHistory } from '@taskyon/ui/modules/useConversationHistory'
@@ -1536,6 +1537,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     // TODO: red-define this as a middleware where we can intercept certain messages
     //       and also change the types of inside/outside ports...
     const shownCreateChainRequests = new Set<string>()
+    let storagePersistenceRequestStarted = false
     uiApiInside.receive((msg) => console.log('received message on UI port!', msg))
     createPortServer(
       uiApiInside,
@@ -1636,12 +1638,16 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
     uiApiInside.receive((msg) => {
       if (msg.type === 'configureTaskyonRequest' || msg.type === 'pasteClipboardRequest') return
-      if (msg.type === 'task.createRequest') {
-        ty.port.send(msg)
-        return
-      }
-      if (msg.type === 'task.createChainRequest') {
-        trackShownTaskChainRequest(shownCreateChainRequests, msg.requestId, msg.show)
+      if (msg.type === 'task.createRequest' || msg.type === 'task.createChainRequest') {
+        if (!storagePersistenceRequestStarted) {
+          storagePersistenceRequestStarted = true
+          void requestBrowserStoragePersistence().catch((error) =>
+            console.warn('Could not request persistent browser storage.', error),
+          )
+        }
+        if (msg.type === 'task.createChainRequest') {
+          trackShownTaskChainRequest(shownCreateChainRequests, msg.requestId, msg.show)
+        }
         ty.port.send(msg)
         return
       }
