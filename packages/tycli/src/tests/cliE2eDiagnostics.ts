@@ -1084,7 +1084,8 @@ export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
     steps: [
       { waitFor: 'Slash commands:', input: '/model\n' },
       { waitFor: 'Model menu', input: '\u0003' },
-      { delayMs: 200, input: '/exit\n' },
+      { waitFor: 'Menu cancelled.', input: '/tools\n' },
+      { waitFor: 'Active tool definitions:', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
     runner: 'pty',
@@ -1092,6 +1093,24 @@ export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
   assertContains(result.output, 'Ctrl-C received.')
   assertContains(result.output, 'Menu cancelled.')
+  assertContains(result.output, 'No conversation saved: no messages.')
+  assertNotContains(result.output, 'Fatal error')
+}
+
+export async function testEscapeCancelsModelMenuAndKeepsPromptUsable() {
+  const result = await runCliE2eSession({
+    testName: 'testEscapeCancelsModelMenuAndKeepsPromptUsable',
+    steps: [
+      { waitFor: 'Slash commands:', input: '/model\n' },
+      { waitFor: 'Model menu', input: '\u001b' },
+      { waitFor: 'idle]', input: '/tools\n' },
+      { waitFor: 'Active tool definitions:', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  assertContains(result.output, 'Active tool definitions:')
   assertContains(result.output, 'No conversation saved: no messages.')
   assertNotContains(result.output, 'Fatal error')
 }

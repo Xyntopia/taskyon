@@ -1,5 +1,6 @@
 import type { TaskCostSummary } from '@taskyon/taskyon'
 import { formatTaskCostFooter, formatTaskCostSummaryLines } from '../../cli/cost'
+import { formatPromptPrefixLine } from '../../cli/promptStatus'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -48,3 +49,32 @@ export const testCliCostFormattingSeparatesUnitsAndMarksPartialData = () => {
 
 testCliCostFormattingSeparatesUnitsAndMarksPartialData.description =
   'Formats tree cost output without combining USD and Taskyon credit amounts.'
+
+export const testCliPromptStatusShowsCostAndIncompleteMarker = () => {
+  const line = formatPromptPrefixLine({
+    activeTasks: 0,
+    cachePercent: 25,
+    cost: '$1.10 + 0.2000 credits',
+    costIncomplete: true,
+    model: 'gpt-test',
+    provider: 'openrouter.ai',
+    taskState: 'idle',
+  })
+  assert(
+    line === '[openrouter.ai | gpt-test | idle | cost $1.10 + 0.2000 credits* | cache 25%]',
+    'Expected the normal prompt status to show cost and incomplete data',
+  )
+  assert(
+    formatPromptPrefixLine({
+      activeTasks: 0,
+      model: 'gpt-test',
+      provider: 'taskyon',
+      taskState: 'idle',
+    }) === '[taskyon | gpt-test | idle]',
+    'Expected cost-free prompt status to remain unchanged',
+  )
+  return { success: true }
+}
+
+testCliPromptStatusShowsCostAndIncompleteMarker.description =
+  'Shows accumulated chat cost in the default prompt status without changing cost-free output.'

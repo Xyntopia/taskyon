@@ -148,7 +148,29 @@ export const testTaskCostServiceMarksMissingBillableDataAndCachesCompleteTrees =
   return { success: true }
 }
 
+export const testTaskCostServiceIncludesSequentialRootContinuation = async () => {
+  const root = messageTask('root', 1)
+  const completion = completionTask('completion', 2, undefined, root.id)
+  const tasks = new Map([root, completion].map((task) => [task.id, task]))
+  const service = createTaskCostService({
+    getTask: (id) => Promise.resolve(tasks.get(id) ?? null),
+    getMeta: (id) => Promise.resolve(id === completion.id ? costMeta(1, 2) : null),
+    getDirectChildren: () => Promise.resolve(new Set<string>()),
+    getNextSiblings: (id) =>
+      Promise.resolve(
+        new Set([...tasks.values()].filter((task) => task.priorID === id).map((task) => task.id)),
+      ),
+  })
+
+  const summary = await service.getSummary(completion.id)
+  assert(summary.total[0]?.amount === 1, 'Expected the sequential root continuation cost')
+  assert(summary.tokens.total === 15, 'Expected usage from the sequential root continuation')
+  return { success: true }
+}
+
 testTaskCostServiceIncludesTreeBranchesAndSeparatesLineage.description =
   'Aggregates every reachable task branch by default while keeping an explicit lineage scope.'
 testTaskCostServiceMarksMissingBillableDataAndCachesCompleteTrees.description =
   'Marks incomplete billable metadata and reuses only complete in-memory tree summaries.'
+testTaskCostServiceIncludesSequentialRootContinuation.description =
+  'Includes the sequential continuation attached to the root through priorID.'

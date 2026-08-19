@@ -305,7 +305,7 @@ export function createTaskCostService(options: TaskCostServiceOptions) {
       }
     }
 
-    await visitNode(rootId)
+    await visitSiblingChain(rootId)
     return { missingTaskIds, tasks }
   }
 

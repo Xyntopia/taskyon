@@ -11,6 +11,8 @@ import {
   testResumeConversationReportsStorageAndLogs as runResumeConversationReportsStorageAndLogs,
   testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
   testQuitPromptCtrlCCancelsAndCtrlDExits as runQuitPromptCtrlCCancelsAndCtrlDExits,
+  testCtrlCCancelsModelMenuAndKeepsPromptUsable as runCtrlCCancelsModelMenuAndKeepsPromptUsable,
+  testEscapeCancelsModelMenuAndKeepsPromptUsable as runEscapeCancelsModelMenuAndKeepsPromptUsable,
   testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
   testTaskRendererWritesHtmlPreviewForAssistantHtml as runTaskRendererWritesHtmlPreviewForAssistantHtml,
   testCliClarificationToolAcceptsTypedAnswers as runCliClarificationToolAcceptsTypedAnswers,
@@ -19,6 +21,20 @@ import {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
+}
+
+function assertNoSubmittedBlankLine(output: string, marker: string) {
+  const markerIndex = output.indexOf(marker)
+  assert(markerIndex >= 0, `Expected output to contain ${marker}.\n${output}`)
+  const transition = output.slice(Math.max(0, markerIndex - 200), markerIndex)
+  assert(
+    !transition.includes('\r\r\n\u001b[1A'),
+    `Expected menu selection not to leave a submitted blank line.\n${output}`,
+  )
+  assert(
+    !transition.includes('\u001b[2K\r\n\u001b[?2004l'),
+    `Expected menu selection not to leave a cleanup newline before the result.\n${output}`,
+  )
 }
 
 const forbiddenStartupRegressions = [
@@ -34,6 +50,103 @@ testCliBracketedPastePreservesMultilinePrompt.description =
   runBracketedPastePreservesMultilinePrompt.description
 testCliBracketedPastePreservesMultilinePrompt.timeoutMs =
   runBracketedPastePreservesMultilinePrompt.timeoutMs
+
+export const testCtrlCCancelsModelMenuAndKeepsPromptUsable =
+  runCtrlCCancelsModelMenuAndKeepsPromptUsable
+testCtrlCCancelsModelMenuAndKeepsPromptUsable.description =
+  'Ctrl-C cancellation returns directly to a usable prompt.'
+testCtrlCCancelsModelMenuAndKeepsPromptUsable.timeoutMs = 60_000
+
+export const testEscapeCancelsModelMenuAndKeepsPromptUsable =
+  runEscapeCancelsModelMenuAndKeepsPromptUsable
+testEscapeCancelsModelMenuAndKeepsPromptUsable.description =
+  'Escape cancellation returns directly to a usable prompt.'
+testEscapeCancelsModelMenuAndKeepsPromptUsable.timeoutMs = 60_000
+
+export const testCliSlashMenuSelectionDoesNotLeaveSubmittedBlankLine = async () => {
+  const result = await runCliE2eSession({
+    testName: 'testCliSlashMenuSelectionDoesNotLeaveSubmittedBlankLine',
+    steps: [
+      { waitFor: 'Slash commands:', input: '/' },
+      { waitFor: 'filter:', input: 'cost' },
+      { delayMs: 100, input: '\n' },
+      { waitFor: 'No active chat tree yet.', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '1' },
+    runner: 'pty',
+  })
+
+  assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
+  assertNoSubmittedBlankLine(result.output, 'No active chat tree yet.')
+  return { success: true }
+}
+
+testCliSlashMenuSelectionDoesNotLeaveSubmittedBlankLine.description =
+  'Selecting a slash command from the raw menu returns to the prompt without an extra blank line.'
+testCliSlashMenuSelectionDoesNotLeaveSubmittedBlankLine.timeoutMs = 60_000
+
+export const testCliFileMenuSelectionDoesNotLeaveSubmittedBlankLine = async () => {
+  const result = await runCliE2eSession({
+    testName: 'testCliFileMenuSelectionDoesNotLeaveSubmittedBlankLine',
+    steps: [
+      { waitFor: 'Slash commands:', input: '@' },
+      { waitFor: 'Files (@)', input: 'package.json' },
+      { waitFor: 'filter: package.json', input: '\n' },
+      { waitFor: 'Added file context: package.json', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '1' },
+    runner: 'pty',
+  })
+
+  assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
+  assertNoSubmittedBlankLine(result.output, 'Added file context: package.json')
+  return { success: true }
+}
+
+testCliFileMenuSelectionDoesNotLeaveSubmittedBlankLine.description =
+  'Selecting a file from the raw menu returns to the prompt without an extra blank line.'
+testCliFileMenuSelectionDoesNotLeaveSubmittedBlankLine.timeoutMs = 60_000
+
+export const testCliModelMenuNavigationDoesNotAccumulateBlankLines = async () => {
+  const result = await runCliE2eSession({
+    testName: 'testCliModelMenuNavigationDoesNotAccumulateBlankLines',
+    steps: [
+      { waitFor: 'Slash commands:', input: '/model\n' },
+      { waitFor: 'Model menu', input: '\u001b[B\u001b[A' },
+      { delayMs: 100, input: '\u0003' },
+      { waitFor: 'Menu cancelled.', input: '' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    runner: 'pty',
+  })
+
+  assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
+  assert(
+    /\| idle\]\r\n\r\n/.test(result.output),
+    `Expected a blank line between the live status and prompt.\n${result.output}`,
+  )
+  const modelMenuStart = result.output.indexOf('Model menu')
+  const cancellationStart = result.output.indexOf('Ctrl-C received.')
+  const modelMenuOutput = result.output.slice(
+    modelMenuStart >= 0 ? modelMenuStart : 0,
+    cancellationStart >= 0 ? cancellationStart : result.output.length,
+  )
+  const cursorClearCommand = '\u001b[1A\r\u001b[2K'
+  const clearCommandCount = modelMenuOutput.split(cursorClearCommand).length - 1
+  assert(
+    clearCommandCount === 21,
+    `Expected two seven-line model menu redraws plus cleanup with cursor resets, got ${String(clearCommandCount)}.\n${result.output}`,
+  )
+  assert(
+    result.output.includes('\x1b[2K\r\nCtrl-C received.'),
+    `Expected a blank line between the closed menu and the cancellation message.\n${result.output}`,
+  )
+  return { success: true }
+}
+
+testCliModelMenuNavigationDoesNotAccumulateBlankLines.description =
+  'Up and Down navigation redraws the model menu without accumulating blank lines.'
+testCliModelMenuNavigationDoesNotAccumulateBlankLines.timeoutMs = 60_000
 
 export const testCliHelloWorldProducesAssistantResponse = async () => {
   const result = await runCliE2eSession({

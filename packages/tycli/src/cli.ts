@@ -100,6 +100,7 @@ import { createStaticEmbeddingAssetReader } from './cli/staticEmbeddingCache'
 import { loadTaskSearchSidecars, saveTaskSearchSidecars } from './cli/searchIndexPersistence'
 import { createCliFooter } from './cli/ui'
 import { formatTaskCostFooter, formatTaskCostSummaryLines } from './cli/cost'
+import { formatPromptPrefixLine } from './cli/promptStatus'
 import {
   applyCodexAccountHeader,
   canReachLocalApi,
@@ -323,13 +324,6 @@ type RuntimeLog = {
   flush: () => Promise<void>
 }
 
-type PromptPrefixStatus = {
-  activeTasks: number
-  model: string
-  provider: string
-  taskState: 'idle' | 'processing' | 'finished'
-}
-
 type SessionLocationInfo = {
   conversationPath: string
   logPath?: string
@@ -395,15 +389,6 @@ const resolveCliChatCompletionTrace = (environmentPrefix: string) => {
     dir: traceDir,
     label: process.env[`${environmentPrefix}_CHAT_COMPLETION_TRACE_LABEL`]?.trim() || undefined,
   }
-}
-
-function formatPromptTaskState(status: PromptPrefixStatus): string {
-  if (status.activeTasks <= 0) return status.taskState
-  return `${status.taskState}:${status.activeTasks}`
-}
-
-function formatPromptPrefixLine(status: PromptPrefixStatus): string {
-  return `[${status.provider} | ${status.model} | ${formatPromptTaskState(status)}]`
 }
 
 function writeLine(text: string) {
@@ -1343,6 +1328,7 @@ function normalizeThinkingChunk(chunk: unknown): string {
 }
 
 async function selectFromListRaw(
+  rl: ReturnType<typeof createInterface>,
   title: string,
   options: string[],
   config?: {
@@ -1361,6 +1347,11 @@ async function selectFromListRaw(
   const stdin = process.stdin
   const stdout = process.stdout
   const optionsFor = (query: string) => optionsForQuery?.(query) ?? options
+  const menuTitle = title.startsWith('\n') ? title : `\n${title}`
+  const readlineKeypressListeners = stdin.listeners('keypress')
+  readlineKeypressListeners.forEach((listener) => {
+    stdin.removeListener('keypress', listener as (...args: unknown[]) => void)
+  })
 
   emitKeypressEvents(stdin)
   stdin.setRawMode(true)
@@ -1375,7 +1366,7 @@ async function selectFromListRaw(
     line.length > width ? `${line.slice(0, Math.max(0, width - 1))}…` : line
 
   const clear = () => {
-    for (let i = 0; i < renderedLines; i += 1) stdout.write('\x1b[1A\x1b[2K')
+    for (let i = 0; i < renderedLines; i += 1) stdout.write('\x1b[1A\r\x1b[2K')
     renderedLines = 0
   }
 
@@ -1390,6 +1381,7 @@ async function selectFromListRaw(
   }
 
   const render = () => {
+    const titleLines = menuTitle.split(/\r?\n/)
     clear()
     const list = filteredOptions()
     if (selectedIdx >= list.length) selectedIdx = Math.max(0, list.length - 1)
@@ -1399,10 +1391,15 @@ async function selectFromListRaw(
       : 'Use ↑/↓ and Enter (Esc/Ctrl+C to cancel)'
     const toggleHelp = config?.toggleHelp?.()
     const queryLine = filterable ? `filter: ${query}` : null
-    const lines = [title, [help, toggleHelp].filter(Boolean).join(' · '), queryLine, ...rows]
-      .filter(Boolean)
+    const lines = [
+      ...titleLines,
+      [help, toggleHelp].filter(Boolean).join(' · '),
+      queryLine,
+      ...rows,
+    ]
+      .filter((line): line is string => line !== null)
       .map((line) => fitLine(String(line)))
-    stdout.write(`${lines.join('\n')}\n`)
+    stdout.write(`\r${lines.join('\n')}\n`)
     renderedLines = lines.length
   }
 
@@ -1415,14 +1412,19 @@ async function selectFromListRaw(
       process.off('SIGINT', onSigint)
       process.off('SIGTERM', onSigterm)
       clear()
+      ;[...readlineKeypressListeners].reverse().forEach((listener) => {
+        stdin.prependListener('keypress', listener as (...args: unknown[]) => void)
+      })
       restoreTerminalInput()
+      rl.resume()
     }
-    const finish = (value: number | null) => {
+    const finish = (value: number | null, leaveGap = false) => {
       cleanup()
+      if (leaveGap) stdout.write('\n')
       resolve(value)
     }
     const cancelWithNotice = (source: 'Ctrl-C' | 'Ctrl-D') => {
-      finish(null)
+      finish(null, true)
       writeLine(`${source} received.`)
       writeLine('Menu cancelled.')
     }
@@ -1515,7 +1517,7 @@ async function selectFromList(
       return num - 1
     }
 
-    return selectFromListRaw(title, options, config)
+    return selectFromListRaw(rl, title, options, config)
   })
 }
 
@@ -1873,10 +1875,12 @@ async function promptForMainInput(
 
   process.stdout.write(ENABLE_BRACKETED_PASTE)
   emitKeypressEvents(stdin, rl)
+  const readlineKeypressListeners = stdin.listeners('keypress')
 
   return await new Promise<string | null>((resolve) => {
     let settled = false
     let menuOpen = false
+    let restoreReadlineKeypress: (() => void) | undefined
     let activePaste:
       | {
           initialLine: string
@@ -1970,8 +1974,24 @@ async function promptForMainInput(
       ;(async () => {
         menuOpen = true
         rl.write('', { ctrl: true, name: 'u' })
-        const selected = typedSlash ? await onSlashRequested() : await onFileRequested()
-        menuOpen = false
+        readlineKeypressListeners.forEach((listener) => {
+          stdin.removeListener('keypress', listener as (...args: unknown[]) => void)
+        })
+        restoreReadlineKeypress = () => {
+          ;[...readlineKeypressListeners].reverse().forEach((listener) => {
+            stdin.prependListener('keypress', listener as (...args: unknown[]) => void)
+          })
+        }
+        rl.pause()
+        let selected: string | null
+        try {
+          selected = typedSlash ? await onSlashRequested() : await onFileRequested()
+        } finally {
+          restoreReadlineKeypress?.()
+          restoreReadlineKeypress = undefined
+          rl.resume()
+          menuOpen = false
+        }
         finish(selected ?? '')
       })().catch(() => {
         menuOpen = false
@@ -3414,8 +3434,12 @@ async function main(host: InteractiveCliHost) {
         model: providerModel.model,
         taskState: taskProcessingStatus,
         activeTasks: activeTaskCount(),
+        ...(latestCostFooter?.cost ? { cost: latestCostFooter.cost } : {}),
+        ...(latestCostFooter ? { costIncomplete: latestCostFooter.incomplete } : {}),
+        ...(latestCostFooter ? { cachePercent: latestCostFooter.cachePercent } : {}),
       }),
     )
+    writeLine('')
   }
 
   const clearThinkingRenderTimer = () => {
