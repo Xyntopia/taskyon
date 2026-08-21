@@ -77,11 +77,11 @@ const tauriHttpWebReader = createTool({
 
 // TODO: add more functionality from here:   https://r.jina.ai/docs
 // TODO: add a state how many tokesn we have left over :)
-export const jinaSearch = createTool({
-  description: 'Search the web through the authenticated Jina Search API.',
+export const webSearch = createTool({
+  description: 'Search the web through the configured fallback search engine.',
   longDescription:
-    'The API key is requested through Taskyon’s secret boundary and sent to the external Jina service. Results are normalized to titles, descriptions, and URLs rather than returning the raw provider payload.',
-  name: 'jinaSearch',
+    'This fallback uses the authenticated Jina Search API when provider-native web search is unavailable. The API key is requested through Taskyon’s secret boundary, and results are normalized to titles, descriptions, and URLs rather than returning the raw provider payload.',
+  name: 'webSearch',
   renderOptions: {
     hideChat: false,
     hideLlm: false,
@@ -158,6 +158,8 @@ export const jinaSearch = createTool({
     }
   },
 })
+
+export const jinaSearch = webSearch
 
 const clock = createTool({
   description: 'Return the local time, date, weekday, and seconds for now or a Unix timestamp.',

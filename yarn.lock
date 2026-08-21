@@ -3554,13 +3554,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openrouter/ai-sdk-provider@npm:^2.2.3":
-  version: 2.2.3
-  resolution: "@openrouter/ai-sdk-provider@npm:2.2.3"
+"@openrouter/ai-sdk-provider@npm:^2.9.1":
+  version: 2.10.0
+  resolution: "@openrouter/ai-sdk-provider@npm:2.10.0"
   peerDependencies:
     ai: ^6.0.0
     zod: ^3.25.0 || ^4.0.0
-  checksum: 10c0/d3b6cb9a8bc4df4c22ccbff13932ef25b3999b74abe9aa38d0d9de9e7ae6f69f4b0b6129c9ad13a0f901f068d4e67b7e8ce69a5cf63187bdb4c85608e359f149
+  checksum: 10c0/22b948f8e82c0affcc4cba0a9b996a09cbc424d17c9f30a9803fb7c3b42c832441e4188d147beed98910cec1bb7200a8c5483fbc89702b0bed8f3d8d975f3108
   languageName: node
   linkType: hard
 
@@ -4886,7 +4886,7 @@ __metadata:
     "@huggingface/transformers": "npm:^4.0.1"
     "@msgpack/msgpack": "npm:^3.1.2"
     "@noble/ed25519": "npm:^2.1.0"
-    "@openrouter/ai-sdk-provider": "npm:^2.2.3"
+    "@openrouter/ai-sdk-provider": "npm:^2.9.1"
     "@reclaimprotocol/tls": "npm:^0.1.2"
     "@scure/bip39": "npm:^1.5.0"
     "@taskyon/common": "workspace:*"
@@ -17482,7 +17482,7 @@ __metadata:
     "@mozilla/readability": "npm:^0.5.0"
     "@msgpack/msgpack": "npm:^3.1.2"
     "@noble/ed25519": "npm:^2.1.0"
-    "@openrouter/ai-sdk-provider": "npm:^2.2.3"
+    "@openrouter/ai-sdk-provider": "npm:^2.9.1"
     "@playwright/test": "npm:^1.55.0"
     "@quasar/app-vite": "npm:^2.3.0"
     "@quasar/cli": "npm:^2.5.0"

@@ -90,6 +90,8 @@ export const resolveToolDefinitionsForTaskChain = async (
     definitions[definition.name] = {
       name: definition.name,
       description: definition.description,
+      ...(definition.longDescription ? { longDescription: definition.longDescription } : {}),
+      ...(definition.renderOptions ? { renderOptions: definition.renderOptions } : {}),
       parameters: deriveBindingParameters(definition, target),
     }
   }

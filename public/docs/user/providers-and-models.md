@@ -38,6 +38,14 @@ Tool calling, multimodal inputs, structured output, and hosted web search are mo
 not guarantees of the OpenAI-compatible protocol. If a workflow fails only when tools are enabled,
 verify that the selected model and endpoint support tool calls.
 
+When enabled, Taskyon uses the AI SDK's provider-defined web-search capability where the selected
+provider supports it. Direct OpenAI and ChatGPT Codex use the Responses `web_search` capability.
+OpenRouter and Taskyon-hosted OpenRouter routes use the `openrouter:web_search` server tool, which
+lets the model decide when to search and uses provider-native search when available, with an Exa
+fallback otherwise. These search capabilities can be sent alongside ordinary Taskyon tools, so a
+model can search and then call Python or another tool in the same provider workflow. Generic local
+or OpenAI-compatible endpoints use Taskyon's `webSearch` fallback tool when web search is enabled.
+
 Local inference can reduce data exposure and per-token billing, but it still consumes local
 hardware and does not automatically make remote tools local. Browser requests can also require the
 endpoint to allow the Taskyon origin through CORS.
@@ -66,6 +74,7 @@ and pricing rather than a copied table in Taskyon documentation.
 ## Advanced settings
 
 **Settings > Agent Configuration** exposes entry-node and tool settings. Prompt templates,
-provider tool calling, shortlist mechanics, and optional web search belong to the configured entry
-node. Selection guidance for an individual tool belongs to that tool's descriptions and parameter
-schema. The `chatCompletion` tool remains the model execution gateway.
+pinned tools, recent and frequent tool windows, focused tool search, optional overview shortlists,
+provider tool calling, and optional web search belong to the configured entry node. Selection
+guidance for an individual tool belongs to that tool's descriptions and parameter schema. The
+`chatCompletion` tool remains the model execution gateway.

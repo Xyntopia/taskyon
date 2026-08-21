@@ -5,6 +5,7 @@ import type { FunctionArguments } from '../types/tools'
 import { safeYamlDump } from '../utils/yamlUtils'
 
 export const TASK_REF_PREFIX = '_t:'
+export const PREVIOUS_RESULT_REF = '$previousResult'
 const PLACEHOLDER_REGEX = /{{\s*([^{}]+?)\s*}}/g
 const JINJA_BLOCK_REGEX = /({{|{%)([\s\S]*?)(}}|%})/g
 const TASKYON_VARIABLE_COMMENT_REGEX =
@@ -26,6 +27,7 @@ type MaterializeOptions = {
   variableService?: TaskVariablePresentationService
   tasksById?: Map<string, TaskNode>
   stringifyValue?: (value: unknown) => string
+  resolveRelativeTaskRef?: (reference: string) => Promise<TaskNode | null>
 }
 
 type UnknownMap = Record<string, unknown>
@@ -78,6 +80,49 @@ export const isTaskVariableRef = (value: string): value is TaskVariableRef =>
 
 export const taskRefToTaskId = (value: string): string | undefined =>
   isTaskVariableRef(value) ? value.slice(TASK_REF_PREFIX.length) : undefined
+
+const previousResultPathPart = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+export const isPreviousResultRef = (value: string) =>
+  value === PREVIOUS_RESULT_REF ||
+  value.startsWith(`${PREVIOUS_RESULT_REF}.`) ||
+  value.startsWith(`${PREVIOUS_RESULT_REF}[`)
+
+export const parsePreviousResultRef = (reference: string): Array<string | number> => {
+  if (!isPreviousResultRef(reference)) {
+    throw new Error(`Invalid Taskyon relative result reference: ${reference}`)
+  }
+  if (reference === PREVIOUS_RESULT_REF) return []
+
+  const path: Array<string | number> = []
+  let cursor = PREVIOUS_RESULT_REF.length
+  while (cursor < reference.length) {
+    const marker = reference[cursor]
+    if (marker === '.') {
+      const match = reference.slice(cursor + 1).match(/^[A-Za-z_][A-Za-z0-9_]*/)
+      const part = match?.[0]
+      if (!part || !previousResultPathPart.test(part)) {
+        throw new Error(`Invalid Taskyon relative result reference: ${reference}`)
+      }
+      path.push(part)
+      cursor += part.length + 1
+      continue
+    }
+    if (marker === '[') {
+      const match = reference.slice(cursor + 1).match(/^([0-9]+)\]/)
+      if (!match) {
+        throw new Error(
+          `Taskyon relative result references only support numeric array indexes: ${reference}`,
+        )
+      }
+      path.push(Number(match[1]))
+      cursor += match[0].length + 1
+      continue
+    }
+    throw new Error(`Invalid Taskyon relative result reference: ${reference}`)
+  }
+  return path
+}
 
 export const createTaskVariablePresentationService = () => {
   const taskIdToVariableName = new Map<string, string>()
@@ -168,6 +213,42 @@ const setDeepPath = (value: Record<string, unknown>, path: string, nextValue: un
   current[parts.at(-1)!] = nextValue
 }
 
+const readPreviousResultPath = (value: unknown, reference: string) => {
+  let current = value
+  for (const part of parsePreviousResultRef(reference)) {
+    if (typeof part === 'number') {
+      if (!Array.isArray(current) || part >= current.length || !Object.hasOwn(current, part)) {
+        throw new Error(`Taskyon $use reference points to a missing result path: ${reference}`)
+      }
+      current = current[part]
+      continue
+    }
+    if (!isObjectMap(current) || !Object.hasOwn(current, part)) {
+      throw new Error(`Taskyon $use reference points to a missing result path: ${reference}`)
+    }
+    current = current[part]
+  }
+  return current
+}
+
+const resolveReferencedTask = async (rawRef: string, options: MaterializeOptions) => {
+  if (isPreviousResultRef(rawRef)) {
+    parsePreviousResultRef(rawRef)
+    const task = await options.resolveRelativeTaskRef?.(rawRef)
+    if (!task) {
+      throw new Error(`Taskyon $use reference points to no previous result: ${rawRef}`)
+    }
+    return { task, value: readPreviousResultPath(task.content.data, rawRef) }
+  }
+
+  const taskId = taskRefToTaskId(rawRef) ?? options.variableService?.resolveVariableName(rawRef)
+  if (!taskId) throw new Error(`Unknown Taskyon variable name in $use: ${rawRef}`)
+  const task = options.tasksById?.get(taskId) ?? (await options.getTaskById(taskId))
+  if (!task) throw new Error(`Taskyon $use points to missing task ${taskId}`)
+  options.tasksById?.set(taskId, task)
+  return { task, value: task.content.data }
+}
+
 const stringifyExecutionValue = (value: unknown) => {
   if (typeof value === 'string') return value
   return safeYamlDump(value)
@@ -245,7 +326,10 @@ export const compileTaskyonFunctionArguments = (
             `Taskyon $use target path conflicts with a literal argument: ${targetPath}`,
           )
         }
-        if (isTaskVariableRef(rawRef)) return [targetPath, rawRef]
+        if (isTaskVariableRef(rawRef) || isPreviousResultRef(rawRef)) {
+          if (isPreviousResultRef(rawRef)) parsePreviousResultRef(rawRef)
+          return [targetPath, rawRef]
+        }
         const taskId = variableService.resolveVariableName(rawRef)
         if (!taskId) {
           throw new Error(`Unknown Taskyon variable name in $use: ${rawRef}`)
@@ -360,19 +444,18 @@ export const materializeTaskyonFunctionArguments = async (
         await Promise.all(
           Object.entries(useMapping).map(async ([targetPath, rawRef]) => {
             if (typeof rawRef !== 'string') return [targetPath, rawRef]
-            const taskId =
-              taskRefToTaskId(rawRef) ?? options.variableService?.resolveVariableName(rawRef)
-            if (!taskId) throw new Error(`Unknown Taskyon variable name in $use: ${rawRef}`)
-            const task = options.tasksById?.get(taskId) ?? (await options.getTaskById(taskId))
-            if (!task) throw new Error(`Taskyon $use points to missing task ${taskId}`)
-            options.tasksById?.set(taskId, task)
+            if (isPreviousResultRef(rawRef)) {
+              parsePreviousResultRef(rawRef)
+              return [targetPath, rawRef]
+            }
+            const { task } = await resolveReferencedTask(rawRef, options)
             const variableName = options.variableService?.variableNameForTaskId(
-              taskId,
+              task.id,
               task,
               options.tasksById,
             )
             if (!variableName)
-              throw new Error(`No LLM variable name could be resolved for task ${taskId}`)
+              throw new Error(`No LLM variable name could be resolved for task ${task.id}`)
             return [targetPath, variableName]
           }),
         ),
@@ -390,15 +473,11 @@ export const materializeTaskyonFunctionArguments = async (
       if (typeof rawRef !== 'string') {
         throw new Error(`Taskyon $use expects string refs, got ${typeof rawRef} at ${targetPath}`)
       }
-      const taskId = taskRefToTaskId(rawRef) ?? options.variableService?.resolveVariableName(rawRef)
-      if (!taskId) throw new Error(`Unknown Taskyon variable name in $use: ${rawRef}`)
-      const task = options.tasksById?.get(taskId) ?? (await options.getTaskById(taskId))
-      if (!task) throw new Error(`Taskyon $use points to missing task ${taskId}`)
-      options.tasksById?.set(taskId, task)
       if (hasOwnPath(literalArgs, targetPath)) {
         throw new Error(`Taskyon $use target path conflicts with a literal argument: ${targetPath}`)
       }
-      setDeepPath(literalArgs, targetPath, task.content.data)
+      const { value } = await resolveReferencedTask(rawRef, options)
+      setDeepPath(literalArgs, targetPath, value)
     }
   }
 

@@ -66,6 +66,7 @@ import {
 } from './toolSettings'
 import { createCompiledSubtasksResult, createTaskCompiler, type TaskCompiler } from './taskCompiler'
 import type { ReadonlyDeep } from 'type-fest'
+import { resolvePreviousSiblingResultTask } from './taskChainSelection'
 
 type TaskyonProtocolMessage = ProtocolMessage<typeof taskyonProtocol>
 type TaskyonHostMessage = ProtocolMessage<typeof taskyonHostProtocol>
@@ -409,6 +410,14 @@ const dynamicContext =
         }),
       resolveRegisteredTool: toolManager.resolveTool,
     })
+    const resolvePreviousResultTask = async (taskId: string) => {
+      const directResult = await resolvePreviousSiblingResultTask(taskId, {
+        getTask: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
+        searchAllDirectChildren: taskManagerInstance.searchAllDirectChildren,
+        findSiblingLeafTasks: taskManagerInstance.findSiblingLeafTasks,
+      })
+      return directResult ?? (await taskManagerInstance.getTaskChain(taskId)).at(-2) ?? null
+    }
     const coreToolExecutor = registerToolRpcExecutor({
       port: coreToolRpcPort,
       getTool: async (name, call) => {
@@ -421,6 +430,7 @@ const dynamicContext =
         prepareInvocationToolCall(call, {
           resolveInvocationTool,
           getTaskById: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
+          resolvePreviousResultTask,
           resolveToolSettings: async (name, toolRevision, settingsRevision) =>
             (await toolSettingsManager.resolve(name, toolRevision, settingsRevision))?.settings,
         }),
@@ -548,6 +558,7 @@ const dynamicContext =
           {
             resolveInvocationTool,
             getTaskById: (id) => taskManagerInstance.getTask(id, { contentMode: 'hydrated' }),
+            resolvePreviousResultTask,
             resolveToolSettings: async (name, toolRevision, settingsRevision) =>
               (await toolSettingsManager.resolve(name, toolRevision, settingsRevision))?.settings,
           },

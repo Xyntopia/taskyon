@@ -10,7 +10,7 @@ import { executePythonScript } from './executePython'
 import { createStorageTool } from './fileTools'
 import { createDagGraphProjectTool } from './dagGraphProjectTool'
 import type { TaskyonStorageClient } from '../api/storageProtocol'
-import { smallHelperTools } from './helperCollection'
+import { smallHelperTools, webSearch } from './helperCollection'
 import { localVectorStore } from './localVectorStore'
 import { proceduralTools } from './proceduralGraphics'
 import { taskOrganizationTools, taskSearcher } from './TaskPlannerTool'
@@ -30,6 +30,7 @@ import { wfcGenerator } from './wavefunctioncollapse'
 export {
   resolveAgentToolCatalog,
   resolveInitialAgentToolCatalog,
+  resolveTaskTreeAgentToolWindow,
   searchAgentToolCatalog,
 } from './toolTools'
 export * from './lambdaTool'
@@ -41,6 +42,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
 }): TyCoreToolSetup => ({
   baseTools: [
     ...smallHelperTools,
+    webSearch,
     ...appDevTools,
     ...useFullSmallTools,
     ...devTools,

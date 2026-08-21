@@ -63,7 +63,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: [],
-    toolChooser: { enabled: true, useTools: true, webSearch: true },
+    toolChooser: { enabled: true, useToolShortlist: true },
   })
 
   const ty = await tyCore(

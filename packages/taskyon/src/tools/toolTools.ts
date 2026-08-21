@@ -6,6 +6,7 @@ import { createTool } from '../types/toolApi'
 import { ToolBase } from '../types/tools'
 import type { TaskNode } from '../types/taskNode'
 import { createChatCompletionTask } from '../api'
+import { rankToolDefinitions } from './toolSearchRanking'
 
 const INTERNAL_AGENT_TOOL_NAMES = new Set([
   'chatCompletion',
@@ -66,28 +67,59 @@ export const resolveInitialAgentToolCatalog = (
   return [...ordinary, ...recentDag]
 }
 
-const searchCatalogEntries = (
+export const resolveTaskTreeAgentToolWindow = (
+  tools: Readonly<Record<string, ToolBase>>,
+  taskChain: readonly TaskNode[],
+  unavailableToolNames: ReadonlySet<string> = new Set(),
+  recentLimit = 3,
+  frequentLimit = 3,
+  allowedToolNames: readonly string[] = [],
+  pinnedToolNames: readonly string[] = [],
+): AgentToolCatalogEntry[] => {
+  const catalog = resolveAgentToolCatalog(tools, unavailableToolNames)
+  const byName = new Map(catalog.map((tool) => [tool.name, tool]))
+  const calls = taskChain.flatMap((task) =>
+    task.content.type === 'functioncall' ? [task.content.data.name] : [],
+  )
+  const recentNames = [...calls].reverse()
+  const frequencies = new Map<string, number>()
+  calls.forEach((name) => frequencies.set(name, (frequencies.get(name) ?? 0) + 1))
+  const frequentNames = [...frequencies.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([name]) => name)
+
+  const selectedNames = [
+    ...pinnedToolNames,
+    ...allowedToolNames,
+    ...recentNames.slice(0, recentLimit),
+    ...frequentNames.slice(0, frequentLimit),
+  ]
+  const selected = selectedNames
+    .filter((name, index, names) => names.indexOf(name) === index)
+    .map((name) => byName.get(name))
+    .filter((tool): tool is AgentToolCatalogEntry => tool !== undefined)
+
+  if (selected.length > 0) return selected
+  return catalog.slice(0, recentLimit + frequentLimit)
+}
+
+const searchToolCatalogEntries = (
+  tools: Readonly<Record<string, ToolBase>>,
   catalog: readonly AgentToolCatalogEntry[],
   query: string,
   limit: number,
 ): AgentToolCatalogEntry[] => {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
-  if (terms.length === 0) return catalog.slice(0, limit)
-
-  return catalog
-    .map((tool) => {
-      const name = tool.name.toLowerCase()
-      const haystack = `${name} ${tool.description.toLowerCase()}`
-      const matches = terms.filter((term) => haystack.includes(term)).length
-      const score = matches * 10 + (terms.some((term) => name.includes(term)) ? 5 : 0)
-      return { tool, score }
-    })
-    .filter(({ score }) => score > 0)
-    .sort(
-      (left, right) => right.score - left.score || left.tool.name.localeCompare(right.tool.name),
-    )
-    .slice(0, Math.max(1, limit))
-    .map(({ tool }) => tool)
+  const visibleNames = new Set(catalog.map((tool) => tool.name))
+  const rankedDefinitions = rankToolDefinitions(
+    Object.values(tools).filter((tool) => visibleNames.has(tool.name)),
+    query,
+    limit,
+  )
+  const catalogByName = new Map(catalog.map((entry) => [entry.name, entry]))
+  return rankedDefinitions.flatMap((definition) => {
+    const entry = catalogByName.get(definition.name)
+    return entry ? [entry] : []
+  })
 }
 
 export const searchAgentToolCatalog = (
@@ -95,8 +127,17 @@ export const searchAgentToolCatalog = (
   query: string,
   limit = 10,
   unavailableToolNames: ReadonlySet<string> = new Set(),
-): AgentToolCatalogEntry[] =>
-  searchCatalogEntries(resolveAgentToolCatalog(tools, unavailableToolNames), query, limit)
+): AgentToolCatalogEntry[] => {
+  const catalog = resolveAgentToolCatalog(tools, unavailableToolNames)
+  const definitions = catalog.flatMap((entry) => {
+    const definition = tools[entry.name]
+    return definition ? [definition] : []
+  })
+  const searchableTools = Object.fromEntries(
+    definitions.map((definition) => [definition.name, definition]),
+  )
+  return searchToolCatalogEntries(searchableTools, catalog, query, limit)
+}
 
 export const createToolSearcher = (
   toolManager: ToolManager,
@@ -166,7 +207,12 @@ export const createToolSearcher = (
         }
       } else if (query) {
         result = {
-          'Here are the matching tools': searchCatalogEntries(toolList, query, limit ?? 10),
+          'Here are the matching tools': searchToolCatalogEntries(
+            searchableTools,
+            toolList,
+            query,
+            limit ?? 10,
+          ),
         }
       } else if (toolName) {
         result = {

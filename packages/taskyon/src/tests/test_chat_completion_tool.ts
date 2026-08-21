@@ -18,7 +18,7 @@ import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import { resolveChatCompletionConnection, type ProviderRequestTrace } from '../types/chatCompletion'
 import { getTaskyonCosts } from '../taskyon.space/taskyon.space_api'
 import { taskPlanner } from '../tools/TaskPlannerTool'
-import { streamText } from 'ai'
+import { jsonSchema, streamText } from 'ai'
 import type { JSONSchema7 } from 'json-schema'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
@@ -155,6 +155,73 @@ export const testChatCompletionDiscoversScopedToolsWithoutRenderingTheirDefiniti
 
 testChatCompletionDiscoversScopedToolsWithoutRenderingTheirDefinitions.description =
   'Discovers lineage-scoped tools while excluding their metadata, code, and references from provider messages.'
+
+export const testHiddenScopedSelectorDoesNotRenderMissingToolResponse = async () => {
+  const scopedSelector = task({
+    id: 'hidden-selector-definition',
+    role: 'system',
+    content: {
+      type: 'tooldefinition',
+      data: {
+        name: 'selectTaskyonTools',
+        description: 'Select relevant tools.',
+        renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
+        implementation: {
+          type: 'binding',
+          target: 'entryNode',
+          targetRevision: 'sha256:selector-target-revision',
+          fixedArguments: {},
+          publicArguments: {
+            allowedTools: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  })
+  const selectorCall = task({
+    id: 'hidden-selector-call',
+    role: 'function',
+    parentID: scopedSelector.id,
+    content: {
+      type: 'functioncall',
+      data: { name: 'selectTaskyonTools', arguments: { allowedTools: ['exploration'] } },
+    },
+  })
+  const definitions = await resolveToolDefinitionsForTaskChain([scopedSelector, selectorCall], {
+    entryNode: {
+      name: 'entryNode',
+      description: 'Route a task.',
+      parameters: {
+        type: 'object',
+        properties: {
+          allowedTools: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+  })
+  assert(
+    definitions.selectTaskyonTools?.renderOptions?.hideLlm === true,
+    'Expected scoped selector render options to survive binding resolution',
+  )
+  const messages = await convertTaskNodesToOpenAIChat(
+    [scopedSelector, selectorCall],
+    undefined,
+    false,
+    true,
+    definitions,
+  )
+  assert(
+    !JSON.stringify(messages).includes('No response was recorded from the tool.'),
+    'Expected hidden selector continuations not to render a fake missing tool result',
+  )
+  return { messages }
+}
+
+testHiddenScopedSelectorDoesNotRenderMissingToolResponse.description =
+  'Keeps hidden selector continuations out of provider tool-call history instead of inserting a fake missing result.'
 
 export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
   const providerSettings = {
@@ -690,6 +757,10 @@ export const testChatCompletionMixedTextAndNativeToolCallContinuesWithTool = () 
   assert(outcome.kind === 'tool-calls', 'Expected native tool call to control continuation')
   assert(outcome.calls.length === 1, 'Expected one interpreted tool call')
   assert(outcome.calls[0]?.name === 'clock', 'Expected the clock tool call')
+  assert(
+    outcome.assistantMessages?.[0]?.content === 'I will check.',
+    'Expected visible assistant commentary to be preserved with the tool call',
+  )
 
   return { success: true }
 }
@@ -762,6 +833,100 @@ export const testChatCompletionAcceptsDeclaredTaskyonUseMapping = () => {
   assert(outcome.kind === 'tool-calls', 'Expected the declared Taskyon $use mapping to be valid')
   assert(outcome.calls[0]?.name === 'clock', 'Expected the clock tool call')
 
+  return { success: true }
+}
+
+export const testChatCompletionOpenAIWebSearchIsAvailableWithoutBeingForced = async () => {
+  const request = await buildChatProviderRequest({
+    messages: [{ role: 'user', content: 'Find current information.' }],
+    tools: {
+      python: {
+        description: 'Run Python code.',
+        inputSchema: jsonSchema({ type: 'object', properties: {} }),
+      },
+    },
+    selectedModel: 'gpt-5.6-luna',
+    api: {
+      provider: 'openai',
+      name: 'openai',
+      model: 'gpt-5.6-luna',
+      baseURL: 'https://example.test/v1',
+      streamSupport: true,
+      routes: { chatCompletion: '/responses', models: '/models' },
+    },
+    apiKey: 'diagnostic-key',
+    webSearch: { maxResults: 5, searchContextSize: 'medium' },
+  })
+
+  assert(
+    request.tools?.python !== undefined,
+    'Expected the ordinary Python tool to remain available',
+  )
+  assert(request.tools?.web_search !== undefined, 'Expected OpenAI web search to be available')
+  assert(request.toolChoice === undefined, 'Expected automatic tool choice for optional web search')
+  return { success: true }
+}
+
+export const testChatCompletionOpenAIWebSearchCanBeRequired = async () => {
+  const request = await buildChatProviderRequest({
+    messages: [{ role: 'user', content: 'Search this now.' }],
+    tools: {},
+    selectedModel: 'gpt-5.6-luna',
+    api: {
+      provider: 'openai',
+      name: 'openai',
+      model: 'gpt-5.6-luna',
+      baseURL: 'https://example.test/v1',
+      streamSupport: true,
+      routes: { chatCompletion: '/responses', models: '/models' },
+    },
+    apiKey: 'diagnostic-key',
+    webSearch: { maxResults: 5, searchContextSize: 'medium', mode: 'required' },
+  })
+
+  const toolChoice = request.toolChoice
+  assert(
+    typeof toolChoice === 'object' &&
+      toolChoice.type === 'tool' &&
+      toolChoice.toolName === 'web_search',
+    'Expected required OpenAI web search to select the provider tool',
+  )
+  return { success: true }
+}
+
+export const testChatCompletionOpenRouterWebSearchIsAProviderTool = async () => {
+  const request = await buildChatProviderRequest({
+    messages: [{ role: 'user', content: 'Find current information.' }],
+    tools: {
+      python: {
+        description: 'Run Python code.',
+        inputSchema: jsonSchema({ type: 'object', properties: {} }),
+      },
+    },
+    selectedModel: 'openai/gpt-5.6',
+    api: {
+      provider: 'openrouter.ai',
+      name: 'openrouter.ai',
+      model: 'openai/gpt-5.6',
+      baseURL: 'https://example.test',
+      streamSupport: true,
+      routes: { chatCompletion: '/chat/completions', models: '/models' },
+    },
+    apiKey: 'diagnostic-key',
+    webSearch: { maxResults: 5, searchContextSize: 'medium' },
+  })
+
+  assert(
+    request.tools?.python !== undefined,
+    'Expected the ordinary Python tool to remain available',
+  )
+  const webSearchTool = request.tools?.web_search
+  assert(
+    webSearchTool?.type === 'provider',
+    'Expected OpenRouter web search to be provider-defined',
+  )
+  assert(webSearchTool.id === 'openrouter.web_search', 'Expected the OpenRouter web search tool id')
+  assert(request.toolChoice === undefined, 'Expected automatic tool choice for OpenRouter search')
   return { success: true }
 }
 
@@ -1207,6 +1372,12 @@ testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema.description =
   'Provider-native tool calls are rejected before execution when their arguments violate the declared tool schema.'
 testChatCompletionAcceptsDeclaredTaskyonUseMapping.description =
   'Provider-native tool calls accept the Taskyon $use extension declared in their LLM-facing schema.'
+testChatCompletionOpenAIWebSearchIsAvailableWithoutBeingForced.description =
+  'Direct OpenAI requests expose native web search beside ordinary tools without forcing the search tool.'
+testChatCompletionOpenAIWebSearchCanBeRequired.description =
+  'Direct OpenAI requests can explicitly require the native web-search tool for a search action.'
+testChatCompletionOpenRouterWebSearchIsAProviderTool.description =
+  'OpenRouter requests expose its model-controlled server web-search tool beside ordinary tools.'
 testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions.description =
   'Codex provider requests move the leading system prompt into provider instructions without making a network request.'
 testChatCompletionCacheKeyAndBreakpointsFollowTaskTree.description =

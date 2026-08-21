@@ -2,7 +2,7 @@
 
 Open **Browser Access** to configure and inspect the paths Taskyon can use to reach the web.
 
-- **ChatCompletion web search** uses search supplied by the selected model provider.
+- **ChatCompletion web search** uses the selected provider's model-controlled search capability when available, with the provider's configured fallback behavior.
 - **Browser MCP** connects to a configured browser MCP endpoint and imports selected tools.
 - **Proxy fallback** reads pages through a configured proxy when direct access is unavailable.
 - **Research defaults** choose which access path the research planner tries first.

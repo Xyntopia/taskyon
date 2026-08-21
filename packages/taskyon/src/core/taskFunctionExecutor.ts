@@ -82,6 +82,7 @@ export const prepareInvocationToolCall = async (
   dependencies: {
     resolveInvocationTool: InvocationToolResolver
     getTaskById: TaskGetter
+    resolvePreviousResultTask?: (taskId: string) => Promise<TaskNode | null>
     resolveToolSettings: (
       name: string,
       toolRevision: NonNullable<FunctionCall['toolRevision']>,
@@ -99,9 +100,23 @@ export const prepareInvocationToolCall = async (
     )
   }
   const persistedArguments = call.arguments ?? {}
+  const persistedLiteralArguments = Object.fromEntries(
+    Object.entries(persistedArguments).filter(([key]) => key !== '$use'),
+  )
+  const resolvePreviousResultTask = dependencies.resolvePreviousResultTask
   const materializedArguments = await materializeTaskyonFunctionArguments(persistedArguments, {
     surface: 'execution',
     getTaskById: dependencies.getTaskById,
+    ...(resolvePreviousResultTask
+      ? {
+          resolveRelativeTaskRef: async () => {
+            if (!call.taskId) {
+              throw new Error('Taskyon $previousResult requires a persisted task id.')
+            }
+            return resolvePreviousResultTask(call.taskId)
+          },
+        }
+      : {}),
   })
   const settings =
     call.settingsRevision && identity
@@ -117,7 +132,7 @@ export const prepareInvocationToolCall = async (
   const argumentsForExecution = FunctionArguments.parse({
     ...createWithDefaults(tool.parameters),
     ...(settings ?? {}),
-    ...persistedArguments,
+    ...persistedLiteralArguments,
     ...materializedArguments,
   })
   validateToolArguments(

@@ -44,8 +44,7 @@ function assert(condition: boolean, msg?: string): asserts condition {
 const taskyonFlowToolchainConfig = {
   taskyonFlow: {
     use_baseprompt: true,
-    use_tool_chooser: true,
-    tool_chooser_min_tools: 5,
+    useToolShortlist: true,
     max_error_retries: 3,
     providerToolCalling: true,
     use_multimodal: true,
@@ -86,7 +85,7 @@ const createConversationHarness = async (
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'taskyonFlow',
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useTools: true },
+    toolChooser: { enabled: true, useToolShortlist: true },
     defaultAllowedTools: ['clock'],
     getToolCatalog: async () => {
       const ty = await tyPromise
@@ -398,8 +397,7 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
     currentTask: null,
     draftTask: getSimpleMessageTask('hi! what is the time? use the tool please!'),
     entryNode: getEntryNodeDraft({
-      use_tool_chooser: true,
-      tool_chooser_min_tools: 0,
+      useToolShortlist: true,
     }),
     mode: 'message',
   })
@@ -480,17 +478,8 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
       stopSummary,
     )
     await assertWithDiagnostics(
-      !!shortlistCall,
-      'Expected a shortlist/decision phase before tool execution',
-      ty,
-      taskChain,
-      observedTasks,
-      conversationTasks,
-      stopSummary,
-    )
-    await assertWithDiagnostics(
-      !!shortlistResult,
-      'Expected the shortlist phase to include the clock tool',
+      !shortlistCall && !shortlistResult,
+      'Expected direct routing without an initial shortlist completion',
       ty,
       taskChain,
       observedTasks,
@@ -499,7 +488,7 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
     )
     await assertWithDiagnostics(
       !!chooseToolCall,
-      'Expected a narrowed tool-selection phase after the shortlist entryNode call',
+      'Expected the direct completion to receive the callable clock tool',
       ty,
       taskChain,
       observedTasks,
@@ -609,7 +598,7 @@ export const testTimeQuestionConversationUsesClockTool = async (
   }
 }
 testTimeQuestionConversationUsesClockTool.description =
-  'Runs the exact UI-style initial Taskyon chain for a time question with the entry-node tool chooser forced on, then verifies the shortlist entryNode call, narrowed clock execution, and final assistant response without intermediate error returns.'
+  'Runs the exact UI-style initial Taskyon chain for a time question and verifies direct callable-tool routing, clock execution, and final assistant response without intermediate error returns.'
 testTimeQuestionConversationUsesClockTool.modelBased = true
 testTimeQuestionConversationUsesClockTool.requiresLongRun = true
 testTimeQuestionConversationUsesClockTool.timeoutMs = 30_000

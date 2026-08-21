@@ -171,6 +171,7 @@ export const buildChatProviderRequest = async (input: {
   webSearch?: {
     maxResults: number
     searchContextSize: 'low' | 'high' | 'medium'
+    mode?: 'auto' | 'required'
   }
   reasoningEffort?: 'low' | 'high' | 'medium' | 'none'
   verbosity?: OpenAI.ChatCompletionCreateParams['verbosity']
@@ -255,7 +256,9 @@ export const buildChatProviderRequest = async (input: {
             searchContextSize: input.webSearch.searchContextSize,
           }),
         }
-        overrideOptions.toolChoice = { type: 'tool', toolName: 'web_search' }
+        if (input.webSearch.mode === 'required') {
+          overrideOptions.toolChoice = { type: 'tool', toolName: 'web_search' }
+        }
       }
       break
     }
@@ -290,22 +293,12 @@ export const buildChatProviderRequest = async (input: {
       }
 
       if (input.webSearch?.maxResults) {
-        options.plugins = [
-          {
-            id: 'web',
-            engine: 'exa',
-            max_results: input.webSearch.maxResults,
-          },
-          {
-            id: 'file-parser',
-            pdf: { engine: 'native' },
-          },
-        ]
-        options.extraBody = {
-          web_search_options: {
-            engine: 'exa',
-            search_context_size: input.webSearch.searchContextSize,
-          },
+        overrideOptions.tools = {
+          ...input.tools,
+          web_search: openrouter.tools.webSearch({
+            engine: 'auto',
+            maxResults: input.webSearch.maxResults,
+          }),
         }
       }
 

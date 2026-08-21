@@ -46,6 +46,43 @@ export const findContinuationLeafTaskIds = async (
   return leafIds
 }
 
+export const resolvePreviousSiblingResultTask = async (
+  taskId: string,
+  access: Pick<
+    TaskChainSelectionAccess,
+    'getTask' | 'searchAllDirectChildren' | 'findSiblingLeafTasks'
+  >,
+) => {
+  const currentTask = await getRequiredTask(taskId, access.getTask)
+  if (!currentTask.priorID) return null
+
+  const previousSibling = await getRequiredTask(currentTask.priorID, access.getTask)
+  const childIds = Array.from(await access.searchAllDirectChildren(previousSibling.id))
+  const leafIds = Array.from(
+    new Set(
+      (
+        await Promise.all(
+          childIds.map(async (childId) => {
+            const branchLeafIds = await access.findSiblingLeafTasks(childId)
+            const visibleResultIds = (
+              await Promise.all(
+                branchLeafIds.map((leafId) => resolveVisibleTerminalResults(leafId, access)),
+              )
+            ).flat()
+            return visibleResultIds.length > 0 ? visibleResultIds : branchLeafIds
+          }),
+        )
+      ).flat(),
+    ),
+  )
+  if (leafIds.length > 1) {
+    throw new Error(
+      `Taskyon $previousResult is ambiguous for ${taskId}: previous sibling ${previousSibling.id} has ${leafIds.length} terminal leaves.`,
+    )
+  }
+  return await access.getTask(leafIds[0] ?? previousSibling.id)
+}
+
 const visibleTerminalContentTypes = new Set<TaskNode['content']['type']>([
   'message',
   'structured',
@@ -105,7 +142,10 @@ const collectLineageIds = async (taskId: string, getTask: TaskGetter) => {
 
 const resolveVisibleTerminalResults = async (
   taskId: string,
-  access: TaskChainSelectionAccess,
+  access: Pick<
+    TaskChainSelectionAccess,
+    'getTask' | 'searchAllDirectChildren' | 'findSiblingLeafTasks'
+  >,
   visited: ReadonlySet<string> = new Set(),
 ): Promise<string[]> => {
   if (visited.has(taskId)) return []

@@ -167,12 +167,6 @@ export const interpretAssistantMessage = (
     .map((content) => convertFunctionCall(content, availableTools, variableService))
     .filter((call): call is FunctionCall => call !== undefined)
 
-  if (useProviderToolCalling && toolCallParts.length > 0) {
-    return calls.length > 0
-      ? { kind: 'tool-calls' as const, calls, sanitation: [] }
-      : { kind: 'empty' as const, sanitation: [] }
-  }
-
   const sanitation: NonNullable<TaskNodeMeta['assistantOutputSanitation']>[] = []
   const answers = message.content.flatMap((content) => {
     if (typeof content === 'string' || content.type !== 'text' || !content.text) return []
@@ -204,6 +198,18 @@ export const interpretAssistantMessage = (
     return calls.length > 0
       ? { kind: 'tool-calls' as const, calls, sanitation }
       : { kind: 'empty' as const, sanitation }
+  }
+
+  if (useProviderToolCalling && calls.length > 0) {
+    return {
+      kind: 'tool-calls' as const,
+      calls,
+      assistantMessages: answers.map((answer, index) => ({
+        ...answer,
+        ...(index === 0 && sources.length > 0 ? { annotations: sources } : {}),
+      })),
+      sanitation,
+    }
   }
 
   return {

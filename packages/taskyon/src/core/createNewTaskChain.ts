@@ -83,6 +83,7 @@ export const applyWebSearchIntent = (
           websearch: {
             ...previousWebSearch,
             enabled: mode === 'websearch',
+            mode: mode === 'websearch' ? 'required' : 'auto',
           },
         },
       },

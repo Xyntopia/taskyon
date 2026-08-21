@@ -201,14 +201,22 @@ export function createChatCompletionTool(
         websearch: {
           type: 'object',
           description:
-            'Optional websearch configuration. Websearch runs only when enabled is true.',
+            'Optional websearch capability. When enabled, the model may choose provider-native search alongside ordinary tools; it is not forced to search.',
           additionalProperties: false,
           properties: {
             enabled: {
               type: 'boolean',
               title: 'Enabled',
               default: false,
-              description: 'Explicitly enable websearch for this request.',
+              description:
+                'Expose websearch to the model for this request. Provider-native search remains optional and uses automatic tool choice.',
+            },
+            mode: {
+              type: 'string',
+              enum: ['auto', 'required'],
+              default: 'auto',
+              description:
+                'Use auto for normal model choice. Use required for an explicit search action when the provider supports forcing its search tool.',
             },
             max_results: {
               type: 'integer',
@@ -323,7 +331,18 @@ export function createChatCompletionTool(
         chunkMs: 120 * 1000,
       }
       const useArtificialStreaming = artificial_streaming ?? true
-      const tools = allowedTools ?? []
+      const selectedApi = providerConnection.provider
+      const supportsNativeWebSearch =
+        selectedApi === 'openai' ||
+        selectedApi === 'chatgpt-codex' ||
+        selectedApi === 'taskyon' ||
+        selectedApi === 'openrouter.ai'
+      const tools = Array.from(
+        new Set([
+          ...(allowedTools ?? []),
+          ...(websearch?.enabled === true && !supportsNativeWebSearch ? ['webSearch'] : []),
+        ]),
+      )
       const useProviderToolCalling = tools.length > 0
       const normalizedToolChoice =
         toolChoice?.type === 'tool' && typeof toolChoice.toolName === 'string'
@@ -334,7 +353,6 @@ export function createChatCompletionTool(
               ? ('auto' as const)
               : undefined
       if (!model) throw new Error('chatCompletion requires an explicit model parameter.')
-      const selectedApi = providerConnection.provider
 
       // maybe ask for the llm api secrets in the future?
       const apiKey = await context.getSecret(selectedApi, false, false)
@@ -420,6 +438,7 @@ export function createChatCompletionTool(
               webSearch: {
                 maxResults: websearch.max_results ?? 5,
                 searchContextSize: 'medium',
+                mode: websearch.mode ?? 'auto',
               } as const,
             }
           : {}),
@@ -708,10 +727,20 @@ export function createChatCompletionTool(
       switch (outcome.kind) {
         case 'tool-calls':
           return context.createSubtasksResult([
-            outcome.calls.map<partialTaskDraft>((call) => ({
-              role: 'function',
-              content: { type: 'functioncall', data: call },
-            })),
+            [
+              ...(outcome.assistantMessages ?? []).map<partialTaskDraft>((message) => ({
+                role: 'assistant',
+                content: {
+                  type: 'message',
+                  data: message.content,
+                  ...(message.annotations ? { ann: message.annotations } : {}),
+                },
+              })),
+              ...outcome.calls.map<partialTaskDraft>((call) => ({
+                role: 'function',
+                content: { type: 'functioncall', data: call },
+              })),
+            ],
           ])
         case 'answers':
           return context.createSubtasksResult([

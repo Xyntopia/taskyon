@@ -211,7 +211,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
             arguments: {
               allowedTools: [documentationToolName],
               providerToolCalling: true,
-              use_tool_chooser: false,
+              useToolShortlist: false,
             },
           }),
         ],
