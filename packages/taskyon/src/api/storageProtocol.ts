@@ -311,6 +311,7 @@ export const createStorageClient = (
 ) => {
   const storage = createPortClient(port, taskyonStorageProtocol).storage
   const namespacePrefix = storagePath.parse(options.namespacePrefix)
+  const hasCustomRecordCodec = options.recordCodec !== undefined
   const codec =
     options.recordCodec ??
     ({
@@ -340,6 +341,8 @@ export const createStorageClient = (
   }
   const decodeRows = (rows: readonly { id: string | number; data: unknown }[]) =>
     rows.map(({ id, data }) => ({ id, data: codec.decode(data) }))
+  const decodeValues = (values: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(values).map(([id, value]) => [id, codec.decode(value)]))
   const getRecord = async (request: { namespace: string; id: string | number }) => {
     const response = await storage.records.get({
       ...recordLocation(request.namespace),
@@ -498,6 +501,13 @@ export const createStorageClient = (
     listIds: async (request: { namespace: string }) =>
       await storage.records.listIds({ ...recordLocation(request.namespace) }),
     find: async (request: { namespace: string; query?: unknown }) => {
+      if (!hasCustomRecordCodec) {
+        const { values } = await storage.records.find({
+          ...recordLocation(request.namespace),
+          ...(request.query !== undefined ? { query: request.query } : {}),
+        })
+        return { values: decodeValues(values) }
+      }
       const rows = decodeRows(
         (await storage.records.list({ ...recordLocation(request.namespace) })).rows,
       )

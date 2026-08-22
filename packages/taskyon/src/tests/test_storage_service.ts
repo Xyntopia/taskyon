@@ -63,6 +63,7 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
       content: task.content,
       priorID: task.id,
     })
+    const taskTree = await reader.getTaskTree(repeatedTask.id)
     const storedContents = await writer.getJsonTaskBackup()
     const taskFromOtherSession = await otherSession.getTask(task.id)
 
@@ -74,6 +75,10 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
     )
     assert(compactTask?.contentRef !== undefined, 'Expected default getTask to expose contentRef')
     assert(task.id !== repeatedTask.id, 'Expected repeated content to remain separate task calls')
+    assert(
+      taskTree.map((treeTask) => treeTask.id).join(',') === `${task.id},${repeatedTask.id}`,
+      'Expected protocol-backed getTaskTree to follow only the connected task chain.',
+    )
     const archive = JSON.parse(storedContents) as { contents: Record<string, unknown> }
     assert(
       Object.keys(archive.contents).length === 1,
@@ -107,7 +112,7 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
 }
 
 testTaskManagerCanUseProtocolBackedStorage.description =
-  'Shares task records between task managers through the Taskyon storage protocol service.'
+  'Shares task records and reachable task-tree traversal through the Taskyon storage protocol service.'
 testTaskManagerCanUseProtocolBackedStorage.timeoutMs = 60_000
 
 export const testStorageAuthorizationDeniesBeforeBackendAccess = async () => {

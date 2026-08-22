@@ -1,4 +1,3 @@
-import { load } from 'js-yaml'
 import type { PartialDeep } from 'type-fest'
 import z from 'zod'
 import { TaskNodeMeta } from '../types/chatCompletion'
@@ -33,7 +32,7 @@ import {
 } from '../utils/crudWrapper'
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode, ensureValidTaskId, taskContentHash, taskNodeToRecord } from './createTasks'
-import { addMarkdownTaskChain } from './markdownTaskIO'
+import { addMarkdownTaskChain, parseYamlTaskDocument } from './markdownTaskIO'
 import { createTaskCostService } from './taskCost'
 import {
   findContinuationLeafTaskIds,
@@ -607,6 +606,7 @@ export async function useTyTaskManager(
   )
 
   const invalidateTaskRelationCaches = (task: Pick<TaskNode, 'parentID' | 'priorID'>) => {
+    if (task.parentID) parentToChildMap.delete(task.parentID)
     if (task.parentID && !task.priorID) immediateChildrenMap.delete(task.parentID)
     if (task.priorID) nextSiblingMap.delete(task.priorID)
   }
@@ -722,6 +722,44 @@ export async function useTyTaskManager(
 
   const getChildChains = async (taskId: string): Promise<TaskNode[][]> =>
     (await buildTaskTreeNode(taskId, 1)).children.map((chain) => chain.map((node) => node.task))
+
+  const getTaskTree = async (taskId: string): Promise<TaskNode[]> => {
+    const initialTask = await taskDb.get(taskId)
+    if (!initialTask) throw new Error(`Task ${taskId} not found`)
+    let root = initialTask
+    const visitedAncestors = new Set<string>()
+    while (!visitedAncestors.has(root.id)) {
+      visitedAncestors.add(root.id)
+      const previousID = root.priorID ?? root.parentID
+      if (!previousID) break
+      const previous = await taskDb.get(previousID)
+      if (!previous) break
+      root = previous
+    }
+
+    const sortTasks = (tasks: TaskNode[]) =>
+      tasks.sort((left, right) => {
+        const createdDifference = (left.created_at ?? 0) - (right.created_at ?? 0)
+        return createdDifference || left.id.localeCompare(right.id)
+      })
+    const ordered: TaskNode[] = []
+    const visited = new Set<string>()
+    const visit = async (task: TaskNode): Promise<void> => {
+      if (visited.has(task.id)) return
+      visited.add(task.id)
+      ordered.push(task)
+      const childIDs = new Set([
+        ...(await searchAllChildren(task.id)),
+        ...(await searchNextSibling(task.id)),
+      ])
+      const children = (await Promise.all([...childIDs].map((id) => taskDb.get(id)))).filter(
+        (child): child is TaskNode => child !== null,
+      )
+      for (const child of sortTasks(children)) await visit(child)
+    }
+    await visit(root)
+    return ordered
+  }
 
   async function getFlattenedChain(
     taskId: string,
@@ -937,6 +975,43 @@ export async function useTyTaskManager(
     return addedTaskList
   }
 
+  async function addTaskArchive(taskList: readonly TaskNode[]) {
+    const verifiedTasks = await Promise.all(taskList.map(ensureValidTaskId))
+    const archiveIDs = new Set(verifiedTasks.map((task) => task.id))
+    const existingIDs = new Set(await taskDb.listIds())
+    for (const task of verifiedTasks) {
+      for (const [field, linkedID] of [
+        ['parentID', task.parentID],
+        ['priorID', task.priorID],
+      ] as const) {
+        if (linkedID && !archiveIDs.has(linkedID) && !existingIDs.has(linkedID)) {
+          console.warn(`Task archive preserves missing ${field} '${linkedID}' on task ${task.id}.`)
+        }
+      }
+    }
+
+    const addedTaskList: TaskNode[] = []
+    for (const task of verifiedTasks) {
+      const existing = await taskDb.getRecord(task.id)
+      if (existing) {
+        const expected = taskNodeToRecord(task)
+        if (JSON.stringify(existing) !== JSON.stringify(expected)) {
+          throw new Error(`Task archive conflicts with existing task ${task.id}.`)
+        }
+        const hydrated = await taskDb.get(task.id)
+        if (hydrated) addedTaskList.push(hydrated)
+        continue
+      }
+      addedTaskList.push(
+        await taskDb.add(task, {
+          createMeta: 'missing',
+          vectors: options.indexTaskVectors !== false,
+        }),
+      )
+    }
+    return addedTaskList
+  }
+
   async function addTaskChain(
     taskList: partialTaskDraft[],
     priorID: string | undefined = undefined,
@@ -958,32 +1033,10 @@ export async function useTyTaskManager(
   // TODO: also move this outside of taskmanager!
   async function loadYamlConversation(input: File | string): Promise<string | undefined> {
     console.log('adding tasknodes & conversations from yaml input!')
-
-    let taskListRaw: unknown
-    if (typeof input === 'string') {
-      taskListRaw = load(input)
-    } else {
-      const fileStr = await input.text()
-      taskListRaw = load(fileStr)
-    }
-
-    const archive = z
-      .object({
-        version: z.literal(1),
-        contents: z.record(z.string(), TaskContentRecord.shape.content),
-        tasks: z.array(TaskNodeRecord),
-      })
-      .parse(taskListRaw)
-    const added = await Promise.all(
-      archive.tasks.map((record) => {
-        const content = archive.contents[record.contentRef]
-        if (!content) throw new Error(`Task content not found in archive: ${record.contentRef}`)
-        const { contentRef: _contentRef, ...task } = record
-        void _contentRef
-        return taskDb.add({ ...task, content })
-      }),
-    )
-    return added.at(-1)?.id
+    const yaml = typeof input === 'string' ? input : await input.text()
+    const archive = parseYamlTaskDocument(yaml)
+    const added = await addTaskArchive(archive.tasks)
+    return archive.leafID ?? added.at(-1)?.id
   }
 
   // TODO: move outside taskmanager as a separate function which returns partialTaskNodes
@@ -1081,10 +1134,12 @@ export async function useTyTaskManager(
     buildSiblingChain,
     buildTaskTreeNode,
     getChildChains,
+    getTaskTree,
     getTaskCostSummary: taskCostService.getSummary,
     addPartialTask2Tree,
     addTaskChain,
     addTaskNodes,
+    addTaskArchive,
     addMdTaskChain,
     getMeta: metaDb.get,
     metaLiveRead: metaDb.readLive,

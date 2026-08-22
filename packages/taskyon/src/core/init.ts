@@ -162,6 +162,12 @@ function createApi(
         getChain: async ({ id, maxFollow, selection }) =>
           await taskManagerInstance.getTaskChain(id, maxFollow, selection),
         getChildChains: async ({ id }) => await taskManagerInstance.getChildChains(id),
+        getTree: async ({ id }) => await taskManagerInstance.getTaskTree(id),
+        importArchive: async ({ tasks, execute }) => {
+          const importedTasks = await taskManagerInstance.addTaskArchive(tasks)
+          if (execute) importedTasks.forEach((task) => queueTask(task.id))
+          return { ids: importedTasks.map((task) => task.id) }
+        },
       },
       tools: {
         register: async (msg) => {
@@ -794,6 +800,7 @@ export async function tyCore(
         // TODO: md taskchain and yaml loading might be better as "utility-functions?" without a dependency
         //       on taskManagerinstance..
         'loadYamlConversation',
+        'addTaskArchive',
         'countTasks',
         'countVecs',
         'syncVectorIndexWithTasks',

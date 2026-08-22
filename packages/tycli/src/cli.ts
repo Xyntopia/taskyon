@@ -22,9 +22,9 @@ import {
   createExternalToolContext,
   findContinuationLeafTaskIds,
   firstWordsTaskName,
-  processMarkdown,
   textRankTaskName,
   createStandardEntryNodeTool,
+  createTaskDocument,
   getTaskQueueLabel,
   getProviderOauthConfig,
   getProviderOauthCredentialsSecretName,
@@ -92,6 +92,7 @@ import {
 import {
   createConversationPersistence,
   createConversationPersistQueue,
+  type ConversationFormat,
   TYCLI_CONVERSATION_TRANSCRIPT_NAMESPACE,
 } from './cli/conversationPersistence'
 import { createCliSelectedStorageService, resolveCliStorageSelection } from './cli/storageService'
@@ -834,6 +835,18 @@ function parseTaskyonClientCliArgs(argv: string[]): string | null {
   const [command, ...rest] = argv
   if (command !== 'client' && command !== 'taskyon-client') return null
   return rest.join(' ')
+}
+
+const resolveConversationFormat = (argv: readonly string[]): ConversationFormat => {
+  const index = argv.findIndex(
+    (arg) => arg === '--conversation-format' || arg.startsWith('--conversation-format='),
+  )
+  if (index < 0) return 'markdown'
+  const value = argv[index]?.includes('=')
+    ? argv[index]?.split('=', 2)[1]
+    : argv[index + 1]
+  if (value === 'markdown' || value === 'yaml') return value
+  throw new Error(`Invalid --conversation-format '${String(value)}'; use markdown or yaml.`)
 }
 
 function formatJsonResult(value: unknown): string {
@@ -1842,7 +1855,7 @@ async function listConversationFiles(configDir: string): Promise<string[]> {
     const names = await readdir(conversationDir)
     const files = await Promise.all(
       names
-        .filter((name) => name.endsWith('.md'))
+        .filter((name) => name.endsWith('.md') || name.endsWith('.yaml') || name.endsWith('.yml'))
         .map(async (name) => {
           const filePath = join(conversationDir, name)
           const fileStat = await stat(filePath)
@@ -2537,7 +2550,8 @@ async function resolveConversationToResume(
           id: metadata.id,
         })
         const markdown = transcript ? new TextDecoder().decode(transcript.data) : ''
-        const firstMessage = processMarkdown(markdown).find(
+        const document = transcript ? await createTaskDocument(markdown).catch(() => undefined) : undefined
+        const firstMessage = document?.tasks.find(
           (task) => task.role === 'user' && task.content.type === 'message',
         )
         const sourceText =
@@ -2774,6 +2788,7 @@ async function findNearestAncestorWithAnyFile(
 }
 
 async function main(host: InteractiveCliHost) {
+  const conversationFormat = resolveConversationFormat(process.argv.slice(2))
   process.title = host.commandName
   debugLogsEnabled = process.env[`${host.environmentPrefix}_DEBUG`] === '1'
   adoptInvocationWorkingDirectory(host.environmentPrefix)
@@ -3023,11 +3038,11 @@ async function main(host: InteractiveCliHost) {
   await syncProviderRuntimeConfig(taskyon, llmState, selectedApi, persistence.oauthStorage)
   writeLine('Preparing conversation storage...')
   const conversationPersistence = await createConversationPersistence({
-    taskyon,
     ...(storageSelection.blobs === 'files' ? { storageRoot } : {}),
     storageNamespace,
     storageClient,
     startedAt: sessionStartedAt,
+    format: conversationFormat,
   })
   const currentSession: TycliSessionRecord = {
     conversationPath: conversationPersistence.filePath,
@@ -3307,13 +3322,15 @@ async function main(host: InteractiveCliHost) {
     },
   )
 
-  const queueConversationPersist = (leafId: string | undefined = currentLeafId) => {
-    conversationPersistQueue.request(leafId)
+  const queueConversationPersist = (
+    task = currentLeafId ? taskById.get(currentLeafId) : undefined,
+  ) => {
+    conversationPersistQueue.request(task)
   }
 
-  const flushConversationPersist = async () => {
-    queueConversationPersist(currentLeafId)
+  const flushConversationPersist = async (warnUnresolved = false) => {
     await conversationPersistQueue.flush()
+    await conversationPersistence.flush(warnUnresolved)
   }
 
   const currentProviderModel = () => {
@@ -3792,7 +3809,7 @@ async function main(host: InteractiveCliHost) {
       )
     }
     activeTaskWaitController?.abort(`${source} received`)
-    queueConversationPersist(currentLeafId)
+    queueConversationPersist()
     scheduleWorkerCleanupNotice()
     resetThinking()
     updateFooter()
@@ -3922,14 +3939,14 @@ async function main(host: InteractiveCliHost) {
     if (!isTaskCreatedMessage(msg)) return
     const task = msg.task
     const suppressed = isSuppressedTask(task)
-    const snapshot = JSON.stringify(task.content)
+    const snapshot = JSON.stringify(task)
     const prev = taskSnapshotById.get(task.id)
     if (prev === snapshot) return
     taskSnapshotById.set(task.id, snapshot)
     taskById.set(task.id, task)
     currentLeafId = task.id
     refreshCostFooter()
-    queueConversationPersist(task.id)
+    queueConversationPersist(task)
     if (suppressed) return
     scheduleThinkingRender()
     renderTaskProgress(
@@ -4211,7 +4228,7 @@ async function main(host: InteractiveCliHost) {
       if (!entryTaskId) throw new Error('CLI message submission created no tasks.')
       currentLeafId = entryTaskId
       refreshCostFooter()
-      queueConversationPersist(currentLeafId)
+      queueConversationPersist()
       writeDebug(`queued task chain: ${taskIds.join(', ')}`)
       try {
         waitingForTask = true
@@ -4295,7 +4312,7 @@ async function main(host: InteractiveCliHost) {
     stopWorkerStatusLine()
     if (costRefreshTimer !== null) clearTimeout(costRefreshTimer)
     clearTransientStatusLine = undefined
-    await flushConversationPersist().catch(() => {})
+    await flushConversationPersist(true).catch(() => {})
     taskyon.cancelCurrentRun(`${host.commandName} exit`)
     setChatCompletionTraceWriter(undefined)
     if (conversationPersistence.hasPersistedConversation()) {

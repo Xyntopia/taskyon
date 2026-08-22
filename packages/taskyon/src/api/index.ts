@@ -1,6 +1,6 @@
 // TODO: we want to reduce dependencies to this file here!
 // TODO: maybe move the "Api" into its own package?
-import { createMarkdownTaskChain } from '../core/markdownTaskIO'
+import { createTaskDocument } from '../core/markdownTaskIO'
 import { createToolExecutionClient, type ToolRpcCallerPort } from '../core/toolRpc'
 import type { ChatCompletionArgs } from '../tools/chatCompletionTool'
 import type { FileAttachment, TaskContentType, TaskNode } from '../types/taskNode'
@@ -31,7 +31,15 @@ export {
   type partialTyConfiguration,
 } from '../types/guiApiTypes'
 export { REMOTE_FUNCTION_TIMEOUT_MS } from './taskyonProtocol'
-export { createMarkdownTaskChain } from '../core/markdownTaskIO'
+export {
+  chat2Md,
+  chatToYaml,
+  createMarkdownTaskChain,
+  createTaskDocument,
+  parseYamlTaskDocument,
+  type TaskDocument,
+  type TaskDocumentFormat,
+} from '../core/markdownTaskIO'
 export {
   getToolchainProviderProfiles,
   llmSettings,
@@ -502,22 +510,23 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
 export type TaskyonClient = ReturnType<typeof createTaskyonClient>
 
 /**
- * Parses Taskyon Markdown, stores the resulting chain, and returns its leaf task ID.
+ * Parses a Taskyon Markdown or YAML document, stores the original task tree, and returns its leaf ID.
  */
 export const createTaskChainFromMarkdown = async (
   client: Pick<TaskyonClient, 'task'>,
   markdown?: string,
   options: { execute?: boolean; show?: boolean } = {},
 ) => {
-  const tasks = await createMarkdownTaskChain(markdown)
+  const document = await createTaskDocument(markdown ?? '')
+  const tasks = document.tasks
   const leafId = tasks.at(-1)?.id
   if (!leafId) return undefined
-  const created = await client.task.createChain({
+  const created = await client.task.importArchive({
     tasks,
     execute: options.execute ?? false,
     show: options.show ?? true,
   })
-  return created.ids.at(-1) ?? leafId
+  return document.leafID ?? created.ids.at(-1) ?? leafId
 }
 
 const createRunTasksSender = <T extends { type: string }>(

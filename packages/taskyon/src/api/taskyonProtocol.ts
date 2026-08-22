@@ -383,12 +383,32 @@ export const taskyonTaskProtocol = defineFrpServiceProtocol({
         .describe('First-level child chains, with each sibling chain in execution order.'),
       defaultTimeoutMs: 30_000,
     },
+    getTree: {
+      request: z
+        .object({
+          id: z.string().describe('Task id whose complete reachable task tree should be loaded.'),
+        })
+        .describe('Request the complete reachable task tree for a task.'),
+      response: z.array(TaskNode).describe('Reachable tasks in deterministic tree order.'),
+      defaultTimeoutMs: 30_000,
+    },
     create: {
       request: task,
     },
     createChain: {
       request: tasks,
       response: z.object({ ids: z.array(z.string()) }),
+    },
+    importArchive: {
+      request: z
+        .object({
+          execute: z.boolean().default(false),
+          show: z.boolean().default(false),
+          tasks: TaskNode.array().describe('Complete task nodes to import without rewriting links.'),
+        })
+        .describe('Import an existing task archive while preserving task ids and topology.'),
+      response: z.object({ ids: z.array(z.string()) }),
+      defaultTimeoutMs: 30_000,
     },
   },
   streams: {

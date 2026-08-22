@@ -1,24 +1,51 @@
 import { load } from 'js-yaml'
 import z from 'zod'
-import { createTaskNode, taskNodeToRecord } from './createTasks'
+import { createTaskNode, taskContentHash, taskNodeToRecord } from './createTasks'
 import { createTaskVariablePresentationService, TASK_REF_PREFIX } from './taskVariables'
-import type { TaskNode } from '../types/taskNode'
-import { partialTaskDraft } from '../types/taskNode'
+import type { TaskContent as TaskContentValue, TaskNode as TaskNodeValue } from '../types/taskNode'
+import {
+  TaskContent,
+  TaskContentRecord,
+  TaskNode,
+  TaskNodeRecord,
+  partialTaskDraft,
+} from '../types/taskNode'
 import { deepCopy } from '../utils/objHelpers'
 import { safeYamlDump } from '../utils/yamlUtils'
 
 const TASK_MARKDOWN_REF_PREFIX = '_tref:'
 const METADATA_REGEX = /<!--taskyon([\s\S]*?)-->/
+const DOCUMENT_METADATA_REGEX = /<!--taskyon-document([\s\S]*?)-->/g
 const MARKDOWN_SEPARATOR_REGEX = /---(?=\s*<!--taskyon)/g
 const MARKDOWN_TASK_REF_REGEX = /^[A-Za-z][A-Za-z0-9_-]*$/
 const TASK_PLACEHOLDER_REGEX = /{{\s*(_t:[^{}]+?)\s*}}/g
 const MARKDOWN_TASK_PLACEHOLDER_REGEX = /{{\s*(_tref:[^{}]+?)\s*}}/g
 
+export type TaskDocumentFormat = 'markdown' | 'yaml'
+
+export type TaskDocument = {
+  format: TaskDocumentFormat
+  tasks: TaskNodeValue[]
+  leafID?: string
+  legacy?: boolean
+}
+
 type MarkdownImportTaskRef = `${typeof TASK_MARKDOWN_REF_PREFIX}${string}`
 type MarkdownTaskDraft = z.infer<typeof MarkdownTaskDraftSchema>
 
-const MarkdownTaskDraftSchema = partialTaskDraft.extend({
-  taskRef: z.string().regex(MARKDOWN_TASK_REF_REGEX).optional(),
+const MarkdownTaskDraftSchema = TaskNode.partial()
+  .required({ role: true })
+  .extend({
+    taskRef: z.string().regex(MARKDOWN_TASK_REF_REGEX).optional(),
+    contentAlias: z.string().regex(MARKDOWN_TASK_REF_REGEX).optional(),
+    content: TaskContent.optional(),
+  })
+
+const TaskArchiveSchema = z.object({
+  version: z.literal(1),
+  leafID: z.string().optional(),
+  contents: z.record(z.string(), TaskContentRecord.shape.content),
+  tasks: z.array(TaskNodeRecord),
 })
 
 const isMarkdownImportTaskRef = (value: string): value is MarkdownImportTaskRef =>
@@ -53,19 +80,38 @@ const makeUniqueTaskRef = (base: string, used: Set<string>) => {
 }
 
 const parseMarkdownMetadata = (rawMetadata: string | undefined) => {
-  if (!rawMetadata) return { role: 'user' }
+  if (!rawMetadata) return { role: 'user' as const }
   return (load(rawMetadata.trim()) ?? {}) as Record<string, unknown>
 }
 
+const parseMarkdownDocumentMetadata = (markdown: string) => {
+  const matches = Array.from(markdown.matchAll(DOCUMENT_METADATA_REGEX))
+  if (matches.length === 0) return { markdown, leafID: undefined }
+  const metadata = matches.map((match) =>
+    z
+      .object({ version: z.literal(1), leafID: z.string().optional() })
+      .parse(load(match[1]?.trim() ?? '{}')),
+  )
+  const latest = metadata.at(-1)
+  return {
+    markdown: markdown.replace(DOCUMENT_METADATA_REGEX, '').trim(),
+    leafID: latest?.leafID,
+  }
+}
+
 const parseMarkdownTaskDrafts = (markdown: string): MarkdownTaskDraft[] => {
-  const messages = markdown.split(MARKDOWN_SEPARATOR_REGEX).map((message) => message.trim())
+  const document = parseMarkdownDocumentMetadata(markdown)
+  if (!document.markdown) return []
+  const messages = document.markdown
+    .split(MARKDOWN_SEPARATOR_REGEX)
+    .map((message) => message.trim())
 
   return messages.map((message) => {
     const metadataMatch = METADATA_REGEX.exec(message)
     const metadata = parseMarkdownMetadata(metadataMatch?.[1])
     const content = message.replace(METADATA_REGEX, '').trim()
     const taskDraft = {
-      content: { type: 'message', data: content },
+      ...(content ? { content: { type: 'message', data: content } } : {}),
       ...metadata,
     }
     const parsed = MarkdownTaskDraftSchema.safeParse(taskDraft)
@@ -83,9 +129,7 @@ const rewriteMarkdownTaskRefsInString = (value: string, aliasToTaskId: Map<strin
   if (directTaskRef) {
     const alias = markdownTaskRefToAlias(directTaskRef)
     const taskId = aliasToTaskId.get(alias)
-    if (!taskId) {
-      throw new Error(`Unknown markdown task reference: ${directTaskRef}`)
-    }
+    if (!taskId) throw new Error(`Unknown markdown task reference: ${directTaskRef}`)
     return toTaskRef(taskId)
   }
 
@@ -93,20 +137,14 @@ const rewriteMarkdownTaskRefsInString = (value: string, aliasToTaskId: Map<strin
     if (!isMarkdownImportTaskRef(rawRef)) return _match
     const alias = markdownTaskRefToAlias(rawRef)
     const taskId = aliasToTaskId.get(alias)
-    if (!taskId) {
-      throw new Error(`Unknown markdown task reference: ${rawRef}`)
-    }
+    if (!taskId) throw new Error(`Unknown markdown task reference: ${rawRef}`)
     return `{{${toTaskRef(taskId)}}}`
   })
 }
 
 const rewriteMarkdownTaskRefs = (value: unknown, aliasToTaskId: Map<string, string>): unknown => {
-  if (typeof value === 'string') {
-    return rewriteMarkdownTaskRefsInString(value, aliasToTaskId)
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => rewriteMarkdownTaskRefs(item, aliasToTaskId))
-  }
+  if (typeof value === 'string') return rewriteMarkdownTaskRefsInString(value, aliasToTaskId)
+  if (Array.isArray(value)) return value.map((item) => rewriteMarkdownTaskRefs(item, aliasToTaskId))
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
@@ -119,8 +157,9 @@ const rewriteMarkdownTaskRefs = (value: unknown, aliasToTaskId: Map<string, stri
 }
 
 const stripMarkdownTaskDraft = (task: MarkdownTaskDraft): partialTaskDraft => {
-  const { taskRef, ...rest } = task
+  const { taskRef, contentAlias, ...rest } = task
   void taskRef
+  void contentAlias
   return partialTaskDraft.parse(rest)
 }
 
@@ -175,8 +214,14 @@ const rewriteTaskRefsForMarkdownExport = (
   return value
 }
 
-const createPortableTaskRefMap = (taskList: TaskNode[]) => {
-  const referencedTaskIds = new Set(taskList.flatMap((task) => collectTaskRefs(task.content.data)))
+const createPortableTaskRefMap = (
+  taskList: readonly TaskNodeValue[],
+  additionalTaskIds: readonly string[] = [],
+) => {
+  const referencedTaskIds = new Set([
+    ...additionalTaskIds,
+    ...taskList.flatMap((task) => collectTaskRefs(task.content.data)),
+  ])
   const tasksById = new Map(taskList.map((task) => [task.id, task]))
   const variableService = createTaskVariablePresentationService()
   const usedAliases = new Set<string>()
@@ -195,12 +240,37 @@ const createPortableTaskRefMap = (taskList: TaskNode[]) => {
   return taskIdToAlias
 }
 
+const createContentAliasMap = (taskList: readonly TaskNodeValue[]) => {
+  const usedAliases = new Set<string>()
+  const firstTaskByContentHash = new Map<string, TaskNodeValue>()
+  const aliasByContentHash = new Map<string, string>()
+  const aliasByTaskId = new Map<string, { alias: string; repeated: boolean }>()
+
+  for (const task of taskList) {
+    if (task.content.type !== 'functioncall') continue
+    const contentHash = taskContentHash(task.content)
+    const firstTask = firstTaskByContentHash.get(contentHash)
+    if (firstTask) {
+      const alias = aliasByContentHash.get(contentHash)
+      if (alias) aliasByTaskId.set(task.id, { alias, repeated: true })
+      continue
+    }
+    const alias = makeUniqueTaskRef(`${sanitizeTaskRef(task.content.data.name)}_call`, usedAliases)
+    firstTaskByContentHash.set(contentHash, task)
+    aliasByContentHash.set(contentHash, alias)
+    aliasByTaskId.set(task.id, { alias, repeated: false })
+  }
+
+  return aliasByTaskId
+}
+
 const renderTaskAsMarkdown = (
-  task: TaskNode,
+  task: TaskNodeValue,
   taskIdToAlias: Map<string, string>,
   fullMeta: boolean,
+  contentAlias?: { alias: string; repeated: boolean },
 ) => {
-  const rewrittenTask = rewriteTaskRefsForMarkdownExport(task, taskIdToAlias) as TaskNode
+  const rewrittenTask = rewriteTaskRefsForMarkdownExport(task, taskIdToAlias) as TaskNodeValue
   const message =
     rewrittenTask.content.type === 'message'
       ? '\n\n' + String(rewriteTaskRefsForMarkdownExport(rewrittenTask.content.data, taskIdToAlias))
@@ -209,12 +279,17 @@ const renderTaskAsMarkdown = (
   const partialTask = deepCopy(rewrittenTask) as Record<string, unknown>
   const alias = taskIdToAlias.get(task.id)
   if (alias) partialTask.taskRef = alias
+  if (contentAlias) {
+    partialTask.contentAlias = contentAlias.alias
+    if (contentAlias.repeated) delete partialTask.content
+  }
 
-  if (!fullMeta && partialTask) {
+  if (!fullMeta) {
     delete partialTask.result
     delete partialTask.id
     delete partialTask.created_at
     delete partialTask.priorID
+    delete partialTask.parentID
     if (message) delete partialTask.content
   }
 
@@ -222,11 +297,44 @@ const renderTaskAsMarkdown = (
   return yamlMeta + message
 }
 
+export const renderMarkdownDocumentMetadata = (leafID: string | undefined) => {
+  if (!leafID) return ''
+  return `<!--taskyon-document\n${safeYamlDump({ version: 1, leafID })}\n-->\n\n`
+}
+
+export const createMarkdownChatRenderer = (options?: {
+  compactRepeatedToolCalls?: boolean
+  leafID?: string
+}) => {
+  let previousTasks: TaskNodeValue[] = []
+
+  const reset = () => {
+    previousTasks = []
+  }
+
+  const render = (taskList: TaskNodeValue[], fullMeta = false) => {
+    const allTasks = [...previousTasks, ...taskList]
+    const taskIdToAlias = createPortableTaskRefMap(allTasks)
+    const contentAliases = createContentAliasMap(allTasks)
+    const useContentAliases = options?.compactRepeatedToolCalls !== false
+    const messageStrings = taskList.map((task) =>
+      renderTaskAsMarkdown(
+        task,
+        taskIdToAlias,
+        fullMeta,
+        useContentAliases ? contentAliases.get(task.id) : undefined,
+      ),
+    )
+    previousTasks = allTasks
+    return renderMarkdownDocumentMetadata(options?.leafID) + messageStrings.join('\n\n---\n\n')
+  }
+
+  return { render, reset }
+}
+
 export async function getTextFile(url: URL | string) {
   const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch text file: ${response.statusText}`)
-  }
+  if (!response.ok) throw new Error(`Failed to fetch text file: ${response.statusText}`)
   return response.text()
 }
 
@@ -240,30 +348,95 @@ export const fetchMarkdown = async (folder: string, filePath: string) => {
   return response.text()
 }
 
-export const processMarkdown = (markdown: string) =>
-  parseMarkdownTaskDrafts(markdown).map((task) => stripMarkdownTaskDraft(task))
+const rewriteMarkdownTaskDraft = (
+  task: MarkdownTaskDraft,
+  aliasToTaskId: Map<string, string>,
+  content: TaskContentValue,
+) => {
+  const { taskRef, contentAlias, ...draft } = task
+  void taskRef
+  void contentAlias
+  return partialTaskDraft.parse(rewriteMarkdownTaskRefs({ ...draft, content }, aliasToTaskId))
+}
+
+const parseMarkdownArchive = async (markdown: string): Promise<TaskDocument | undefined> => {
+  const drafts = parseMarkdownTaskDrafts(markdown)
+  if (drafts.length === 0 || drafts.some((draft) => !draft.id)) return undefined
+
+  const document = parseMarkdownDocumentMetadata(markdown)
+  const aliasToTaskId = new Map<string, string>()
+  const contentAliasToContent = new Map<string, TaskContentValue>()
+  const taskIDs = new Set<string>()
+
+  for (const draft of drafts) {
+    if (!draft.id || taskIDs.has(draft.id)) {
+      throw new Error(`Duplicate markdown task id: ${draft.id}`)
+    }
+    taskIDs.add(draft.id)
+    if (draft.taskRef) {
+      if (aliasToTaskId.has(draft.taskRef)) {
+        throw new Error(`Duplicate markdown taskRef: ${draft.taskRef}`)
+      }
+      aliasToTaskId.set(draft.taskRef, draft.id)
+    }
+    if (draft.contentAlias && draft.content) {
+      const existing = contentAliasToContent.get(draft.contentAlias)
+      if (existing && taskContentHash(existing) !== taskContentHash(draft.content)) {
+        throw new Error(`Markdown contentAlias '${draft.contentAlias}' has conflicting content.`)
+      }
+      contentAliasToContent.set(draft.contentAlias, draft.content)
+    }
+  }
+
+  const tasks = await Promise.all(
+    drafts.map(async (draft) => {
+      const content =
+        draft.content ??
+        (draft.contentAlias ? contentAliasToContent.get(draft.contentAlias) : undefined)
+      if (!content) throw new Error(`Unknown markdown contentAlias: ${draft.contentAlias}`)
+      return await createTaskNode(rewriteMarkdownTaskDraft(draft, aliasToTaskId, content), {
+        createMeta: 'missing',
+      })
+    }),
+  )
+
+  if (document.leafID && !taskIDs.has(document.leafID)) {
+    throw new Error(`Markdown document leafID is not present: ${document.leafID}`)
+  }
+  const leafID = document.leafID ?? tasks.at(-1)?.id
+  return {
+    format: 'markdown',
+    tasks,
+    ...(leafID ? { leafID } : {}),
+  }
+}
 
 export const addMarkdownTaskChain = async (
   markdown: string,
-  addTask: (task: partialTaskDraft) => Promise<TaskNode>,
+  addTask: (task: partialTaskDraft) => Promise<TaskNodeValue>,
 ) => {
   const taskDrafts = parseMarkdownTaskDrafts(markdown)
-  const seenAliases = new Set<string>()
+  const seenTaskAliases = new Set<string>()
   const aliasToTaskId = new Map<string, string>()
-  const addedTasks: TaskNode[] = []
+  const contentAliasToContent = new Map<string, TaskContentValue>()
+  const addedTasks: TaskNodeValue[] = []
 
   for (const taskDraft of taskDrafts) {
     if (taskDraft.taskRef) {
-      if (seenAliases.has(taskDraft.taskRef)) {
+      if (seenTaskAliases.has(taskDraft.taskRef)) {
         throw new Error(`Duplicate markdown taskRef: ${taskDraft.taskRef}`)
       }
-      seenAliases.add(taskDraft.taskRef)
+      seenTaskAliases.add(taskDraft.taskRef)
     }
-
-    const rewrittenDraft = rewriteMarkdownTaskRefs(taskDraft, aliasToTaskId)
-    const addedTask = await addTask(
-      stripMarkdownTaskDraft(MarkdownTaskDraftSchema.parse(rewrittenDraft)),
-    )
+    if (taskDraft.contentAlias && taskDraft.content) {
+      contentAliasToContent.set(taskDraft.contentAlias, taskDraft.content)
+    }
+    const content =
+      taskDraft.content ??
+      (taskDraft.contentAlias ? contentAliasToContent.get(taskDraft.contentAlias) : undefined)
+    if (!content) throw new Error(`Unknown markdown contentAlias: ${taskDraft.contentAlias}`)
+    const rewrittenDraft = rewriteMarkdownTaskDraft(taskDraft, aliasToTaskId, content)
+    const addedTask = await addTask(rewrittenDraft)
     if (taskDraft.taskRef) aliasToTaskId.set(taskDraft.taskRef, addedTask.id)
     addedTasks.push(addedTask)
   }
@@ -271,33 +444,73 @@ export const addMarkdownTaskChain = async (
   return addedTasks
 }
 
-export const createMarkdownTaskChain = async (markdown?: string): Promise<TaskNode[]> => {
-  if (!markdown) return []
+export const createMarkdownTaskDocument = async (markdown?: string): Promise<TaskDocument> => {
+  if (!markdown) return { format: 'markdown', tasks: [] }
+  const archive = await parseMarkdownArchive(markdown)
+  if (archive) return archive
+
   let lastTaskId: string | undefined
-  return await addMarkdownTaskChain(markdown, async (task) => {
-    const taskNode = await createTaskNode({ ...task, priorID: lastTaskId })
+  const tasks = await addMarkdownTaskChain(markdown, async (task) => {
+    const taskNode = await createTaskNode({ ...task, priorID: task.priorID ?? lastTaskId })
     lastTaskId = taskNode.id
     return taskNode
   })
+  const leafID = tasks.at(-1)?.id
+  return { format: 'markdown', tasks, ...(leafID ? { leafID } : {}), legacy: true }
 }
 
-export const chatToYaml = (taskList: TaskNode[]) =>
+export const createMarkdownTaskChain = async (markdown?: string): Promise<TaskNodeValue[]> =>
+  (await createMarkdownTaskDocument(markdown)).tasks
+
+export const parseYamlTaskDocument = (yaml: string): TaskDocument => {
+  const archive = TaskArchiveSchema.parse(load(yaml))
+  const tasks = archive.tasks.map((record) => {
+    const content = archive.contents[record.contentRef]
+    if (!content) throw new Error(`Task content not found in archive: ${record.contentRef}`)
+    const { contentRef: _contentRef, ...task } = record
+    void _contentRef
+    return TaskNode.parse({ ...task, content })
+  })
+  if (archive.leafID && !new Set(tasks.map((task) => task.id)).has(archive.leafID)) {
+    throw new Error(`YAML document leafID is not present: ${archive.leafID}`)
+  }
+  const leafID = archive.leafID ?? tasks.at(-1)?.id
+  return { format: 'yaml', tasks, ...(leafID ? { leafID } : {}) }
+}
+
+export const createTaskDocument = async (input: string, format?: TaskDocumentFormat) => {
+  const detectedFormat =
+    format ?? (/^\s*version:\s*1\b[\s\S]*^\s*tasks:/m.test(input) ? 'yaml' : 'markdown')
+  return detectedFormat === 'yaml'
+    ? parseYamlTaskDocument(input)
+    : await createMarkdownTaskDocument(input)
+}
+
+export const chatToYaml = (taskList: readonly TaskNodeValue[], options?: { leafID?: string }) =>
   safeYamlDump({
     version: 1,
+    ...(options?.leafID ? { leafID: options.leafID } : {}),
     contents: Object.fromEntries(
       taskList.map((task) => [taskNodeToRecord(task).contentRef, task.content]),
     ),
     tasks: taskList.map(taskNodeToRecord),
   })
 
-export const task2Md = (task: TaskNode, fullMeta = false) => {
+export const task2Md = (task: TaskNodeValue, fullMeta = false) => {
   const taskIdToAlias = createPortableTaskRefMap([task])
   return renderTaskAsMarkdown(task, taskIdToAlias, fullMeta)
 }
 
-export function chat2Md(taskList: TaskNode[], fullMeta = false) {
-  const taskIdToAlias = createPortableTaskRefMap(taskList)
-  const messageStrings = taskList.map((task) => renderTaskAsMarkdown(task, taskIdToAlias, fullMeta))
-
-  return messageStrings.join('\n\n---\n\n')
+export function chat2Md(
+  taskList: readonly TaskNodeValue[],
+  fullMeta = false,
+  options?: { compactRepeatedToolCalls?: boolean; leafID?: string },
+) {
+  return createMarkdownChatRenderer(options).render([...taskList], fullMeta)
 }
+
+export const processMarkdown = (markdown: string) =>
+  parseMarkdownTaskDrafts(markdown).map((task) => {
+    if (!task.content) return task
+    return stripMarkdownTaskDraft(task)
+  })

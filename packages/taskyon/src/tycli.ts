@@ -2,7 +2,17 @@ export { createTaskNode } from './core/createTasks'
 export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
-export { chat2Md, processMarkdown } from './core/markdownTaskIO'
+export {
+  chat2Md,
+  chatToYaml,
+  createMarkdownChatRenderer,
+  createMarkdownTaskDocument,
+  createTaskDocument,
+  processMarkdown,
+  renderMarkdownDocumentMetadata,
+  type TaskDocument,
+  type TaskDocumentFormat,
+} from './core/markdownTaskIO'
 export { findContinuationLeafTaskIds } from './core/taskChainSelection'
 export { firstWordsTaskName, textRankTaskName } from './core/taskNaming'
 export {
