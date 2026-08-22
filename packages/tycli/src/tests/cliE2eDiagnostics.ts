@@ -500,6 +500,14 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
       data: 'already echoed by readline',
     },
   }
+  const toolResultTask: TaskNode = {
+    id: 'tool-result-task',
+    role: 'system',
+    content: {
+      type: 'toolresult',
+      data: { matches: ['packages/tycli/src/cli.ts', 'packages/tycli/src/cli/taskRenderer.ts'] },
+    },
+  }
   const assistantTask: TaskNode = {
     id: 'assistant-task',
     role: 'assistant',
@@ -513,11 +521,14 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
     role: 'function',
     content: {
       type: 'functioncall',
-      data: { name: 'clock', arguments: {} },
+      data: {
+        name: 'exploration',
+        arguments: { action: 'search', query: 'tycli', path: 'packages', limit: 100 },
+      },
     },
   }
   const state = {
-    debugEnabled: () => false,
+    detailedViewEnabled: () => false,
     showRoleTag: () => true,
     showFullFunctionResults: () => false,
     isFunctionHiddenInChat: () => false,
@@ -530,13 +541,18 @@ export function testTaskRendererDoesNotEchoUserPromptInput() {
 
   renderTaskProgress(state, userTask, false)
   renderTaskProgress(state, functionTask, false)
+  renderTaskProgress(state, toolResultTask, false)
   renderTaskProgress(state, assistantTask, false)
 
   const output = stripVTControlCharacters(lines.join('\n'))
   assertNotContains(output, 'already echoed by readline')
   assertContains(output, 'assistant response')
-  assertContains(output, '[chatgpt-codex | gpt-5.4 | processing:1]\n\n[function|functioncall]')
-  assertContains(output, 'arguments: {}\n\n[assistant|message]')
+  assertContains(
+    output,
+    '[chatgpt-codex | gpt-5.4 | processing:1]\n[function|functioncall] exploration action=search query=tycli path=packages limit=100',
+  )
+  assertContains(output, '[system|toolresult] {"matches":["packages/tycli/src/cli.ts"')
+  assertNotContains(output, 'arguments: {}')
 }
 
 export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {
@@ -550,7 +566,7 @@ export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {
     },
   }
   const state = {
-    debugEnabled: () => false,
+    detailedViewEnabled: () => false,
     showRoleTag: () => true,
     showFullFunctionResults: () => false,
     isFunctionHiddenInChat: () => false,
@@ -686,7 +702,7 @@ export async function testCliClarificationToolAcceptsTypedAnswers() {
 export function testTaskRendererDoesNotPrintTransientWorkerProgress() {
   const lines: string[] = []
   const state = {
-    debugEnabled: () => false,
+    detailedViewEnabled: () => false,
     showRoleTag: () => true,
     showFullFunctionResults: () => false,
     isFunctionHiddenInChat: () => false,
@@ -717,7 +733,7 @@ export function testTaskRendererDoesNotPrintTransientWorkerProgress() {
 export function testTaskRendererHidesHiddenWorkerProgress() {
   const lines: string[] = []
   const state = {
-    debugEnabled: () => false,
+    detailedViewEnabled: () => false,
     showRoleTag: () => true,
     showFullFunctionResults: () => false,
     isFunctionHiddenInChat: (name: string) => name === 'hiddenTool',
@@ -745,7 +761,7 @@ export function testTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask()
   const lines: string[] = []
   const pendingHiddenNodes: string[] = []
   const state = {
-    debugEnabled: () => false,
+    detailedViewEnabled: () => false,
     showRoleTag: () => true,
     showFullFunctionResults: () => false,
     isFunctionHiddenInChat: (name: string) => name === 'hiddenTool',
@@ -787,14 +803,9 @@ export function testTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask()
   renderTaskProgress(state, visibleTask, false)
 
   const output = stripVTControlCharacters(lines.join('\n'))
-  assertContains(
-    output,
-    '>hiddenTool\n>hiddenTool\n>hiddenTool\n>hiddenTool\n\n[function|functioncall]',
-  )
+  assertContains(output, '[function|functioncall] visibleTool')
+  assertNotContains(output, 'hiddenTool')
   assertNotContains(output, 'name: hiddenTool')
-  if (output.split('>hiddenTool').length - 1 !== 4) {
-    throw new Error(`Expected exactly four hidden tool markers. Output:\n${output}`)
-  }
 }
 
 export function testDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls() {
@@ -853,7 +864,7 @@ export function testWorkerStatusTextHidesHiddenTools() {
     role: 'function',
     content: {
       type: 'functioncall',
-      data: { name: 'visibleTool', arguments: {} },
+      data: { name: 'visibleTool', arguments: { query: 'foo', path: 'src', limit: 5 } },
     },
   }
   const hiddenTask: TaskNode = {
@@ -868,6 +879,11 @@ export function testWorkerStatusTextHidesHiddenTools() {
   const isHidden = (name: string) => name === 'hiddenTool'
   const visible = resolveWorkerStatusText({ stage: 'processing', task: visibleTask }, isHidden)
   const hidden = resolveWorkerStatusText({ stage: 'processing', task: hiddenTask }, isHidden)
+  const hiddenActive = resolveWorkerStatusText(
+    { stage: 'processing', task: hiddenTask },
+    isHidden,
+    true,
+  )
   const progress = resolveWorkerStatusText(
     {
       stage: 'tool progress',
@@ -887,11 +903,14 @@ export function testWorkerStatusTextHidesHiddenTools() {
     isHidden,
   )
 
-  if (visible !== 'visibleTool: processing') {
+  if (visible !== 'processing: visibleTool query=foo path=src limit=5') {
     throw new Error(`Expected visible worker status text, got ${String(visible)}`)
   }
   if (hidden !== null) {
     throw new Error(`Expected hidden worker status text to be null, got ${String(hidden)}`)
+  }
+  if (hiddenActive !== 'processing: hiddenTool') {
+    throw new Error(`Expected active hidden tool status text, got ${String(hiddenActive)}`)
   }
   if (progress !== 'visibleTool: first line second line') {
     throw new Error(`Expected one-line tool progress, got ${String(progress)}`)

@@ -68,9 +68,11 @@ enabling all live runtime output.
 Online diagnostics are opt-in. They reuse the selected CLI provider/model unless the command
 explicitly overrides them.
 
-For request-shape, usage, or prompt-cache debugging, start interactive `yarn tycli` with
-`TYCLI_CHAT_COMPLETION_TRACE_DIR` and a stable `TYCLI_CHAT_COMPLETION_TRACE_LABEL`, then enable
-`/debug` before submitting the task. Inspect the runtime log, persisted conversation, final tree,
+For request-shape, usage, or prompt-cache debugging, start interactive `yarn tycli --debug`.
+This enables live runtime diagnostics and redacted `chatCompletionTool` provider-request records
+in the same configured log directory while keeping the terminal chat compact. Detailed task/worker
+diagnostics are still written to the runtime log. Use `/debug view on` when detailed task/tool
+rendering is needed. Inspect the runtime log, persisted conversation, final tree,
 and redacted request records together. Run:
 
 ```bash

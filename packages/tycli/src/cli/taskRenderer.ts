@@ -18,10 +18,11 @@ export type WorkerEvent = {
 export type RendererWrite = (text: string) => void
 
 export type RendererState = {
-  debugEnabled: () => boolean
+  detailedViewEnabled: () => boolean
   showRoleTag: () => boolean
   showFullFunctionResults: () => boolean
   isFunctionHiddenInChat: (name: string) => boolean
+  writeDebugLine?: RendererWrite
   noteHiddenNode?: (toolName: string) => void
   flushHiddenNodeMarkers?: () => void
   clearThinkingPanel: () => void
@@ -41,18 +42,49 @@ const toYaml = (value: unknown) =>
     includeTruncationMeta: true,
   }).trim()
 
-const MAX_RESULT_LINES = 3
+const MAX_COMPACT_DISPLAY_CHARS = 180
 const CONTENT_INDENT = '  '
 const HTML_TAG_PATTERN = /<\/?[a-z][\s\S]*>/i
 
-const truncateToLines = (text: string, maxLines: number) => {
-  const lines = text.split('\n')
-  if (lines.length <= maxLines) return { text, truncated: false }
-  return {
-    text: [...lines.slice(0, maxLines), `... (${lines.length - maxLines} more lines)`].join('\n'),
-    truncated: true,
+const truncateToChars = (text: string, maxChars: number) => {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxChars) return normalized
+  return `${normalized.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`
+}
+
+const compactValue = (value: unknown): string => {
+  if (typeof value === 'string') {
+    return /^[\w./:@+-]+$/u.test(value) ? value : JSON.stringify(value)
+  }
+  if (value === undefined) return 'undefined'
+  if (typeof value === 'bigint') return `${value}n`
+  try {
+    const serialized = JSON.stringify(value)
+    return serialized === undefined ? Object.prototype.toString.call(value) : serialized
+  } catch {
+    return Object.prototype.toString.call(value)
   }
 }
+
+const compactFunctionArguments = (argumentsValue: unknown) => {
+  if (!argumentsValue || typeof argumentsValue !== 'object' || Array.isArray(argumentsValue)) {
+    return compactValue(argumentsValue)
+  }
+  return Object.entries(argumentsValue)
+    .map(([key, value]) => `${key}=${compactValue(value)}`)
+    .join(' ')
+}
+
+export const formatCompactFunctionCall = (task: TaskNode) => {
+  if (task.content.type !== 'functioncall') throw new Error('Expected a function-call task.')
+  return truncateToChars(
+    `${task.content.data.name} ${compactFunctionArguments(task.content.data.arguments)}`.trim(),
+    MAX_COMPACT_DISPLAY_CHARS,
+  )
+}
+
+const compactToolResult = (value: unknown) =>
+  truncateToChars(compactValue(value), MAX_COMPACT_DISPLAY_CHARS)
 
 const indentMultiline = (text: string, indent: string = CONTENT_INDENT) =>
   text
@@ -172,23 +204,28 @@ export const countDelegatedSubtaskToolCalls = (
 export const resolveWorkerStatusText = (
   event: WorkerEvent,
   isFunctionHiddenInChat: (name: string) => boolean,
+  showHiddenActiveTool = false,
 ): string | null => {
   const stage = event.stage ?? ''
   if (stage !== 'processing' && stage !== 'subtasks' && stage !== 'tool progress') return null
   const task = event.task
   const functionName = task?.content?.type === 'functioncall' ? task.content.data?.name : undefined
   const knownToolName = functionName ?? event.toolName
-  if (knownToolName && isFunctionHiddenInChat(knownToolName)) return null
+  const hiddenTool = knownToolName ? isFunctionHiddenInChat(knownToolName) : false
+  if (hiddenTool && !showHiddenActiveTool) return null
   const toolName = knownToolName ?? (event.taskId ? event.taskId.slice(0, 12) : 'task')
+  const compactCall =
+    event.task?.content.type === 'functioncall' ? formatCompactFunctionCall(event.task) : toolName
   if (stage === 'tool progress') {
+    if (hiddenTool) return `${toolName}: processing`
     const message = event.progress?.message.replace(/\s+/g, ' ').trim().slice(-160)
     return message ? `${toolName}: ${message}` : null
   }
   const status = stage === 'subtasks' ? 'waiting for subtasks' : 'processing'
-  return `${toolName}: ${status}`
+  return `${status}: ${compactCall}`
 }
 
-const renderTaskSummary = (task: TaskNode, showRoleTag: boolean): string => {
+const renderTaskSummary = (task: TaskNode, showRoleTag: boolean, compact = false): string => {
   const role = task.role ?? 'unknown'
   if (task.content.type === 'message')
     return color(
@@ -197,17 +234,29 @@ const renderTaskSummary = (task: TaskNode, showRoleTag: boolean): string => {
         : renderHtmlPreviewText(task, String(task.content.data)),
       roleColorCode(role),
     )
-  if (task.content.type === 'functioncall')
+  if (task.content.type === 'functioncall') {
+    const summary = compact ? formatCompactFunctionCall(task) : toYaml(task.content.data)
     return color(
-      showRoleTag
-        ? `[${role}|functioncall]\n${indentMultiline(toYaml(task.content.data))}`
-        : `functioncall\n${toYaml(task.content.data)}`,
+      compact
+        ? showRoleTag
+          ? `[${role}|functioncall] ${summary}`
+          : `functioncall ${summary}`
+        : showRoleTag
+          ? `[${role}|functioncall]\n${indentMultiline(summary)}`
+          : `functioncall\n${summary}`,
       functionCallColorCode(),
     )
+  }
   if (task.content.type === 'toolresult') {
-    const yaml = toYaml(task.content.data)
+    const summary = compact ? compactToolResult(task.content.data) : toYaml(task.content.data)
     return color(
-      showRoleTag ? `[${role}|toolresult]\n${indentMultiline(yaml)}` : `toolresult\n${yaml}`,
+      compact
+        ? showRoleTag
+          ? `[${role}|toolresult] ${summary}`
+          : `toolresult ${summary}`
+        : showRoleTag
+          ? `[${role}|toolresult]\n${indentMultiline(summary)}`
+          : `toolresult\n${summary}`,
       toolResultColorCode(),
     )
   }
@@ -234,8 +283,8 @@ const renderTaskSummary = (task: TaskNode, showRoleTag: boolean): string => {
 const isVisibleMessageRole = (task: TaskNode) =>
   task.content.type === 'message' && task.role === 'assistant'
 
-const shouldRenderTask = (task: TaskNode, debugEnabled: boolean) => {
-  if (debugEnabled) return true
+const shouldRenderTask = (task: TaskNode, detailedViewEnabled: boolean) => {
+  if (detailedViewEnabled) return true
   if (task.content.type === 'error') return true
   if (isVisibleMessageRole(task)) return true
   if (task.content.type === 'functioncall') return true
@@ -245,58 +294,63 @@ const shouldRenderTask = (task: TaskNode, debugEnabled: boolean) => {
   return false
 }
 
-const shouldRenderWorker = (event: WorkerEvent, debugEnabled: boolean) =>
-  debugEnabled || event.stage === 'error'
+const shouldRenderWorker = (event: WorkerEvent, detailedViewEnabled: boolean) =>
+  detailedViewEnabled || event.stage === 'error'
 
 export const renderTaskProgress = (
   state: RendererState,
   task: TaskNode,
   previousSnapshotExists: boolean,
 ): void => {
-  const debugEnabled = state.debugEnabled()
+  const detailedViewEnabled = state.detailedViewEnabled()
   const toolName = extractToolName(task)
+  const debugPrefix = previousSnapshotExists ? '[task updated] ' : '[task] '
+  const prefix = detailedViewEnabled ? debugPrefix : ''
+  if (!detailedViewEnabled && state.writeDebugLine) {
+    state.writeDebugLine(`${debugPrefix}${renderTaskSummary(task, state.showRoleTag(), false)}`)
+  }
   if (
-    !debugEnabled &&
+    !detailedViewEnabled &&
     task.content.type === 'functioncall' &&
     toolName &&
     state.isFunctionHiddenInChat(toolName)
   ) {
-    if (!previousSnapshotExists) state.noteHiddenNode?.(toolName)
     return
   }
   if (
-    !debugEnabled &&
+    !detailedViewEnabled &&
     task.content.type === 'toolresult' &&
     toolName &&
     state.isFunctionHiddenInChat(toolName)
   )
     return
-  if (!shouldRenderTask(task, debugEnabled)) return
+  if (!shouldRenderTask(task, detailedViewEnabled)) return
   state.clearThinkingPanel()
   state.flushHiddenNodeMarkers?.()
-  state.writeLine('')
-  const prefix = debugEnabled ? (previousSnapshotExists ? '[task updated] ' : '[task] ') : ''
-  const summary = renderTaskSummary(task, state.showRoleTag())
-  if (!debugEnabled && task.content.type === 'toolresult' && !state.showFullFunctionResults()) {
-    const [header, ...body] = summary.split('\n')
-    const compact = truncateToLines(body.join('\n'), MAX_RESULT_LINES)
-    state.writeLine(`${prefix}${header}\n${compact.text}`)
-    state.renderThinkingPanel()
-    return
-  }
+  const summary = renderTaskSummary(
+    task,
+    state.showRoleTag(),
+    !detailedViewEnabled &&
+      !state.showFullFunctionResults() &&
+      (task.content.type === 'functioncall' || task.content.type === 'toolresult'),
+  )
   state.writeLine(`${prefix}${summary}`)
+  state.writeLine('')
   state.renderThinkingPanel()
 }
 
 export const renderWorkerProgress = (state: RendererState, event: WorkerEvent): void => {
-  const debugEnabled = state.debugEnabled()
-  if (!shouldRenderWorker(event, debugEnabled)) return
+  const detailedViewEnabled = state.detailedViewEnabled()
+  if (!detailedViewEnabled && state.writeDebugLine) {
+    state.writeDebugLine(`[worker] ${summarizeWorkerEvent(event)}\n[worker yaml]\n${toYaml(event)}`)
+  }
+  if (!shouldRenderWorker(event, detailedViewEnabled)) return
   const toolName =
     event.task?.content?.type === 'functioncall' ? event.task.content.data?.name : undefined
-  if (!debugEnabled && toolName && state.isFunctionHiddenInChat(toolName)) return
+  if (!detailedViewEnabled && toolName && state.isFunctionHiddenInChat(toolName)) return
   state.clearThinkingPanel()
   state.writeLine(`[worker] ${summarizeWorkerEvent(event)}`)
-  if (debugEnabled) state.writeLine(`[worker yaml]\n${toYaml(event)}`)
+  if (detailedViewEnabled) state.writeLine(`[worker yaml]\n${toYaml(event)}`)
   state.writeLine('')
   state.renderThinkingPanel()
 }

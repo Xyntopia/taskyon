@@ -69,8 +69,7 @@ import { getInMemoryDatabase } from '@taskyon/taskyon/db'
 import {
   createDefaultTaskyonToolSetup,
   resolveAgentToolCatalog,
-  resolveInitialAgentToolCatalog,
-  searchAgentToolCatalog,
+  resolveTaskTreeAgentToolWindow,
 } from '@taskyon/taskyon/tools'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { createNodeResourceFilesLoader } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
@@ -97,6 +96,7 @@ import {
 } from './cli/conversationPersistence'
 import { createCliSelectedStorageService, resolveCliStorageSelection } from './cli/storageService'
 import type { CliStoragePaths } from './cli/storagePaths'
+import { cleanCliDebugArtifacts, resolveCliDebugConfiguration } from './cli/debugOptions'
 import { createStaticEmbeddingAssetReader } from './cli/staticEmbeddingCache'
 import { loadTaskSearchSidecars, saveTaskSearchSidecars } from './cli/searchIndexPersistence'
 import { createCliFooter } from './cli/ui'
@@ -368,27 +368,26 @@ function createCliChatCompletionTraceWriter(traceDir: string) {
   return {
     write: async (record: { taskId: string; label?: string; providerRequest: unknown }) => {
       await mkdir(traceDir, { recursive: true })
-      const sequenceId = ++sequence
-      await writeFile(
-        join(traceDir, fileNameFor(sequenceId, record)),
-        stringifyTraceJson({
-          sequence: sequenceId,
-          taskId: record.taskId,
-          ...(record.label ? { label: record.label } : {}),
-          providerRequest: record.providerRequest,
-        }),
-        'utf8',
-      )
+      for (;;) {
+        const sequenceId = ++sequence
+        try {
+          await writeFile(
+            join(traceDir, fileNameFor(sequenceId, record)),
+            stringifyTraceJson({
+              sequence: sequenceId,
+              taskId: record.taskId,
+              ...(record.label ? { label: record.label } : {}),
+              providerRequest: record.providerRequest,
+            }),
+            { encoding: 'utf8', flag: 'wx' },
+          )
+          return
+        } catch (error) {
+          if (!(error && typeof error === 'object' && 'code' in error)) throw error
+          if (error.code !== 'EEXIST') throw error
+        }
+      }
     },
-  }
-}
-
-const resolveCliChatCompletionTrace = (environmentPrefix: string) => {
-  const traceDir = process.env[`${environmentPrefix}_CHAT_COMPLETION_TRACE_DIR`]?.trim()
-  if (!traceDir) return undefined
-  return {
-    dir: traceDir,
-    label: process.env[`${environmentPrefix}_CHAT_COMPLETION_TRACE_LABEL`]?.trim() || undefined,
   }
 }
 
@@ -654,7 +653,9 @@ function exitAfterFatalError(code = 1) {
 
 function writeDebug(text: string) {
   if (!debugLogsEnabled) return
-  process.stderr.write(`[debug] ${text}\n`)
+  const message = `[debug] ${text}\n`
+  runtimeLog?.append('stderr', message)
+  process.stderr.write(message)
 }
 
 async function withCliMenuInteraction<T>(run: () => Promise<T>): Promise<T> {
@@ -837,6 +838,10 @@ function parseTaskyonClientCliArgs(argv: string[]): string | null {
   return rest.join(' ')
 }
 
+const hasHelpFlag = (argv: readonly string[]) =>
+  argv.some((arg) => arg === '--help' || arg === '-h')
+const hasCleanLogsFlag = (argv: readonly string[]) => argv.includes('--clean-logs')
+
 const resolveConversationFormat = (argv: readonly string[]): ConversationFormat => {
   const index = argv.findIndex(
     (arg) => arg === '--conversation-format' || arg.startsWith('--conversation-format='),
@@ -847,6 +852,94 @@ const resolveConversationFormat = (argv: readonly string[]): ConversationFormat 
     : argv[index + 1]
   if (value === 'markdown' || value === 'yaml') return value
   throw new Error(`Invalid --conversation-format '${String(value)}'; use markdown or yaml.`)
+}
+
+const printCliHelp = (host: InteractiveCliHost) => {
+  const prefix = host.environmentPrefix
+  const paths = host.storagePaths
+  const lines = [
+    `${host.commandName} - interactive Taskyon terminal assistant`,
+    '',
+    'Usage:',
+    `  ${host.commandName}              Start the interactive chat`,
+    `  ${host.commandName} --help       Show this help`,
+    `  ${host.commandName} -h           Show this help`,
+    `  ${host.commandName} --debug       Enable runtime and request tracing`,
+    `  ${host.commandName} --clean-logs Remove saved debug logs and traces`,
+    `  ${host.commandName} --conversation-format=yaml  Save conversations as YAML`,
+    `  ${host.commandName} client ...   Run a non-interactive Taskyon client command`,
+    '',
+    'Command-line options:',
+    '  -h, --help                       Show this help and exit',
+    '  --debug                          Enable runtime debug and chatCompletion request tracing',
+    '  --clean-logs                     Delete runtime logs and chatCompletion traces',
+    '  --conversation-format=FORMAT     Save conversations as markdown (default) or yaml',
+    '  client list-tools                List tools exposed by the connected Taskyon client',
+    '  client call-tool <name> [json]   Call a tool with an optional JSON object',
+    '  client callTool <json>           Call a tool using {"name":...,"arguments":...}',
+    '  client <method> [json]           Invoke a connected client API method',
+    '  taskyon-client ...               Alias for client ...',
+    '',
+    'Interactive slash commands:',
+    '  /keys                            Configure or inspect provider credentials',
+    '  /provider                        Select the model provider',
+    '  /model                           Select the provider model',
+    '  /tools                           List registered and agent-available tools',
+    '  /debug [on|off|toggle]            Toggle live diagnostic logging',
+    '  /debug view [on|off|toggle]       Toggle detailed chat rendering',
+    '  /settings                        Inspect or change CLI settings',
+    '  /client                          Invoke the connected Taskyon client interactively',
+    '  /resume                          Resume a saved conversation',
+    '  /search <words>                  Search persisted tasks and conversations',
+    '  /tree                            Inspect or export the active task tree',
+    '  /cost                            Show usage and cost information',
+    '  /stop                            Stop the active task and clean up its tools',
+    '  /exit, /quit                     Exit tycli',
+    '',
+    'Storage and logs:',
+    `  Config:                          ${paths.configDir}`,
+    `  Data, task records, blobs:       ${paths.dataDir}`,
+    `  Cache:                           ${paths.cacheDir}`,
+    `  State:                           ${paths.stateDir}`,
+    `  Authentication:                  ${paths.authDir}`,
+    `  Runtime logs:                    ${paths.logDir}`,
+    '  Conversation snapshots:          stored below the Taskyon data/blob namespace',
+    '',
+    'Environment variables:',
+    `  ${prefix}_CWD                         Override the workspace root`,
+    `  ${prefix}_HOME                       Override the tycli application home`,
+    `  XDG_CONFIG_HOME / XDG_DATA_HOME      Override standard XDG config/data roots`,
+    `  XDG_CACHE_HOME / XDG_STATE_HOME      Override standard XDG cache/state roots`,
+    `  ${prefix}_CONFIG_DIR                 Override the configuration directory`,
+    `  ${prefix}_DATA_DIR                   Override the data directory`,
+    `  ${prefix}_CACHE_DIR                  Override the cache directory`,
+    `  ${prefix}_STATE_DIR                  Override the state directory`,
+    `  ${prefix}_LOG_DIR                    Override the runtime log directory`,
+    `  ${prefix}_TERMINAL_UI=terminal-kit   Enable the terminal-kit footer UI`,
+    `  ${prefix}_HOTKEY_MENUS=0             Disable interactive hotkey menus`,
+    `  ${prefix}_DEBUG=1                    Enable debug mode without the CLI flag`,
+    `  ${prefix}_PYTHON_PATH                Select the native Python executable`,
+    `  TASKYON_DENO_PATH                   Select the optional Deno sandbox executable`,
+    `  ${prefix}_CHAT_COMPLETION_TRACE_DIR  Override the debug trace directory`,
+    `  ${prefix}_CHAT_COMPLETION_TRACE_LABEL Label trace files`,
+    '  PROJECT_CWD / INIT_CWD                Workspace-root fallbacks',
+    '',
+    'Provider selection and credentials:',
+    '  TASKYON_SELECTED_API                  openai, openrouter.ai, taskyon, local, or chatgpt-codex',
+    '  OPENAI_API_KEY                        OpenAI credentials',
+    '  OPENROUTER_API_KEY                    OpenRouter credentials',
+    '  TASKYON_API_KEY                       Taskyon credentials',
+    '  TASKYON_LOCAL_API_KEY                 Local provider credentials',
+    '  TASKYON_CHATGPT_CODEX_API_KEY        ChatGPT Codex credentials',
+    '  CHATGPT_CODEX_API_KEY                ChatGPT Codex credential alias',
+    '  TYAUTH / TASKYON_TYAUTH               Auth token for token/proxy diagnostics',
+    '',
+    'Notes:',
+    '  Start with no arguments for the normal interactive workflow.',
+    '  The current workspace is selected from the explicit CWD variables or the nearest .git/package.json root.',
+    '  Full task trees, tool calls, results, and provider traces remain available through storage and diagnostics.',
+  ]
+  process.stdout.write(`${lines.join('\n')}\n`)
 }
 
 function formatJsonResult(value: unknown): string {
@@ -1323,10 +1416,14 @@ async function waitForTaskResult(
   })
 }
 
+const MAX_TRANSIENT_THINKING_CHARS = 600
+const MAX_TRANSIENT_THINKING_LINES = 3
+
 function normalizeThinkingChunk(chunk: unknown): string {
   const c = chunk as Record<string, unknown>
   const type = typeof c['type'] === 'string' ? c['type'] : ''
   if (type.includes('reasoning')) {
+    if (typeof c['delta'] === 'string') return c['delta']
     if (typeof c['textDelta'] === 'string') return c['textDelta']
     if (typeof c['text'] === 'string') return c['text']
   }
@@ -2299,8 +2396,23 @@ async function refreshToolRenderOptions(
   }
 }
 
-async function handleDebugCommand(rl: ReturnType<typeof createInterface>, parsedArgs: string) {
-  const arg = parsedArgs.trim().toLowerCase()
+async function handleDebugCommand(
+  rl: ReturnType<typeof createInterface>,
+  parsedArgs: string,
+  chatView: { detailed: boolean },
+) {
+  const args = parsedArgs.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const arg = args[0] ?? ''
+  if (arg === 'view') {
+    const viewMode = args[1] ?? 'toggle'
+    if (viewMode !== 'on' && viewMode !== 'off' && viewMode !== 'toggle') {
+      writeLine('Usage: /debug view [on|off|toggle]')
+      return
+    }
+    chatView.detailed = viewMode === 'toggle' ? !chatView.detailed : viewMode === 'on'
+    writeNotice('success', `Detailed chat view: ${chatView.detailed ? 'ON' : 'OFF'}`)
+    return
+  }
   if (arg === 'on') {
     debugLogsEnabled = true
     writeNotice('success', 'Debug logs: ON')
@@ -2311,13 +2423,19 @@ async function handleDebugCommand(rl: ReturnType<typeof createInterface>, parsed
     writeNotice('success', 'Debug logs: OFF')
     return
   }
-  const options = ['toggle', 'on', 'off', 'back']
-  const choice = await selectFromList(rl, '\nDebug logging', options)
-  if (choice === null || choice === 3) return
+  const options = ['toggle', 'on', 'off', 'view toggle', 'view on', 'view off', 'back']
+  const choice = await selectFromList(rl, '\nDebug logging and chat view', options)
+  if (choice === null || choice === 6) return
   if (choice === 0) debugLogsEnabled = !debugLogsEnabled
   if (choice === 1) debugLogsEnabled = true
   if (choice === 2) debugLogsEnabled = false
-  writeNotice('success', `Debug logs: ${debugLogsEnabled ? 'ON' : 'OFF'}`)
+  if (choice === 3) chatView.detailed = !chatView.detailed
+  if (choice === 4) chatView.detailed = true
+  if (choice === 5) chatView.detailed = false
+  writeNotice(
+    'success',
+    `Debug logs: ${debugLogsEnabled ? 'ON' : 'OFF'}; detailed chat view: ${chatView.detailed ? 'ON' : 'OFF'}`,
+  )
 }
 
 async function handleSettingsCommand(
@@ -2632,6 +2750,7 @@ async function handleResumeCommand(args: {
 async function handleSlashCommand(
   parsed: SlashParsed,
   rl: ReturnType<typeof createInterface>,
+  chatView: { detailed: boolean },
   ty: Taskyon,
   taskyonClient: TaskyonClientInvoker,
   taskPort: Parameters<typeof waitForTaskResult>[0],
@@ -2669,7 +2788,7 @@ async function handleSlashCommand(
   }
 
   if (parsed.name === 'debug') {
-    await handleDebugCommand(rl, parsed.args)
+    await handleDebugCommand(rl, parsed.args, chatView)
     return true
   }
 
@@ -2788,9 +2907,27 @@ async function findNearestAncestorWithAnyFile(
 }
 
 async function main(host: InteractiveCliHost) {
-  const conversationFormat = resolveConversationFormat(process.argv.slice(2))
+  const argv = process.argv.slice(2)
+  if (hasHelpFlag(argv)) {
+    printCliHelp(host)
+    return
+  }
+  if (hasCleanLogsFlag(argv)) {
+    const removed = await cleanCliDebugArtifacts(host.storagePaths.logDir)
+    process.stdout.write(
+      `Removed ${removed} ${removed === 1 ? 'debug file' : 'debug files'} from ${host.storagePaths.logDir}\n`,
+    )
+    return
+  }
+  const conversationFormat = resolveConversationFormat(argv)
   process.title = host.commandName
-  debugLogsEnabled = process.env[`${host.environmentPrefix}_DEBUG`] === '1'
+  const debugConfiguration = resolveCliDebugConfiguration(
+    argv,
+    host.environmentPrefix,
+    process.env,
+    host.storagePaths.logDir,
+  )
+  debugLogsEnabled = debugConfiguration.debugLogsEnabled
   adoptInvocationWorkingDirectory(host.environmentPrefix)
   const taskyonClientCommand = parseTaskyonClientCliArgs(process.argv.slice(2))
 
@@ -2843,7 +2980,7 @@ async function main(host: InteractiveCliHost) {
     ...(reasoningEffort ? { reasoningEffort } : {}),
     ...(providerKey ? { key: providerKey } : {}),
   } as CliApiConfig
-  const chatCompletionTrace = resolveCliChatCompletionTrace(host.environmentPrefix)
+  const chatCompletionTrace = debugConfiguration.chatCompletionTrace
   if (chatCompletionTrace) {
     setChatCompletionTraceWriter(createCliChatCompletionTraceWriter(chatCompletionTrace.dir))
   } else {
@@ -2887,27 +3024,32 @@ async function main(host: InteractiveCliHost) {
   const cliEntryNodeTool = createStandardEntryNodeTool({
     name: host.entryNodeName,
     renderOptions: { hideLlm: true, hideChat: true },
-    toolChooser: { enabled: true, useTools: true },
-    getToolCatalog: async ({ taskChain, allowedTools }) => {
+    toolChooser: { enabled: true, useToolShortlist: true },
+    getToolCatalog: async ({
+      taskChain,
+      allowedTools,
+      pinnedToolNames,
+      recentToolCount,
+      frequentToolCount,
+    }) => {
       const ty = taskyonRef.current
       if (!ty) return []
       const allTools = await createCliTaskyonClient(ty.port).tools.list({
         includeHidden: true,
       })
-      return resolveInitialAgentToolCatalog(
+      const tools = resolveTaskTreeAgentToolWindow(
         allTools,
         taskChain,
         agentUnavailableToolNames,
+        recentToolCount,
+        frequentToolCount,
         allowedTools,
+        pinnedToolNames,
       )
-    },
-    searchToolCatalog: async (query, limit) => {
-      const ty = taskyonRef.current
-      if (!ty) return []
-      const allTools = await createCliTaskyonClient(ty.port).tools.list({
-        includeHidden: true,
-      })
-      return searchAgentToolCatalog(allTools, query, limit, agentUnavailableToolNames)
+      return {
+        tools,
+        total: resolveAgentToolCatalog(allTools, agentUnavailableToolNames).length,
+      }
     },
     stableContext: () => host.buildStableContext(projectInstructions),
     extraContext: () => buildCliVolatileContext(),
@@ -3160,6 +3302,15 @@ async function main(host: InteractiveCliHost) {
       }),
   })
   await refreshToolRenderOptions(taskyon, toolRenderOptions)
+  const isFunctionHiddenInChat = (name: string) =>
+    name === host.entryNodeName ||
+    name === 'chatCompletion' ||
+    name === 'selectTaskyonTools' ||
+    Boolean(toolRenderOptions[name]?.hideChat)
+  const writeChatDebugLine = (text: string) => {
+    if (!debugLogsEnabled) return
+    runtimeLog?.append('chat.debug', `${text}\n`)
+  }
   writeLine('Opening interactive prompt...')
 
   if (taskyonClientCommand !== null) {
@@ -3201,6 +3352,7 @@ async function main(host: InteractiveCliHost) {
   })
   let currentLeafId: string | undefined
   let waitingForTask = false
+  const chatView = { detailed: false }
   let interruptedCurrentTask = false
   let interruptNoticePrinted = false
   let requestQuitOnNextPrompt = false
@@ -3216,6 +3368,7 @@ async function main(host: InteractiveCliHost) {
   let activeTaskWaitController: AbortController | undefined
   let thinkingLines: string[] = []
   let toolProgressLines: string[] = []
+  let transientActivity: Array<{ kind: 'thinking' | 'progress'; text: string }> = []
   let thinkingText = ''
   let thinkingPanelHeight = 0
   let thinkingRenderTimer: ReturnType<typeof setTimeout> | null = null
@@ -3248,27 +3401,21 @@ async function main(host: InteractiveCliHost) {
 
   clearTransientStatusLine = clearWorkerStatusLine
 
-  const renderWorkerStatusLine = () => {
-    if (!process.stdout.isTTY || !workerStatusText || activeCliMenuDepth > 0) return
-    const frame = workerSpinnerFrames[workerStatusFrameIndex % workerSpinnerFrames.length] ?? '-'
-    workerStatusFrameIndex += 1
-    process.stdout.write(`\r\x1b[2K${frame} ${workerStatusText}`)
-    workerStatusRendered = true
-  }
-
   const setWorkerStatusLine = (text: string) => {
     if (!process.stdout.isTTY) return
+    workerStatusText = text
     if (activeCliMenuDepth > 0) {
       clearWorkerStatusLine()
-      workerStatusText = text
       return
     }
-    workerStatusText = text
     if (workerStatusTimer === null) {
-      workerStatusTimer = setInterval(renderWorkerStatusLine, 120)
+      workerStatusTimer = setInterval(() => {
+        workerStatusFrameIndex += 1
+        scheduleThinkingRender()
+      }, 120)
       workerStatusTimer.unref()
     }
-    renderWorkerStatusLine()
+    scheduleThinkingRender()
   }
 
   const stopWorkerStatusLine = () => {
@@ -3279,6 +3426,7 @@ async function main(host: InteractiveCliHost) {
     workerStatusText = ''
     workerStatusFrameIndex = 0
     clearWorkerStatusLine()
+    if (waitingForTask) scheduleThinkingRender()
   }
 
   const clearWorkerIdleSettleTimer = () => {
@@ -3301,9 +3449,7 @@ async function main(host: InteractiveCliHost) {
       return
     }
     if (suppressed) return
-    const text = resolveWorkerStatusText(event, (name) =>
-      Boolean(toolRenderOptions[name]?.hideChat),
-    )
+    const text = resolveWorkerStatusText(event, (name) => isFunctionHiddenInChat(name), true)
     if (text) setWorkerStatusLine(text)
     else if (event.stage === 'processing' || event.stage === 'subtasks') {
       setWorkerStatusLine('task: processing')
@@ -3524,6 +3670,7 @@ async function main(host: InteractiveCliHost) {
     clearWorkerIdleSettleTimer()
     thinkingLines = []
     toolProgressLines = []
+    transientActivity = []
     thinkingText = ''
     activeWorkerTasks.clear()
     workerTaskStateById.clear()
@@ -3562,7 +3709,17 @@ async function main(host: InteractiveCliHost) {
     return typeof functionName === 'string' && INTERACTIVE_PROMPT_TOOL_NAMES.has(functionName)
   }
 
-  const wrapThinkingText = (text: string, maxWidth = 88) => {
+  const transientLineWidth = () => Math.max(20, (process.stdout.columns || 88) - 4)
+
+  const fitTransientLine = (text: string) => {
+    const normalized = text.replace(/\s+/g, ' ').trim()
+    const maxWidth = transientLineWidth()
+    return normalized.length <= maxWidth
+      ? normalized
+      : `${normalized.slice(0, Math.max(0, maxWidth - 1)).trimEnd()}…`
+  }
+
+  const wrapThinkingText = (text: string, maxWidth = transientLineWidth()) => {
     const paragraphs = text
       .replace(/\r\n?/g, '\n')
       .trim()
@@ -3588,6 +3745,8 @@ async function main(host: InteractiveCliHost) {
 
     return lines
   }
+
+  const dimCliText = (text: string) => (process.stdout.isTTY ? `\x1b[90m${text}\x1b[0m` : text)
 
   const renderThinkingPanel = () => {
     if (!waitingForTask) return
@@ -3625,15 +3784,32 @@ async function main(host: InteractiveCliHost) {
             ...(queuedTasks.length > 3 ? [`  - ... ${queuedTasks.length - 3} more`] : []),
           ]
         : []
-    const recent = thinkingLines.slice(-5)
+    const recentActivity = transientActivity.slice(-5)
+    const recentProgress = recentActivity
+      .filter((entry) => entry.kind === 'progress')
+      .map((entry) => entry.text)
+    const recentThinking = recentActivity
+      .filter((entry) => entry.kind === 'thinking' && entry.text.trim().length > 0)
+      .map((entry) => entry.text.trim())
     const progressPanel =
-      toolProgressLines.length > 0
-        ? ['[tool progress]', ...toolProgressLines.map((line) => `  ${line}`)]
+      recentProgress.length > 0
+        ? ['[tool progress]', ...recentProgress.map((line) => `  ${line}`)]
         : []
     const thinkingPanel =
-      recent.length > 0 ? ['[thinking]', ...recent.map((line) => `  ${line}`)] : []
-    const panel = [...queueLines, ...progressPanel, ...thinkingPanel]
+      recentThinking.length > 0 ? ['[thinking]', ...recentThinking.map((line) => `  ${line}`)] : []
+    const processingPanel = workerStatusText
+      ? [
+          `${workerSpinnerFrames[workerStatusFrameIndex % workerSpinnerFrames.length] ?? '-'} ${workerStatusText}`,
+        ]
+      : []
+    const panel = [...processingPanel, ...queueLines, ...progressPanel, ...thinkingPanel]
     const panelText = panel.join('\n')
+    const queueLineCount = processingPanel.length + queueLines.length
+    const processingLineCount = processingPanel.length
+    const displayPanel = panel.map((line, index) => {
+      if (index < processingLineCount) return fitTransientLine(line)
+      return index >= queueLineCount ? dimCliText(fitTransientLine(line)) : line
+    })
     if (panelText === renderedThinkingPanelText) return
 
     clearThinkingRenderTimer()
@@ -3644,7 +3820,7 @@ async function main(host: InteractiveCliHost) {
     }
 
     clearWorkerStatusLine()
-    process.stdout.write(`${panel.join('\n')}\n`)
+    process.stdout.write(`${displayPanel.join('\n')}\n`)
     thinkingPanelHeight = panel.length
     renderedThinkingPanelText = panelText
   }
@@ -3698,8 +3874,10 @@ async function main(host: InteractiveCliHost) {
         .replace(/\r\n?/g, '\n')
         .split('\n')
         .filter((line) => line.length > 0)
-        .map((line) => `${prefix}${line.slice(0, 160)}`)
+        .map((line) => `${prefix}${line.slice(0, transientLineWidth())}`)
       toolProgressLines = [...toolProgressLines, ...lines].slice(-5)
+      lines.forEach((text) => transientActivity.push({ kind: 'progress', text }))
+      transientActivity = transientActivity.slice(-5)
       writeDebug(
         `tool progress: ${JSON.stringify({ taskId, toolName: event.toolName, ...event.progress })}`,
       )
@@ -3763,10 +3941,19 @@ async function main(host: InteractiveCliHost) {
 
   const appendThinkingText = (delta: string) => {
     if (!delta) return
-    thinkingText = `${thinkingText}${delta}`.slice(-2000)
-    const next = wrapThinkingText(thinkingText)
+    thinkingText = `${thinkingText}${delta}`.slice(-MAX_TRANSIENT_THINKING_CHARS)
+    const next = wrapThinkingText(thinkingText, transientLineWidth())
     if (next.length <= 0) return
-    thinkingLines = next.slice(-5)
+    thinkingLines = next.slice(-MAX_TRANSIENT_THINKING_LINES)
+    const latestThinkingLine = thinkingLines.at(-1)?.trim()
+    if (latestThinkingLine) {
+      const lastActivity = transientActivity.at(-1)
+      transientActivity =
+        lastActivity?.kind === 'thinking'
+          ? [...transientActivity.slice(0, -1), { kind: 'thinking', text: latestThinkingLine }]
+          : [...transientActivity, { kind: 'thinking', text: latestThinkingLine }]
+      transientActivity = transientActivity.slice(-5)
+    }
     scheduleThinkingRender()
   }
 
@@ -3951,10 +4138,11 @@ async function main(host: InteractiveCliHost) {
     scheduleThinkingRender()
     renderTaskProgress(
       {
-        debugEnabled: () => debugLogsEnabled,
+        detailedViewEnabled: () => chatView.detailed,
         showRoleTag: () => uiSettings.showRoleTag,
         showFullFunctionResults: () => uiSettings.showFullFunctionResults,
-        isFunctionHiddenInChat: (name: string) => Boolean(toolRenderOptions[name]?.hideChat),
+        isFunctionHiddenInChat,
+        ...(debugLogsEnabled ? { writeDebugLine: writeChatDebugLine } : {}),
         noteHiddenNode,
         flushHiddenNodeMarkers,
         clearThinkingPanel,
@@ -3975,10 +4163,11 @@ async function main(host: InteractiveCliHost) {
     renderCompletedSubtaskSummary(workerEvent)
     renderWorkerProgress(
       {
-        debugEnabled: () => debugLogsEnabled,
+        detailedViewEnabled: () => chatView.detailed,
         showRoleTag: () => uiSettings.showRoleTag,
         showFullFunctionResults: () => uiSettings.showFullFunctionResults,
-        isFunctionHiddenInChat: (name: string) => Boolean(toolRenderOptions[name]?.hideChat),
+        isFunctionHiddenInChat,
+        ...(debugLogsEnabled ? { writeDebugLine: writeChatDebugLine } : {}),
         clearThinkingPanel,
         renderThinkingPanel,
         writeLine,
@@ -4014,7 +4203,12 @@ async function main(host: InteractiveCliHost) {
     'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /cost, /exit, /quit',
   )
   if (debugLogsEnabled) {
-    writeNotice('warn', `Debug logs enabled (${host.environmentPrefix}_DEBUG=1).`)
+    writeNotice(
+      'warn',
+      `Debug mode enabled: runtime logs and chatCompletion traces are recorded in ${chatCompletionTrace?.dir ?? host.storagePaths.logDir}. Detailed task/worker diagnostics are logged while chat remains compact; use /debug view on for details.`,
+    )
+  } else if (chatCompletionTrace) {
+    writeNotice('warn', `ChatCompletion request tracing enabled: ${chatCompletionTrace.dir}.`)
   }
   updateFooter()
 
@@ -4177,6 +4371,7 @@ async function main(host: InteractiveCliHost) {
         const keepRunning = await handleSlashCommand(
           parsed,
           rl,
+          chatView,
           taskyon,
           taskyonApi,
           clientPort as Parameters<typeof waitForTaskResult>[0],

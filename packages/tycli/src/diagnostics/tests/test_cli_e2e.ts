@@ -15,6 +15,7 @@ import {
   testEscapeCancelsModelMenuAndKeepsPromptUsable as runEscapeCancelsModelMenuAndKeepsPromptUsable,
   testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
   testTaskRendererWritesHtmlPreviewForAssistantHtml as runTaskRendererWritesHtmlPreviewForAssistantHtml,
+  testTaskRendererDoesNotEchoUserPromptInput as runTaskRendererDoesNotEchoUserPromptInput,
   testCliClarificationToolAcceptsTypedAnswers as runCliClarificationToolAcceptsTypedAnswers,
   testBracketedPastePreservesMultilinePrompt as runBracketedPastePreservesMultilinePrompt,
 } from '../../tests/cliE2eDiagnostics'
@@ -43,6 +44,11 @@ const forbiddenStartupRegressions = [
   'getExecutionTaskChain is not available for this external tool client',
   '[function|functioncall]\n  name: cliFlow',
 ]
+
+export const testTaskRendererDoesNotEchoUserPrompt = runTaskRendererDoesNotEchoUserPromptInput
+
+testTaskRendererDoesNotEchoUserPrompt.description =
+  'Renders function calls and tool results as compact single-line summaries.'
 
 export const testCliBracketedPastePreservesMultilinePrompt =
   runBracketedPastePreservesMultilinePrompt
@@ -290,6 +296,56 @@ export const testCliListsAndUsesAvailableTools = async () => {
 testCliListsAndUsesAvailableTools.description =
   'Starts tycli, verifies that Taskyon plans separate tool-list and weather tasks, and lets each delegated entry node choose its relevant tool.'
 testCliListsAndUsesAvailableTools.timeoutMs = 320_000
+
+export const testCliFocusedSearchFindsANonPinnedTool = async () => {
+  const prompt = [
+    'Use the current weather capability for latitude 32.7157 and longitude -117.1611.',
+    'The weather capability is intentionally not pinned in the initial tool window.',
+    'Use focused tool search immediately if it is not already callable. Do not request a broad tool overview and do not use toolSearcher.',
+    'After the weather tool succeeds, begin the final answer with WEATHER_NON_PINNED_COMPLETE.',
+  ].join('\n\n')
+  const result = await runCliE2eSession({
+    testName: 'testCliFocusedSearchFindsANonPinnedTool',
+    steps: [
+      {
+        waitFor: 'tycli ready.',
+        input: `\u001b[200~${prompt}\u001b[201~`,
+      },
+      { delayMs: 200, input: '\r' },
+      {
+        waitFor: 'name: openMeteoWeatherTool',
+        failOn: ['Fatal error', 'No key configured', 'Cannot connect to API', '[system|error]'],
+        input: '',
+      },
+      {
+        waitFor: 'Allow openMeteoWeatherTool to read https://api.open-meteo.com',
+        failOn: ['Fatal error', '[system|error]'],
+        input: 'y\r',
+      },
+      {
+        waitFor: 'WEATHER_NON_PINNED_COMPLETE',
+        failOn: ['Fatal error', '[system|error]'],
+        input: '',
+      },
+    ],
+    acceptOutputAsExit: 'WEATHER_NON_PINNED_COMPLETE',
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    isolateHome: false,
+    timeoutMs: 180_000,
+    runner: 'pty',
+  })
+
+  assert(result.code === 0, `Expected exit code 0, got ${result.code}\n${result.output}`)
+  assert(
+    result.output.includes('name: openMeteoWeatherTool'),
+    `Expected the non-pinned weather tool to be discovered and called.\n${result.output}`,
+  )
+  return { success: true }
+}
+
+testCliFocusedSearchFindsANonPinnedTool.description =
+  'Verifies that CLI focused tool search discovers and executes a required tool absent from pinned tools.'
+testCliFocusedSearchFindsANonPinnedTool.timeoutMs = 200_000
 
 export const testCliToolsListsDocumentationTools = async () => {
   const result = await runCliE2eSession({

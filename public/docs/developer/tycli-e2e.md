@@ -39,7 +39,7 @@ For every experiment:
    "$RUN_DIR/llm-trace" \
    TYCLI_CHAT_COMPLETION_TRACE_LABEL=\
    <task-id> \
-   yarn --cwd /workspace/frontend tycli
+   yarn --cwd /workspace/frontend tycli --debug
    ```
 
    `TYCLI_DATA_DIR` isolates every record and blob served through Taskyon's `StorageClient`,

@@ -20,16 +20,18 @@ Apply this policy when implementing, debugging, or evaluating `tycli`.
 - Start interactive work with the normal `yarn tycli` entrypoint and reuse its persisted OAuth
   login, provider, and model selection. Do not configure keys, change providers or models, import
   credentials, or silently substitute a model unless the user requests it.
-- Add only task-scoped environment such as `TYCLI_CWD`, `TYCLI_CHAT_COMPLETION_TRACE_DIR`, and a
-  stable `TYCLI_CHAT_COMPLETION_TRACE_LABEL`. Confirm the startup banner shows the expected
-  provider and model before submitting the task prompt.
+- Add only task-scoped environment such as `TYCLI_CWD`, `TYCLI_DATA_DIR`, and isolated trace
+  overrides when needed. Confirm the startup banner shows the expected provider and model before
+  submitting the task prompt.
 - If sandbox restrictions hide persisted state or block required network access, rerun with the
   needed permissions instead of creating a temporary profile or copying credentials.
 
 ## Debugging Evidence Bundle
 
-- Enable per-chatCompletion tracing before the first prompt and enable live session debug logging
-  through `/debug` for every non-trivial debugging or evaluation run.
+- Start non-trivial debugging or evaluation runs with `yarn tycli --debug` before the first
+  prompt. This enables per-chatCompletion tracing and live session debug logging together while
+  keeping chat compact; use `/debug view on` for detailed rendering and `/debug` for live logging
+  toggles during an already-running session.
 - Record and inspect the runtime log, persisted Markdown conversation, redacted chatCompletion
   records, final task-tree export, changed files, and verification command output.
 - Run `scripts/audit-tycli-chatcompletion-trace.mjs` after the run. Report call counts, request and

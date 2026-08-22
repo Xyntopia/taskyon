@@ -32,7 +32,7 @@ The CLI supports slash commands:
 
 - `/keys`, `/provider`, and `/model`: configure model access.
 - `/tools`: inspect registered tools.
-- `/debug` and `/settings`: change CLI diagnostics and display behavior.
+- `/debug` and `/settings`: change CLI diagnostics and display behavior. Use `/debug view on` for detailed task/tool rendering.
 - `/client`: invoke the connected Taskyon client API.
 - `/resume`: select a saved Markdown conversation by date and keywords, or import a path.
 - `/search <words>`: hybrid-search individual tasks and continue from a selected result.
@@ -41,6 +41,33 @@ The CLI supports slash commands:
 - `/stop`: cancel active tasks and destroy their retained tool sandboxes.
 
 ## Usage
+
+`tycli` provides built-in command-line help. Use either spelling:
+
+```bash
+yarn tycli --help
+yarn tycli -h
+```
+
+Runtime and diagnostic logs default to the user cache directory (`~/.cache/tycli/logs` on
+Linux-like systems). Start a session with runtime diagnostics and redacted provider request tracing
+using one option:
+
+```bash
+yarn tycli --debug
+```
+
+The runtime `.log` file and chat-completion `*_record.json` files are written to the same log
+directory. Detailed task/worker diagnostics are written to the runtime log while the terminal
+chat remains compact. Remove both kinds of debug artifacts with:
+
+```bash
+yarn tycli --clean-logs
+```
+
+The help output lists interactive slash commands, non-interactive `client` commands, provider and
+credential variables, workspace selection, storage locations, runtime logs, terminal UI settings,
+and redacted chat-completion tracing.
 
 From this directory:
 
@@ -92,9 +119,10 @@ Optional environment variables:
 - `TASKYON_DENO_PATH` (optional Deno executable for explicitly selected Deno sandboxes)
 - `TASKYON_PYTHON_PATH` (optional native Python executable)
 - `TYCLI_DATA_DIR` (isolated task records, generated tools, artifacts, transcripts, and indexes)
-- `TYCLI_LOG_DIR` (runtime and diagnostic logs)
-- `TYCLI_CHAT_COMPLETION_TRACE_DIR` and `TYCLI_CHAT_COMPLETION_TRACE_LABEL` (redacted provider
-  request records for debugging and cache audits)
+- `TYCLI_LOG_DIR` (runtime and diagnostic logs; defaults to the tycli cache log directory)
+- `TYCLI_DEBUG=1` (advanced equivalent of `tycli --debug`)
+- `TYCLI_CHAT_COMPLETION_TRACE_DIR` and `TYCLI_CHAT_COMPLETION_TRACE_LABEL` (advanced overrides
+  for isolated redacted provider request records and cache audits)
 
 Sandboxed CLI JavaScript uses the retained Node VM by default. Hosts may explicitly select Deno for
 tools that need it; Deno is available in the repository's Nix development shell. Native Python is
@@ -105,7 +133,7 @@ Diagnostics defaults:
 
 - `cli-diagnostics` reuses the same persisted `tycli` provider, model, API key, and OAuth login state by default.
 - Normal runs print only per-test status, the final summary, failed test names, and the live log path.
-- `--verbose` restores full live runtime and test output; `TYCLI_LOG_DIR` selects the log directory.
+- `--verbose` restores full live runtime and test output; `TYCLI_LOG_DIR` selects the log directory. `tycli --clean-logs` removes runtime `.log` files and chat-completion `*_record.json` files from that directory.
 - `TYAUTH` / `--tyauth` is only needed for Taskyon auth-token tests such as token minting/proxy coverage.
 - `--provider` and `--model` override the stored `tycli` selection for a diagnostics run.
 
