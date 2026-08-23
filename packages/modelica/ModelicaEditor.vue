@@ -1879,7 +1879,6 @@ const configuration = computed<partialTyConfiguration | null>(() => {
         ...customBaseToolchainConfig,
         taskyonFlow: {
           ...(customBaseToolchainConfig.taskyonFlow ?? {}),
-          use_tool_chooser: true,
           entryNode: toolCall({ name: 'modelicaDocumentAssistant', arguments: {} }),
         },
       },

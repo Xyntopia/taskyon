@@ -60,11 +60,11 @@ export const testBrowserStorageRequestsPersistentStorage = async () => {
   let persisted = false
   let requestCount = 0
   const storageManager = {
-    persisted: async () => persisted,
-    persist: async () => {
+    persisted: () => Promise.resolve(persisted),
+    persist: () => {
       requestCount += 1
       persisted = true
-      return true
+      return Promise.resolve(true)
     },
   }
 

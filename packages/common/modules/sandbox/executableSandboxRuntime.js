@@ -195,7 +195,11 @@ export function installExecutableSandboxRuntime() {
     const controlChannel = new MessageChannel()
     connect(controlChannel.port1)
     window.parent.postMessage({ ready: true }, '*', [controlChannel.port2])
-  } else if (typeof process !== 'undefined' && typeof process.send === 'function') {
+  } else if (
+    typeof Deno === 'undefined' &&
+    typeof process !== 'undefined' &&
+    typeof process.send === 'function'
+  ) {
     const ipcPort = {
       onmessage: null,
       postMessage: (message) => process.send?.(message),
