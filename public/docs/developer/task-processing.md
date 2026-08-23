@@ -170,28 +170,34 @@ The entry node is the workflow router used after a user message, plain tool resu
 result, or error. The standard entry node decides whether to:
 
 - answer through `chatCompletion`;
-- expose provider-native tool calling;
-- run a structured tool-shortlist phase;
+- expose the pinned, recent, and frequent callable tools directly;
+- offer focused full-catalog tool search when the needed capability is absent;
+- optionally use a broad tool overview, whose results continue directly into EntryNode;
 - recover from a failed tool call;
 - ask structured clarification questions;
-- enable configured hosted web search.
+- enable configured provider-controlled web search.
 
-Entry-node settings own prompt templates, default tools, tool-choice behavior, reasoning,
-multimodal input, and web-search flags. The implementation selects a template for the current
-message, tool result, error, chooser, or exhausted-retry mode and appends only runtime-specific
-context. `chatCompletion` remains the model gateway.
+Entry-node settings own prompt templates, pinned tools, recent and frequent windows, tool search,
+reasoning, multimodal input, and web-search flags. The implementation selects a template for the
+current message, tool result, error, or exhausted-retry mode and appends only
+runtime-specific context. `chatCompletion` remains the model gateway.
 
-The shortlist router and the selected executor receive the same stable leading base/project
-instructions and tree-selected lineage. Role-specific routing text stays after that shared prefix.
-Their tool declarations intentionally differ, so provider cache reuse must be measured rather than
-assumed.
+Normal entry-node calls go directly to `chatCompletion` with the small callable window. Focused
+`toolSearch` searches the full public tool catalog, returns up to three ranked tools, and creates an
+immediate entry-node continuation with those tools added to the next window. The previous callable
+window does not restrict this explicit search.
 
-When tool choosing is enabled and the available tool count exceeds `tool_chooser_min_tools`, the
-shortlist phase creates a scoped `selectTaskyonTools` binding and runs a `chatCompletion` that
-exposes and forces only that reduced tool signature. The binding calls the current entry node with
-a narrowed `allowedTools` list. The new entry node inherits the preceding entry node's other
-deterministic settings and performs the next tool-selection step; the internal binding definition
-is hidden from model-facing and copied chat text.
+Entry-node search is a task-tree binding over the regular `toolSearcher`; it is not a second
+registered search implementation. The binding calls `toolSearcher` with `analyze: false`, then the
+next EntryNode consumes its terminal result through `$use: { toolSearchInput: "$previousResult" }`.
+`$previousResult` refers to the terminal leaf of the immediately preceding sibling branch and may
+select nested values with dot paths or numeric array indexes, such as
+`$previousResult.matches[0].name`. Ambiguous preceding branches are rejected.
+
+A model may request `toolSearch` with `mode: overview` only when focused search did not find the
+needed capability or when broad multi-tool planning genuinely requires many tools. The search
+results are passed directly to the next EntryNode call as its narrowed `allowedTools` list. The
+internal binding definition is hidden from model-facing and copied chat text.
 
 Use a custom entry node when a page needs domain context, deterministic routing, or a deliberately
 narrow tool set. Keep its top-level branch visible in the tool function rather than hiding the
@@ -214,13 +220,15 @@ unavailable rather than becoming zero.
 ```mermaid
 flowchart TD
   Input[User message or task result] --> Router[Entry node]
+  Router --> Window[Direct callable window]
   Router --> Chat[Chat completion]
-  Router --> Shortlist[Tool shortlist]
-  Router --> Search[Hosted web search]
+  Router --> Search[Focused full catalog search]
+  Router --> Overview[Optional broad tool overview]
   Router --> Recover[Error recovery]
-  Shortlist --> NarrowedRouter[Entry node with allowed tools]
+  Window --> Chat
+  Search --> NarrowedRouter[Immediate entry node with search tools]
+  Overview --> NarrowedRouter
   NarrowedRouter --> Chat
-  Search --> Chat
   Recover --> Chat
   Chat --> Answer[Assistant message]
   Chat --> ToolCall[Tool call]

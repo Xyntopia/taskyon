@@ -53,11 +53,13 @@ const tystate = useTaskyonStore()
 const em = computed(() => state.appConfiguration.expertMode)
 const entryNodePickKeys = [
   'use_baseprompt',
-  'use_tool_chooser',
-  'tool_chooser_min_tools',
+  'pinnedTools',
+  'toolSearchEnabled',
+  'recentToolCount',
+  'frequentToolCount',
+  'recentSearchToolCount',
   'use_multimodal',
   'reasoning_effort',
-  'providerToolCalling',
   'max_error_retries',
 ] as const
 const slimChatKeys = computed(() => (em.value ? entryNodePickKeys : ['reasoning_effort']))

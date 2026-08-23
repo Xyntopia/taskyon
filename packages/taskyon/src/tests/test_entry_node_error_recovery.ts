@@ -35,8 +35,6 @@ const testPromptTemplates: EntryNodePromptTemplates = {
   message: 'MESSAGE',
   toolResult: 'TOOL RESULT: {toolResult}',
   error: 'ERROR: {error}',
-  toolChooser:
-    'Choose {maxTools} via {selectorTool} using allowedTools from this catalog:\n{toolCatalog}',
   retryExhausted: 'STOP AFTER {retryCount}',
 }
 
@@ -44,9 +42,12 @@ export const testEntryNodeRequiresConfiguredPromptTemplates = () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: {},
-    toolChooser: { enabled: false },
   })
   const required = new Set(entryNodeTool.parameters.required ?? [])
+  assert(
+    !('useToolShortlist' in entryNodeTool.parameters.properties),
+    'Expected the removed shortlist setting to stay out of the EntryNode schema',
+  )
   assert(required.has('prompt_templates'), 'Expected prompt_templates to be required by the tool')
 
   let error: unknown
@@ -236,11 +237,10 @@ export const testAgentToolCatalogSearchIncludesDagNodes = () => {
 testAgentToolCatalogSearchIncludesDagNodes.description =
   'Searches ordinary tools and DAG-node tools through one concise catalog.'
 
-export const testEntryNodeToolSearchRerunsConciseChooser = async () => {
+export const testEntryNodeToolSearchPassesOverviewResultsDirectly = async () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useToolShortlist: true },
   })
   const taskChain: TaskNode[] = [
     { id: 'user', role: 'user', content: { type: 'message', data: 'Calculate a deck.' } },
@@ -278,10 +278,7 @@ export const testEntryNodeToolSearchRerunsConciseChooser = async () => {
           },
         ],
       },
-      prompt_templates: {
-        ...testPromptTemplates,
-        toolChooser: 'Choose {maxTools} via {selectorTool} from this catalog:\n{toolCatalog}',
-      },
+      prompt_templates: testPromptTemplates,
     },
     {
       getExecutionTaskChain: () => Promise.resolve(taskChain),
@@ -292,50 +289,26 @@ export const testEntryNodeToolSearchRerunsConciseChooser = async () => {
       toolId: 'entry-search-test',
     },
   )
-  assert(result && typeof result === 'object' && 'taskChainList' in result, 'Expected chooser task')
-  const call = findFunctionCall(result.taskChainList[0], 'chatCompletion')
-  const prompts = call?.arguments.appendSystemPrompts
   assert(
-    Array.isArray(prompts) &&
-      prompts.some(
-        (prompt) =>
-          String(prompt).includes('Choose 3 via selectTaskyonTools') &&
-          String(prompt).includes('constructionDecking'),
-      ),
-    'Expected the configured chooser template to receive its runtime catalog values',
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected continuation task',
   )
-
-  await entryNodeTool.function?.(
-    { prompt_templates: testPromptTemplates },
-    {
-      getExecutionTaskChain: () =>
-        Promise.resolve([
-          ...taskChain,
-          {
-            id: 'entry-after-search',
-            role: 'function',
-            priorID: 'entry-search',
-            content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
-          },
-        ]),
-      createSubtasksResult,
-      getSecret: () => Promise.resolve(null),
-      setSecret: () => Promise.resolve(),
-      stopSignal: new AbortController().signal,
-      toolId: 'entry-after-search-test',
-    },
+  const call = findFunctionCall(result.taskChainList[0], 'entryNode')
+  assert(
+    Array.isArray(call?.arguments.allowedTools) &&
+      call.arguments.allowedTools.includes('constructionDecking'),
+    'Expected overview search results to pass directly to the next entry node',
   )
   return { selected: 'constructionDecking' }
 }
 
-testEntryNodeToolSearchRerunsConciseChooser.description =
-  'Uses the optional shortlist stage only for an explicit broad tool overview.'
+testEntryNodeToolSearchPassesOverviewResultsDirectly.description =
+  'Passes explicit broad tool-overview results directly into the next EntryNode call.'
 
 export const testEntryNodeFocusedToolSearchReturnsImmediateCallableWindow = async () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useToolShortlist: true },
   })
   const result = await entryNodeTool.function?.(
     {
@@ -383,7 +356,7 @@ export const testEntryNodeFocusedToolSearchReturnsImmediateCallableWindow = asyn
   )
   assert(
     !findFunctionCall(result.taskChainList[0], 'chatCompletion'),
-    'Expected focused search not to create a separate shortlist completion',
+    'Expected focused search not to create a separate routing completion',
   )
   return { selected: entryCall?.arguments.allowedTools }
 }
@@ -395,7 +368,6 @@ export const testEntryNodeSearchRunsAsVisibleTaskTreeContinuation = async () => 
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useToolShortlist: true },
   })
   const entryResult = await entryNodeTool.function?.(
     {
@@ -515,7 +487,6 @@ export const testEntryNodeToolSearchEscapesPreviousToolWindow = async () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useToolShortlist: true },
     getToolCatalog: ({ allowedTools }) => {
       const selected = allowedTools
         ? Object.fromEntries(
@@ -587,7 +558,7 @@ export const testEntryNodeToolSearchEscapesPreviousToolWindow = async () => {
   )
   assert(
     !findFunctionCall(result.taskChainList[0], 'chatCompletion'),
-    'Expected focused search not to create a separate chooser completion',
+    'Expected focused search not to create a separate routing completion',
   )
   return { selected: 'exploration' }
 }
@@ -613,7 +584,6 @@ export const testEntryNodeCarriesSelectedSearchToolIntoLaterUsageWindow = async 
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useToolShortlist: true },
     getToolCatalog: ({ taskChain, allowedTools, recentToolCount, frequentToolCount }) => {
       const window = resolveTaskTreeAgentToolWindow(
         catalog,
@@ -782,7 +752,6 @@ export const testEntryNodePromptTemplatesSelectTheCurrentMode = () => {
     message: 'MESSAGE',
     toolResult: 'TOOL RESULT: {toolResult}',
     error: 'ERROR: {error}',
-    toolChooser: 'CHOOSER',
     retryExhausted: 'STOP AFTER {retryCount}',
   }
   const previousTask: TaskNode = {
@@ -807,7 +776,6 @@ export const testEntryNodePromptTemplatesSelectTheCurrentMode = () => {
   assert(appended.includes('stdout: done'), 'Expected runtime tool-result interpolation')
   assert(appended.includes('DYNAMIC CONTEXT'), 'Expected dynamic context after reusable prose')
   assert(!appended.includes('MESSAGE'), 'Expected only the current mode template')
-  assert(!appended.includes('CHOOSER'), 'Expected chooser prose only during tool selection')
 
   return { success: true }
 }
@@ -868,7 +836,6 @@ export const testEntryNodePropagatesTaskContractWithoutPromptDuplication = async
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: ['bash'],
-    toolChooser: { enabled: false },
   })
   const completionCriterion = 'Every trust boundary has an evidence note.'
   const taskContract = {
@@ -909,7 +876,6 @@ export const testEntryNodePropagatesTaskContractWithoutPromptDuplication = async
   const result = await entryNodeTool.function?.(
     {
       taskContract,
-      providerToolCalling: false,
       prompt_templates: testPromptTemplates,
     },
     {
@@ -945,22 +911,19 @@ export const testEntryNodePropagatesTaskContractWithoutPromptDuplication = async
   )
   const scopedDefinition = continuation?.find((task) => task.content.type === 'tooldefinition')
   assert(
-    continuation?.length === 2 &&
+      continuation?.length === 2 &&
       scopedDefinition?.content.type === 'tooldefinition' &&
       'implementation' in scopedDefinition.content.data &&
       scopedDefinition.content.data.implementation.target === 'entryNode' &&
       chatArguments &&
       typeof chatArguments === 'object' &&
       Array.isArray(chatArguments.allowedTools) &&
-      chatArguments.allowedTools.length === 1 &&
-      chatArguments.allowedTools[0] === 'selectTaskyonTools' &&
-      chatArguments.toolChoice &&
-      typeof chatArguments.toolChoice === 'object' &&
-      !Array.isArray(chatArguments.toolChoice) &&
-      chatArguments.toolChoice.toolName === 'selectTaskyonTools' &&
+      chatArguments.allowedTools.includes('bash') &&
+      chatArguments.allowedTools.includes('selectTaskyonTools') &&
+      !('toolChoice' in chatArguments) &&
       !('schema' in chatArguments) &&
       !('resultMode' in chatArguments),
-    'Expected the decision completion to expose and force only the scoped selector',
+    'Expected native tool calling with the task contract carried separately',
   )
 
   return { success: true }
@@ -971,7 +934,6 @@ export const testEntryNodeForwardsContractedResultSchema = async () => {
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: [],
-    toolChooser: { enabled: false },
   })
   const resultSchema = {
     type: 'object' as const,
@@ -1057,7 +1019,6 @@ export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
         { name: 'taskPlanner', description: 'Plan multi-step work.' },
         { name: 'askClarifyingQuestions', description: 'Ask blocking questions.' },
       ]),
-    toolChooser: { enabled: true, useToolShortlist: true },
   })
   const taskChain: TaskNode[] = [
     {
@@ -1211,7 +1172,6 @@ export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = asyn
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: ['bash'],
-    toolChooser: { enabled: false },
   })
   const taskContract = {
     objective: 'Inspect the CLI documentation.',
@@ -1241,7 +1201,6 @@ export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = asyn
           name: 'entryNode',
           arguments: {
             taskContract,
-            providerToolCalling: true,
             trace: { enabled: true, label: 'contract-routing' },
           },
         },
@@ -1252,7 +1211,6 @@ export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = asyn
   const result = await entryNodeTool.function?.(
     {
       taskContract,
-      providerToolCalling: true,
       trace: { enabled: true, label: 'contract-routing' },
       prompt_templates: testPromptTemplates,
     },
@@ -1267,28 +1225,26 @@ export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = asyn
   )
   assert(
     result && typeof result === 'object' && 'taskChainList' in result,
-    'Expected entryNode to create a structured tool-decision chain',
+    'Expected entryNode to create a structured native-tool continuation',
   )
 
   const continuation = result.taskChainList[0]
   const scopedDefinition = continuation?.find((task) => task.content.type === 'tooldefinition')
   const chatArguments = findFunctionCall(continuation, 'chatCompletion')?.arguments
   assert(
-    scopedDefinition?.content.type === 'tooldefinition' &&
+      scopedDefinition?.content.type === 'tooldefinition' &&
       'implementation' in scopedDefinition.content.data &&
       scopedDefinition.content.data.implementation.target === 'entryNode' &&
       chatArguments &&
       typeof chatArguments === 'object' &&
       Array.isArray(chatArguments.allowedTools) &&
-      chatArguments.allowedTools.length === 1 &&
-      chatArguments.allowedTools[0] === 'selectTaskyonTools' &&
-      chatArguments.toolChoice &&
-      typeof chatArguments.toolChoice === 'object' &&
-      !Array.isArray(chatArguments.toolChoice) &&
-      chatArguments.toolChoice.toolName === 'selectTaskyonTools' &&
-      !('schema' in chatArguments) &&
+      chatArguments.allowedTools.includes('bash') &&
+      chatArguments.allowedTools.includes('selectTaskyonTools') &&
+      !('toolChoice' in chatArguments) &&
+      'schema' in chatArguments &&
+      JSON.stringify(chatArguments.schema) === JSON.stringify(taskContract.result.schema) &&
       !('resultMode' in chatArguments),
-    'Expected a forced native scoped selector before contracted result finalization',
+    'Expected native tool calling and the structured result schema in the same completion',
   )
 
   const selectedToolResult = await entryNodeTool.function?.(
@@ -1386,20 +1342,15 @@ export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = asyn
     postToolResult.taskChainList[0],
     'chatCompletion',
   )?.arguments
-  const postToolPrompts =
-    postToolArguments &&
-    typeof postToolArguments === 'object' &&
-    'appendSystemPrompts' in postToolArguments &&
-    Array.isArray(postToolArguments.appendSystemPrompts)
-      ? postToolArguments.appendSystemPrompts.join('\n')
-      : ''
   assert(
     postToolArguments &&
       typeof postToolArguments === 'object' &&
       'trace' in postToolArguments &&
-      postToolPrompts.includes('selectTaskyonTools') &&
-      postToolPrompts.includes('allowedTools'),
-    'Expected structured post-tool selection to avoid repeated work and preserve tracing',
+      'schema' in postToolArguments &&
+      JSON.stringify(postToolArguments.schema) === JSON.stringify(taskContract.result.schema) &&
+      Array.isArray(postToolArguments.allowedTools) &&
+      postToolArguments.allowedTools.includes('bash'),
+    'Expected structured post-tool completion to preserve tracing, native tools, and schema',
   )
 
   return { success: true }
@@ -1410,7 +1361,6 @@ export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () 
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: ['bash', CLARIFICATION_TOOL_NAME],
-    toolChooser: { enabled: true, useToolShortlist: true },
   })
   const taskChain: TaskNode[] = [
     {
@@ -1525,7 +1475,6 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: ['executePythonScript'],
-    toolChooser: { enabled: true, useToolShortlist: true },
   })
   const executePythonScriptTool = createTool({
     name: 'executePythonScript',
@@ -1560,9 +1509,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       }),
     {
       chatCompletion: runtimeConfig.providerSettings,
-      entryNode: {
-        providerToolCalling: true,
-      },
+      entryNode: {},
     },
     undefined,
     {

@@ -7,7 +7,6 @@ import {
 import {
   mdiAutoFix,
   mdiFormatListNumbered,
-  mdiFunctionVariant,
   mdiHeadSnowflake,
   mdiProfessionalHexagon,
   mdiSearchWeb,
@@ -27,11 +26,13 @@ export const iconRegistry: iconMap = {
   },
   entryNode: {
     use_baseprompt: mdiAutoFix,
-    use_tool_chooser: mdiTools,
-    tool_chooser_min_tools: mdiFormatListNumbered,
+    pinnedTools: mdiTools,
+    toolSearchEnabled: mdiTools,
+    recentToolCount: mdiFormatListNumbered,
+    frequentToolCount: mdiFormatListNumbered,
+    recentSearchToolCount: mdiFormatListNumbered,
     max_error_retries: mdiFormatListNumbered,
     reasoning_effort: mdiHeadSnowflake,
-    providerToolCalling: mdiFunctionVariant,
     use_multimodal: matVisibility,
     max_results: mdiFormatListNumbered,
     websearch: {

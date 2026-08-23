@@ -57,8 +57,8 @@ import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browse
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import {
   createDefaultTaskyonToolSetup,
-  resolveInitialAgentToolCatalog,
-  searchAgentToolCatalog,
+  resolveAgentToolCatalog,
+  resolveTaskTreeAgentToolWindow,
 } from '@taskyon/taskyon/tools'
 import {
   createDocumentationIndexClientTool,
@@ -1434,26 +1434,34 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const documentationReady = documentationBases.register(taskyonDocumentationManifest, 'taskyon')
   const allTools = reactiveTools(taskyon, taskyonClient)
 
+  const listBrowserTools = () =>
+    taskyonClient.tools.list({
+      includeHidden: true,
+    })
   const entryNodeTool = createStandardEntryNodeTool({
     name: getEntryNodeToolName(buildEntryNodeDraft()),
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useTools: true },
-    getToolCatalog: async ({ taskChain, allowedTools }) => {
-      const currentTools: Record<string, ToolBase> = await taskyonClient.tools.list({
-        includeHidden: true,
-      })
-      return resolveInitialAgentToolCatalog(
-        currentTools,
-        taskChain,
-        getBrowserUnavailableToolNames(),
-        allowedTools,
-      )
-    },
-    searchToolCatalog: async (query, limit) => {
-      const currentTools: Record<string, ToolBase> = await taskyonClient.tools.list({
-        includeHidden: true,
-      })
-      return searchAgentToolCatalog(currentTools, query, limit, getBrowserUnavailableToolNames())
+    getToolCatalog: async ({
+      taskChain,
+      allowedTools,
+      pinnedToolNames,
+      recentToolCount,
+      frequentToolCount,
+    }) => {
+      const currentTools: Record<string, ToolBase> = await listBrowserTools()
+      const unavailableToolNames = getBrowserUnavailableToolNames()
+      return {
+        tools: resolveTaskTreeAgentToolWindow(
+          currentTools,
+          taskChain,
+          unavailableToolNames,
+          recentToolCount,
+          frequentToolCount,
+          allowedTools,
+          pinnedToolNames,
+        ),
+        total: resolveAgentToolCatalog(currentTools, unavailableToolNames).length,
+      }
     },
   })
 

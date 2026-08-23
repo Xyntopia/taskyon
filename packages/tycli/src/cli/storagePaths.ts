@@ -87,6 +87,6 @@ export function resolveTaskyonCliStoragePaths(): CliStoragePaths {
     ...paths,
     configDir,
     authDir: join(home, '.taskyon-cli', 'auth'),
-    logDir: process.env.TYCLI_LOG_DIR?.trim() || join('/tmp', 'tycli'),
+    logDir: process.env.TYCLI_LOG_DIR?.trim() || join(paths.cacheDir, 'logs'),
   }
 }

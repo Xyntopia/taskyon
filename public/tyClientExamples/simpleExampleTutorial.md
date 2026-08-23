@@ -169,7 +169,6 @@ const configuration = {
     base: {
       taskyonFlow: {
         // make sure, our app can choose from all available tools!
-        use_tool_chooser: true,
       },
     },
   },

@@ -33,7 +33,6 @@ export const testCliUsesCompleteCliFlowToolchainSettings = () => {
     'message',
     'toolResult',
     'error',
-    'toolChooser',
     'retryExhausted',
   ] as const) {
     assert(

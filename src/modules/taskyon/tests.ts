@@ -2038,7 +2038,7 @@ export async function getTestMetaData() {
           // we are not testing files right now...
           () => Promise.resolve(undefined),
           !!state.effectiveToolchainConfig.entryNode?.use_multimodal,
-          !!state.effectiveToolchainConfig.entryNode?.providerToolCalling,
+          true,
           toolDefs,
         )
         tyChat.thread = res

@@ -44,9 +44,7 @@ function assert(condition: boolean, msg?: string): asserts condition {
 const taskyonFlowToolchainConfig = {
   taskyonFlow: {
     use_baseprompt: true,
-    useToolShortlist: true,
     max_error_retries: 3,
-    providerToolCalling: true,
     use_multimodal: true,
     reasoning_effort: 'low',
     websearch: {
@@ -58,7 +56,6 @@ const taskyonFlowToolchainConfig = {
       message: 'Continue the conversation. Use a tool only when needed.',
       toolResult: 'Continue from the previous tool result.',
       error: 'Retry a recoverable tool error once.',
-      toolChooser: 'Choose up to {maxTools} tools via {selectorTool}:\n\n{toolCatalog}',
       retryExhausted: 'Do not retry after {retryCount} failures.',
     },
   },
@@ -85,7 +82,6 @@ const createConversationHarness = async (
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'taskyonFlow',
     renderOptions: { hideChat: true, hideLlm: true },
-    toolChooser: { enabled: true, useToolShortlist: true },
     defaultAllowedTools: ['clock'],
     getToolCatalog: async () => {
       const ty = await tyPromise
@@ -396,9 +392,7 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
     draftTask: getSimpleMessageTask('hi! what is the time? use the tool please!'),
-    entryNode: getEntryNodeDraft({
-      useToolShortlist: true,
-    }),
+    entryNode: getEntryNodeDraft({}),
     mode: 'message',
   })
 
@@ -415,7 +409,7 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
     const observedTasks = processingResult.observedTasks
     const stopSummary = summarizeProcessingResult(processingResult)
 
-    const shortlistCallIndex = conversationTasks.findIndex(
+    const initialToolSearchCallIndex = conversationTasks.findIndex(
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
@@ -425,9 +419,9 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
           'Call taskyonFlow with only the allowedTools argument.',
         ),
     )
-    const shortlistCall =
-      shortlistCallIndex >= 0 ? conversationTasks[shortlistCallIndex] : undefined
-    const shortlistResult = conversationTasks.find(
+    const initialToolSearchCall =
+      initialToolSearchCallIndex >= 0 ? conversationTasks[initialToolSearchCallIndex] : undefined
+    const initialToolSearchContinuation = conversationTasks.find(
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'taskyonFlow') &&
@@ -478,8 +472,8 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
       stopSummary,
     )
     await assertWithDiagnostics(
-      !shortlistCall && !shortlistResult,
-      'Expected direct routing without an initial shortlist completion',
+      !initialToolSearchCall && !initialToolSearchContinuation,
+      'Expected direct routing without an initial tool-search continuation',
       ty,
       taskChain,
       observedTasks,

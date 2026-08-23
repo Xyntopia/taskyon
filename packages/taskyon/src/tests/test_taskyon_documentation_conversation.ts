@@ -100,7 +100,6 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     name: entryNodeToolName,
     renderOptions: { hideChat: true, hideLlm: true },
     defaultAllowedTools: [documentationToolName],
-    toolChooser: { enabled: false },
     getToolCatalog: () =>
       Promise.resolve([{ name: documentationToolName, description: 'Search Taskyon docs.' }]),
   })
@@ -111,7 +110,6 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     {
       chatCompletion: runtimeConfig.providerSettings,
       entryNode: {
-        providerToolCalling: true,
         use_baseprompt: true,
         use_multimodal: true,
         max_error_retries: 3,
@@ -210,8 +208,6 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
             name: entryNodeToolName,
             arguments: {
               allowedTools: [documentationToolName],
-              providerToolCalling: true,
-              useToolShortlist: false,
             },
           }),
         ],

@@ -116,7 +116,6 @@ bind({
   name: 'selectTaskyonTools',
   description: 'Select relevant tools.',
   target: 'taskyonFlow',
-  fixedArguments: { use_tool_chooser: false },
   publicArguments: {
     allowedTools: {
       description: 'Candidate tool names.',
@@ -207,7 +206,7 @@ argument documentation into it. It must still stand alone because callable decla
 place of the short text. Put argument meanings, constraints, defaults, interactions, and
 examples in the owning parameter schema; complex values should include schema examples.
 
-Catalog search and shortlisting use the short description. Once a tool is callable, Taskyon sends
+Catalog search and direct tool continuations use the short description. Once a tool is callable, Taskyon sends
 its long description when present and otherwise falls back to the short description. Entry nodes
 and global prompts must not maintain parallel named-tool guidance or rewrite descriptions.
 

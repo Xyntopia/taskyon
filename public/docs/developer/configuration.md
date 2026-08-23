@@ -74,9 +74,9 @@ profiles.
 contract under `toolchainProfiles.base.cliFlow` with terminal-specific prompt values:
 
 - prompt templates and stable prompt context;
-- default and allowed tools;
+- host-specific `pinnedTools` plus recent and frequent callable windows;
+- focused `toolSearchEnabled` routing and direct tool-search continuations;
 - provider-native tool calling;
-- structured tool-shortlist thresholds;
 - multimodal and reasoning options;
 - optional hosted web-search settings.
 
@@ -87,9 +87,9 @@ that should not invalidate a reusable prompt prefix.
 Entry-node configuration owns generic routing mechanics, not named-tool playbooks. Each tool's
 short description, optional callable long description, and parameter schema own the guidance for
 when and how that tool should be selected.
-The entry-node prompt template fields are `basePrompt`, `message`, `toolResult`, `error`, `toolChooser`, and
+The entry-node prompt template fields are `basePrompt`, `message`, `toolResult`, `error`, and
 `retryExhausted`. Entry-node code selects the applicable template and interpolates runtime values;
-reusable wording stays in configuration. All six values are required; there are no tool-code or
+reusable wording stays in configuration. All five values are required; there are no tool-code or
 JSON-Schema prompt fallbacks.
 
 ## Research settings

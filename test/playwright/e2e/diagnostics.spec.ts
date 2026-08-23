@@ -119,7 +119,7 @@ test.describe('diagnostics page', () => {
     expect(copiedChat).not.toContain('type: tooldefinition')
     expect(copiedChat).not.toContain('prompt_templates')
     expect(copiedChat).not.toContain('use_baseprompt')
-    expect(copiedChat).not.toContain('tool_chooser_min_tools')
+    expect(copiedChat).not.toContain('recentToolCount')
   })
 
   test('plans separate tool tasks and opens the animated clock popup', async ({

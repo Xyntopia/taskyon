@@ -22,7 +22,7 @@ or tool-visible capabilities.
 - Each tool owns its selection and usage guidance. Entry nodes, catalog routers, and global runtime
   prompts must not maintain named-tool instructions or rewrite tool descriptions.
 - Keep `description` concise and discriminative: state what the tool does and when an agent should
-  select it. Catalog search and shortlist stages use this short description.
+  select it. Catalog search and direct tool continuations use this short description.
 - Add `longDescription` only when tool-wide operational guidance materially improves correct use.
   Describe workflow, observable side effects, execution boundaries, result semantics, or
   limitations that apply to the tool as a whole. Do not repeat the short description or document

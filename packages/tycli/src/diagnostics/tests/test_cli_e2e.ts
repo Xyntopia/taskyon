@@ -57,17 +57,21 @@ testCliBracketedPastePreservesMultilinePrompt.description =
 testCliBracketedPastePreservesMultilinePrompt.timeoutMs =
   runBracketedPastePreservesMultilinePrompt.timeoutMs
 
-export const testCtrlCCancelsModelMenuAndKeepsPromptUsable =
-  runCtrlCCancelsModelMenuAndKeepsPromptUsable
-testCtrlCCancelsModelMenuAndKeepsPromptUsable.description =
-  'Ctrl-C cancellation returns directly to a usable prompt.'
-testCtrlCCancelsModelMenuAndKeepsPromptUsable.timeoutMs = 60_000
+export const testCtrlCCancelsModelMenuAndKeepsPromptUsable = Object.assign(
+  runCtrlCCancelsModelMenuAndKeepsPromptUsable,
+  {
+    description: 'Ctrl-C cancellation returns directly to a usable prompt.',
+    timeoutMs: 60_000,
+  },
+)
 
-export const testEscapeCancelsModelMenuAndKeepsPromptUsable =
-  runEscapeCancelsModelMenuAndKeepsPromptUsable
-testEscapeCancelsModelMenuAndKeepsPromptUsable.description =
-  'Escape cancellation returns directly to a usable prompt.'
-testEscapeCancelsModelMenuAndKeepsPromptUsable.timeoutMs = 60_000
+export const testEscapeCancelsModelMenuAndKeepsPromptUsable = Object.assign(
+  runEscapeCancelsModelMenuAndKeepsPromptUsable,
+  {
+    description: 'Escape cancellation returns directly to a usable prompt.',
+    timeoutMs: 60_000,
+  },
+)
 
 export const testCliSlashMenuSelectionDoesNotLeaveSubmittedBlankLine = async () => {
   const result = await runCliE2eSession({
@@ -172,7 +176,7 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
         input: '',
       },
       {
-        waitFor: '| finished]',
+        waitFor: '| finished |',
         input: '/exit\n',
       },
     ],
@@ -251,6 +255,11 @@ export const testCliListsAndUsesAvailableTools = async () => {
         input: '',
       },
       {
+        waitFor: 'Allow openMeteoWeatherTool to read https://api.open-meteo.com',
+        failOn: ['Fatal error', '[system|error]'],
+        input: 'y\r',
+      },
+      {
         waitFor: 'WEATHER_TASK_COMPLETE',
         failOn: ['Fatal error', '[system|error]'],
         input: '',
@@ -313,15 +322,11 @@ export const testCliFocusedSearchFindsANonPinnedTool = async () => {
       },
       { delayMs: 200, input: '\r' },
       {
-        waitFor: 'name: openMeteoWeatherTool',
+        waitFor: 'Allow openMeteoWeatherTool to read https://api.open-meteo.com',
         failOn: ['Fatal error', 'No key configured', 'Cannot connect to API', '[system|error]'],
         input: '',
       },
-      {
-        waitFor: 'Allow openMeteoWeatherTool to read https://api.open-meteo.com',
-        failOn: ['Fatal error', '[system|error]'],
-        input: 'y\r',
-      },
+      { input: 'y\r' },
       {
         waitFor: 'WEATHER_NON_PINNED_COMPLETE',
         failOn: ['Fatal error', '[system|error]'],
@@ -337,7 +342,7 @@ export const testCliFocusedSearchFindsANonPinnedTool = async () => {
 
   assert(result.code === 0, `Expected exit code 0, got ${result.code}\n${result.output}`)
   assert(
-    result.output.includes('name: openMeteoWeatherTool'),
+    result.output.includes('[function|functioncall] openMeteoWeatherTool latitude=32.7157'),
     `Expected the non-pinned weather tool to be discovered and called.\n${result.output}`,
   )
   return { success: true }
@@ -516,6 +521,16 @@ export const testCliAiWorkstationCreatesAndOptimizesDagGraph = async () => {
       },
       {
         waitFor: '[assistant|message]',
+        failOn: [
+          '[system|error]',
+          'Cannot connect to API',
+          'No key configured',
+          'does not provide an export named',
+        ],
+        input: '',
+      },
+      {
+        waitFor: '| finished |',
         failOn: [
           '[system|error]',
           'Cannot connect to API',

@@ -124,7 +124,7 @@ export const testBindCreatesDeclarativeBinding = () => {
       name: 'selectTaskyonTools',
       description: 'Select tools for the next task.',
       target: 'taskyonFlow',
-      fixedArguments: { useToolShortlist: false },
+      fixedArguments: { toolSearchEnabled: true },
       publicArguments: {
         allowedTools: { description: 'Candidate tools.', maxItems: 20 },
       },
@@ -155,14 +155,14 @@ export const testBindKeepsFixedAndPublicArgumentsSeparate = () => {
     name: 'selectTaskyonTools',
     description: 'Select tools for the next task.',
     target: 'taskyonFlow',
-    fixedArguments: { useToolShortlist: false },
+    fixedArguments: { toolSearchEnabled: true },
     publicArguments: { allowedTools: {} },
   })
   const definition = requireScopedDefinition(tasks[0])
   assert(
     'implementation' in definition &&
       definition.implementation.type === 'binding' &&
-      definition.implementation.fixedArguments.useToolShortlist === false &&
+      definition.implementation.fixedArguments.toolSearchEnabled === true &&
       Object.hasOwn(definition.implementation.publicArguments, 'allowedTools'),
     'Expected fixed arguments and public argument selection to remain distinct',
   )
@@ -177,7 +177,7 @@ export const testDeclarativeBindingCompilesToValidatedTargetCall = async () => {
       name: 'selectTaskyonTools',
       description: 'Select tools.',
       target: 'taskyonFlow',
-      fixedArguments: { useToolShortlist: false },
+      fixedArguments: { toolSearchEnabled: true },
       publicArguments: { allowedTools: { maxItems: 20 } },
     })[0],
   )
@@ -192,7 +192,7 @@ export const testDeclarativeBindingCompilesToValidatedTargetCall = async () => {
           type: 'object',
           properties: {
             allowedTools: { type: 'array', items: { type: 'string' } },
-            useToolShortlist: { type: 'boolean' },
+            toolSearchEnabled: { type: 'boolean' },
           },
           required: ['allowedTools'],
         },
@@ -209,7 +209,7 @@ export const testDeclarativeBindingCompilesToValidatedTargetCall = async () => {
   )
   const call = requireFunctionCall(result.taskChainList[0]?.[0])
   assert(call.toolRevision === revision, 'Expected the target revision to be pinned')
-  assert(call.arguments.useToolShortlist === false, 'Expected fixed arguments to win')
+  assert(call.arguments.toolSearchEnabled === true, 'Expected fixed arguments to win')
 }
 
 testDeclarativeBindingCompilesToValidatedTargetCall.description =

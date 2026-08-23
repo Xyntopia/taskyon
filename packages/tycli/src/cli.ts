@@ -3024,7 +3024,6 @@ async function main(host: InteractiveCliHost) {
   const cliEntryNodeTool = createStandardEntryNodeTool({
     name: host.entryNodeName,
     renderOptions: { hideLlm: true, hideChat: true },
-    toolChooser: { enabled: true, useToolShortlist: true },
     getToolCatalog: async ({
       taskChain,
       allowedTools,

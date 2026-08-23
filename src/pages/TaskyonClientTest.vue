@@ -73,7 +73,7 @@ const configuration: partialTyConfiguration = {
   toolchainProfiles: {
     base: {
       taskyonFlow: {
-        use_tool_chooser: true,
+        toolSearchEnabled: true,
       },
     },
     profiles: {

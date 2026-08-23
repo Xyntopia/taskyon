@@ -29,14 +29,14 @@ const entryNodeSelectionParameters = {
       type: 'object',
       additionalProperties: false,
       description:
-        'Search the full tool catalog. Focused search is preferred; use overview only when focused search fails or broad multi-tool planning is genuinely needed.',
+        'Search the full tool catalog and pass the matching tools directly to the next EntryNode call. Focused search is preferred; use overview only for broad multi-tool planning.',
       properties: {
         mode: {
           type: 'string',
           enum: ['focused', 'overview'],
           default: 'focused',
           description:
-            'Use focused for a small callable set. Use overview only to inspect many tools for broad planning.',
+            'Use focused for a small callable set. Use overview only to inspect many tools for broad planning; results are passed directly to the next EntryNode call.',
         },
         query: { type: 'string', minLength: 1 },
         limit: { type: 'integer', minimum: 1, maximum: 50, default: 3 },
@@ -64,12 +64,6 @@ type EntryNodeConfig = {
     recentToolCount: number
     frequentToolCount: number
   }) => Promise<EntryNodeToolCatalog | EntryNodeToolCatalog['tools']>
-  toolChooser?:
-    | {
-        enabled: true
-        useToolShortlist?: boolean
-      }
-    | { enabled: false }
   buildPrompt: (args: {
     mode: EntryNodeMode
     taskChain: TaskNode[]
@@ -89,7 +83,6 @@ export type EntryNodePromptTemplates = {
   message: string
   toolResult: string
   error: string
-  toolChooser: string
   retryExhausted: string
 }
 
@@ -104,8 +97,6 @@ export type EntryNodeArgs = {
   pinnedTools?: string[]
   toolSearchEnabled?: boolean
   use_baseprompt?: boolean
-  providerToolCalling?: boolean
-  useToolShortlist?: boolean
   recentToolCount?: number
   frequentToolCount?: number
   recentSearchToolCount?: number
@@ -129,8 +120,6 @@ export type ResolvedEntryNodeSettings = {
   pinnedTools: string[]
   toolSearchEnabled: boolean
   use_baseprompt: boolean
-  providerToolCalling: boolean
-  useToolShortlist: boolean
   recentToolCount: number
   frequentToolCount: number
   recentSearchToolCount: number
@@ -199,14 +188,6 @@ export const normalizeEntryNodeSettings = (
     pinnedTools: input?.pinnedTools ?? [],
     toolSearchEnabled: input?.toolSearchEnabled ?? true,
     use_baseprompt: input?.use_baseprompt ?? true,
-    providerToolCalling:
-      taskContract?.result.mode !== undefined && taskContract.result.mode !== 'message'
-        ? false
-        : (input?.providerToolCalling ??
-          (input as { nativeToolCalling?: boolean } | undefined)?.nativeToolCalling ??
-          (input as { llmTools?: boolean } | undefined)?.llmTools ??
-          true),
-    useToolShortlist: input?.useToolShortlist ?? true,
     recentToolCount: input?.recentToolCount ?? 3,
     frequentToolCount: input?.frequentToolCount ?? 3,
     recentSearchToolCount: input?.recentSearchToolCount ?? 3,
@@ -330,8 +311,6 @@ type EntryNodePromptContext = {
 type EntryNodeRoutingContext = {
   mode: EntryNodeMode
   webSearchEnabled: boolean
-  chooserEnabled: boolean
-  chooserUsesTools: boolean
 }
 
 type EntryNodeRuntimeState = {
@@ -343,7 +322,6 @@ type EntryNodeRuntimeState = {
   previousTask: TaskNode | undefined
   prompt: string
   promptContext: EntryNodePromptContext
-  retryToolSelection: boolean
   routingContext: EntryNodeRoutingContext
   toolResultSection?: string
   toolSearch?: { mode?: 'focused' | 'overview'; query: string; limit?: number }
@@ -352,90 +330,6 @@ type EntryNodeRuntimeState = {
   toolSearchResults?: EntryNodeToolCatalog & { mode?: 'focused' | 'overview' }
   taskChain: TaskNode[]
 }
-
-const isToolSelectionRequest = (task: TaskNode | undefined, selectionToolName: string) => {
-  if (task?.content.type !== 'functioncall') return false
-  if (task.content.data.name === ENTRY_NODE_SELECTION_TOOL_NAME) return true
-  if (task.content.data.name !== 'chatCompletion') return false
-  const args = task.content.data.arguments as {
-    allowedTools?: unknown
-    toolChoice?: { type?: unknown; toolName?: unknown }
-  }
-  return (
-    isStringArray(args.allowedTools) &&
-    args.allowedTools.length === 1 &&
-    args.allowedTools[0] === selectionToolName &&
-    args.toolChoice?.type === 'tool' &&
-    args.toolChoice.toolName === selectionToolName
-  )
-}
-
-const normalizeEntryNodeSelectionArgs = (
-  args: EntryNodeArgs,
-  isToolSelection: boolean,
-): { args: EntryNodeArgs; retry: boolean } => {
-  if (!isToolSelection) return { args, retry: false }
-  const hasAllowedTools = Array.isArray(args.allowedTools)
-  const hasToolSearch = args.toolSearch !== undefined
-  const hasToolSearchInput = args.toolSearchInput !== undefined
-  const hasToolSearchResults = args.toolSearchResults !== undefined
-  return {
-    args: {
-      ...(hasAllowedTools ? { allowedTools: args.allowedTools } : {}),
-      ...(hasToolSearch ? { toolSearch: args.toolSearch } : {}),
-      ...(hasToolSearchInput ? { toolSearchInput: args.toolSearchInput } : {}),
-      ...(hasToolSearchResults ? { toolSearchResults: args.toolSearchResults } : {}),
-    },
-    retry: !hasToolSearchResults && hasAllowedTools === hasToolSearch,
-  }
-}
-
-const buildToolShortlistPrompt = (
-  template: string,
-  toolCatalog: ReadonlyArray<{ name: string; description: string }>,
-  entryNodeName: string,
-  toolNum = 3,
-  totalTools = toolCatalog.length,
-) =>
-  interpolatePromptTemplate(template, {
-    maxTools: String(toolNum),
-    totalTools: String(totalTools),
-    selectorTool: entryNodeName,
-    toolCatalog: safeYamlDump(toolCatalog),
-  })
-
-const createEntryNodeSelectionTasks = (
-  entryNodeName: string,
-  prompt: string,
-  options: {
-    appendSystemPrompts?: string[]
-    prependSystemPrompts?: Parameters<typeof createChatCompletionTask>[0]['prependSystemPrompts']
-    reasoning_effort?: ResolvedEntryNodeSettings['reasoning_effort']
-    trace?: ResolvedEntryNodeSettings['trace']
-    use_multimodal: boolean
-    fixedArguments?: EntryNodeArgs
-  },
-) =>
-  bind(
-    {
-      name: ENTRY_NODE_SELECTION_TOOL_NAME,
-      description:
-        'Search the full tool catalog, then pass a focused result directly or use a broad overview only when multi-tool planning requires it.',
-      renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
-      target: entryNodeName,
-      ...(options.fixedArguments ? { fixedArguments: options.fixedArguments } : {}),
-      publicArguments: entryNodeSelectionParameters.properties,
-    },
-    {
-      appendSystemPrompts: [...(options.appendSystemPrompts ?? []), prompt],
-      ...(options.prependSystemPrompts
-        ? { prependSystemPrompts: options.prependSystemPrompts }
-        : {}),
-      ...withReasoningEffort(options.reasoning_effort),
-      ...(options.trace ? { trace: options.trace } : {}),
-      use_multimodal: options.use_multimodal,
-    },
-  )
 
 const createFallbackToolCatalog = (toolNames: readonly string[]) =>
   toolNames.map((name) => ({ name, description: name }))
@@ -450,8 +344,6 @@ const getEntryNodePersistentArguments = (settings: ResolvedEntryNodeSettings): E
   pinnedTools: settings.pinnedTools,
   toolSearchEnabled: settings.toolSearchEnabled,
   use_baseprompt: settings.use_baseprompt,
-  providerToolCalling: settings.providerToolCalling,
-  useToolShortlist: settings.useToolShortlist,
   recentToolCount: settings.recentToolCount,
   frequentToolCount: settings.frequentToolCount,
   recentSearchToolCount: settings.recentSearchToolCount,
@@ -492,7 +384,7 @@ const createToolSelectorBinding = (entryNodeName: string, fixedArguments: EntryN
   const [definition] = bind({
     name: ENTRY_NODE_SELECTION_TOOL_NAME,
     description:
-      'Search the full tool catalog, then pass a focused result directly or use a broad overview only when multi-tool planning requires it.',
+      'Search the full tool catalog and pass the matching tools directly to the next EntryNode call.',
     renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
     target: entryNodeName,
     fixedArguments,
@@ -725,11 +617,7 @@ const createEntryNodeRuntimeState = async (
 ): Promise<EntryNodeRuntimeState> => {
   const taskChain = await context.getExecutionTaskChain()
   const entryNodeName = config.name ?? 'entryNode'
-  const selection = normalizeEntryNodeSelectionArgs(
-    args,
-    isToolSelectionRequest(taskChain.at(-2), ENTRY_NODE_SELECTION_TOOL_NAME),
-  )
-  const inheritedArgs = inheritEntryNodeArguments(taskChain, entryNodeName, selection.args)
+  const inheritedArgs = inheritEntryNodeArguments(taskChain, entryNodeName, args)
   const {
     toolResultSection,
     allowedTools: allowedToolsOverride,
@@ -776,14 +664,9 @@ const createEntryNodeRuntimeState = async (
     previousTask,
     prompt,
     promptContext,
-    retryToolSelection: selection.retry,
     routingContext: {
       mode,
       webSearchEnabled: normalizedSettings.websearch.enabled,
-      chooserEnabled: !!config.toolChooser?.enabled,
-      chooserUsesTools: config.toolChooser?.enabled
-        ? (config.toolChooser.useToolShortlist ?? false)
-        : false,
     },
     taskChain,
     ...(toolResultSection !== undefined ? { toolResultSection } : {}),
@@ -797,43 +680,14 @@ const createEntryNodeRuntimeState = async (
 const createToolSearchContinuationTasks = (
   runtime: EntryNodeRuntimeState,
   searched: EntryNodeToolCatalog,
-) => {
-  const searchMode =
-    runtime.toolSearchMode ??
-    runtime.toolSearch?.mode ??
-    runtime.toolSearchResults?.mode ??
-    'focused'
-  const useOverviewShortlist =
-    searchMode === 'overview' &&
-    runtime.normalizedSettings.useToolShortlist &&
-    runtime.routingContext.chooserEnabled &&
-    runtime.routingContext.chooserUsesTools
-  if (useOverviewShortlist) {
-    return createEntryNodeSelectionTasks(
-      runtime.entryNodeName,
-      buildToolShortlistPrompt(
-        runtime.normalizedSettings.prompt_templates.toolChooser,
-        searched.tools,
-        ENTRY_NODE_SELECTION_TOOL_NAME,
-        3,
-        searched.total,
-      ),
-      {
-        reasoning_effort: 'low',
-        trace: runtime.normalizedSettings.trace,
-        use_multimodal: runtime.normalizedSettings.use_multimodal,
-      },
-    )
-  }
-  return [
-    [
-      toolCall({
-        name: runtime.entryNodeName,
-        arguments: { allowedTools: searched.tools.map((tool) => tool.name) },
-      }),
-    ],
-  ]
-}
+) => [
+  [
+    toolCall({
+      name: runtime.entryNodeName,
+      arguments: { allowedTools: searched.tools.map((tool) => tool.name) },
+    }),
+  ],
+]
 
 const shouldGiveUpAfterError = (
   taskChain: TaskNode[],
@@ -859,12 +713,6 @@ type StandardEntryNodeOptions = {
     recentToolCount: number
     frequentToolCount: number
   }) => Promise<EntryNodeToolCatalog | EntryNodeToolCatalog['tools']>
-  toolChooser:
-    | {
-        enabled: true
-        useToolShortlist?: boolean
-      }
-    | { enabled: false }
   extraContext?: (args: {
     mode: EntryNodeMode
     previousTask: TaskNode | undefined
@@ -883,7 +731,6 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
   const config: EntryNodeConfig = {
     ...options,
     ...(options.getToolCatalog ? { getToolCatalog: options.getToolCatalog } : {}),
-    ...(options.toolChooser ? { toolChooser: options.toolChooser } : {}),
     buildPrompt: ({ mode, previousTask, taskChain, toolResultSection }) => {
       const extraContextArgsBase = { mode, previousTask, taskChain }
       const extraContext = options.extraContext
@@ -959,20 +806,6 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
           type: 'boolean',
           default: true,
           description: 'Expose focused and overview tool-catalog search to the model.',
-        },
-        providerToolCalling: {
-          type: 'boolean',
-          default: true,
-          title: 'Provider Tool Calling',
-          description:
-            'Enable provider-native tool calling during chatCompletion. Disable to prefer Taskyon DIY tool selection via structured results.',
-        },
-        useToolShortlist: {
-          type: 'boolean',
-          default: true,
-          title: 'Tool Shortlist',
-          description:
-            'Allow an explicit broad tool overview to pass through the concise shortlist stage. Normal focused search and ordinary messages stay direct.',
         },
         recentToolCount: {
           type: 'integer',
@@ -1069,7 +902,6 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
             'message',
             'toolResult',
             'error',
-            'toolChooser',
             'retryExhausted',
           ],
           type: 'object',
@@ -1078,7 +910,6 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
             message: { type: 'string' },
             toolResult: { type: 'string' },
             error: { type: 'string' },
-            toolChooser: { type: 'string' },
             retryExhausted: { type: 'string' },
           },
         },
@@ -1091,12 +922,6 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
       const promptAugmentations = resolveEntryNodePromptAugmentations(runtime.promptContext)
 
       if (runtime.allowedTools.length > 0) {
-        const requestedCatalog = await resolveAvailableToolsForMessage(
-          config,
-          undefined,
-          runtime.taskChain,
-          runtime.normalizedSettings,
-        )
         const selectedCatalog = await resolveAvailableToolsForMessage(
           config,
           runtime.allowedTools,
@@ -1104,55 +929,10 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
           runtime.normalizedSettings,
         )
         if (selectedCatalog.invalidToolNames.length > 0) {
-          return context.createSubtasksResult(
-            createEntryNodeSelectionTasks(
-              runtime.entryNodeName,
-              `${buildToolShortlistPrompt(
-                runtime.normalizedSettings.prompt_templates.toolChooser,
-                requestedCatalog.toolCatalog,
-                ENTRY_NODE_SELECTION_TOOL_NAME,
-                3,
-                requestedCatalog.totalTools,
-              )}\n\nUnknown tool name(s): ${selectedCatalog.invalidToolNames.join(', ')}. Choose only exact canonical names from the catalog.`,
-              {
-                appendSystemPrompts: promptAugmentations.appendSystemPrompts,
-                prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-                reasoning_effort: runtime.normalizedSettings.reasoning_effort,
-                trace: runtime.normalizedSettings.trace,
-                use_multimodal: runtime.normalizedSettings.use_multimodal,
-                fixedArguments: getEntryNodePersistentArguments(runtime.normalizedSettings),
-              },
-            ),
+          throw new Error(
+            `Entry-node received unknown tool name(s): ${selectedCatalog.invalidToolNames.join(', ')}.`,
           )
         }
-      }
-
-      if (runtime.retryToolSelection) {
-        const { toolCatalog, totalTools } = await resolveAvailableToolsForMessage(
-          config,
-          runtime.toolRestriction,
-          runtime.taskChain,
-          runtime.normalizedSettings,
-        )
-        return context.createSubtasksResult(
-          createEntryNodeSelectionTasks(
-            runtime.entryNodeName,
-            `${buildToolShortlistPrompt(
-              runtime.normalizedSettings.prompt_templates.toolChooser,
-              toolCatalog,
-              ENTRY_NODE_SELECTION_TOOL_NAME,
-              3,
-              totalTools,
-            )}\n\nYour previous routing call was invalid: provide exactly one of allowedTools or toolSearch, and do not provide execution settings or a taskContract.`,
-            {
-              appendSystemPrompts: promptAugmentations.appendSystemPrompts,
-              prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-              reasoning_effort: runtime.normalizedSettings.reasoning_effort,
-              trace: runtime.normalizedSettings.trace,
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
-            },
-          ),
-        )
       }
 
       if (runtime.toolSearch) {
@@ -1244,130 +1024,69 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
             runtime.promptContext,
           )
 
-          if (runtime.normalizedSettings.providerToolCalling || availableTools.length === 0) {
-            return createChatCompletionWithToolSelector(
-              runtime.entryNodeName,
-              {
-                use_multimodal: runtime.normalizedSettings.use_multimodal,
-                ...withTaskContractResult(runtime.normalizedSettings.taskContract),
-                appendSystemPrompts: messagePromptAugmentations.appendSystemPrompts,
-                prependSystemPrompts: messagePromptAugmentations.prependSystemPrompts,
-                ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
-                ...(runtime.normalizedSettings.trace
-                  ? { trace: runtime.normalizedSettings.trace }
-                  : {}),
-              },
-              availableTools,
-              getEntryNodePersistentArguments(runtime.normalizedSettings),
-              runtime.normalizedSettings.toolSearchEnabled,
-            )
-          }
-
-          return createEntryNodeSelectionTasks(
+          return createChatCompletionWithToolSelector(
             runtime.entryNodeName,
-            buildToolShortlistPrompt(
-              runtime.normalizedSettings.prompt_templates.toolChooser,
-              createFallbackToolCatalog(availableTools),
-              ENTRY_NODE_SELECTION_TOOL_NAME,
-              1,
-            ),
             {
+              use_multimodal: runtime.normalizedSettings.use_multimodal,
+              ...withTaskContractResult(runtime.normalizedSettings.taskContract),
               appendSystemPrompts: messagePromptAugmentations.appendSystemPrompts,
               prependSystemPrompts: messagePromptAugmentations.prependSystemPrompts,
-              reasoning_effort: runtime.normalizedSettings.reasoning_effort,
-              trace: runtime.normalizedSettings.trace,
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
+              ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
+              ...(runtime.normalizedSettings.trace
+                ? { trace: runtime.normalizedSettings.trace }
+                : {}),
             },
+            availableTools,
+            getEntryNodePersistentArguments(runtime.normalizedSettings),
+            runtime.normalizedSettings.toolSearchEnabled,
           )
         })
         // Re-entry after tool results, recoverable errors, or fallback states.
         .with({ mode: P.union('toolresult', 'error', 'fallback', 'structured') }, () => {
           const executeSelectedTool =
             runtime.mode === 'fallback' && runtime.allowedTools.length === 1
-          if (
-            runtime.normalizedSettings.providerToolCalling ||
-            runtime.allowedTools.length === 0 ||
-            executeSelectedTool
-          ) {
-            return createChatCompletionWithToolSelector(
-              runtime.entryNodeName,
-              {
-                use_multimodal: runtime.normalizedSettings.use_multimodal,
-                ...(executeSelectedTool
-                  ? {}
-                  : withTaskContractResult(runtime.normalizedSettings.taskContract)),
-                appendSystemPrompts: promptAugmentations.appendSystemPrompts,
-                prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-                ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
-                ...(runtime.normalizedSettings.trace
-                  ? { trace: runtime.normalizedSettings.trace }
-                  : {}),
-              },
-              runtime.allowedTools,
-              getEntryNodePersistentArguments(runtime.normalizedSettings),
-              runtime.normalizedSettings.toolSearchEnabled,
-            )
-          }
-
-          return createEntryNodeSelectionTasks(
+          return createChatCompletionWithToolSelector(
             runtime.entryNodeName,
-            buildToolShortlistPrompt(
-              runtime.normalizedSettings.prompt_templates.toolChooser,
-              createFallbackToolCatalog(runtime.allowedTools),
-              ENTRY_NODE_SELECTION_TOOL_NAME,
-              1,
-            ),
             {
+              use_multimodal: runtime.normalizedSettings.use_multimodal,
+              ...(executeSelectedTool
+                ? {}
+                : withTaskContractResult(runtime.normalizedSettings.taskContract)),
               appendSystemPrompts: promptAugmentations.appendSystemPrompts,
               prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-              reasoning_effort: runtime.normalizedSettings.reasoning_effort,
-              trace: runtime.normalizedSettings.trace,
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
+              ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
+              ...(runtime.normalizedSettings.trace
+                ? { trace: runtime.normalizedSettings.trace }
+                : {}),
             },
+            runtime.allowedTools,
+            getEntryNodePersistentArguments(runtime.normalizedSettings),
+            runtime.normalizedSettings.toolSearchEnabled,
           )
         })
         // Defensive fallback for future routing modes.
         .otherwise(() => {
-          if (runtime.normalizedSettings.providerToolCalling || runtime.allowedTools.length === 0) {
-            return [
-              createChatCompletionTask({
-                use_multimodal: runtime.normalizedSettings.use_multimodal,
-                ...withTaskContractResult(runtime.normalizedSettings.taskContract),
-                ...(runtime.allowedTools.length > 0 ? { allowedTools: runtime.allowedTools } : {}),
-                ...(runtime.allowedTools.length === 1
-                  ? {
-                      toolChoice: {
-                        type: 'tool' as const,
-                        toolName: runtime.allowedTools[0] as string,
-                      },
-                    }
-                  : {}),
-                appendSystemPrompts: promptAugmentations.appendSystemPrompts,
-                prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-                ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
-                ...(runtime.normalizedSettings.trace
-                  ? { trace: runtime.normalizedSettings.trace }
-                  : {}),
-              }),
-            ]
-          }
-
-          return createEntryNodeSelectionTasks(
-            runtime.entryNodeName,
-            buildToolShortlistPrompt(
-              runtime.normalizedSettings.prompt_templates.toolChooser,
-              createFallbackToolCatalog(runtime.allowedTools),
-              ENTRY_NODE_SELECTION_TOOL_NAME,
-              1,
-            ),
-            {
+          return [
+            createChatCompletionTask({
+              use_multimodal: runtime.normalizedSettings.use_multimodal,
+              ...withTaskContractResult(runtime.normalizedSettings.taskContract),
+              ...(runtime.allowedTools.length > 0 ? { allowedTools: runtime.allowedTools } : {}),
+              ...(runtime.allowedTools.length === 1
+                ? {
+                    toolChoice: {
+                      type: 'tool' as const,
+                      toolName: runtime.allowedTools[0] as string,
+                    },
+                  }
+                : {}),
               appendSystemPrompts: promptAugmentations.appendSystemPrompts,
               prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-              reasoning_effort: runtime.normalizedSettings.reasoning_effort,
-              trace: runtime.normalizedSettings.trace,
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
-            },
-          )
+              ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
+              ...(runtime.normalizedSettings.trace
+                ? { trace: runtime.normalizedSettings.trace }
+                : {}),
+            }),
+          ]
         })
 
       return context.createSubtasksResult(subtaskDrafts)

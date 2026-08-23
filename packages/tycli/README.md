@@ -34,7 +34,7 @@ The CLI supports slash commands:
 - `/tools`: inspect registered tools.
 - `/debug` and `/settings`: change CLI diagnostics and display behavior. Use `/debug view on` for detailed task/tool rendering.
 - `/client`: invoke the connected Taskyon client API.
-- `/resume`: select a saved Markdown conversation by date and keywords, or import a path.
+- `/resume`: select a saved conversation by date and keywords, or import a path.
 - `/search <words>`: hybrid-search individual tasks and continue from a selected result.
 - `/tree`: inspect or export the active task history.
 - `/exit` and `/quit`: end the session.
@@ -173,12 +173,15 @@ direct client evaluation does not require a configured model provider.
 
 ## Conversation history
 
-`tycli` creates a Markdown conversation snapshot only after the first user message is submitted.
+`tycli` creates a conversation snapshot only after the first user message is submitted. Markdown is
+the default; use `yarn tycli --conversation-format=yaml` to save the equivalent content-addressed
+YAML archive instead.
 Starting and exiting an idle session does not create a conversation file or history entry. Tasks
-remain the authoritative immutable records in Taskyon storage. The CLI projects their active chain
-into a human-readable Markdown blob, appending newly created tasks instead of rewriting the whole
-file. `/resume` derives its date and keywords from those transcripts; it does not maintain a
-separate conversation manifest. Older Markdown files can still be imported by path.
+remain the authoritative immutable records in Taskyon storage. The CLI snapshots the complete
+reachable task tree, preserving task IDs, parent/prior links, and the active leaf. Repeated
+function-call content is represented by readable Markdown `contentAlias` values while retaining
+every task occurrence. `/resume` accepts both formats and older Markdown files can still be
+imported by path.
 
 ## Task search
 

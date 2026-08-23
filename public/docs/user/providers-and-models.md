@@ -74,7 +74,8 @@ and pricing rather than a copied table in Taskyon documentation.
 ## Advanced settings
 
 **Settings > Agent Configuration** exposes entry-node and tool settings. Prompt templates,
-pinned tools, recent and frequent tool windows, focused tool search, optional overview shortlists,
-provider tool calling, and optional web search belong to the configured entry node. Selection
-guidance for an individual tool belongs to that tool's descriptions and parameter schema. The
-`chatCompletion` tool remains the model execution gateway.
+pinned tools, recent and frequent tool windows, direct tool definitions, focused tool search,
+optional broad catalog search, native provider tool calls, and optional web search belong to the
+configured entry node. Search results continue directly into the next EntryNode call; there is no
+separate shortlist decision. Selection guidance for an individual tool belongs to that tool's
+descriptions and parameter schema. The `chatCompletion` tool remains the model execution gateway.

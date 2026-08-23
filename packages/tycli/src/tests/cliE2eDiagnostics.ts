@@ -1182,7 +1182,7 @@ export async function testResumeConversationReportsStorageAndLogs() {
   await mkdir(testHome, { recursive: true })
   await writeFile(
     conversationPath,
-    'Fixture user message\n\n---\n\n<!--taskyon\nrole: assistant\n-->\n\nFixture assistant response\n',
+    'Fixture user message\n\n---\n\n<!--taskyon\nrole: function\nparentID: stale-parent-id\ncontent:\n  type: functioncall\n  data:\n    name: entryNode\n    arguments: {}\n-->\n\n---\n\n<!--taskyon\nrole: assistant\n-->\n\nFixture assistant response\n',
     'utf8',
   )
   const resumeResult = await runCliE2eSession({
@@ -1190,8 +1190,12 @@ export async function testResumeConversationReportsStorageAndLogs() {
     homeKey: 'testResumeConversationReportsStorageAndLogs',
     steps: [
       { waitFor: 'Slash commands:', input: `/resume ${conversationPath}\n` },
-      { waitFor: 'Imported legacy conversation', input: '' },
-      { waitFor: '\u001b[?2004h> ', input: '/exit\n' },
+      {
+        waitFor: 'Imported legacy conversation',
+        input: '',
+        failOn: ['Compiled task parent mismatch', 'an error occured'],
+      },
+      { waitFor: '> ', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
     runner: 'pty',
