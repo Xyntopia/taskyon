@@ -19,7 +19,7 @@ import { createProjectDraftStore } from './projectDraft.ts'
 import { importDesignGraphSnapshot, projectDesignGraphSnapshot } from './dagGitProjection.ts'
 import { createDagModuleArtifact, createDagModuleLock } from './dagModule.ts'
 import { SELF_HASH_PLACEHOLDER, hashFilePart } from './dagNodeIdentity.ts'
-import { saveStoredGraphNodeSource } from './dagNodeLoader.ts'
+import { loadStoredGraphNodeFiles, saveStoredGraphNodeSource } from './dagNodeLoader.ts'
 import {
   replaceDagNodeRecordModuleSource,
   replaceDagNodeRecordPackageRange,
@@ -36,6 +36,7 @@ import {
 } from './storageInvocationArtifacts.ts'
 import { iterateInvocationRowRange } from './storageInvocationRows.ts'
 import {
+  createCachedDesignRepositoryNodeFileLoader,
   createDesignRepositoryFileReader,
   loadDesignRepositorySnapshot,
   loadProjectRepositoryPresentation,
@@ -503,16 +504,29 @@ export const testNamedDesignGraphProjectionRoundTripsAndExplainsInputs = async (
   const rootFile = projected.find(({ path }) => path === 'nodes/ReadableRoot.ts')
   assert(rootFile?.content.includes('ReadableSource — Readable source'), 'Expected input comment')
 
-  const namedReader = createDesignRepositoryFileReader(projected)
+  let namedNodeLoadBatches = 0
+  const loadNamedNodeFiles = createCachedDesignRepositoryNodeFileLoader(
+    async (files: Parameters<typeof loadStoredGraphNodeFiles>[0]) => {
+      namedNodeLoadBatches += 1
+      return await loadStoredGraphNodeFiles(files)
+    },
+  )
+  const namedReader = createDesignRepositoryFileReader(projected, loadNamedNodeFiles)
   const snapshot = await loadDesignRepositorySnapshot({
     readText: namedReader.readText,
     readManyText: namedReader.readManyText,
+    loadNodeFiles: loadNamedNodeFiles,
     checkout: { kind: 'ref', name: 'graph/main' },
   })
   assert(snapshot.nodesByHash[root.hash], 'Expected the named projection to load by hash')
+  assert(namedNodeLoadBatches === 1, 'Expected indexed nodes to be reused by snapshot loading')
 
   const imported = createMemoryStore()
-  await importDesignGraphSnapshot({ store: imported.store, files: projected })
+  await importDesignGraphSnapshot({
+    store: imported.store,
+    files: projected,
+    preloadedNodes: snapshot.nodesByHash,
+  })
   assert(
     (await imported.store.readText(`nodes/${hashFilePart(root.hash)}.ts`)).includes(
       "localName: 'ReadableRoot'",

@@ -1,6 +1,6 @@
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
-import { canonicalProjectedPath, type DagProjectedFile } from './dagGitProjection.ts'
+import { canonicalProjectedPaths, type DagProjectedFile } from './dagGitProjection.ts'
 import {
   parseDesignGraphRef,
   parseGraphRevision,
@@ -26,6 +26,7 @@ import {
 } from './dagModuleCompiler.ts'
 import {
   loadStoredGraphNodeFiles,
+  parseStoredGraphNodeHashFromPath,
   type SavedStoredGraphNode,
   type StoredGraphNodeFile,
 } from './dagNodeLoader.ts'
@@ -40,16 +41,54 @@ export type DesignRepositoryFileReader = {
 }
 export type DesignRepositoryNodeFileLoader = typeof loadStoredGraphNodeFiles
 
+export const createCachedDesignRepositoryNodeFileLoader = (
+  loadNodeFiles: DesignRepositoryNodeFileLoader,
+): DesignRepositoryNodeFileLoader => {
+  const nodesBySource = new Map<string, SavedStoredGraphNode>()
+  return async (files) => {
+    const missing = [
+      ...new Map(
+        files.filter(({ source }) => !nodesBySource.has(source)).map((file) => [file.source, file]),
+      ).values(),
+    ]
+    if (missing.length > 0) {
+      const loaded = await loadNodeFiles(missing)
+      for (const node of Object.values(loaded)) nodesBySource.set(node.file.source, node)
+    }
+    return Object.fromEntries(
+      files.map((file) => {
+        if (!file.path.endsWith('.ts')) {
+          throw new Error(`Stored graph node ${file.path}: only .ts node files are supported`)
+        }
+        const node = nodesBySource.get(file.source)
+        if (!node) throw new Error(`Design repository node loader omitted ${file.path}`)
+        const filenameHash = parseStoredGraphNodeHashFromPath(file.path)
+        if (filenameHash && filenameHash !== node.hash) {
+          throw new Error(
+            `Stored graph node ${file.path}: filename hash ${filenameHash} does not match normalized hash ${node.hash}`,
+          )
+        }
+        return [node.hash, { ...node, file }] as const
+      }),
+    ) as Record<Hash, SavedStoredGraphNode>
+  }
+}
+
 export const createDesignRepositoryFileReader = (
   files: readonly DagProjectedFile[],
+  loadNodeFiles: DesignRepositoryNodeFileLoader = loadStoredGraphNodeFiles,
 ): DesignRepositoryFileReader => {
   const sourceFiles = files.filter(({ path }) => path !== 'repository-index.json')
   const direct = new Map(sourceFiles.map(({ path, content }) => [path, content]))
   let canonical: Promise<Map<string, string>> | undefined
   const getCanonical = async () => {
-    canonical ??= Promise.all(
-      sourceFiles.map(async (file) => [await canonicalProjectedPath(file), file.content] as const),
-    ).then((entries) => {
+    canonical ??= Promise.resolve().then(async () => {
+      const canonicalPaths = await canonicalProjectedPaths(sourceFiles, loadNodeFiles)
+      const entries = sourceFiles.map((file) => {
+        const path = canonicalPaths.get(file.path)
+        if (!path) throw new Error(`Design repository index omitted ${file.path}`)
+        return [path, file.content] as const
+      })
       const index = new Map<string, string>()
       for (const [path, content] of entries) {
         const existing = index.get(path)

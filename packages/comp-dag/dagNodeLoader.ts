@@ -559,6 +559,9 @@ const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Pro
   })
 }
 
+export const hashStoredGraphNodeRecord = async (node: DagNodeRecord): Promise<Hash> =>
+  await hashStoredGraphNodeDefinition({ ...node, id: SELF_HASH_PLACEHOLDER })
+
 export const normalizeStoredGraphNodeSource = async (
   source: string,
   opts?: { id?: Hash | typeof SELF_HASH_PLACEHOLDER },
@@ -627,11 +630,14 @@ export const loadStoredGraphNodeFile = async (
   if (!file.path.endsWith('.ts')) {
     throw new Error(`Stored graph node ${file.path}: only .ts node files are supported`)
   }
-  const normalized = await normalizeStoredGraphNodeSource(file.source)
-  const hash = await hashStoredGraphNodeSource(file.source)
-  if (normalized.node.id !== hash) {
+  const declaredNode = toStoredGraphNodeDefinition(await parseSourceFields(file.source))
+  const normalized = await normalizeStoredGraphNodeSource(file.source, {
+    id: SELF_HASH_PLACEHOLDER,
+  })
+  const hash = await hashStoredGraphNodeDefinition(normalized.node)
+  if (declaredNode.id !== hash) {
     throw new Error(
-      `Stored graph node ${file.path}: node id ${normalized.node.id} does not match normalized hash ${hash}`,
+      `Stored graph node ${file.path}: node id ${declaredNode.id} does not match normalized hash ${hash}`,
     )
   }
   const filenameHash = parseStoredGraphNodeHashFromPath(file.path)
@@ -644,11 +650,7 @@ export const loadStoredGraphNodeFile = async (
     hash,
     node: { ...normalized.node, id: hash },
     file,
-    normalizedSource: (
-      await normalizeStoredGraphNodeSource(file.source, {
-        id: SELF_HASH_PLACEHOLDER,
-      })
-    ).source,
+    normalizedSource: normalized.source,
   }
 }
 

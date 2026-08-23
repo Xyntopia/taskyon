@@ -18,9 +18,9 @@ import {
 import type { DesignGraphObjectStore } from './designGraphRepository.ts'
 import { getDagNodeRecordInputHashes, type DagNodeRecordInputRef } from './dagNodeRecord.ts'
 import {
-  hashStoredGraphNodeSource,
   loadStoredGraphNodeFile,
-  normalizeStoredGraphNodeSource,
+  loadStoredGraphNodeFiles,
+  saveStoredGraphNodeSource,
   type SavedStoredGraphNode,
 } from './dagNodeLoader.ts'
 import { SELF_HASH_PLACEHOLDER } from './dagNodeIdentity.ts'
@@ -107,22 +107,58 @@ const projectObjectPath = (kind: ProjectedObjectKind, name: string): string => {
   return `${kind}/${name}${extension}`
 }
 
-const loadProjectedNodeFile = async (file: {
+type ProjectedNodeFileLoader = (file: {
+  path: string
+  source: string
+}) => Promise<SavedStoredGraphNode>
+
+const prepareProjectedNodeFile = async (file: {
   path: string
   source: string
 }): Promise<SavedStoredGraphNode> => {
-  const hash = await hashStoredGraphNodeSource(file.source)
-  const normalized = await normalizeStoredGraphNodeSource(file.source, { id: hash })
-  const normalizedSource = await normalizeStoredGraphNodeSource(file.source, {
-    id: SELF_HASH_PLACEHOLDER,
-  })
+  const saved = await saveStoredGraphNodeSource(file.source)
   return {
-    hash,
-    node: { ...normalized.node, id: hash },
-    file,
-    normalizedSource: normalizedSource.source,
+    ...saved,
+    file: { path: file.path, source: saved.file.source },
   }
 }
+
+const createProjectedNodeFileLoader = (
+  preloadedNodes: readonly SavedStoredGraphNode[] = [],
+): ProjectedNodeFileLoader => {
+  const cache = new Map<string, Promise<Omit<SavedStoredGraphNode, 'file'> & { source: string }>>()
+  for (const node of preloadedNodes) {
+    const loaded = {
+      hash: node.hash,
+      node: node.node,
+      source: node.normalizedSource.replace(SELF_HASH_PLACEHOLDER, node.hash),
+      normalizedSource: node.normalizedSource,
+    }
+    cache.set(node.file.source, Promise.resolve(loaded))
+    cache.set(loaded.source, Promise.resolve(loaded))
+  }
+  return async (file) => {
+    let prepared = cache.get(file.source)
+    if (!prepared) {
+      prepared = prepareProjectedNodeFile(file).then(({ file: normalizedFile, ...saved }) => ({
+        ...saved,
+        source: normalizedFile.source,
+      }))
+      cache.set(file.source, prepared)
+    }
+    const loaded = await prepared
+    if (!cache.has(loaded.source)) cache.set(loaded.source, Promise.resolve(loaded))
+    return {
+      hash: loaded.hash,
+      node: loaded.node,
+      file: { path: file.path, source: loaded.source },
+      normalizedSource: loaded.normalizedSource,
+    }
+  }
+}
+
+const loadProjectedNodeFile: ProjectedNodeFileLoader = async (file) =>
+  await prepareProjectedNodeFile(file)
 
 const addCandidate = (map: Map<Hash, string[]>, id: Hash, candidate: string) => {
   const candidates = map.get(id) ?? []
@@ -464,28 +500,59 @@ const parseProjectedJson = (path: string, value: unknown): Hash | null => {
   throw new Error(`Unsupported design graph JSON file: ${path}`)
 }
 
-const normalizeProjectedFile = async (file: DagProjectedFile): Promise<DagProjectedFile> => {
+const normalizeProjectedFile = async (
+  file: DagProjectedFile,
+  loadNodeFile: ProjectedNodeFileLoader = loadProjectedNodeFile,
+): Promise<DagProjectedFile> => {
   normalizeProjectedPath(file.path)
   if (file.path.startsWith('nodes/')) {
-    const loaded = await loadProjectedNodeFile({ path: file.path, source: file.content })
-    const normalized = await normalizeStoredGraphNodeSource(file.content, { id: loaded.hash })
-    return { path: file.path, content: normalized.source }
+    const loaded = await loadNodeFile({ path: file.path, source: file.content })
+    return { path: file.path, content: loaded.file.source }
   }
   if (!file.path.endsWith('.json')) throw new Error(`Unsupported design graph file: ${file.path}`)
   parseProjectedJson(file.path, JSON.parse(file.content) as unknown)
   return file
 }
 
-export const canonicalProjectedPath = async (file: DagProjectedFile): Promise<string> => {
+const resolveCanonicalProjectedPath = async (
+  file: DagProjectedFile,
+  loadNodeFile: ProjectedNodeFileLoader,
+): Promise<string> => {
   if (file.path.startsWith('refs/')) return file.path
   if (file.path.startsWith('nodes/')) {
-    const loaded = await loadProjectedNodeFile({ path: file.path, source: file.content })
+    const loaded = await loadNodeFile({ path: file.path, source: file.content })
     return `nodes/${hashFilePart(loaded.hash)}.ts`
   }
   const kind = file.path.split('/')[0] ?? ''
   const id = parseProjectedJson(file.path, JSON.parse(file.content) as unknown)
   if (!id) return file.path
   return objectPath(kind, id)
+}
+
+export const canonicalProjectedPath = async (file: DagProjectedFile): Promise<string> =>
+  await resolveCanonicalProjectedPath(file, loadProjectedNodeFile)
+
+export const canonicalProjectedPaths = async (
+  files: readonly DagProjectedFile[],
+  nodeFileLoader: typeof loadStoredGraphNodeFiles = loadStoredGraphNodeFiles,
+): Promise<Map<string, string>> => {
+  const nodeFiles = files.filter(({ path }) => path.startsWith('nodes/'))
+  const nodes = await nodeFileLoader(
+    nodeFiles.map(({ path, content }) => ({ path, source: content })),
+  )
+  const nodesByPath = new Map(Object.values(nodes).map((node) => [node.file.path, node]))
+  return new Map(
+    await Promise.all(
+      files.map(async (file) => {
+        if (!file.path.startsWith('nodes/')) {
+          return [file.path, await canonicalProjectedPath(file)] as const
+        }
+        const node = nodesByPath.get(file.path)
+        if (!node) throw new Error(`Design repository node loader omitted ${file.path}`)
+        return [file.path, `nodes/${hashFilePart(node.hash)}.ts`] as const
+      }),
+    ),
+  )
 }
 
 const immutableComparisonContent = (file: DagProjectedFile) =>
@@ -513,11 +580,14 @@ const replaceNodeHashRefs = (source: string, replacements: ReadonlyMap<Hash, Has
 const incomingNodeMatchesHash = (node: SavedStoredGraphNode, hash: Hash) =>
   node.file.path.endsWith(`--${shortHash(hash)}.ts`)
 
-const readIncomingNodes = async (files: readonly DagProjectedFile[]) => {
+const readIncomingNodes = async (
+  files: readonly DagProjectedFile[],
+  loadNodeFile: ProjectedNodeFileLoader,
+) => {
   const entries = await Promise.all(
     files
       .filter(({ path }) => path.startsWith('nodes/'))
-      .map(async (file) => await loadProjectedNodeFile({ path: file.path, source: file.content })),
+      .map(async (file) => await loadNodeFile({ path: file.path, source: file.content })),
   )
   const nodes = new Map<string, SavedStoredGraphNode[]>()
   for (const node of entries)
@@ -581,8 +651,9 @@ const patchNamedRoots = async (args: {
 const updateNamedNodeReferences = async (args: {
   store: DesignGraphObjectStore
   files: readonly DagProjectedFile[]
+  loadNodeFile: ProjectedNodeFileLoader
 }): Promise<DagProjectedFile[]> => {
-  const incomingNodes = await readIncomingNodes(args.files)
+  const incomingNodes = await readIncomingNodes(args.files, args.loadNodeFile)
   const output = new Map(args.files.map((file) => [file.path, file]))
   const rootReplacements = new Map<Hash, Hash>()
   const graphRevisionUpdates = new Map<Hash, GraphRevisionUpdate>()
@@ -716,11 +787,12 @@ type ProjectRevisionUpdate = { revision: ReturnType<typeof createProjectRevision
 const validateProjectedClosure = async (
   store: DesignGraphObjectStore,
   projected: ReadonlyMap<string, string>,
+  loadNodeFile: ProjectedNodeFileLoader,
 ) => {
   const readAvailable = async (path: string) => projected.get(path) ?? (await store.readText(path))
   for (const [path, content] of projected) {
     if (path.startsWith('nodes/')) {
-      const node = (await loadStoredGraphNodeFile({ path, source: content })).node
+      const node = (await loadNodeFile({ path, source: content })).node
       if (node.moduleLockId) {
         const lock = parseDagModuleLock(
           JSON.parse(await readAvailable(objectPath('module-locks', node.moduleLockId))) as unknown,
@@ -743,7 +815,7 @@ const validateProjectedClosure = async (
         const invocation = parseInvocationDefinition(
           JSON.parse(await readAvailable(objectPath('invocations', invocationId))) as unknown,
         )
-        await loadStoredGraphNodeFile({
+        await loadNodeFile({
           path: `nodes/${hashFilePart(invocation.rootNodeId)}.ts`,
           source: await readAvailable(`nodes/${hashFilePart(invocation.rootNodeId)}.ts`),
         })
@@ -769,13 +841,21 @@ export const importDesignGraphSnapshot = async (args: {
   store: DesignGraphObjectStore
   files: readonly DagProjectedFile[]
   expectedRefs?: Readonly<Record<string, string | null>>
+  preloadedNodes?: Readonly<Record<Hash, SavedStoredGraphNode>>
 }) => {
-  const reconciledFiles = await updateNamedNodeReferences({ store: args.store, files: args.files })
-  const normalized = await Promise.all(reconciledFiles.map(normalizeProjectedFile))
+  const loadNodeFile = createProjectedNodeFileLoader(Object.values(args.preloadedNodes ?? {}))
+  const reconciledFiles = await updateNamedNodeReferences({
+    store: args.store,
+    files: args.files,
+    loadNodeFile,
+  })
+  const normalized = await Promise.all(
+    reconciledFiles.map(async (file) => await normalizeProjectedFile(file, loadNodeFile)),
+  )
   const canonical = await Promise.all(
     normalized.map(async (file) => ({
       ...file,
-      path: await canonicalProjectedPath(file),
+      path: await resolveCanonicalProjectedPath(file, loadNodeFile),
     })),
   )
   const projected = new Map<string, string>()
@@ -786,7 +866,7 @@ export const importDesignGraphSnapshot = async (args: {
     }
     projected.set(file.path, file.content)
   }
-  await validateProjectedClosure(args.store, projected)
+  await validateProjectedClosure(args.store, projected, loadNodeFile)
 
   const immutable = canonical.filter((file) => !file.path.startsWith('refs/'))
   const refs = canonical.filter((file) => file.path.startsWith('refs/'))

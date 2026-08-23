@@ -118,7 +118,7 @@
             <q-checkbox
               :model-value="selectedListNodeIds.includes(node.id)"
               :disable="!selectableNodeIds.includes(node.id)"
-              @click.stop="toggleListNodeSelection(node.id)"
+              @update:model-value="setListNodeSelected(node.id, $event)"
             />
           </q-item-section>
           <q-item-section class="cursor-pointer" @click="selectNode(node.id)">
@@ -254,10 +254,10 @@ const chooseSearchResult = (nodeId: string) => {
   void graphCanvas.value?.showNode(nodeId)
   selectNode(nodeId)
 }
-const toggleListNodeSelection = (nodeId: string) => {
-  selectedListNodeIds.value = selectedListNodeIds.value.includes(nodeId)
-    ? selectedListNodeIds.value.filter((id) => id !== nodeId)
-    : [...selectedListNodeIds.value, nodeId]
+const setListNodeSelected = (nodeId: string, selected: boolean) => {
+  selectedListNodeIds.value = selected
+    ? [...new Set([...selectedListNodeIds.value, nodeId])]
+    : selectedListNodeIds.value.filter((id) => id !== nodeId)
 }
 const setAllVisibleSelected = (selected: boolean) => {
   const visible = new Set(visibleSelectableNodeIds.value)
