@@ -21,6 +21,7 @@ export interface TaskyonTestFn {
   requiresLongRun?: boolean
   requiresAuth?: boolean
   modelBased?: boolean
+  requiresJouliosRuntime?: boolean
   helper?: boolean
   timeoutMs?: number
 }
@@ -55,7 +56,8 @@ export type DiagnosticsRunResult = {
   error?: unknown
 }
 
-const MAX_DIAGNOSTICS_TEST_TIMEOUT_MS = 20_000
+const DEFAULT_DIAGNOSTICS_TEST_TIMEOUT_MS = 20_000
+const MAX_DIAGNOSTICS_TEST_TIMEOUT_MS = 600_000
 
 function camelToNormal(input: string): string {
   if (!input) return ''
@@ -158,7 +160,7 @@ export async function runDiagnosticsTests(
   },
 ): Promise<DiagnosticsRunResult[]> {
   const details = opts?.details ?? false
-  const requestedDefaultTimeoutMs = opts?.timeoutMs ?? MAX_DIAGNOSTICS_TEST_TIMEOUT_MS
+  const requestedDefaultTimeoutMs = opts?.timeoutMs ?? DEFAULT_DIAGNOSTICS_TEST_TIMEOUT_MS
   const defaultTimeoutMs = Math.min(requestedDefaultTimeoutMs, MAX_DIAGNOSTICS_TEST_TIMEOUT_MS)
   const out: DiagnosticsRunResult[] = []
 

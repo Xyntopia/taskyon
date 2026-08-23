@@ -11,6 +11,7 @@ export type InvocationRowStorageClient = {
 }
 
 const storageId = (hash: string) => hash.replace(':', '_')
+const maxStorageReadBytes = 1024 * 1024
 
 const parseRow = (source: string): InvocationRow => {
   const value = JSON.parse(source) as unknown
@@ -58,6 +59,46 @@ const parseIndexEntry = (source: string) => {
   return { rowId: value.rowId, offset: value.offset, length: value.length }
 }
 
+const readBlobRangeFully = async (args: {
+  storage: InvocationRowStorageClient
+  namespace: string
+  id: string
+  offset: number
+  length: number
+  chunkBytes: number
+}) => {
+  const chunks: Uint8Array<ArrayBuffer>[] = []
+  let nextOffset = args.offset
+  let remaining = args.length
+  while (remaining > 0) {
+    const response = await args.storage.readBlobRange({
+      namespace: args.namespace,
+      id: args.id,
+      offset: nextOffset,
+      length: Math.min(remaining, args.chunkBytes),
+    })
+    if (response.data.byteLength === 0 || response.nextOffset <= nextOffset) {
+      throw new Error('Invocation artifact reader did not advance.')
+    }
+    if (response.data.byteLength > remaining) {
+      throw new Error('Invocation artifact reader returned too much data.')
+    }
+    chunks.push(response.data)
+    remaining -= response.data.byteLength
+    nextOffset = response.nextOffset
+    if (response.eof && remaining > 0) {
+      throw new Error('Invocation artifact row is incomplete.')
+    }
+  }
+  const data = new Uint8Array(args.length)
+  let cursor = 0
+  for (const chunk of chunks) {
+    data.set(chunk, cursor)
+    cursor += chunk.byteLength
+  }
+  return data
+}
+
 const iterateLines = async function* (args: {
   storage: InvocationRowStorageClient
   artifact: InvocationArtifact
@@ -98,7 +139,10 @@ export const iterateInvocationRowRange = async function* (args: {
   const limit = Math.max(0, Math.floor(args.limit ?? Number.MAX_SAFE_INTEGER))
   if (limit === 0) return
   const namespace = args.namespace ?? 'design-graph/v2/artifacts'
-  const chunkBytes = Math.max(1024, Math.floor(args.chunkBytes ?? 256 * 1024))
+  const chunkBytes = Math.min(
+    maxStorageReadBytes,
+    Math.max(1024, Math.floor(args.chunkBytes ?? 256 * 1024)),
+  )
   let emitted = 0
   for await (const line of iterateLines({
     storage: args.storage,
@@ -109,16 +153,15 @@ export const iterateInvocationRowRange = async function* (args: {
     const entry = parseIndexEntry(line)
     if (entry.rowId < startRow) continue
     if (emitted >= limit) return
-    const response = await args.storage.readBlobRange({
+    const data = await readBlobRangeFully({
+      storage: args.storage,
       namespace,
       id: storageId(args.rows.id),
       offset: entry.offset,
       length: entry.length,
+      chunkBytes,
     })
-    if (response.data.byteLength !== entry.length) {
-      throw new Error(`Invocation row ${entry.rowId} is incomplete.`)
-    }
-    yield parseRow(new TextDecoder().decode(response.data).trimEnd())
+    yield parseRow(new TextDecoder().decode(data).trimEnd())
     emitted += 1
   }
 }

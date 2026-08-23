@@ -30,6 +30,10 @@ import {
   iterateInvocationCandidates,
   type StagedArtifactWriter,
 } from './invocationExecution.ts'
+import {
+  createStorageInvocationArtifactStore,
+  type InvocationArtifactStorageClient,
+} from './storageInvocationArtifacts.ts'
 import { iterateInvocationRowRange } from './storageInvocationRows.ts'
 import {
   createDesignRepositoryFileReader,
@@ -1007,6 +1011,34 @@ export const testInvocationExecutionUsesCanonicalObjectivesAndConstraints = asyn
 testInvocationExecutionUsesCanonicalObjectivesAndConstraints.description =
   'Evaluates invocation reducers and constraints while streaming rows into named artifacts.'
 
+export const testInvocationArtifactStoreSplitsOversizedBlobChunks = async () => {
+  const chunkSizes: number[] = []
+  const storage: InvocationArtifactStorageClient = {
+    statBlob: async () => null,
+    beginBlobWrite: async () => ({ writeId: 'write-1' }),
+    writeBlobChunk: async ({ offset, data }) => {
+      assert(data.byteLength <= 1024 * 1024, 'Expected artifact chunks to fit the blob limit')
+      chunkSizes.push(data.byteLength)
+      return { nextOffset: offset + data.byteLength }
+    },
+    commitBlobWrite: async ({ expectedSize, targetId, writeId }) => ({
+      id: targetId,
+      size: expectedSize,
+      contentType: writeId,
+    }),
+    abortBlobWrite: async () => {},
+  }
+  const artifacts = createStorageInvocationArtifactStore(storage, () => 'test')
+  const writer = await artifacts.begin('application/octet-stream')
+  await writer.write(new Uint8Array(1024 * 1024 + 7))
+  const artifact = await writer.commit()
+  assert(chunkSizes.join(',') === '1048576,7', 'Expected oversized writes to be split at 1 MiB')
+  assert(artifact.size === 1024 * 1024 + 7, 'Expected the artifact size to include all chunks')
+}
+
+testInvocationArtifactStoreSplitsOversizedBlobChunks.description =
+  'Splits invocation artifacts at the CLI storage protocol blob-chunk limit.'
+
 export const testInvocationRowsAreReadThroughBoundedArtifactRanges = async () => {
   const encoder = new TextEncoder()
   const rows = [
@@ -1021,7 +1053,7 @@ export const testInvocationRowsAreReadThroughBoundedArtifactRanges = async () =>
     {
       rowId: 1,
       params: {},
-      outputs: { value: 2 },
+      outputs: { value: 'x'.repeat(2048) },
       objectives: {},
       constraints: {},
       feasible: true,

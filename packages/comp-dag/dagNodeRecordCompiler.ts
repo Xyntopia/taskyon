@@ -203,7 +203,7 @@ export const executeDagNodeRun = async (args: {
   capabilities?: readonly string[]
   callCapability?: (id: string, input: unknown) => Promise<unknown>
 }) => {
-  const timeoutMs = Math.max(100, Math.min(args.timeoutMs ?? 5_000, 60_000))
+  const timeoutMs = Math.max(100, Math.min(args.timeoutMs ?? 60_000, 60_000))
   const timeout = createTimeoutSignal(args.id, timeoutMs)
   try {
     const callCapability = async (id: string, input: unknown) => {
@@ -411,6 +411,7 @@ export const compileDagNodeRecord = (args: {
   const directRunCode =
     !args.record.runCode && !args.record.importsSource ? args.record.runSource : undefined
   const runCode = args.record.runCode ?? directRunCode
+  const nodeFetch = mediatedFetch ?? args.fetch
 
   return createNode<
     DagJsonSchema,
@@ -447,7 +448,7 @@ export const compileDagNodeRecord = (args: {
         use: createLazyDagUse(runtimeInputs, use),
         ...(args.record.capabilities ? { capabilities: args.record.capabilities } : {}),
         ...(args.callCapability ? { callCapability: args.callCapability } : {}),
-        ...(mediatedFetch ? { fetch: mediatedFetch } : {}),
+        ...(nodeFetch ? { fetch: nodeFetch } : {}),
       })
     },
   })

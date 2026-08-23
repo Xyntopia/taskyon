@@ -35,6 +35,7 @@ export type InvocationArtifactStorageClient = {
   abortBlobWrite: (request: { namespace: string; id: string; writeId: string }) => Promise<void>
 }
 
+const maxBlobChunkBytes = 1024 * 1024
 const storageId = (hash: string) => hash.replace(':', '_')
 
 export const createStorageInvocationArtifactStore = (
@@ -56,14 +57,18 @@ export const createStorageInvocationArtifactStore = (
       write: async (chunk) => {
         if (closed) throw new Error('Cannot write to a finalized invocation artifact.')
         hasher.update(chunk)
-        const result = await storage.writeBlobChunk({
-          namespace,
-          id: stagingId,
-          writeId,
-          offset,
-          data: new Uint8Array(chunk),
-        })
-        offset = result.nextOffset
+        for (let chunkOffset = 0; chunkOffset < chunk.byteLength; ) {
+          const data = new Uint8Array(chunk.slice(chunkOffset, chunkOffset + maxBlobChunkBytes))
+          const result = await storage.writeBlobChunk({
+            namespace,
+            id: stagingId,
+            writeId,
+            offset,
+            data,
+          })
+          offset = result.nextOffset
+          chunkOffset += data.byteLength
+        }
       },
       commit: async () => {
         if (closed) throw new Error('Invocation artifact is already finalized.')

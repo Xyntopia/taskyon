@@ -218,6 +218,37 @@ export const testStoredDagNodeReceivesFetchAsASeparateService = async () => {
 testStoredDagNodeReceivesFetchAsASeparateService.description =
   'Keeps network access separate from use, which remains reserved for DAG dependencies.'
 
+export const testCompiledDagNodeRecordReceivesFetchService = async () => {
+  const record = await defineDagNodeRecord({
+    formatVersion: 2,
+    localName: 'compiled_fetch_service_test',
+    label: 'Compiled Fetch Service Test',
+    version: 1,
+    localParamsSchema: {},
+    outputSchema: { type: 'string' },
+    inputs: {},
+    runSource:
+      "async ({ services }) => await (await services.fetch('https://example.test/value')).text()",
+    run: async ({ services }) => await (await services.fetch('https://example.test/value')).text(),
+  })
+  const { run, ...recordWithoutRun } = record
+  void run
+  const compiled = compileDagNodeRecordGraph({
+    graph: {
+      [record.id]: { ...recordWithoutRun, runCode: record.runSource },
+    },
+    rootHash: record.id,
+    fetch: () => Promise.resolve(new Response('graph-result')),
+  })
+  const result = await compiled[record.id]!.call({}).run(undefined, {
+    execution: { mode: 'local' },
+  })
+  assert(result.value === 'graph-result', 'Expected compiled graph nodes to receive fetch service')
+}
+
+testCompiledDagNodeRecordReceivesFetchService.description =
+  'Passes the host fetch service into compiled stored graph nodes.'
+
 export const testDagNodeRecordGraphCompilesStoredClosureInDependencyOrder = async () => {
   const upstream = await defineDagNodeRecord({
     formatVersion: 2,
