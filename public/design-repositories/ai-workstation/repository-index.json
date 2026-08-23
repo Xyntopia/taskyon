@@ -1,0 +1,12 @@
+[
+  "graph-revisions/main.json",
+  "invocations/template-main.json",
+  "nodes/model_memory_estimate.ts",
+  "nodes/selected_workstation_configuration.ts",
+  "nodes/workstation_configuration_catalog.ts",
+  "nodes/workstation_recommendation.ts",
+  "nodes/workstation_requirements.ts",
+  "project-revisions/template.json",
+  "refs/graph/main.json",
+  "refs/projects/template.json"
+]

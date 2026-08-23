@@ -69,6 +69,25 @@ the revision records parent hashes, a display name, friendly invocation names, a
 extension hashes. Each invocation selects its computational root and input domains. Projects share
 the global node pool and do not own copied node catalogs.
 
+The paths above are the internal StorageClient layout. A checked-out source tree uses readable,
+deterministic aliases for the same immutable objects. Node files use `localName` first, while graph
+revisions, project revisions, invocations, extensions, modules, and locks use names available from
+refs and metadata. If two objects would receive the same path, the projector appends the first eight
+characters of that object's hash, for example:
+
+```text
+nodes/FeasibilitySummaryNode--8iH7Wt-x.ts
+graph-revisions/main.json
+project-revisions/Feasibility-Summary-Rectangle-Real-Weather.json
+```
+
+These names are presentation only. They are not a manifest and do not replace embedded Taskyon
+hashes. Node input fields continue to reference hashes. The checkout adds generated comments beside
+those references, such as `source -> SolarResourceNode — Solar resource`; comments are explanatory
+projection text and are excluded from node identity. When a named node is edited, import recomputes
+its hash, rewrites affected downstream input references, creates new immutable graph/project
+revisions, and advances the checked-out refs conditionally.
+
 Source-observation locks currently use the separate `SourceManifestRepository` over logical
 StorageClient namespaces. The Git projection recognizes a `source-manifests` directory, but project
 snapshots do not infer source locks from a computational closure.
@@ -92,6 +111,11 @@ Imports validate paths, schemas, content hashes, and closure references. Immutab
 written before refs, and refs use expected-current conditional writes. Synchronization only
 fast-forwards: equal histories are unchanged, an ahead side is pushed or pulled, and divergent
 histories return `conflict` without an automatic merge.
+
+Static browser hosts may include a generated `repository-index.json`. It is only a list of files so
+the browser can enumerate a checkout over HTTP; it is not a hash-to-name manifest or part of graph
+identity. Browser and Node readers resolve both readable checkout paths and internal hash-addressed
+paths during migration and import.
 
 Node and graph snapshots include the transitive module-lock/module closure of every imported
 stored node.

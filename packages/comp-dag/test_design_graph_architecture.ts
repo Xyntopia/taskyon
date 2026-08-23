@@ -6,6 +6,10 @@ import {
   createProjectExtension,
   createProjectRevision,
   deriveInvocationCategory,
+  parseDesignGraphRef,
+  parseGraphRevision,
+  parseInvocationDefinition,
+  parseProjectRevision,
 } from './designGraphModel.ts'
 import {
   createDesignGraphRepository,
@@ -28,6 +32,7 @@ import {
 } from './invocationExecution.ts'
 import { iterateInvocationRowRange } from './storageInvocationRows.ts'
 import {
+  createDesignRepositoryFileReader,
   loadDesignRepositorySnapshot,
   loadProjectRepositoryPresentation,
   loadProjectRevisionSnapshot,
@@ -411,19 +416,192 @@ export default {
     selector: { kind: 'node', nodeId: node.hash },
   })
   const paths = projection.map(({ path }) => path)
-  assert(paths.includes(`nodes/${hashFilePart(node.hash)}.ts`), 'Expected projected node source')
+  assert(paths.includes('nodes/LockedProjectionNode.ts'), 'Expected projected node source')
   assert(
-    paths.includes(`module-locks/${hashFilePart(lock.id)}.json`),
+    paths.some((path) => path.startsWith('module-locks/module-lock--')),
     'Expected projected module lock',
   )
   assert(
-    paths.includes(`modules/${hashFilePart(module.id)}.json`),
+    paths.some((path) => path.startsWith('modules/module--')),
     'Expected projected module object',
   )
 }
 
 testNodeGitProjectionIncludesLockedModuleClosure.description =
   'Projects imported stored nodes with their exact module lock and module objects.'
+
+export const testNamedDesignGraphProjectionRoundTripsAndExplainsInputs = async () => {
+  const source = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'ReadableSource',
+  label: 'Readable source',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: {},
+  run: () => 1,
+}`)
+  const root = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2,
+  id: '${SELF_HASH_PLACEHOLDER}',
+  localName: 'ReadableRoot',
+  label: 'Readable root',
+  version: 1,
+  localParamsSchema: {},
+  outputSchema: {},
+  inputs: { source: { nodeId: '${source.hash}', role: 'internal' } },
+  run: ({ use }) => use.source,
+}`)
+  const revision = createGraphRevision({ parents: [], nodes: { main: root.hash } })
+  const memory = createMemoryStore()
+  for (const node of [source, root]) {
+    memory.values.set(`nodes/${hashFilePart(node.hash)}.ts`, node.file.source)
+  }
+  memory.values.set(`graph-revisions/${hashFilePart(revision.id)}.json`, JSON.stringify(revision))
+  memory.values.set(
+    'refs/graph/main.json',
+    JSON.stringify({ schemaVersion: 2, revisionId: revision.id }),
+  )
+  const invocation = createInvocationDefinition({
+    rootNodeId: root.hash,
+    variables: {},
+    objectives: [],
+    constraints: [],
+    policy: { accuracy: 'auto' },
+    reducerOverrides: {},
+  })
+  const project = createProjectRevision({
+    parents: [],
+    displayName: 'Readable project',
+    invocations: { main: invocation.id },
+    extensions: {},
+  })
+  memory.values.set(`invocations/${hashFilePart(invocation.id)}.json`, JSON.stringify(invocation))
+  memory.values.set(`project-revisions/${hashFilePart(project.id)}.json`, JSON.stringify(project))
+  memory.values.set(
+    'refs/projects/readable.json',
+    JSON.stringify({ schemaVersion: 2, revisionId: project.id }),
+  )
+
+  const projected = await projectDesignGraphSnapshot({
+    store: memory.store,
+    selector: { kind: 'global' },
+  })
+  assert(
+    projected.some(({ path }) => path === 'nodes/ReadableRoot.ts'),
+    'Expected the root node to use its local name',
+  )
+  assert(
+    projected.some(({ path }) => path === 'nodes/ReadableSource.ts'),
+    'Expected the source node to use its local name',
+  )
+  const rootFile = projected.find(({ path }) => path === 'nodes/ReadableRoot.ts')
+  assert(rootFile?.content.includes('ReadableSource — Readable source'), 'Expected input comment')
+
+  const namedReader = createDesignRepositoryFileReader(projected)
+  const snapshot = await loadDesignRepositorySnapshot({
+    readText: namedReader.readText,
+    readManyText: namedReader.readManyText,
+    checkout: { kind: 'ref', name: 'graph/main' },
+  })
+  assert(snapshot.nodesByHash[root.hash], 'Expected the named projection to load by hash')
+
+  const imported = createMemoryStore()
+  await importDesignGraphSnapshot({ store: imported.store, files: projected })
+  assert(
+    (await imported.store.readText(`nodes/${hashFilePart(root.hash)}.ts`)).includes(
+      "localName: 'ReadableRoot'",
+    ),
+    'Expected named projection import to restore the hash-addressed node',
+  )
+
+  const edited = projected.map((file) =>
+    file.path === 'nodes/ReadableSource.ts'
+      ? { ...file, content: file.content.replace('run: () => 1', 'run: () => 2') }
+      : file,
+  )
+  const expectedRefs = Object.fromEntries(
+    projected
+      .filter(({ path }) => path.startsWith('refs/'))
+      .map((file) => [file.path, file.content]),
+  )
+  await importDesignGraphSnapshot({
+    store: memory.store,
+    files: edited,
+    expectedRefs,
+  })
+  const nextRef = parseDesignGraphRef(
+    JSON.parse(await memory.store.readText('refs/graph/main.json')) as unknown,
+  )
+  assert(nextRef.revisionId !== revision.id, 'Expected a named node edit to advance the graph ref')
+  const nextRevision = parseGraphRevision(
+    JSON.parse(
+      await memory.store.readText(`graph-revisions/${hashFilePart(nextRef.revisionId)}.json`),
+    ) as unknown,
+  )
+  assert(nextRevision.nodes.main !== root.hash, 'Expected downstream root hash propagation')
+  const nextProjectRef = parseDesignGraphRef(
+    JSON.parse(await memory.store.readText('refs/projects/readable.json')) as unknown,
+  )
+  assert(nextProjectRef.revisionId !== project.id, 'Expected the project ref to advance')
+  const nextProject = parseProjectRevision(
+    JSON.parse(
+      await memory.store.readText(
+        `project-revisions/${hashFilePart(nextProjectRef.revisionId)}.json`,
+      ),
+    ) as unknown,
+  )
+  const nextInvocationId = nextProject.invocations.main
+  assert(nextInvocationId, 'Expected the edited project to keep its main invocation')
+  const nextInvocation = parseInvocationDefinition(
+    JSON.parse(
+      await memory.store.readText(`invocations/${hashFilePart(nextInvocationId)}.json`),
+    ) as unknown,
+  )
+  assert(nextInvocation.rootNodeId === nextRevision.nodes.main, 'Expected project root propagation')
+}
+
+testNamedDesignGraphProjectionRoundTripsAndExplainsInputs.description =
+  'Projects readable node names and input comments, then imports edits through immutable graph refs.'
+
+export const testNamedDesignGraphProjectionUsesDeterministicCollisionSuffixes = async () => {
+  const first = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2, id: '${SELF_HASH_PLACEHOLDER}', localName: 'CollisionNode',
+  label: 'First collision node', version: 1, localParamsSchema: {}, outputSchema: {},
+  inputs: {}, run: () => 1,
+}`)
+  const second = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2, id: '${SELF_HASH_PLACEHOLDER}', localName: 'CollisionNode',
+  label: 'Second collision node', version: 1, localParamsSchema: {}, outputSchema: {},
+  inputs: {}, run: () => 2,
+}`)
+  const revision = createGraphRevision({
+    parents: [],
+    nodes: { first: first.hash, second: second.hash },
+  })
+  const memory = createMemoryStore()
+  for (const node of [first, second]) {
+    memory.values.set(`nodes/${hashFilePart(node.hash)}.ts`, node.file.source)
+  }
+  memory.values.set(`graph-revisions/${hashFilePart(revision.id)}.json`, JSON.stringify(revision))
+
+  const projection = await projectDesignGraphSnapshot({
+    store: memory.store,
+    selector: { kind: 'graphRevision', revisionId: revision.id },
+  })
+  const paths = projection
+    .filter(({ path }) => path.startsWith('nodes/CollisionNode'))
+    .map(({ path }) => path)
+  assert(paths.length === 2, 'Expected both colliding nodes in the projection')
+  assert(
+    paths.every((path) => /^nodes\/CollisionNode--[A-Za-z0-9_-]{8}\.ts$/.test(path)),
+    'Expected collisions to use deterministic short hash suffixes',
+  )
+}
+
+testNamedDesignGraphProjectionUsesDeterministicCollisionSuffixes.description =
+  'Uses stable short hash suffixes when readable node names collide.'
 
 export const testStoredModuleEditRewritesEverySharingNodeAndItsDependents = async () => {
   const module = createDagModuleArtifact({

@@ -1,0 +1,11 @@
+[
+  "graph-revisions/main.json",
+  "invocations/template-main.json",
+  "nodes/constraint_scoring.ts",
+  "nodes/design_candidates.ts",
+  "nodes/mission_requirements.ts",
+  "nodes/satellite_recommendation.ts",
+  "project-revisions/template.json",
+  "refs/graph/main.json",
+  "refs/projects/template.json"
+]

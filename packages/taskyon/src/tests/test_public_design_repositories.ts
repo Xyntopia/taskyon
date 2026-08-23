@@ -1,7 +1,7 @@
 import {
+  createDesignRepositoryFileReader,
   createUrlDesignRepositoryReader,
   loadDesignRepositorySnapshot,
-  type DesignRepositoryTextReader,
 } from '@taskyon/comp-dag/designRepositorySnapshot'
 
 const repositories = {
@@ -17,25 +17,29 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-const repositoryReader = (projectId: string): DesignRepositoryTextReader => {
+const repositoryReader = async (projectId: string) => {
   if (typeof window !== 'undefined') {
     return createUrlDesignRepositoryReader({
       baseUrl: new URL(`/design-repositories/${projectId}/`, location.origin),
       fetch,
     })
   }
-  return async (path) => {
-    const { readFile } = await import('node:fs/promises')
-    const baseUrl = new URL(`../../../../public/design-repositories/${projectId}/`, import.meta.url)
-    return await readFile(new URL(path, baseUrl), 'utf8')
-  }
+  const { readFile } = await import('node:fs/promises')
+  const baseUrl = new URL(`../../../../public/design-repositories/${projectId}/`, import.meta.url)
+  const paths = JSON.parse(
+    await readFile(new URL('repository-index.json', baseUrl), 'utf8'),
+  ) as string[]
+  const files = await Promise.all(
+    paths.map(async (path) => ({ path, content: await readFile(new URL(path, baseUrl), 'utf8') })),
+  )
+  return createDesignRepositoryFileReader(files).readText
 }
 
 export const testPublicDesignRepositoriesLoadImmutableRootClosures = async () => {
   const loaded = await Promise.all(
     Object.entries(repositories).map(async ([projectId, expectedNodes]) => {
       const snapshot = await loadDesignRepositorySnapshot({
-        readText: repositoryReader(projectId),
+        readText: await repositoryReader(projectId),
         checkout: { kind: 'ref', name: 'graph/main' },
       })
       assert(snapshot.revision.nodes.main, `${projectId} must define a main root`)
@@ -55,4 +59,4 @@ export const testPublicDesignRepositoriesLoadImmutableRootClosures = async () =>
 }
 
 testPublicDesignRepositoriesLoadImmutableRootClosures.description =
-  'Resolves every bundled design ref and verifies its public, hash-addressed node closure.'
+  'Resolves every bundled design ref and verifies its public content-addressed node closure.'

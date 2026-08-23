@@ -1,5 +1,6 @@
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
+import { canonicalProjectedPath, type DagProjectedFile } from './dagGitProjection.ts'
 import {
   parseDesignGraphRef,
   parseGraphRevision,
@@ -33,7 +34,47 @@ export type DesignRepositoryTextReader = (path: string) => Promise<string>
 export type DesignRepositoryBulkTextReader = (
   paths: readonly string[],
 ) => Promise<Map<string, string | null>>
+export type DesignRepositoryFileReader = {
+  readText: DesignRepositoryTextReader
+  readManyText: DesignRepositoryBulkTextReader
+}
 export type DesignRepositoryNodeFileLoader = typeof loadStoredGraphNodeFiles
+
+export const createDesignRepositoryFileReader = (
+  files: readonly DagProjectedFile[],
+): DesignRepositoryFileReader => {
+  const sourceFiles = files.filter(({ path }) => path !== 'repository-index.json')
+  const direct = new Map(sourceFiles.map(({ path, content }) => [path, content]))
+  let canonical: Promise<Map<string, string>> | undefined
+  const getCanonical = async () => {
+    canonical ??= Promise.all(
+      sourceFiles.map(async (file) => [await canonicalProjectedPath(file), file.content] as const),
+    ).then((entries) => {
+      const index = new Map<string, string>()
+      for (const [path, content] of entries) {
+        const existing = index.get(path)
+        if (existing !== undefined && existing !== content) {
+          throw new Error(`Conflicting design graph files resolve to ${path}`)
+        }
+        index.set(path, content)
+      }
+      return index
+    })
+    return await canonical
+  }
+  const readText = async (path: string) => {
+    const directValue = direct.get(path)
+    if (directValue !== undefined) return directValue
+    const value = (await getCanonical()).get(path)
+    if (value === undefined) throw new Error(`Design graph object not found: ${path}`)
+    return value
+  }
+  return {
+    readText,
+    readManyText: async (paths) =>
+      new Map(await Promise.all(paths.map(async (path) => [path, await readText(path)] as const))),
+  }
+}
 
 export type DesignRepositoryCheckout =
   | { kind: 'ref'; name: string }
@@ -619,16 +660,42 @@ export const loadProjectRevisionPresentation = async (args: {
 export const createUrlDesignRepositoryReader = (args: {
   baseUrl: URL
   fetch: typeof globalThis.fetch
+  filePaths?: readonly string[]
 }): DesignRepositoryTextReader => {
   const fetchUrl = args.fetch.bind(globalThis)
   const baseUrl = new URL(
     args.baseUrl.href.endsWith('/') ? args.baseUrl.href : `${args.baseUrl.href}/`,
   )
-  return async (path) => {
+  let namedReader: Promise<DesignRepositoryFileReader> | null = null
+  const readRemote = async (path: string) => {
     const response = await fetchUrl(new URL(path, baseUrl))
     if (!response.ok) {
       throw new Error(`Failed to read design repository object ${path}: HTTP ${response.status}`)
     }
     return await response.text()
+  }
+  const loadNamedReader = async () => {
+    namedReader ??= (async () => {
+      const filePaths = args.filePaths
+        ? [...args.filePaths]
+        : (JSON.parse(await readRemote('repository-index.json')) as unknown)
+      if (!Array.isArray(filePaths) || filePaths.some((path) => typeof path !== 'string')) {
+        throw new Error('Design repository index must contain file paths.')
+      }
+      const files = await Promise.all(
+        filePaths.map(async (path) => ({ path, content: await readRemote(path) })),
+      )
+      return createDesignRepositoryFileReader(files)
+    })()
+    return await namedReader
+  }
+  return async (path) => {
+    if (args.filePaths) return await (await loadNamedReader()).readText(path)
+    try {
+      return await (await loadNamedReader()).readText(path)
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('HTTP 404')) throw error
+      return await readRemote(path)
+    }
   }
 }

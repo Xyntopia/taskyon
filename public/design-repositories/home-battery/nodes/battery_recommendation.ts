@@ -132,6 +132,9 @@ export default {
     required: ['recommendation', 'ranked', 'viableCount', 'constraints'],
     type: 'object',
   },
+  // Input node references:
+  // ranked -> constraint_scoring — Constraint & Score Evaluation
+  // requirements -> mission_requirements — Mission Requirements
   inputs: {
     ranked: {
       nodeId: 'sha256:dQKY4N14QSfu4kT-hHg8GBpTi0d3pvzQBD2wuNTT4tg',

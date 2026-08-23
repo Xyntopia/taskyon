@@ -2,6 +2,7 @@ import {
   compileDagNodeRecordGraph,
   savedStoredNodesToRecordGraph,
 } from '@taskyon/comp-dag/dagNodeRecordGraph'
+import { createDesignRepositoryFileReader } from '@taskyon/comp-dag/designRepositorySnapshot'
 import { createAiWorkstationExample } from '../examples/aiWorkstationExample'
 
 type WorkstationResult = {
@@ -25,7 +26,16 @@ const nodeRepositoryReader = async (path: string): Promise<string> => {
     '../../../../public/design-repositories/ai-workstation/',
     import.meta.url,
   )
-  return await readFile(new URL(path, repositoryUrl), 'utf8')
+  const paths = JSON.parse(
+    await readFile(new URL('repository-index.json', repositoryUrl), 'utf8'),
+  ) as string[]
+  const files = await Promise.all(
+    paths.map(async (filePath) => ({
+      path: filePath,
+      content: await readFile(new URL(filePath, repositoryUrl), 'utf8'),
+    })),
+  )
+  return await createDesignRepositoryFileReader(files).readText(path)
 }
 
 export const testAiWorkstationGraphEvaluatesStructuralConfigurations = async () => {

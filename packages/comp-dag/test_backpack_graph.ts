@@ -2,6 +2,7 @@ import type { Hash } from './caching.ts'
 import { defineDagNodeRecord, type DagNodeRecord } from './dagNodeRecord.ts'
 import {
   compileDesignRepositoryNodes,
+  createDesignRepositoryFileReader,
   loadDesignRepositorySnapshot,
 } from './designRepositorySnapshot.ts'
 import {
@@ -153,8 +154,19 @@ const loadBackpackRepository = async (): Promise<{
 }> => {
   const { readFile } = await import('node:fs/promises')
   const repositoryUrl = new URL('../../public/design-repositories/backpack/', import.meta.url)
+  const paths = JSON.parse(
+    await readFile(new URL('repository-index.json', repositoryUrl), 'utf8'),
+  ) as string[]
+  const files = await Promise.all(
+    paths.map(async (path) => ({
+      path,
+      content: await readFile(new URL(path, repositoryUrl), 'utf8'),
+    })),
+  )
+  const reader = createDesignRepositoryFileReader(files)
   const snapshot = await loadDesignRepositorySnapshot({
-    readText: async (path) => await readFile(new URL(path, repositoryUrl), 'utf8'),
+    readText: reader.readText,
+    readManyText: reader.readManyText,
     checkout: { kind: 'ref', name: 'graph/main' },
   })
   const root = snapshot.revision.nodes.main

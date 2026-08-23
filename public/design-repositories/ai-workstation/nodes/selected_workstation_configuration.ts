@@ -84,6 +84,8 @@ export default {
     ],
     type: 'object',
   },
+  // Input node references:
+  // source -> workstation_configuration_catalog — Workstation Configuration Catalog
   inputs: {
     source: {
       nodeId: 'sha256:039gEFdzfKtvphe1DPBgNiGvzNJbh8y9BusrnvqrfYY',

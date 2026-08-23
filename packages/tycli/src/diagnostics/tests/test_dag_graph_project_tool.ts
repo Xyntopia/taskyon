@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { createDesignRepositoryFileReader } from '@taskyon/comp-dag/designRepositorySnapshot'
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import { createGraphRevision } from '@taskyon/comp-dag/designGraphModel'
 import {
@@ -130,8 +131,18 @@ export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async
     '../../../../../public/design-repositories/ai-workstation/',
     import.meta.url,
   )
+  const paths = JSON.parse(
+    await readFile(new URL('repository-index.json', repositoryUrl), 'utf8'),
+  ) as string[]
+  const files = await Promise.all(
+    paths.map(async (path) => ({
+      path,
+      content: await readFile(new URL(path, repositoryUrl), 'utf8'),
+    })),
+  )
+  const reader = createDesignRepositoryFileReader(files)
   const example = await createAiWorkstationExample({
-    readText: async (path) => await readFile(new URL(path, repositoryUrl), 'utf8'),
+    readText: reader.readText,
   })
   const exampleInvocationId = example.revision.invocations.main
   const exampleInvocation = exampleInvocationId

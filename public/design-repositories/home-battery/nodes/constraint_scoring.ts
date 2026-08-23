@@ -1,6 +1,6 @@
 export default {
   formatVersion: 2,
-  id: 'sha256:R9A24gcmDjX3yhSUgguIryEkUHqHVHn1g2EljsfEq8M',
+  id: 'sha256:dQKY4N14QSfu4kT-hHg8GBpTi0d3pvzQBD2wuNTT4tg',
   localName: 'constraint_scoring',
   label: 'Constraint & Score Evaluation',
   version: 1,
@@ -114,13 +114,16 @@ export default {
     required: ['ranked', 'viable'],
     type: 'object',
   },
+  // Input node references:
+  // candidates -> design_candidates — Design Candidates
+  // requirements -> mission_requirements — Mission Requirements
   inputs: {
     candidates: {
-      nodeId: 'sha256:619UnvxOaz4ZAMq66ylCyqu4D_8s4gaC4UwvwSivkKQ',
+      nodeId: 'sha256:eyBa6ShsylMpwau5N_2IGU_jkAzVfqFZI3MXOipH1Vg',
       role: 'internal',
     },
     requirements: {
-      nodeId: 'sha256:SbqiYLA6nmSqnXC29hETtfhAS6DOf1W7ICeQlUcZemk',
+      nodeId: 'sha256:8-eiDExF1j-oilsD5CNykl5syV_ZMfZwMMn6TK3noCs',
       role: 'internal',
     },
   },

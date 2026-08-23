@@ -285,6 +285,10 @@ export default {
     ],
     type: 'object',
   },
+  // Input node references:
+  // candidate -> selected_workstation_configuration — Selected Workstation Configuration
+  // modelEstimate -> model_memory_estimate — Model Memory Estimate
+  // requirements -> workstation_requirements — Workload & Requirements
   inputs: {
     candidate: {
       nodeId: 'sha256:TngzrenlLhjkgA_48UxK8RpPOC4uPCm6za8F5NOJcqw',

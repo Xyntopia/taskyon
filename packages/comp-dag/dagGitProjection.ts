@@ -6,15 +6,29 @@ import {
   parseDagModuleLock,
 } from './dagModule.ts'
 import {
+  createGraphRevision,
+  createInvocationDefinition,
   parseDesignGraphRef,
   parseGraphRevision,
   parseInvocationDefinition,
   parseProjectExtension,
   parseProjectRevision,
+  createProjectRevision,
 } from './designGraphModel.ts'
 import type { DesignGraphObjectStore } from './designGraphRepository.ts'
-import { getDagNodeRecordInputHashes } from './dagNodeRecord.ts'
-import { loadStoredGraphNodeFile, normalizeStoredGraphNodeSource } from './dagNodeLoader.ts'
+import { getDagNodeRecordInputHashes, type DagNodeRecordInputRef } from './dagNodeRecord.ts'
+import {
+  hashStoredGraphNodeSource,
+  loadStoredGraphNodeFile,
+  normalizeStoredGraphNodeSource,
+  type SavedStoredGraphNode,
+} from './dagNodeLoader.ts'
+import { SELF_HASH_PLACEHOLDER } from './dagNodeIdentity.ts'
+import {
+  createStoredDagSourceGraph,
+  getStoredDagSourceGraphLocalNameIndex,
+  patchStoredDagSourceGraphNode,
+} from './storedDagSourceGraph.ts'
 
 export type DagProjectedFile = { path: string; content: string }
 
@@ -49,6 +63,235 @@ export const DESIGN_GRAPH_GIT_DIRECTORIES = [
 
 const hashFilePart = (id: Hash) => id.replace(':', '_')
 const objectPath = (kind: string, id: Hash) => `${kind}/${hashFilePart(id)}.json`
+
+type ProjectedObjectKind =
+  | 'modules'
+  | 'module-locks'
+  | 'nodes'
+  | 'graph-revisions'
+  | 'project-revisions'
+  | 'invocations'
+  | 'extensions'
+
+type ProjectedObject = {
+  file: DagProjectedFile
+  kind: ProjectedObjectKind
+  id: Hash
+  candidates: string[]
+}
+
+type NamingMetadata = {
+  localName?: string
+  label?: string
+  displayName?: string
+  namespace?: string
+}
+
+const shortHash = (id: Hash) => hashFilePart(id).slice('sha256_'.length, 'sha256_'.length + 8)
+
+const safeName = (value: string): string => {
+  const normalized = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return normalized || 'unnamed'
+}
+
+const suffixPath = (path: string, id: Hash): string => {
+  const extension = path.endsWith('.ts') ? '.ts' : '.json'
+  return `${path.slice(0, -extension.length)}--${shortHash(id)}${extension}`
+}
+
+const projectObjectPath = (kind: ProjectedObjectKind, name: string): string => {
+  const extension = kind === 'nodes' ? '.ts' : '.json'
+  return `${kind}/${name}${extension}`
+}
+
+const loadProjectedNodeFile = async (file: {
+  path: string
+  source: string
+}): Promise<SavedStoredGraphNode> => {
+  const hash = await hashStoredGraphNodeSource(file.source)
+  const normalized = await normalizeStoredGraphNodeSource(file.source, { id: hash })
+  const normalizedSource = await normalizeStoredGraphNodeSource(file.source, {
+    id: SELF_HASH_PLACEHOLDER,
+  })
+  return {
+    hash,
+    node: { ...normalized.node, id: hash },
+    file,
+    normalizedSource: normalizedSource.source,
+  }
+}
+
+const addCandidate = (map: Map<Hash, string[]>, id: Hash, candidate: string) => {
+  const candidates = map.get(id) ?? []
+  candidates.push(candidate)
+  map.set(id, candidates)
+}
+
+const collectNamingHints = (files: readonly DagProjectedFile[]) => {
+  const graphRevisions = new Map<Hash, string[]>()
+  const projectRevisions = new Map<Hash, string[]>()
+  const invocations = new Map<Hash, string[]>()
+  const extensions = new Map<Hash, string[]>()
+  const projectNames = new Map<Hash, string>()
+
+  for (const file of files.filter(({ path }) => path.startsWith('refs/'))) {
+    const ref = parseDesignGraphRef(JSON.parse(file.content) as unknown)
+    if (file.path.startsWith('refs/graph/')) {
+      addCandidate(graphRevisions, ref.revisionId, file.path.slice('refs/graph/'.length, -5))
+    } else if (file.path.startsWith('refs/projects/')) {
+      projectNames.set(ref.revisionId, file.path.slice('refs/projects/'.length, -5))
+    }
+  }
+
+  for (const file of files.filter(({ path }) => path.startsWith('project-revisions/'))) {
+    const revision = parseProjectRevision(JSON.parse(file.content) as unknown)
+    const projectName = projectNames.get(revision.id) ?? revision.displayName
+    addCandidate(projectRevisions, revision.id, projectName)
+    for (const [name, id] of Object.entries(revision.invocations)) {
+      addCandidate(invocations, id, `${projectName}/${name}`)
+    }
+    for (const [name, id] of Object.entries(revision.extensions)) {
+      addCandidate(extensions, id, `${projectName}/${name}`)
+    }
+  }
+
+  return { graphRevisions, projectRevisions, invocations, extensions }
+}
+
+const objectCandidates = (
+  kind: ProjectedObjectKind,
+  id: Hash,
+  metadata: NamingMetadata,
+  hints: ReturnType<typeof collectNamingHints>,
+): string[] => {
+  if (kind === 'nodes') {
+    return [String(metadata.localName ?? metadata.label ?? `node-${shortHash(id)}`)]
+  }
+  if (kind === 'graph-revisions') return hints.graphRevisions.get(id) ?? []
+  if (kind === 'project-revisions') {
+    return hints.projectRevisions.get(id) ?? [String(metadata.displayName ?? '')]
+  }
+  if (kind === 'invocations') return hints.invocations.get(id) ?? []
+  if (kind === 'extensions') {
+    return hints.extensions.get(id) ?? [String(metadata.namespace ?? '')]
+  }
+  return []
+}
+
+const fallbackObjectName = (kind: ProjectedObjectKind, id: Hash) =>
+  `${kind.slice(0, -1)}--${shortHash(id)}`
+
+const jsonNamingMetadata = (kind: ProjectedObjectKind, value: unknown): NamingMetadata => {
+  if (kind === 'project-revisions') {
+    return { displayName: parseProjectRevision(value).displayName }
+  }
+  if (kind === 'extensions') return { namespace: parseProjectExtension(value).namespace }
+  return {}
+}
+
+const createNamedObjectPaths = async (
+  files: readonly DagProjectedFile[],
+): Promise<Map<string, string>> => {
+  const hints = collectNamingHints(files)
+  const objects: ProjectedObject[] = []
+  for (const file of files) {
+    if (file.path.startsWith('refs/')) continue
+    const kind = file.path.split('/')[0] as ProjectedObjectKind
+    if (
+      ![
+        'modules',
+        'module-locks',
+        'nodes',
+        'graph-revisions',
+        'project-revisions',
+        'invocations',
+        'extensions',
+      ].includes(kind)
+    )
+      continue
+    const parsed =
+      kind === 'nodes' ? null : parseProjectedJson(file.path, JSON.parse(file.content) as unknown)
+    const node =
+      kind === 'nodes'
+        ? await loadStoredGraphNodeFile({ path: file.path, source: file.content })
+        : null
+    if (kind === 'nodes' && !node) throw new Error(`Could not parse projected node: ${file.path}`)
+    const id = kind === 'nodes' ? node!.hash : parsed
+    if (!id) throw new Error(`Projected object ${file.path} has no content identity.`)
+    const value = kind === 'nodes' ? null : (JSON.parse(file.content) as unknown)
+    const metadata = kind === 'nodes' ? node!.node : jsonNamingMetadata(kind, value)
+    const candidates = objectCandidates(kind, id, metadata, hints).map(safeName).filter(Boolean)
+    objects.push({
+      file,
+      kind,
+      id,
+      candidates: [candidates[0] ?? fallbackObjectName(kind, id)],
+    })
+  }
+
+  const proposed = objects.map((object) => ({
+    ...object,
+    path: projectObjectPath(object.kind, object.candidates[0]!),
+  }))
+  const collisions = new Map<string, typeof proposed>()
+  for (const object of proposed) {
+    const group = collisions.get(object.path) ?? []
+    group.push(object)
+    collisions.set(object.path, group)
+  }
+  const output = new Map<string, string>()
+  for (const object of proposed) {
+    const group = collisions.get(object.path)!
+    const path = group.length > 1 ? suffixPath(object.path, object.id) : object.path
+    if (output.has(object.file.path))
+      throw new Error(`Duplicate projected source path: ${object.file.path}`)
+    output.set(object.file.path, path)
+  }
+  return output
+}
+
+const nodeReferenceEntries = (node: { inputs?: Record<string, DagNodeRecordInputRef> }) =>
+  Object.entries(node.inputs ?? {}).flatMap(([alias, reference]) => {
+    const nodeIds = 'kind' in reference ? reference.nodeIds : [reference.nodeId]
+    return nodeIds.map((nodeId) => ({ alias, nodeId }))
+  })
+
+const decorateNodeSource = (
+  source: string,
+  node: { inputs?: Record<string, DagNodeRecordInputRef> },
+  names: ReadonlyMap<Hash, { localName: string; label: string }>,
+) => {
+  const references = nodeReferenceEntries(node)
+  if (references.length === 0) return source
+  const comments = references.map(({ alias, nodeId }) => {
+    const name = names.get(nodeId)
+    return `  // ${alias} -> ${name ? `${name.localName} — ${name.label}` : nodeId}`
+  })
+  const marker = '\n  inputs: {'
+  if (!source.includes(marker)) return source
+  return source.replace(marker, `\n  // Input node references:\n${comments.join('\n')}${marker}`)
+}
+
+const decorateProjectedNodeSources = async (files: readonly DagProjectedFile[]) => {
+  const names = new Map<Hash, { localName: string; label: string }>()
+  for (const file of files.filter(({ path }) => path.startsWith('nodes/'))) {
+    const loaded = await loadProjectedNodeFile({ path: file.path, source: file.content })
+    names.set(loaded.hash, { localName: loaded.node.localName, label: loaded.node.label })
+  }
+  return await Promise.all(
+    files.map(async (file) => {
+      if (!file.path.startsWith('nodes/')) return file
+      const loaded = await loadStoredGraphNodeFile({ path: file.path, source: file.content })
+      return {
+        ...file,
+        content: decorateNodeSource(file.content, loaded.node, names),
+      }
+    }),
+  )
+}
 
 const normalizeProjectedPath = (path: string) => {
   if (
@@ -195,46 +438,54 @@ export const projectDesignGraphSnapshot = async (args: {
       break
   }
   const uniquePaths = [...new Set(paths)].sort()
-  return await Promise.all(
+  const files = await Promise.all(
     uniquePaths.map(async (path) => await readProjectedFile(args.store, path)),
   )
+  const namedPaths = await createNamedObjectPaths(files)
+  const namedFiles = await decorateProjectedNodeSources(files)
+  return namedFiles.map((file) => ({
+    ...file,
+    path: namedPaths.get(file.path) ?? file.path,
+  }))
 }
 
-const assertObjectPath = (path: string, directory: string, id: Hash) => {
-  if (path !== objectPath(directory, id)) {
-    throw new Error(`Design graph object path does not match its identity: ${path}`)
+const parseProjectedJson = (path: string, value: unknown): Hash | null => {
+  if (path.startsWith('modules/')) return parseDagModuleArtifact(value).id
+  if (path.startsWith('module-locks/')) return parseDagModuleLock(value).id
+  if (path.startsWith('graph-revisions/')) return parseGraphRevision(value).id
+  if (path.startsWith('project-revisions/')) return parseProjectRevision(value).id
+  if (path.startsWith('invocations/')) return parseInvocationDefinition(value).id
+  if (path.startsWith('extensions/')) return parseProjectExtension(value).id
+  if (path.startsWith('source-manifests/')) return null
+  if (path.startsWith('refs/')) {
+    parseDesignGraphRef(value)
+    return null
   }
-}
-
-const parseProjectedJson = (path: string, value: unknown) => {
-  if (path.startsWith('modules/'))
-    assertObjectPath(path, 'modules', parseDagModuleArtifact(value).id)
-  else if (path.startsWith('module-locks/'))
-    assertObjectPath(path, 'module-locks', parseDagModuleLock(value).id)
-  else if (path.startsWith('graph-revisions/'))
-    assertObjectPath(path, 'graph-revisions', parseGraphRevision(value).id)
-  else if (path.startsWith('project-revisions/'))
-    assertObjectPath(path, 'project-revisions', parseProjectRevision(value).id)
-  else if (path.startsWith('invocations/'))
-    assertObjectPath(path, 'invocations', parseInvocationDefinition(value).id)
-  else if (path.startsWith('extensions/'))
-    assertObjectPath(path, 'extensions', parseProjectExtension(value).id)
-  else if (path.startsWith('refs/')) parseDesignGraphRef(value)
+  throw new Error(`Unsupported design graph JSON file: ${path}`)
 }
 
 const normalizeProjectedFile = async (file: DagProjectedFile): Promise<DagProjectedFile> => {
   normalizeProjectedPath(file.path)
   if (file.path.startsWith('nodes/')) {
-    const loaded = await loadStoredGraphNodeFile({ path: file.path, source: file.content })
-    if (file.path !== `nodes/${hashFilePart(loaded.hash)}.ts`) {
-      throw new Error(`Stored graph node path does not match its identity: ${file.path}`)
-    }
+    const loaded = await loadProjectedNodeFile({ path: file.path, source: file.content })
     const normalized = await normalizeStoredGraphNodeSource(file.content, { id: loaded.hash })
     return { path: file.path, content: normalized.source }
   }
   if (!file.path.endsWith('.json')) throw new Error(`Unsupported design graph file: ${file.path}`)
   parseProjectedJson(file.path, JSON.parse(file.content) as unknown)
   return file
+}
+
+export const canonicalProjectedPath = async (file: DagProjectedFile): Promise<string> => {
+  if (file.path.startsWith('refs/')) return file.path
+  if (file.path.startsWith('nodes/')) {
+    const loaded = await loadProjectedNodeFile({ path: file.path, source: file.content })
+    return `nodes/${hashFilePart(loaded.hash)}.ts`
+  }
+  const kind = file.path.split('/')[0] ?? ''
+  const id = parseProjectedJson(file.path, JSON.parse(file.content) as unknown)
+  if (!id) return file.path
+  return objectPath(kind, id)
 }
 
 const immutableComparisonContent = (file: DagProjectedFile) =>
@@ -250,6 +501,217 @@ const readOptionalText = async (store: DesignGraphObjectStore, path: string) => 
     throw error
   }
 }
+
+const repositoryJson = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`
+
+const replaceNodeHashRefs = (source: string, replacements: ReadonlyMap<Hash, Hash>) => {
+  let result = source
+  for (const [from, to] of replacements) result = result.replaceAll(from, to)
+  return result
+}
+
+const incomingNodeMatchesHash = (node: SavedStoredGraphNode, hash: Hash) =>
+  node.file.path.endsWith(`--${shortHash(hash)}.ts`)
+
+const readIncomingNodes = async (files: readonly DagProjectedFile[]) => {
+  const entries = await Promise.all(
+    files
+      .filter(({ path }) => path.startsWith('nodes/'))
+      .map(async (file) => await loadProjectedNodeFile({ path: file.path, source: file.content })),
+  )
+  const nodes = new Map<string, SavedStoredGraphNode[]>()
+  for (const node of entries)
+    nodes.set(node.node.localName, [...(nodes.get(node.node.localName) ?? []), node])
+  return nodes
+}
+
+const patchNamedRoots = async (args: {
+  store: DesignGraphObjectStore
+  roots: Record<string, Hash>
+  incomingNodes: ReadonlyMap<string, SavedStoredGraphNode[]>
+}) => {
+  const paths = await collectNodeClosure(args.store, Object.values(args.roots))
+  const files = await Promise.all(
+    paths
+      .filter((path) => path.startsWith('nodes/'))
+      .map(async (path) => ({ path, source: await args.store.readText(path) })),
+  )
+  let storedGraph = await createStoredDagSourceGraph({ files, roots: args.roots })
+  const replacements = new Map<Hash, Hash>()
+  const createdFiles = new Map<string, { path: string; source: string }>()
+
+  for (const [rootName, rootHash] of Object.entries(args.roots)) {
+    const localNames = getStoredDagSourceGraphLocalNameIndex({ storedGraph, rootName })
+    for (const [localName, currentHash] of Object.entries(localNames)) {
+      const namedCandidates = (args.incomingNodes.get(localName) ?? []).filter((candidate) =>
+        incomingNodeMatchesHash(candidate, currentHash),
+      )
+      const candidates = (
+        namedCandidates.length > 0 ? namedCandidates : (args.incomingNodes.get(localName) ?? [])
+      ).filter((candidate) => candidate.hash !== currentHash)
+      if (candidates.length > 1) {
+        throw new Error(`Named graph edit is ambiguous for local node ${localName}`)
+      }
+      const candidate = candidates[0]
+      if (!candidate) continue
+      const patched = await patchStoredDagSourceGraphNode({
+        storedGraph,
+        rootName,
+        targetLocalName: localName,
+        updateSource: () => replaceNodeHashRefs(candidate.file.source, replacements),
+      })
+      storedGraph = patched.storedGraph
+      const change = patched.patch.changedNodes[localName]
+      if (!change) throw new Error(`Named graph edit did not change ${localName}`)
+      replacements.set(currentHash, change.newHash)
+      for (const changed of Object.values(patched.patch.changedNodes)) {
+        const file = patched.storedGraph.nodesByHash[changed.newHash]?.file
+        if (file) createdFiles.set(file.path, file)
+      }
+    }
+  }
+
+  return {
+    roots: storedGraph.roots,
+    replacements,
+    files: [...createdFiles.values()],
+  }
+}
+
+const updateNamedNodeReferences = async (args: {
+  store: DesignGraphObjectStore
+  files: readonly DagProjectedFile[]
+}): Promise<DagProjectedFile[]> => {
+  const incomingNodes = await readIncomingNodes(args.files)
+  const output = new Map(args.files.map((file) => [file.path, file]))
+  const rootReplacements = new Map<Hash, Hash>()
+  const graphRevisionUpdates = new Map<Hash, GraphRevisionUpdate>()
+
+  for (const refFile of args.files.filter(({ path }) => path.startsWith('refs/graph/'))) {
+    const incomingRef = parseDesignGraphRef(JSON.parse(refFile.content) as unknown)
+    const currentRef = await readOptionalText(args.store, refFile.path)
+    if (!currentRef) continue
+    const currentRefValue = parseDesignGraphRef(JSON.parse(currentRef) as unknown)
+    if (currentRefValue.revisionId !== incomingRef.revisionId) continue
+    const cached = graphRevisionUpdates.get(currentRefValue.revisionId)
+    if (cached) {
+      output.set(refFile.path, {
+        path: refFile.path,
+        content: repositoryJson({ schemaVersion: 2, revisionId: cached.revision.id }),
+      })
+      continue
+    }
+    const revision = parseGraphRevision(
+      await readJson(args.store, objectPath('graph-revisions', currentRefValue.revisionId)),
+    )
+    const patched = await patchNamedRoots({
+      store: args.store,
+      roots: revision.nodes,
+      incomingNodes,
+    })
+    for (const file of patched.files)
+      output.set(file.path, { path: file.path, content: file.source })
+    if (patched.replacements.size === 0) continue
+    for (const [oldRoot, newRoot] of Object.entries(revision.nodes)) {
+      const nextRoot = patched.roots[oldRoot]
+      if (nextRoot && nextRoot !== newRoot) rootReplacements.set(newRoot, nextRoot)
+    }
+    const nextRevision = createGraphRevision({ parents: [revision.id], nodes: patched.roots })
+    const update = { revision: nextRevision }
+    graphRevisionUpdates.set(revision.id, update)
+    output.set(`graph-revisions/${hashFilePart(nextRevision.id)}.json`, {
+      path: `graph-revisions/${hashFilePart(nextRevision.id)}.json`,
+      content: repositoryJson(nextRevision),
+    })
+    output.set(refFile.path, {
+      path: refFile.path,
+      content: repositoryJson({ schemaVersion: 2, revisionId: nextRevision.id }),
+    })
+  }
+
+  const projectRevisionUpdates = new Map<Hash, ProjectRevisionUpdate>()
+  for (const refFile of args.files.filter(({ path }) => path.startsWith('refs/projects/'))) {
+    const incomingRef = parseDesignGraphRef(JSON.parse(refFile.content) as unknown)
+    const currentRef = await readOptionalText(args.store, refFile.path)
+    if (!currentRef) continue
+    const currentRefValue = parseDesignGraphRef(JSON.parse(currentRef) as unknown)
+    if (currentRefValue.revisionId !== incomingRef.revisionId) continue
+    const cached = projectRevisionUpdates.get(currentRefValue.revisionId)
+    if (cached) {
+      output.set(refFile.path, {
+        path: refFile.path,
+        content: repositoryJson({ schemaVersion: 2, revisionId: cached.revision.id }),
+      })
+      continue
+    }
+    const revision = parseProjectRevision(
+      await readJson(args.store, objectPath('project-revisions', currentRefValue.revisionId)),
+    )
+    const invocations: Record<string, ReturnType<typeof createInvocationDefinition>> = {}
+    let changed = false
+    for (const [name, invocationId] of Object.entries(revision.invocations)) {
+      const invocation = parseInvocationDefinition(
+        await readJson(args.store, objectPath('invocations', invocationId)),
+      )
+      let rootNodeId = rootReplacements.get(invocation.rootNodeId)
+      if (!rootNodeId) {
+        const patched = await patchNamedRoots({
+          store: args.store,
+          roots: { [name]: invocation.rootNodeId },
+          incomingNodes,
+        })
+        for (const file of patched.files)
+          output.set(file.path, { path: file.path, content: file.source })
+        rootNodeId = patched.roots[name]
+        if (rootNodeId && rootNodeId !== invocation.rootNodeId) {
+          rootReplacements.set(invocation.rootNodeId, rootNodeId)
+        }
+      }
+      if (rootNodeId && rootNodeId !== invocation.rootNodeId) {
+        changed = true
+        const nextInvocation = createInvocationDefinition({
+          rootNodeId,
+          variables: invocation.variables,
+          inputs: invocation.inputs,
+          objectives: invocation.objectives,
+          constraints: invocation.constraints,
+          capture: invocation.capture,
+          policy: invocation.policy,
+          reducerOverrides: invocation.reducerOverrides,
+        })
+        invocations[name] = nextInvocation
+        output.set(`invocations/${hashFilePart(nextInvocation.id)}.json`, {
+          path: `invocations/${hashFilePart(nextInvocation.id)}.json`,
+          content: repositoryJson(nextInvocation),
+        })
+      } else {
+        invocations[name] = invocation
+      }
+    }
+    if (!changed) continue
+    const nextRevision = createProjectRevision({
+      parents: [revision.id],
+      displayName: revision.displayName,
+      invocations: Object.fromEntries(
+        Object.entries(invocations).map(([name, invocation]) => [name, invocation.id]),
+      ),
+      extensions: revision.extensions,
+    })
+    projectRevisionUpdates.set(revision.id, { revision: nextRevision })
+    output.set(`project-revisions/${hashFilePart(nextRevision.id)}.json`, {
+      path: `project-revisions/${hashFilePart(nextRevision.id)}.json`,
+      content: repositoryJson(nextRevision),
+    })
+    output.set(refFile.path, {
+      path: refFile.path,
+      content: repositoryJson({ schemaVersion: 2, revisionId: nextRevision.id }),
+    })
+  }
+  return [...output.values()]
+}
+
+type GraphRevisionUpdate = { revision: ReturnType<typeof createGraphRevision> }
+type ProjectRevisionUpdate = { revision: ReturnType<typeof createProjectRevision> }
 
 const validateProjectedClosure = async (
   store: DesignGraphObjectStore,
@@ -308,17 +770,26 @@ export const importDesignGraphSnapshot = async (args: {
   files: readonly DagProjectedFile[]
   expectedRefs?: Readonly<Record<string, string | null>>
 }) => {
-  const normalized = await Promise.all(args.files.map(normalizeProjectedFile))
+  const reconciledFiles = await updateNamedNodeReferences({ store: args.store, files: args.files })
+  const normalized = await Promise.all(reconciledFiles.map(normalizeProjectedFile))
+  const canonical = await Promise.all(
+    normalized.map(async (file) => ({
+      ...file,
+      path: await canonicalProjectedPath(file),
+    })),
+  )
   const projected = new Map<string, string>()
-  for (const file of normalized) {
-    if (projected.has(file.path))
-      throw new Error(`Duplicate design graph projected path: ${file.path}`)
+  for (const file of canonical) {
+    const existing = projected.get(file.path)
+    if (existing !== undefined && existing !== file.content) {
+      throw new Error(`Conflicting design graph objects resolve to ${file.path}`)
+    }
     projected.set(file.path, file.content)
   }
   await validateProjectedClosure(args.store, projected)
 
-  const immutable = normalized.filter((file) => !file.path.startsWith('refs/'))
-  const refs = normalized.filter((file) => file.path.startsWith('refs/'))
+  const immutable = canonical.filter((file) => !file.path.startsWith('refs/'))
+  const refs = canonical.filter((file) => file.path.startsWith('refs/'))
   const missing: DagProjectedFile[] = []
   const existingImmutable = args.store.readManyText
     ? await args.store.readManyText(immutable.map((file) => file.path))

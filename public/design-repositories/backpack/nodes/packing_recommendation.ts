@@ -15,6 +15,10 @@ export default {
     required: [],
     type: 'object',
   },
+  // Input node references:
+  // policy -> recommendation_policy — Recommendation Policy
+  // score -> utility_score — Utility Score
+  // weightCheck -> weight_check — Weight Check
   inputs: {
     policy: {
       nodeId: 'sha256:c4fozV-mLLupocGOKRHhgRrMWS0_JpAwwguOieH6CWE',

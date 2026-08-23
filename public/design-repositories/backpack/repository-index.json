@@ -1,0 +1,14 @@
+[
+  "graph-revisions/main.json",
+  "invocations/template-main.json",
+  "nodes/item_candidates.ts",
+  "nodes/packing_recommendation.ts",
+  "nodes/recommendation_policy.ts",
+  "nodes/trip_requirements.ts",
+  "nodes/utility_score.ts",
+  "nodes/weather_check.ts",
+  "nodes/weight_check.ts",
+  "project-revisions/template.json",
+  "refs/graph/main.json",
+  "refs/projects/template.json"
+]

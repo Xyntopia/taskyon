@@ -15,6 +15,9 @@ export default {
     required: [],
     type: 'object',
   },
+  // Input node references:
+  // candidates -> item_candidates — Item Candidates
+  // requirements -> trip_requirements — Trip Requirements
   inputs: {
     candidates: {
       nodeId: 'sha256:_f9_PhbjBSxk-XoTB-XyMVqlrqKIv2Zk6GcSgDJF9u8',

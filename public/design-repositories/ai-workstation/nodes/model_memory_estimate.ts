@@ -53,6 +53,8 @@ export default {
     ],
     type: 'object',
   },
+  // Input node references:
+  // requirements -> workstation_requirements — Workload & Requirements
   inputs: {
     requirements: {
       nodeId: 'sha256:GygE4bN_4kbDjXcPjoF1FwGj39TgYTe0Vguwde5ZsrE',

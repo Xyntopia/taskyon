@@ -15,6 +15,9 @@ export default {
     required: [],
     type: 'object',
   },
+  // Input node references:
+  // weatherCheck -> weather_check — Weather Check
+  // weightCheck -> weight_check — Weight Check
   inputs: {
     weatherCheck: {
       nodeId: 'sha256:PTChioJ6O7AwmIEo-9uu1XJA056ggSdBGHJvDKj4dQQ',
