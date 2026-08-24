@@ -958,6 +958,14 @@ function formatClientCommandResult(value: unknown): string {
   )
 }
 
+function missingProviderCredentialsMessage(llmState: CliLlmState, provider: string): string {
+  const api = getProviderSettings(llmState, provider)
+  if (api && getProviderOauthConfig(api)) {
+    return `No credentials configured for '${provider}'. Run /provider and choose login with OAuth.`
+  }
+  return `No API key configured for '${provider}'. Run /keys first.`
+}
+
 const taskCreatedAt = (task: TaskNode) => task.created_at ?? 0
 
 const isMapToolName = (toolName: string) =>
@@ -2199,7 +2207,7 @@ async function handleModelCommand(
       (await ty.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)) ??
       resolveKeyForProvider(selectedApi, persistence.environmentPrefix)
     if (!key) {
-      writeError(`No key configured for '${selectedApi}'. Run /keys first.`)
+      writeError(missingProviderCredentialsMessage(llmState, selectedApi))
       return
     }
 
@@ -4393,7 +4401,7 @@ async function main(host: InteractiveCliHost) {
 
       const currentProvider = llmState.selectedToolchainProfile
       if (!(await taskyon.getSecret(API_KEY_STORE_NAME, currentProvider, false, false))) {
-        writeError(`No key configured for '${currentProvider}'. Run /keys first.`)
+        writeError(missingProviderCredentialsMessage(llmState, currentProvider))
         continue
       }
 

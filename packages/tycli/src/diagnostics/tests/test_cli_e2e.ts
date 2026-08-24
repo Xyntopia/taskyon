@@ -7,6 +7,7 @@ import {
   testDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls as runDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls,
   testWorkerStatusTextHidesHiddenTools as runWorkerStatusTextHidesHiddenTools,
   testCliConcurrentSessionsStartWithSharedHome as runCliConcurrentSessionsStartWithSharedHome,
+  testCliDoesNotUseCodexCliOAuthCache as runCliDoesNotUseCodexCliOAuthCache,
   testEmptyCliSessionDoesNotCreateConversationFile as runEmptyCliSessionDoesNotCreateConversationFile,
   testResumeConversationReportsStorageAndLogs as runResumeConversationReportsStorageAndLogs,
   testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
@@ -56,6 +57,11 @@ testCliBracketedPastePreservesMultilinePrompt.description =
   runBracketedPastePreservesMultilinePrompt.description
 testCliBracketedPastePreservesMultilinePrompt.timeoutMs =
   runBracketedPastePreservesMultilinePrompt.timeoutMs
+
+export const testCliDoesNotUseCodexCliOAuthCache = runCliDoesNotUseCodexCliOAuthCache
+testCliDoesNotUseCodexCliOAuthCache.description =
+  'Does not authenticate tycli from the official Codex OAuth cache.'
+testCliDoesNotUseCodexCliOAuthCache.timeoutMs = 60_000
 
 export const testCtrlCCancelsModelMenuAndKeepsPromptUsable = Object.assign(
   runCtrlCCancelsModelMenuAndKeepsPromptUsable,

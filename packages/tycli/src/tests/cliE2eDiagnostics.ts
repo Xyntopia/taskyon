@@ -477,6 +477,52 @@ export async function testCliStartupShowsVersionCommitAndBuildDate() {
   assertContains(result.output, '| idle]')
 }
 
+export async function testCliDoesNotUseCodexCliOAuthCache() {
+  const testHome = join(TEST_HOME, 'testCliDoesNotUseCodexCliOAuthCache')
+  const codexHome = join(testHome, '.codex')
+  await mkdir(codexHome, { recursive: true })
+  await writeFile(
+    join(codexHome, 'auth.json'),
+    JSON.stringify({
+      auth_mode: 'chatgpt',
+      tokens: {
+        access_token: 'codex-oauth-access-token',
+        refresh_token: 'codex-oauth-refresh-token',
+        id_token: 'eyJhbGciOiJub25lIn0.eyJleHAiOjF9.',
+        account_id: 'codex-test-account',
+      },
+      last_refresh: new Date().toISOString(),
+    }),
+    { encoding: 'utf8', mode: 0o600 },
+  )
+
+  const result = await runCliE2eSession({
+    testName: 'testCliDoesNotUseCodexCliOAuthCache',
+    homeKey: 'testCliDoesNotUseCodexCliOAuthCache',
+    steps: [
+      {
+        waitFor: 'tycli ready.',
+        input: 'hello\n',
+      },
+      {
+        waitFor: "No credentials configured for 'chatgpt-codex'",
+        input: '/exit\n',
+      },
+    ],
+    env: {
+      CODEX_HOME: codexHome,
+      TYCLI_HOTKEY_MENUS: '0',
+      TYCLI_SELECTED_API: 'chatgpt-codex',
+    },
+    timeoutMs: 45_000,
+    runner: 'pty',
+  })
+
+  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
+  assertContains(result.output, "No credentials configured for 'chatgpt-codex'")
+  assertNotContains(result.output, 'task: processing')
+}
+
 export async function testTerminalKitFooterOptInStartsAndExits() {
   const result = await runCliE2eSession({
     testName: 'testTerminalKitFooterOptInStartsAndExits',
