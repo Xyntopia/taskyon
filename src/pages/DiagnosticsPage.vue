@@ -477,7 +477,6 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
     typeof chatCompletionConfig.provider === 'string'
       ? chatCompletionConfig.provider
       : undefined
-  const providerKey = selectedApi ? await tystate.getProviderApiKey(selectedApi) : null
   const isCypress = typeof window !== 'undefined' && 'Cypress' in window
   const runOptions: Parameters<typeof runDiagnosticsTests>[1] = {
     details,
@@ -488,7 +487,14 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
       ...(tystate.currentModelId ? { model: tystate.currentModelId } : {}),
       llmSettings: state.llmSettings,
       toolchainConfig: state.effectiveToolchainConfig,
-      ...(typeof providerKey === 'string' ? { providerKey } : {}),
+      ...(selectedApi
+        ? {
+            providerSession: tystate.createDiagnosticsProviderSession(
+              selectedApi,
+              tystate.currentModelId,
+            ),
+          }
+        : {}),
       isCypress,
     },
     shouldAbort: () => abortRequested.value,

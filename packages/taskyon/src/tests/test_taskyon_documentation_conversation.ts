@@ -17,7 +17,10 @@ import {
 } from '../tools/documentationProviderTool'
 import { taskyonDocumentationTool } from '../tools/documentationTool'
 import { taskyonDocumentationManifest } from '../documentationManifest'
-import { resolveDiagnosticsRuntimeConfig } from '../testSupport/onlineProviderSupport'
+import {
+  authenticateDiagnosticsRuntime,
+  resolveDiagnosticsRuntimeConfig,
+} from '../testSupport/onlineProviderSupport'
 import type { TaskNode } from '../types/taskNode'
 import { toolCall } from '../types/toolApi'
 
@@ -74,8 +77,7 @@ const summarizeTask = (task: TaskNode) => ({
 export const testTaskyonCliConversationUsesDocumentationTool = async (
   context?: DiagnosticsTestContext,
 ) => {
-  const providerKey = context?.providerKey
-  if (!providerKey) {
+  if (!context?.providerSession) {
     return {
       skipped: true,
       reason:
@@ -123,8 +125,9 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     },
   )
   taskyonRef.current = ty
-  const selectedApi = runtimeConfig.providerSettings.provider
-  await ty.updateChatCompletionApiKey(selectedApi, providerKey)
+  if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+    return { skipped: true, reason: 'The saved provider session is unavailable.' }
+  }
 
   const manifests = new Map<string, DocumentationManifest>()
   const loadFiles = createNodeResourceFilesLoader(
@@ -238,7 +241,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
 
     return {
       success: true,
-      selectedApi,
+      selectedApi: runtimeConfig.providerSettings.provider,
       model: context?.model,
       question: selected.question,
       answer: answerTask && answerTask.content.type === 'message' ? answerTask.content.data : '',

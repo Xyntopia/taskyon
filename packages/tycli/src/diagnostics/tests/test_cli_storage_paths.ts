@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { resolveKeyForProvider, resolveProviderSelection } from '../../cli/config'
+import { resolveProviderSelection } from '../../cli/config'
 import { resolveCliStoragePaths } from '../../cli/storagePaths'
 
 const assertEqual = (actual: string, expected: string, label: string) => {
@@ -52,24 +52,19 @@ export const testCliStoragePathsHonorRootAndCategoryOverrides = () => {
 testCliStoragePathsHonorRootAndCategoryOverrides.description =
   'Verifies application home and category-specific environment overrides resolve predictably.'
 
-export const testCliProviderEnvironmentUsesHostPrefix = () => {
+export const testCliProviderSelectionIgnoresCredentialEnvironment = () => {
   const environment = {
-    HOST_CLI_CHATGPT_CODEX_API_KEY: 'host-codex-key',
-    CHATGPT_CODEX_API_KEY: 'shared-codex-key',
+    HOST_CLI_OPENAI_API_KEY: 'host-key',
+    OPENAI_API_KEY: 'shared-key',
   }
 
   assertEqual(
     resolveProviderSelection({}, 'HOST_CLI', environment),
-    'chatgpt-codex',
-    'host provider selection',
-  )
-  assertEqual(
-    resolveKeyForProvider('chatgpt-codex', 'HOST_CLI', environment) ?? '',
-    'host-codex-key',
-    'host provider key',
+    'local',
+    'credential-free provider selection',
   )
   return { success: true }
 }
 
-testCliProviderEnvironmentUsesHostPrefix.description =
-  'Selects providers and credentials from the configured host environment namespace.'
+testCliProviderSelectionIgnoresCredentialEnvironment.description =
+  'Provider credentials in the process environment neither select nor authenticate a CLI provider.'

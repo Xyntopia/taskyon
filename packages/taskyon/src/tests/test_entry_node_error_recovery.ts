@@ -3,7 +3,7 @@ import { tyCore } from '../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { createTaskyonClient } from '../api'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
-import type { TaskNode } from '../types/taskNode'
+import type { partialTaskDraft, TaskNode } from '../types/taskNode'
 import {
   buildEntryNodePromptAugmentations,
   createStandardEntryNodeTool,
@@ -13,7 +13,7 @@ import { createDefaultTaskyonToolSetup } from '../tools'
 import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { createPortableTestStorage } from '../testSupport/portableTestStorage'
 import {
-  buildLinkedTaskChain,
+  authenticateDiagnosticsRuntime,
   resolveDiagnosticsRuntimeConfig,
 } from '../testSupport/onlineProviderSupport'
 import { FunctionCall } from '../types/tools'
@@ -1456,7 +1456,7 @@ export const testEntryNodeDoesNotAskClarificationDuringErrorRecovery = async () 
 export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
   context?: DiagnosticsTestContext,
 ) => {
-  if (!context?.providerKey) {
+  if (!context?.providerSession) {
     return {
       skipped: true,
       reason: 'No configured provider key/session was available from the diagnostics harness.',
@@ -1509,7 +1509,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
       }),
     {
       chatCompletion: runtimeConfig.providerSettings,
-      entryNode: {},
+      ...(runtimeConfig.entryNodeSettings ? { entryNode: runtimeConfig.entryNodeSettings } : {}),
     },
     undefined,
     {
@@ -1530,9 +1530,9 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
   })
 
   try {
-    const selectedApi = runtimeConfig.providerSettings.provider
-    const providerKey = context.providerKey
-    await ty.updateChatCompletionApiKey(selectedApi, providerKey)
+    if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+      return { skipped: true, reason: 'The saved provider session is unavailable.' }
+    }
 
     const observed: TaskNode[] = []
     const byId = new Map<string, TaskNode>()
@@ -1556,7 +1556,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
             }
           }
         })
-        void buildLinkedTaskChain([
+        void Promise.resolve([
           {
             role: 'user',
             content: {
@@ -1573,7 +1573,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
             name: 'entryNode',
             arguments: {},
           }),
-        ])
+        ] satisfies partialTaskDraft[])
           .then((tasks) =>
             createTaskyonClient(ty.port).task.createChain({
               execute: true,
@@ -1625,7 +1625,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
     return {
       success: true,
       model: context.model,
-      selectedApi,
+      selectedApi: runtimeConfig.providerSettings.provider,
       assistantMessage:
         finish.assistant.content.type === 'message' ? finish.assistant.content.data : '',
       counts: {

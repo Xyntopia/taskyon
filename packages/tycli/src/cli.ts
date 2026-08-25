@@ -82,7 +82,6 @@ import { overpassMapTool } from '@taskyon/ui/gis/overpassMapTool'
 import { InternalTool as InternalToolSchema } from '../../taskyon/src/types/toolApi'
 import {
   createCliConfigStore,
-  resolveKeyForProvider,
   resolveProviderSelection,
   resolveStoredModel,
   resolveStoredReasoningEffort,
@@ -123,7 +122,11 @@ import { hasInterruptibleWorkerActivity } from './cli/interruptState'
 import { TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS, isInteractiveTaskResult } from './cli/taskWait'
 import type { ToolchainProfiles } from '@taskyon/taskyon'
 import { createNativePythonTool, findNativePythonExecutable } from './cli/nativePythonTool'
-import { applyCliRuntimeConfig, syncProviderRuntimeConfig } from './cli/runtime'
+import {
+  applyCliRuntimeConfig,
+  resolveProviderCredential,
+  syncProviderRuntimeConfig,
+} from './cli/runtime'
 import { runBashCommand } from './cli/bash'
 import {
   countDelegatedSubtaskToolCalls,
@@ -925,15 +928,10 @@ const printCliHelp = (host: InteractiveCliHost) => {
     `  ${prefix}_CHAT_COMPLETION_TRACE_LABEL Label trace files`,
     '  PROJECT_CWD / INIT_CWD                Workspace-root fallbacks',
     '',
-    'Provider selection and credentials:',
-    '  TASKYON_SELECTED_API                  openai, openrouter.ai, taskyon, local, or chatgpt-codex',
-    '  OPENAI_API_KEY                        OpenAI credentials',
-    '  OPENROUTER_API_KEY                    OpenRouter credentials',
-    '  TASKYON_API_KEY                       Taskyon credentials',
-    '  TASKYON_LOCAL_API_KEY                 Local provider credentials',
-    '  TASKYON_CHATGPT_CODEX_API_KEY        ChatGPT Codex credentials',
-    '  CHATGPT_CODEX_API_KEY                ChatGPT Codex credential alias',
-    '  TYAUTH / TASKYON_TYAUTH               Auth token for token/proxy diagnostics',
+    'Provider selection:',
+    `  ${prefix}_SELECTED_API                openai, openrouter.ai, taskyon, local, or chatgpt-codex`,
+    '  Provider credentials are managed by /keys and Taskyon-owned OAuth login.',
+    '  Taskyon-service diagnostics use the encrypted Taskyon provider secret when available.',
     '',
     'Notes:',
     '  Start with no arguments for the normal interactive workflow.',
@@ -1752,10 +1750,6 @@ async function setSelectedApi(
   setSelectedProvider(llmState, nextApi)
   if (configuredModel) setProviderModel(llmState, nextApi, configuredModel)
   await syncProviderRuntimeConfig(ty, llmState, nextApi, persistence.oauthStorage)
-  const key =
-    (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
-    resolveKeyForProvider(nextApi, persistence.environmentPrefix)
-  await ty.updateChatCompletionApiKey(nextApi, key ?? undefined)
 }
 
 async function loginProvider(
@@ -1779,7 +1773,6 @@ async function loginProvider(
     storage: oauthStorage,
     forceReauth: forceLogin,
   })
-  await ty.setSecret(API_KEY_STORE_NAME, selectedApi, accessToken)
   await ty.updateChatCompletionApiKey(selectedApi, accessToken)
   if (selectedApi === 'chatgpt-codex') applyCodexAccountHeader(llmState, accountId)
   await applyCliRuntimeConfig(ty, llmState)
@@ -1800,11 +1793,9 @@ async function getProviderStatusTags(
   llmState: CliLlmState,
   providerId: string,
   oauthSecretId: string,
-  environmentPrefix: string,
 ): Promise<string[]> {
   const api = getProviderSettings(llmState, providerId)
   const configuredSecret = await ty.getSecret(API_KEY_STORE_NAME, providerId, false, false)
-  const envKey = resolveKeyForProvider(providerId, environmentPrefix)
   const oauthEnabled = api ? !!getProviderOauthConfig(api) : false
   const oauthLoggedIn = oauthEnabled
     ? await hasStoredOauthLogin(ty, providerId, oauthSecretId)
@@ -1813,7 +1804,6 @@ async function getProviderStatusTags(
   return [
     llmState.selectedToolchainProfile === providerId ? 'selected' : '',
     configuredSecret ? 'saved-key' : '',
-    !configuredSecret && envKey ? 'env-key' : '',
     oauthEnabled ? 'oauth' : '',
     oauthLoggedIn ? 'logged-in' : '',
   ].filter(Boolean)
@@ -2204,9 +2194,7 @@ async function handleModelCommand(
       writeError(`No API definition for '${selectedApi}'.`)
       return
     }
-    const key =
-      (await ty.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)) ??
-      resolveKeyForProvider(selectedApi, persistence.environmentPrefix)
+    const key = await resolveProviderCredential(ty, llmState, selectedApi, persistence.oauthStorage)
     if (!key) {
       writeError(missingProviderCredentialsMessage(llmState, selectedApi))
       return
@@ -2313,7 +2301,6 @@ async function handleProviderCommand(
         llmState,
         providerId,
         persistence.oauthStorage.secretId,
-        persistence.environmentPrefix,
       )
       return `${providerId}${status.length > 0 ? ` [${status.join(', ')}]` : ''}`
     }),
@@ -2330,15 +2317,15 @@ async function handleProviderCommand(
     return
   }
 
-  const configuredKey =
-    (await ty.getSecret(API_KEY_STORE_NAME, nextApi, false, false)) ??
-    resolveKeyForProvider(nextApi, persistence.environmentPrefix)
   const hasOauth = !!getProviderOauthConfig(api)
+  const oauthLoggedIn = hasOauth
+    ? await hasStoredOauthLogin(ty, nextApi, persistence.oauthStorage.secretId)
+    : false
   const actionOptions = [
     llmState.selectedToolchainProfile === nextApi
       ? 'use provider (already selected)'
       : 'use provider',
-    ...(hasOauth ? [configuredKey ? 're-login with OAuth' : 'login with OAuth'] : []),
+    ...(hasOauth ? [oauthLoggedIn ? 're-login with OAuth' : 'login with OAuth'] : []),
     'back',
   ]
   const action = await selectFromList(rl, `\nProvider: ${nextApi}`, actionOptions)
@@ -2350,7 +2337,7 @@ async function handleProviderCommand(
   }
   if (hasOauth && action === 1) {
     try {
-      await loginProvider(ty, llmState, nextApi, configuredKey != null, persistence.oauthStorage)
+      await loginProvider(ty, llmState, nextApi, oauthLoggedIn, persistence.oauthStorage)
       writeNotice('success', `OAuth login complete for provider '${nextApi}'.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -2981,13 +2968,11 @@ async function main(host: InteractiveCliHost) {
   }
 
   const model = resolveStoredModel(stored, selectedApi)
-  const providerKey = resolveKeyForProvider(selectedApi, host.environmentPrefix)
   const reasoningEffort = resolveStoredReasoningEffort(stored)
   const config = {
     selectedApi,
     ...(model ? { model } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),
-    ...(providerKey ? { key: providerKey } : {}),
   } as CliApiConfig
   const chatCompletionTrace = debugConfiguration.chatCompletionTrace
   if (chatCompletionTrace) {
@@ -3224,13 +3209,6 @@ async function main(host: InteractiveCliHost) {
       ]),
     })
     currentSessionRecorded = true
-  }
-
-  const persistedKey = await taskyon.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)
-  const bootstrapKey = persistedKey ?? config.key
-  if (bootstrapKey) {
-    await taskyon.setSecret(API_KEY_STORE_NAME, selectedApi, bootstrapKey)
-    await taskyon.updateChatCompletionApiKey(selectedApi, bootstrapKey)
   }
 
   if (llmState.selectedToolchainProfile === 'local' && taskyonClientCommand === null) {
@@ -4409,7 +4387,14 @@ async function main(host: InteractiveCliHost) {
       }
 
       const currentProvider = llmState.selectedToolchainProfile
-      if (!(await taskyon.getSecret(API_KEY_STORE_NAME, currentProvider, false, false))) {
+      if (
+        !(await syncProviderRuntimeConfig(
+          taskyon,
+          llmState,
+          currentProvider,
+          persistence.oauthStorage,
+        ))
+      ) {
         writeError(missingProviderCredentialsMessage(llmState, currentProvider))
         continue
       }

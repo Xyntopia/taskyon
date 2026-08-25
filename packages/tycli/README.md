@@ -90,32 +90,17 @@ yarn tycli:diagnostics:release
 yarn tycli:discovery-fixture
 ```
 
-Select provider explicitly:
+Configure the persisted provider and credentials:
 
 ```bash
-TASKYON_SELECTED_API=openrouter.ai OPENROUTER_API_KEY=... yarn run
-TASKYON_SELECTED_API=taskyon TASKYON_API_KEY=... yarn run
-TASKYON_SELECTED_API=local TASKYON_LOCAL_API_KEY=local yarn run
-TASKYON_SELECTED_API=chatgpt-codex yarn run
-```
-
-OAuth login helpers:
-
-```bash
-yarn run
+yarn tycli
 /provider
+/keys
 ```
 
 Optional environment variables:
 
-- `TASKYON_SELECTED_API`
-- `OPENAI_API_KEY`
-- `OPENROUTER_API_KEY`
-- `TASKYON_API_KEY`
-- `TASKYON_LOCAL_API_KEY`
-- `TASKYON_CHATGPT_CODEX_API_KEY`
-- `CHATGPT_CODEX_API_KEY`
-- `TYAUTH`
+- `TYCLI_SELECTED_API`
 - `TASKYON_DENO_PATH` (optional Deno executable for explicitly selected Deno sandboxes)
 - `TASKYON_PYTHON_PATH` (optional native Python executable)
 - `TYCLI_DATA_DIR` (isolated task records, generated tools, artifacts, transcripts, and indexes)
@@ -134,7 +119,7 @@ Diagnostics defaults:
 - `cli-diagnostics` reuses the same persisted `tycli` provider, model, API key, and OAuth login state by default.
 - Normal runs print only per-test status, the final summary, failed test names, and the live log path.
 - `--verbose` restores full live runtime and test output; `TYCLI_LOG_DIR` selects the log directory. `tycli --clean-logs` removes runtime `.log` files and chat-completion `*_record.json` files from that directory.
-- `TYAUTH` / `--tyauth` is only needed for Taskyon auth-token tests such as token minting/proxy coverage.
+- Taskyon-service diagnostics use the encrypted Taskyon provider secret when available; no raw auth flag is required.
 - `--provider` and `--model` override the stored `tycli` selection for a diagnostics run.
 
 From the Nix dev shell:

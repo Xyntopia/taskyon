@@ -1,3 +1,11 @@
+export type DiagnosticsProviderSession = {
+  provider: string
+  model?: string
+  authenticate: (runtime: {
+    updateChatCompletionApiKey: (provider: string, value?: string) => Promise<void>
+  }) => Promise<boolean>
+}
+
 export type DiagnosticsTestContext = {
   tyauth?: string
   allowLongRun?: boolean
@@ -6,9 +14,7 @@ export type DiagnosticsTestContext = {
   model?: string
   llmSettings?: unknown
   toolchainConfig?: unknown
-  providerKey?: string
-  providerAccessToken?: string
-  accountId?: string
+  providerSession?: DiagnosticsProviderSession
 }
 
 export interface TaskyonTestFn {

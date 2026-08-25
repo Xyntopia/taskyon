@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createPortClient, createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBusWeb'
+import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
 import { taskyonRuntimeProtocol } from '@taskyon/taskyon/api'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
@@ -22,7 +23,6 @@ import {
 } from './types'
 import {
   createCliConfigStore,
-  resolveKeyForProvider,
   resolveProviderSelection,
   resolveStoredModel,
   resolveStoredReasoningEffort,
@@ -57,35 +57,53 @@ const runtimeDirectoryName = () => {
   ].join('')
 }
 
+export async function resolveProviderCredential(
+  ty: Taskyon,
+  llmState: CliLlmState,
+  providerId: string,
+  oauthStorage: CliOauthStorage,
+): Promise<string | null> {
+  const api = getProviderSettings(llmState, providerId)
+  const oauthSession =
+    providerId === 'chatgpt-codex' && api
+      ? await resolveCachedProviderOauthSession({
+          providerName: providerId,
+          api,
+          taskyon: ty,
+          storage: oauthStorage,
+        })
+      : null
+  const accountId =
+    oauthSession?.accountId ??
+    (providerId === 'chatgpt-codex'
+      ? await readProviderOauthAccountId(ty, providerId, oauthStorage)
+      : undefined)
+  if (providerId === 'chatgpt-codex') applyCodexAccountHeader(llmState, accountId)
+  return (
+    oauthSession?.accessToken ??
+    (await ty.getSecret(API_KEY_STORE_NAME, providerId, false, false)) ??
+    (providerId === 'local' ? 'local' : null)
+  )
+}
+
 export async function syncProviderRuntimeConfig(
   ty: Taskyon,
   llmState: CliLlmState,
   providerId: string,
   oauthStorage: CliOauthStorage,
-): Promise<null | { accessToken: string; accountId?: string }> {
-  let cachedSession: null | { accessToken: string; accountId?: string } = null
-
-  if (providerId === 'chatgpt-codex') {
-    const api = getProviderSettings(llmState, providerId)
-    if (api) {
-      cachedSession = await resolveCachedProviderOauthSession({
-        providerName: providerId,
-        api,
-        taskyon: ty,
-        storage: oauthStorage,
-      })
-      const accountId =
-        cachedSession?.accountId ?? (await readProviderOauthAccountId(ty, providerId, oauthStorage))
-      applyCodexAccountHeader(llmState, accountId)
-      if (cachedSession?.accessToken) {
-        await ty.setSecret(API_KEY_STORE_NAME, providerId, cachedSession.accessToken)
-        await ty.updateChatCompletionApiKey(providerId, cachedSession.accessToken)
-      }
-    }
+): Promise<DiagnosticsProviderSession | undefined> {
+  const providerSession: DiagnosticsProviderSession = {
+    provider: providerId,
+    authenticate: async (runtime) => {
+      const credential = await resolveProviderCredential(ty, llmState, providerId, oauthStorage)
+      if (!credential) return false
+      await runtime.updateChatCompletionApiKey(providerId, credential)
+      return true
+    },
   }
-
+  const authenticated = await providerSession.authenticate(ty)
   await applyCliRuntimeConfig(ty, llmState)
-  return cachedSession
+  return authenticated ? providerSession : undefined
 }
 
 export async function applyCliRuntimeConfig(ty: Taskyon, llmState: CliLlmState) {
@@ -110,8 +128,8 @@ export async function bootstrapCliTaskyon(args?: {
   selectedApi: string
   model?: string
   stored: StoredConfig
-  providerKey?: string
-  oauthSession?: { accessToken: string; accountId?: string } | null
+  providerSession?: DiagnosticsProviderSession
+  taskyonAuth?: string
 }> {
   const configStore = createCliConfigStore(args?.storagePaths ?? resolveTaskyonCliStoragePaths())
   const { cryptoSession, stored } = await configStore.initPersistentCryptoSession()
@@ -135,13 +153,11 @@ export async function bootstrapCliTaskyon(args?: {
   }
 
   const model = args?.model ?? resolveStoredModel(stored, selectedApi)
-  const envProviderKey = resolveKeyForProvider(selectedApi, environmentPrefix)
   const reasoningEffort = resolveStoredReasoningEffort(stored)
   const config: CliApiConfig = {
     selectedApi,
     ...(model ? { model } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),
-    ...(envProviderKey ? { key: envProviderKey } : {}),
   }
 
   const llmState = createCliLlmState(config, cliToolchainProfiles, CLI_FLOW_TOOL_NAME)
@@ -180,15 +196,13 @@ export async function bootstrapCliTaskyon(args?: {
     },
   )
 
-  const persistedKey = await taskyon.getSecret(API_KEY_STORE_NAME, selectedApi, false, false)
-  const bootstrapKey = persistedKey ?? config.key
-  if (bootstrapKey) {
-    await taskyon.setSecret(API_KEY_STORE_NAME, selectedApi, bootstrapKey)
-    await taskyon.updateChatCompletionApiKey(selectedApi, bootstrapKey)
-  }
-
-  const oauthSession = await syncProviderRuntimeConfig(taskyon, llmState, selectedApi, oauthStorage)
-  const providerKey = oauthSession?.accessToken ?? bootstrapKey
+  const providerSession = await syncProviderRuntimeConfig(
+    taskyon,
+    llmState,
+    selectedApi,
+    oauthStorage,
+  )
+  const taskyonAuth = await taskyon.getSecret(API_KEY_STORE_NAME, 'taskyon', false, false)
 
   return {
     taskyon,
@@ -197,7 +211,7 @@ export async function bootstrapCliTaskyon(args?: {
     selectedApi,
     ...(model ? { model } : {}),
     stored,
-    ...(providerKey ? { providerKey } : {}),
-    oauthSession,
+    ...(providerSession ? { providerSession } : {}),
+    ...(taskyonAuth ? { taskyonAuth } : {}),
   }
 }

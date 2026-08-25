@@ -1,8 +1,8 @@
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
-import { buildChatProviderRequest } from '@taskyon/taskyon/tools/chatCompletion/providerRequest'
 import type { ChatCompletionProviderSettings, ProviderRequestTrace } from '@taskyon/taskyon'
 import type { ModelMessage, LanguageModelUsage } from 'ai'
 import { streamText } from 'ai'
+import { createAuthenticatedProviderRequestBuilder } from '../authenticatedProviderRequest'
 
 const stableRootInstructions = [
   'Prompt-cache tree laboratory.',
@@ -65,7 +65,7 @@ export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
   const api = (
     context?.toolchainConfig as { chatCompletion?: ChatCompletionProviderSettings } | undefined
   )?.chatCompletion
-  if (!api || !context?.providerKey) {
+  if (!api || !context?.providerSession) {
     return { skipped: true, reason: 'No saved provider session is available.' }
   }
   if (
@@ -73,6 +73,13 @@ export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
     !context.model?.includes('gpt-5.6')
   ) {
     return { skipped: true, reason: 'This release diagnostic requires an OpenAI GPT-5.6 model.' }
+  }
+  const buildProviderRequest = await createAuthenticatedProviderRequestBuilder(
+    context.providerSession,
+    api,
+  )
+  if (!buildProviderRequest) {
+    return { skipped: true, reason: 'The saved provider session is unavailable.' }
   }
 
   const branches = [
@@ -95,12 +102,10 @@ export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
         recordedAt: new Date().toISOString(),
         attempts: [],
       }
-      const request = await buildChatProviderRequest({
+      const request = await buildProviderRequest({
         messages: branch.messages,
         tools: {},
         selectedModel: context.model,
-        api,
-        apiKey: context.providerKey,
         providerRequest,
         promptCacheRootId: 'release-prompt-cache-tree-laboratory',
       })

@@ -49,6 +49,7 @@ import {
   taskyonRuntimeProtocol,
 } from '@taskyon/taskyon'
 import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
+import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
 import {
   createPersistentOauthTokenGetter,
   OAUTH_CREDENTIALS_SECRET_PREFIX,
@@ -749,6 +750,20 @@ const useApiManagement = (
     return (await ty.getSecret(AiProvideKeyStoreName, name, false, false)) as KeyString | null
   }
 
+  const createDiagnosticsProviderSession = (
+    provider: string,
+    model?: string,
+  ): DiagnosticsProviderSession => ({
+    provider,
+    ...(model ? { model } : {}),
+    authenticate: async (runtime) => {
+      const credential = await getProviderApiKey(provider)
+      if (!credential) return false
+      await runtime.updateChatCompletionApiKey(provider, credential)
+      return true
+    },
+  })
+
   const providerProfiles = computed(() => getToolchainProviderProfiles(stateRefs.toolchainProfiles))
   const selectedProviderProfile = computed(() => {
     const selected = stateRefs.selectedToolchainProfile
@@ -1002,6 +1017,7 @@ const useApiManagement = (
     noAiService,
     setProviderApiKey,
     getProviderApiKey,
+    createDiagnosticsProviderSession,
     // Method to handle the updateBotName event
     updateModelAndApi,
     llmModels: computed(() => llmModelsInternal.value),

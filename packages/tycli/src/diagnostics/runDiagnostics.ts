@@ -38,7 +38,6 @@ type CliOptions = {
   verbose: boolean
   allowLongRun: boolean
   filter: string
-  tyauth: string | undefined
   category?: DiagnosticsCategory
   provider?: string
   model?: string
@@ -116,7 +115,6 @@ function parseArgs(args: string[]): CliOptions {
     verbose: false,
     allowLongRun: false,
     filter: '',
-    tyauth: process.env.TYAUTH ?? process.env.TASKYON_TYAUTH ?? undefined,
     ...(process.env.TASKYON_SELECTED_API?.trim()
       ? { provider: process.env.TASKYON_SELECTED_API.trim() }
       : {}),
@@ -139,8 +137,6 @@ function parseArgs(args: string[]): CliOptions {
       opts.category = parseCategory(arg.slice('--category='.length))
     } else if (arg === '--filter') opts.filter = args[++i] ?? ''
     else if (arg.startsWith('--filter=')) opts.filter = arg.slice('--filter='.length)
-    else if (arg === '--tyauth') opts.tyauth = args[++i] ?? undefined
-    else if (arg.startsWith('--tyauth=')) opts.tyauth = arg.slice('--tyauth='.length)
     else if (arg === '--provider') {
       const provider = args[++i]?.trim()
       if (provider) opts.provider = provider
@@ -377,14 +373,6 @@ function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | 
     }
   }
 
-  if (metadata.requiresAuth && !opts.tyauth) {
-    return {
-      skipped: true,
-      reason: 'Requires Taskyon auth. Set TYAUTH or pass --tyauth.',
-      testId: id,
-    }
-  }
-
   if (metadata.requiresLargeTokens && !opts.includeLargeTokens) {
     return {
       skipped: true,
@@ -405,7 +393,6 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
 
         const nextContext: DiagnosticsTestContext = {
           ...(ctx ?? {}),
-          ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
           allowLongRun: opts.allowLongRun,
         }
         return await Promise.resolve(fn(nextContext))
@@ -415,6 +402,7 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
       if (fn.timeoutMs !== undefined) wrapped.timeoutMs = fn.timeoutMs
       const modelBased = fn.modelBased ?? diagnosticsTestMetadata[testIdentifier(name)]?.modelBased
       if (modelBased !== undefined) wrapped.modelBased = modelBased
+      if (diagnosticsTestMetadata[testIdentifier(name)]?.requiresAuth) wrapped.requiresAuth = true
       return [name, wrapped]
     }),
   )
@@ -523,35 +511,6 @@ function buildSummary(
   }
 }
 
-function applyDiagnosticsEnvironment(context: DiagnosticsTestContext) {
-  if (context.selectedApi) process.env.TASKYON_SELECTED_API = context.selectedApi
-  if (context.model) {
-    process.env.TASKYON_TEST_MODEL = context.model
-  }
-  if (context.tyauth) {
-    process.env.TYAUTH = context.tyauth
-    process.env.TASKYON_TYAUTH = context.tyauth
-  }
-  if (context.selectedApi === 'openai' && context.providerKey) {
-    process.env.TASKYON_OPENAI_API_KEY = context.providerKey
-    process.env.OPENAI_API_KEY = context.providerKey
-  }
-  if (context.selectedApi === 'taskyon' && context.providerKey) {
-    process.env.TASKYON_API_KEY = context.providerKey
-  }
-  if (context.selectedApi === 'openrouter.ai' && context.providerKey) {
-    process.env.TASKYON_OPENROUTER_API_KEY = context.providerKey
-    process.env.OPENROUTER_API_KEY = context.providerKey
-  }
-  if (context.selectedApi === 'chatgpt-codex' && context.providerKey) {
-    process.env.TASKYON_CHATGPT_CODEX_API_KEY = context.providerKey
-    process.env.CHATGPT_CODEX_API_KEY = context.providerKey
-  }
-  if (context.selectedApi === 'chatgpt-codex' && context.accountId) {
-    process.env.TASKYON_CHATGPT_CODEX_ACCOUNT_ID = context.accountId
-  }
-}
-
 async function main(): Promise<number> {
   const opts = parseArgs(process.argv.slice(2))
 
@@ -643,19 +602,14 @@ async function main(): Promise<number> {
       ...(opts.model ? { model: opts.model } : {}),
     })
     const context: DiagnosticsTestContext = {
-      ...(opts.tyauth ? { tyauth: opts.tyauth } : {}),
+      ...(runtime.taskyonAuth ? { tyauth: runtime.taskyonAuth } : {}),
       allowLongRun: opts.allowLongRun,
       selectedApi: runtime.selectedApi,
       llmSettings: runtime.llmState.settings,
       toolchainConfig: getSelectedToolchainConfig(runtime.llmState),
       ...(runtime.model ? { model: runtime.model } : {}),
-      ...(runtime.providerKey ? { providerKey: runtime.providerKey } : {}),
-      ...(runtime.oauthSession?.accessToken
-        ? { providerAccessToken: runtime.oauthSession.accessToken }
-        : {}),
-      ...(runtime.oauthSession?.accountId ? { accountId: runtime.oauthSession.accountId } : {}),
+      ...(runtime.providerSession ? { providerSession: runtime.providerSession } : {}),
     }
-    applyDiagnosticsEnvironment(context)
 
     const startedAt = Date.now()
     const results = await runDiagnosticsTests(wrapped, {

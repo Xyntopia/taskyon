@@ -219,7 +219,6 @@ async function runDiagnosticsMode() {
     typeof chatCompletionConfig.provider === 'string'
       ? chatCompletionConfig.provider
       : undefined
-  const providerKey = selectedApi ? await state.getProviderApiKey(selectedApi) : null
   const runOptions: Parameters<typeof runDiagnosticsTests>[1] = {
     details: diagnosticsDetailed.value,
     context: {
@@ -228,7 +227,14 @@ async function runDiagnosticsMode() {
       ...(state.currentModelId ? { model: state.currentModelId } : {}),
       llmSettings: appState.llmSettings,
       toolchainConfig: appState.effectiveToolchainConfig,
-      ...(typeof providerKey === 'string' ? { providerKey } : {}),
+      ...(selectedApi
+        ? {
+            providerSession: state.createDiagnosticsProviderSession(
+              selectedApi,
+              state.currentModelId,
+            ),
+          }
+        : {}),
     },
     onProgress: (progress) => {
       void emitHeadlessEvent('headless-diagnostics-progress', {

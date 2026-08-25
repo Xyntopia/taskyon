@@ -4,12 +4,12 @@ import { createTaskyonClient } from '../api'
 import { createStandardEntryNodeTool } from '../tools/entryNode'
 import { createDefaultTaskyonToolSetup } from '../tools'
 import {
-  buildLinkedTaskChain,
+  authenticateDiagnosticsRuntime,
   resolveDiagnosticsRuntimeConfig,
 } from '../testSupport/onlineProviderSupport'
 import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { toolCall } from '../types/toolApi'
-import type { TaskNode } from '../types/taskNode'
+import type { partialTaskDraft, TaskNode } from '../types/taskNode'
 import { createPortableTestStorage } from '../testSupport/portableTestStorage'
 
 const assert = (condition: unknown, message: string) => {
@@ -43,7 +43,7 @@ const waitForTaskMeta = async (
 export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
   context?: DiagnosticsTestContext,
 ) => {
-  if (!context?.providerKey) {
+  if (!context?.providerSession) {
     return {
       skipped: true,
       reason: 'No configured provider key/session was available from the diagnostics harness.',
@@ -74,8 +74,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
       }),
     {
       chatCompletion: runtimeConfig.providerSettings,
-      entryNode: {
-      },
+      ...(runtimeConfig.entryNodeSettings ? { entryNode: runtimeConfig.entryNodeSettings } : {}),
     },
     undefined,
     {
@@ -96,9 +95,9 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
   })
 
   try {
-    const selectedApi = runtimeConfig.providerSettings.provider
-    const providerKey = context.providerKey
-    await ty.updateChatCompletionApiKey(selectedApi, providerKey)
+    if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+      return { skipped: true, reason: 'The saved provider session is unavailable.' }
+    }
 
     const observed: TaskNode[] = []
     const finish = await new Promise<{ assistant: TaskNode; tasks: TaskNode[] }>(
@@ -120,7 +119,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
             }
           }
         })
-        void buildLinkedTaskChain([
+        void Promise.resolve([
           {
             role: 'user',
             content: {
@@ -137,7 +136,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
               },
             },
           }),
-        ])
+        ] satisfies partialTaskDraft[])
           .then((tasks) =>
             createTaskyonClient(ty.port).task.createChain({
               execute: true,
@@ -174,7 +173,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
     return {
       success: true,
       model: context.model,
-      selectedApi,
+      selectedApi: runtimeConfig.providerSettings.provider,
       assistantMessage:
         finish.assistant.content.type === 'message' ? finish.assistant.content.data : '',
     }

@@ -325,35 +325,7 @@ export function resolveProviderSelection(
   const explicitApi = prefixed('SELECTED_API')
   if (explicitApi) return explicitApi
   if (stored.selectedApi) return stored.selectedApi
-  if (prefixed('OPENAI_API_KEY') || environment.OPENAI_API_KEY) return 'openai'
-  if (
-    prefixed('CHATGPT_CODEX_API_KEY') ||
-    environment.TASKYON_CHATGPT_CODEX_API_KEY ||
-    environment.CHATGPT_CODEX_API_KEY
-  ) {
-    return 'chatgpt-codex'
-  }
-  if (prefixed('OPENROUTER_API_KEY') || environment.OPENROUTER_API_KEY) return 'openrouter.ai'
-  if (prefixed('API_KEY') || environment.TASKYON_API_KEY) return 'taskyon'
   return 'local'
-}
-
-export function resolveKeyForProvider(
-  provider: string,
-  environmentPrefix = 'TASKYON',
-  environment: Readonly<Record<string, string | undefined>> = process.env,
-): string | undefined {
-  const prefixedKey = (name: string) => environment[`${environmentPrefix}_${name}`]
-  if (provider === 'openai') return prefixedKey('OPENAI_API_KEY') ?? environment.OPENAI_API_KEY
-  if (provider === 'chatgpt-codex') {
-    return prefixedKey('CHATGPT_CODEX_API_KEY') ?? environment.CHATGPT_CODEX_API_KEY
-  }
-  if (provider === 'openrouter.ai') {
-    return prefixedKey('OPENROUTER_API_KEY') ?? environment.OPENROUTER_API_KEY
-  }
-  if (provider === 'taskyon') return prefixedKey('API_KEY') ?? environment.TASKYON_API_KEY
-  if (provider === 'local') return prefixedKey('LOCAL_API_KEY') ?? 'local'
-  return undefined
 }
 
 const taskyonConfigStore = createCliConfigStore(resolveTaskyonCliStoragePaths())

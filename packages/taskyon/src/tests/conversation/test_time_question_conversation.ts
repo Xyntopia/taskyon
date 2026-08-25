@@ -6,7 +6,10 @@ import { tyCore, type Taskyon } from '../../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../../core/toolRpc'
 import { createDefaultTaskyonToolSetup } from '../../tools'
 import { createStandardEntryNodeTool } from '../../tools/entryNode'
-import { resolveDiagnosticsRuntimeConfig } from '../../testSupport/onlineProviderSupport'
+import {
+  authenticateDiagnosticsRuntime,
+  resolveDiagnosticsRuntimeConfig,
+} from '../../testSupport/onlineProviderSupport'
 import type { ChatCompletionProviderSettings } from '../../types/chatCompletion'
 import type { llmSettings } from '../../types/profiles'
 import { partialTaskDraft, type TaskNode } from '../../types/taskNode'
@@ -565,7 +568,7 @@ runTimeQuestionConversationUsesClockToolScenario.helper = true
 export const testTimeQuestionConversationUsesClockTool = async (
   context?: DiagnosticsTestContext,
 ) => {
-  if (!context?.providerKey) {
+  if (!context?.providerSession) {
     return {
       skipped: true,
       reason: 'No configured provider key/session was available from the diagnostics harness.',
@@ -584,8 +587,9 @@ export const testTimeQuestionConversationUsesClockTool = async (
     runtimeConfig.providerSettings,
   )
   try {
-    const providerKey = context.providerKey
-    await ty.updateChatCompletionApiKey(runtimeConfig.providerSettings.provider, providerKey)
+    if (!(await authenticateDiagnosticsRuntime(context, ty))) {
+      return { skipped: true, reason: 'The saved provider session is unavailable.' }
+    }
     return await runTimeQuestionConversationUsesClockToolScenario(ty)
   } finally {
     cleanup()

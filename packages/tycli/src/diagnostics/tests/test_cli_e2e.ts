@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import {
   runCliE2eSession,
   testTaskRendererDoesNotPrintTransientWorkerProgress as runTaskRendererDoesNotPrintTransientWorkerProgress,
@@ -7,7 +8,6 @@ import {
   testDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls as runDelegatedSubtaskCountsOnlyItsExecutableFunctionCalls,
   testWorkerStatusTextHidesHiddenTools as runWorkerStatusTextHidesHiddenTools,
   testCliConcurrentSessionsStartWithSharedHome as runCliConcurrentSessionsStartWithSharedHome,
-  testCliDoesNotUseCodexCliOAuthCache as runCliDoesNotUseCodexCliOAuthCache,
   testEmptyCliSessionDoesNotCreateConversationFile as runEmptyCliSessionDoesNotCreateConversationFile,
   testResumeConversationReportsStorageAndLogs as runResumeConversationReportsStorageAndLogs,
   testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
@@ -57,11 +57,6 @@ testCliBracketedPastePreservesMultilinePrompt.description =
   runBracketedPastePreservesMultilinePrompt.description
 testCliBracketedPastePreservesMultilinePrompt.timeoutMs =
   runBracketedPastePreservesMultilinePrompt.timeoutMs
-
-export const testCliDoesNotUseCodexCliOAuthCache = runCliDoesNotUseCodexCliOAuthCache
-testCliDoesNotUseCodexCliOAuthCache.description =
-  'Does not authenticate tycli from the official Codex OAuth cache.'
-testCliDoesNotUseCodexCliOAuthCache.timeoutMs = 60_000
 
 export const testCtrlCCancelsModelMenuAndKeepsPromptUsable = Object.assign(
   runCtrlCCancelsModelMenuAndKeepsPromptUsable,
@@ -164,7 +159,9 @@ testCliModelMenuNavigationDoesNotAccumulateBlankLines.description =
   'Up and Down navigation redraws the model menu without accumulating blank lines.'
 testCliModelMenuNavigationDoesNotAccumulateBlankLines.timeoutMs = 60_000
 
-export const testCliHelloWorldProducesAssistantResponse = async () => {
+export const testCliHelloWorldProducesAssistantResponse = async (
+  context?: DiagnosticsTestContext,
+) => {
   const result = await runCliE2eSession({
     testName: 'testCliHelloWorldProducesAssistantResponse',
     steps: [
@@ -197,6 +194,12 @@ export const testCliHelloWorldProducesAssistantResponse = async () => {
     result.output.includes('[assistant|message]'),
     `Expected assistant response in CLI output.\n${result.output}`,
   )
+  if (context?.selectedApi && context.model) {
+    assert(
+      result.output.includes(`[${context.selectedApi} | ${context.model} |`),
+      `Expected CLI to reuse ${context.selectedApi} / ${context.model}.\n${result.output}`,
+    )
+  }
   for (const forbidden of forbiddenStartupRegressions) {
     assert(
       !result.output.includes(forbidden),
