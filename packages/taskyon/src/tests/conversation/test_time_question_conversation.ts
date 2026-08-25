@@ -1,7 +1,6 @@
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import { createTaskyonClient } from '../../api'
 import { buildCreateNewTaskChain } from '../../core/createNewTaskChain'
-import { forgeTaskChain } from '../../core/createTasks'
 import { tyCore, type Taskyon } from '../../core/init'
 import { createExternalToolContext, registerToolRpcTools } from '../../core/toolRpc'
 import { createDefaultTaskyonToolSetup } from '../../tools'
@@ -310,9 +309,8 @@ const getConversationTasks = async (ty: Taskyon, processingResult: ConversationR
 
 const processConversationUntilReturn =
   (ty: Taskyon) => async (taskChain: ReturnType<typeof buildCreateNewTaskChain>) => {
-    const tasks = await forgeTaskChain([taskChain])
-    const initialIds = tasks.map((task) => task.id)
-    const trackedIds = new Set(initialIds)
+    let initialIds: string[] = []
+    const trackedIds = new Set<string>()
     const pendingByParentId = new Map<string, TaskNodeWithParent[]>()
     const observedTasks: TaskNode[] = []
 
@@ -322,7 +320,7 @@ const processConversationUntilReturn =
       pendingByParentId.set(task.parentID, pending)
     }
 
-    return await new Promise<ConversationRunResult>((resolve) => {
+    return await new Promise<ConversationRunResult>((resolve, reject) => {
       const finish = (result: ConversationRunResult) => {
         clearTimeout(timeout)
         unsubscribe()
@@ -383,11 +381,22 @@ const processConversationUntilReturn =
         })
       }, timeoutMs)
 
-      void createTaskyonClient(ty.port).task.createChain({
-        tasks,
-        execute: true,
-        show: true,
-      })
+      void createTaskyonClient(ty.port)
+        .task.createChain({
+          tasks: taskChain,
+          execute: true,
+          show: true,
+        })
+        .then(({ ids }) => {
+          initialIds = ids
+          ids.forEach((id) => trackedIds.add(id))
+          ids.forEach((id) => {
+            const pendingChildren = pendingByParentId.get(id) ?? []
+            pendingByParentId.delete(id)
+            pendingChildren.forEach(emitTaskAndFlush)
+          })
+        })
+        .catch((error) => reject(error instanceof Error ? error : new Error(String(error))))
     })
   }
 
@@ -441,14 +450,11 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
         task.content.type === 'functioncall' && isNamedFunctionCall(task.content.data, 'clock'),
     )
     const tasksAfterClock = clockCallIndex >= 0 ? conversationTasks.slice(clockCallIndex + 1) : []
-    const analyzeToolResultCall = tasksAfterClock.find(
+    const toolResultContinuationCall = tasksAfterClock.find(
       (task: TaskNode) =>
         task.content.type === 'functioncall' &&
         isNamedFunctionCall(task.content.data, 'chatCompletion') &&
-        hasPromptSnippet(
-          task.content.data,
-          'Analyze the previous tool result and continue the task.',
-        ),
+        hasPromptSnippet(task.content.data, 'Continue from the previous tool result.'),
     )
     const clockCall = clockCallIndex >= 0 ? conversationTasks[clockCallIndex] : undefined
     const clockResult = conversationTasks.find(isClockToolResult)
@@ -493,8 +499,8 @@ export const runTimeQuestionConversationUsesClockToolScenario = async (ty: Tasky
       stopSummary,
     )
     await assertWithDiagnostics(
-      !!analyzeToolResultCall,
-      'Expected an AnalyzeToolResult phase after the clock tool returned',
+      !!toolResultContinuationCall,
+      'Expected the configured tool-result continuation after the clock tool returned',
       ty,
       taskChain,
       observedTasks,
