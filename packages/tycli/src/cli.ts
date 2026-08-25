@@ -142,8 +142,9 @@ import {
   SUPPORTED_PROVIDERS,
   type TycliSessionRecord,
 } from './cli/types'
-import { createExplorationTool } from './tools/explorationTool'
-import { updateFilesTool } from './tools/patchTool'
+import { createExplorationTool, formatExplorationContext } from './tools/explorationTool'
+import { createUpdateFilesTool } from './tools/patchTool'
+import { createNodeWorkspaceOperations } from './tools/nodeWorkspaceOperations'
 import { downloadFileTool } from './tools/downloadFileTool'
 import { githubIssuesTool } from './tools/githubIssuesTool'
 import { gitlabTool } from './tools/gitlabTool'
@@ -2995,7 +2996,11 @@ async function main(host: InteractiveCliHost) {
     setChatCompletionTraceWriter(undefined)
   }
   const explorationContextFiles: Record<string, string> = {}
-  const explorationTool = createExplorationTool(explorationContextFiles)
+  const workspaceOperations = createNodeWorkspaceOperations(process.cwd(), {
+    onDidWrite: (path) => delete explorationContextFiles[path],
+  })
+  const explorationTool = createExplorationTool(explorationContextFiles, workspaceOperations)
+  const updateFilesTool = createUpdateFilesTool(workspaceOperations)
 
   const toolchainProfiles = chatCompletionTrace
     ? {
@@ -3059,7 +3064,10 @@ async function main(host: InteractiveCliHost) {
       }
     },
     stableContext: () => host.buildStableContext(projectInstructions),
-    extraContext: () => buildCliVolatileContext(),
+    extraContext: () =>
+      [buildCliVolatileContext(), formatExplorationContext(explorationContextFiles)]
+        .filter(Boolean)
+        .join('\n\n'),
     includeRoutinePrompt: false,
     ...(host.defaultAllowedTools ? { defaultAllowedTools: host.defaultAllowedTools } : {}),
   })
@@ -3150,6 +3158,7 @@ async function main(host: InteractiveCliHost) {
         unavailableToolNames,
         pythonTool: null,
         storageClient,
+        workspaceOperations,
       }),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in this CLI.'),

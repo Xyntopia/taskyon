@@ -11,6 +11,7 @@ export const browserRecordNamespacePrefixes = [
   'taskyon/ui-state/',
   'tool-files/',
   'ui/',
+  'workspace-files/',
 ] as const
 
 export const isBrowserRecordNamespace = (logicalNamespace: string) => {

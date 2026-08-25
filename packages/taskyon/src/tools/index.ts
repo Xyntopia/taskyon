@@ -26,6 +26,7 @@ import { useFullSmallTools } from './usefulSmallTools'
 import { appDevTools } from './webAppDev'
 import { webResearchTools } from './webResearchTool'
 import { wfcGenerator } from './wavefunctioncollapse'
+import { createStandardWorkspaceTools, type WorkspaceOperations } from './workspaceTools'
 
 export {
   resolveAgentToolCatalog,
@@ -39,8 +40,12 @@ export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>
   storageClient?: TaskyonStorageClient
   pythonTool?: InternalTool | null
+  workspaceOperations?: WorkspaceOperations
 }): TyCoreToolSetup => ({
   baseTools: [
+    ...(options?.workspaceOperations
+      ? createStandardWorkspaceTools(options.workspaceOperations)
+      : []),
     ...smallHelperTools,
     webSearch,
     ...appDevTools,

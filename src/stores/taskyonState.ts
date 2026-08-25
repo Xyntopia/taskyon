@@ -80,6 +80,7 @@ import { useConversationHistory } from '@taskyon/ui/modules/useConversationHisto
 import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
+import { createStorageWorkspaceOperations } from '@taskyon/taskyon/tools/storageWorkspaceOperations'
 import { createTaskyonResourceFilesLoader } from 'src/modules/taskyonResourceFiles'
 import { isBrowserRecordNamespace } from 'src/modules/taskyonStorageNamespaces'
 import { until } from '@vueuse/core'
@@ -1333,6 +1334,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       createDefaultTaskyonToolSetup({
         unavailableToolNames: getBrowserUnavailableToolNames(),
         storageClient,
+        workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
       }),
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
     authorizePopup: authorizeBrowserPopup,
