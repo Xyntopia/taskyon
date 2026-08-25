@@ -1,7 +1,7 @@
 import { mkdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { updateFilesTool } from '../../tools/patchTool'
+import { createUpdateFilesTool } from '../../tools/patchTool'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -21,6 +21,7 @@ const withTempCwd = async <T>(prefix: string, fn: (dir: string) => Promise<T>) =
 
 export const testUpdateFilesCreatesMissingFileWithNewContent = async () =>
   await withTempCwd('tycli-update-files-create', async (dir) => {
+    const updateFilesTool = createUpdateFilesTool()
     const result = await updateFilesTool.function?.({
       updates: [
         {
@@ -48,6 +49,7 @@ export const testUpdateFilesCreatesMissingFileWithNewContent = async () =>
 
 export const testUpdateFilesRejectsMixedEditModes = async () =>
   await withTempCwd('tycli-update-files-mixed', async () => {
+    const updateFilesTool = createUpdateFilesTool()
     let message = ''
     try {
       await updateFilesTool.function?.({
@@ -71,8 +73,24 @@ export const testUpdateFilesRejectsMixedEditModes = async () =>
     return { success: true }
   })
 
+export const testUpdateFilesComposesSameFileUpdatesBeforeWriting = async () =>
+  await withTempCwd('tycli-update-files-compose', async (dir) => {
+    const updateFilesTool = createUpdateFilesTool()
+    await updateFilesTool.function?.({
+      updates: [
+        { filePath: 'result.md', newContent: '# Draft\n' },
+        { filePath: 'result.md', patches: [{ search: '# Draft', replace: '# Final' }] },
+      ],
+    })
+
+    const content = await readFile(join(dir, 'result.md'), 'utf8')
+    assert(content === '# Final\n', `Expected composed same-file updates, got ${content}`)
+    return { success: true }
+  })
+
 export const testUpdateFilesRejectsPathsOutsideArtifactRoot = async () =>
   await withTempCwd('tycli-update-files-artifact-root', async () => {
+    const updateFilesTool = createUpdateFilesTool()
     let message = ''
     try {
       await updateFilesTool.function?.({
@@ -97,6 +115,7 @@ export const testUpdateFilesRejectsPathsOutsideArtifactRoot = async () =>
   })
 
 export const testUpdateFilesSchemaDeclaresExclusiveEditModes = () => {
+  const updateFilesTool = createUpdateFilesTool()
   const updates = updateFilesTool.parameters.properties?.updates
   const itemSchema =
     updates && typeof updates === 'object' && 'items' in updates ? updates.items : undefined
@@ -124,6 +143,8 @@ testUpdateFilesCreatesMissingFileWithNewContent.description =
   'updateFiles can create a missing nested file when the model uses newContent.'
 testUpdateFilesRejectsMixedEditModes.description =
   'updateFiles returns a recoverable validation error when a provider mixes edit modes.'
+testUpdateFilesComposesSameFileUpdatesBeforeWriting.description =
+  'updateFiles composes repeated updates to one file before performing its guarded write.'
 testUpdateFilesRejectsPathsOutsideArtifactRoot.description =
   'updateFiles rejects research artifacts that try to write outside the selected artifact root.'
 testUpdateFilesSchemaDeclaresExclusiveEditModes.description =

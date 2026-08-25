@@ -29,6 +29,7 @@ export const createPortableTestStorage = () => {
   })
 
   return {
+    storageClient: storage,
     taskManagerStorageFactory: ({ sessionId }: { sessionId: string }) =>
       connectTaskManagerStorageFromProtocol(storage, sessionId),
     destroy,
