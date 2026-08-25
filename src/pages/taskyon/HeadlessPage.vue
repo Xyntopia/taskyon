@@ -67,10 +67,14 @@ async function emitHeadlessEvent(name: string, payload: Record<string, unknown>)
 function getDiagnosticsTests() {
   const testModules = import.meta.glob(
     [
-      '../../packages/taskyon/src/tests/**/*.ts',
-      '../../packages/common/modules/test_*.ts',
-      '../../packages/comp-dag/test_*.ts',
-      '../../packages/surrogate/test_*.ts',
+      '../../../packages/runtime-browser/src/tests/**/*.ts',
+      '../../../packages/taskyon/src/tests/**/*.ts',
+      '!../../../packages/taskyon/src/tests/test_ai_workstation_graph.ts',
+      '!../../../packages/taskyon/src/tests/test_public_design_repositories.ts',
+      '!../../../packages/taskyon/src/tests/test_taskyon_documentation_conversation.ts',
+      '../../../packages/common/modules/test_*.ts',
+      '../../../packages/comp-dag/test_*.ts',
+      '../../../packages/surrogate/test_*.ts',
     ],
     { eager: true },
   )

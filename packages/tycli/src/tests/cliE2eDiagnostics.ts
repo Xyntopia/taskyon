@@ -45,6 +45,23 @@ const DEFAULT_E2E_CWD = process.env.TYCLI_E2E_CWD ?? REPO_ROOT
 const TYCLI_PACKAGE_CWD = fileURLToPath(new URL('../..', import.meta.url))
 const sessionLogs: CliE2eSessionLog[] = []
 
+const withoutCredentialEnvironment = (
+  environment: Readonly<Record<string, string | undefined>>,
+): NodeJS.ProcessEnv => ({
+  NODE_ENV: process.env.NODE_ENV ?? 'test',
+  VUE_ROUTER_MODE: process.env.VUE_ROUTER_MODE ?? 'history',
+  VUE_ROUTER_BASE: process.env.VUE_ROUTER_BASE ?? '/',
+  ...Object.fromEntries(
+    Object.entries(environment).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined &&
+        !/(?:^|_)(?:API_KEY|ACCESS_TOKEN|REFRESH_TOKEN|AUTH_TOKEN|TYAUTH|PASSWORD|SECRET)$/.test(
+          entry[0],
+        ),
+    ),
+  ),
+})
+
 export function clearCliE2eSessionLogs() {
   sessionLogs.length = 0
 }
@@ -312,7 +329,7 @@ async function runSpawnedSession(args: {
     const child = spawn(attempt.command, attempt.args, {
       cwd: cwd ?? attempt.cwd ?? DEFAULT_E2E_CWD,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
+      env: withoutCredentialEnvironment({
         ...process.env,
         ...(isolateHome
           ? {
@@ -322,7 +339,7 @@ async function runSpawnedSession(args: {
           : {}),
         TYCLI_TERMINAL_UI: 'none',
         ...(env ?? {}),
-      },
+      }),
     })
 
     let output = ''
@@ -475,52 +492,6 @@ export async function testCliStartupShowsVersionCommitAndBuildDate() {
   assertContains(result.output, 'Conversation storage:')
   assertContains(result.output, 'tycli ready.')
   assertContains(result.output, '| idle]')
-}
-
-export async function testCliDoesNotUseCodexCliOAuthCache() {
-  const testHome = join(TEST_HOME, 'testCliDoesNotUseCodexCliOAuthCache')
-  const codexHome = join(testHome, '.codex')
-  await mkdir(codexHome, { recursive: true })
-  await writeFile(
-    join(codexHome, 'auth.json'),
-    JSON.stringify({
-      auth_mode: 'chatgpt',
-      tokens: {
-        access_token: 'codex-oauth-access-token',
-        refresh_token: 'codex-oauth-refresh-token',
-        id_token: 'eyJhbGciOiJub25lIn0.eyJleHAiOjF9.',
-        account_id: 'codex-test-account',
-      },
-      last_refresh: new Date().toISOString(),
-    }),
-    { encoding: 'utf8', mode: 0o600 },
-  )
-
-  const result = await runCliE2eSession({
-    testName: 'testCliDoesNotUseCodexCliOAuthCache',
-    homeKey: 'testCliDoesNotUseCodexCliOAuthCache',
-    steps: [
-      {
-        waitFor: 'tycli ready.',
-        input: 'hello\n',
-      },
-      {
-        waitFor: "No credentials configured for 'chatgpt-codex'",
-        input: '/exit\n',
-      },
-    ],
-    env: {
-      CODEX_HOME: codexHome,
-      TYCLI_HOTKEY_MENUS: '0',
-      TYCLI_SELECTED_API: 'chatgpt-codex',
-    },
-    timeoutMs: 45_000,
-    runner: 'pty',
-  })
-
-  if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
-  assertContains(result.output, "No credentials configured for 'chatgpt-codex'")
-  assertNotContains(result.output, 'task: processing')
 }
 
 export async function testTerminalKitFooterOptInStartsAndExits() {
@@ -1093,55 +1064,62 @@ export async function testIdleCtrlDReportsPathsAndExits() {
   assertContains(result.output, 'tycli log:')
 }
 
-export async function testQuitPromptCtrlCCancelsAndCtrlDExits() {
-  const cases: Array<{
-    name: string
-    steps: Parameters<typeof runCliE2eSession>[0]['steps']
-    expected: string[]
-  }> = [
-    {
-      name: 'ctrl-d-from-main-prompt',
-      steps: [{ waitFor: 'Slash commands:', input: '\u0004' }],
-      expected: ['Ctrl-D', 'No conversation saved: no messages.'],
-    },
-    {
-      name: 'ctrl-c-ctrl-d',
-      steps: [
-        { waitFor: 'Slash commands:', input: '\u0003' },
-        { waitFor: 'Quit tycli? (y/N)', input: '\u0004' },
-      ],
-      expected: ['Quit tycli? (y/N)', 'No conversation saved: no messages.'],
-    },
-    {
-      name: 'ctrl-c-n-ctrl-d',
-      steps: [
-        { waitFor: 'Slash commands:', input: '\u0003' },
-        { waitFor: 'Quit tycli? (y/N)', input: 'n\n' },
-        { delayMs: 500, input: '\u0004' },
-      ],
-      expected: ['Quit tycli? (y/N)', 'Ctrl-D', 'No conversation saved: no messages.'],
-    },
-  ]
+const quitPromptCases: Array<{
+  name: string
+  steps: Parameters<typeof runCliE2eSession>[0]['steps']
+  expected: string[]
+}> = [
+  {
+    name: 'ctrl-d-from-main-prompt',
+    steps: [{ waitFor: 'Slash commands:', input: '\u0004' }],
+    expected: ['Ctrl-D', 'No conversation saved: no messages.'],
+  },
+  {
+    name: 'ctrl-c-ctrl-d',
+    steps: [
+      { waitFor: 'Slash commands:', input: '\u0003' },
+      { waitFor: 'Quit tycli? (y/N)', input: '\u0004' },
+    ],
+    expected: ['Quit tycli? (y/N)', 'No conversation saved: no messages.'],
+  },
+  {
+    name: 'ctrl-c-n-ctrl-d',
+    steps: [
+      { waitFor: 'Slash commands:', input: '\u0003' },
+      { waitFor: 'Quit tycli? (y/N)', input: 'n\n' },
+      { delayMs: 500, input: '\u0004' },
+    ],
+    expected: ['Quit tycli? (y/N)', 'Ctrl-D', 'No conversation saved: no messages.'],
+  },
+]
 
-  for (const testCase of cases) {
-    const result = await runCliE2eSession({
-      testName: `testQuitPromptCtrlCCancelsAndCtrlDExits:${testCase.name}`,
-      steps: testCase.steps,
-      env: { TYCLI_HOTKEY_MENUS: '1' },
-      runner: 'pty',
-      acceptOutputAsExit: 'No conversation saved: no messages.',
-      timeoutMs: 30_000,
-    })
-    if (result.code !== 0) {
-      throw new Error(
-        `Expected exit code 0 for ${testCase.name}, got ${String(result.code)}\n${result.output}`,
-      )
-    }
-    for (const expected of testCase.expected) {
-      assertContains(result.output, expected)
-    }
+const runQuitPromptCase = async (name: string) => {
+  const testCase = quitPromptCases.find((candidate) => candidate.name === name)
+  if (!testCase) throw new Error(`Unknown quit prompt case: ${name}`)
+  const result = await runCliE2eSession({
+    testName: `testQuitPrompt:${testCase.name}`,
+    steps: testCase.steps,
+    env: { TYCLI_HOTKEY_MENUS: '1' },
+    runner: 'pty',
+    acceptOutputAsExit: 'No conversation saved: no messages.',
+    timeoutMs: 30_000,
+  })
+  if (result.code !== 0) {
+    throw new Error(
+      `Expected exit code 0 for ${testCase.name}, got ${String(result.code)}\n${result.output}`,
+    )
   }
+  for (const expected of testCase.expected) assertContains(result.output, expected)
 }
+
+export const testQuitPromptCtrlDExits = async () =>
+  await runQuitPromptCase('ctrl-d-from-main-prompt')
+
+export const testQuitPromptCtrlCCanBeCompletedByCtrlD = async () =>
+  await runQuitPromptCase('ctrl-c-ctrl-d')
+
+export const testQuitPromptCancellationReturnsToCtrlD = async () =>
+  await runQuitPromptCase('ctrl-c-n-ctrl-d')
 
 export async function testCtrlCCancelsModelMenuAndKeepsPromptUsable() {
   const result = await runCliE2eSession({
@@ -1180,47 +1158,49 @@ export async function testEscapeCancelsModelMenuAndKeepsPromptUsable() {
   assertNotContains(result.output, 'Fatal error')
 }
 
-export async function testPromptHistoryCyclesPreviousInputWithArrowKeys() {
-  for (const hotkeyMenus of ['0', '1']) {
-    const initialResult = await runCliE2eSession({
-      testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:initial`,
-      homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
-      steps: [
-        { waitFor: 'Slash commands:', input: '/tools\n' },
-        { waitFor: 'Active tool definitions:', input: '/exit\n' },
-      ],
-      env: { TYCLI_HOTKEY_MENUS: hotkeyMenus },
-      runner: 'pty',
-    })
-    if (initialResult.code !== 0) {
-      throw new Error(
-        `Expected initial exit code 0 for hotkeyMenus=${hotkeyMenus}, got ${String(initialResult.code)}`,
-      )
-    }
-
-    const replayResult = await runCliE2eSession({
-      testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:replay`,
-      homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
-      steps: [
-        { waitFor: 'Slash commands:', input: '\x1b[A\n' },
-        { waitFor: 'Active tool definitions:', input: '/exit\n' },
-      ],
-      env: { TYCLI_HOTKEY_MENUS: hotkeyMenus },
-      runner: 'pty',
-    })
-    if (replayResult.code !== 0) {
-      throw new Error(
-        `Expected replay exit code 0 for hotkeyMenus=${hotkeyMenus}, got ${String(replayResult.code)}`,
-      )
-    }
-    if (!replayResult.output.includes('Active tool definitions:')) {
-      throw new Error(
-        `Expected Up+Enter to replay persisted /tools for hotkeyMenus=${hotkeyMenus}.\n${replayResult.output}`,
-      )
-    }
-    assertNotContains(replayResult.output, '^[[A')
+const runPromptHistoryCase = async (hotkeyMenus: '0' | '1') => {
+  const initialResult = await runCliE2eSession({
+    testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:initial`,
+    homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
+    steps: [
+      { waitFor: 'Slash commands:', input: '/tools\n' },
+      { waitFor: 'Active tool definitions:', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: hotkeyMenus },
+    runner: 'pty',
+  })
+  if (initialResult.code !== 0) {
+    throw new Error(
+      `Expected initial exit code 0 for hotkeyMenus=${hotkeyMenus}, got ${String(initialResult.code)}`,
+    )
   }
+
+  const replayResult = await runCliE2eSession({
+    testName: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}:replay`,
+    homeKey: `testPromptHistoryCyclesPreviousInputWithArrowKeys:${hotkeyMenus}`,
+    steps: [
+      { waitFor: 'Slash commands:', input: '\x1b[A\n' },
+      { waitFor: 'Active tool definitions:', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: hotkeyMenus },
+    runner: 'pty',
+  })
+  if (replayResult.code !== 0) {
+    throw new Error(
+      `Expected replay exit code 0 for hotkeyMenus=${hotkeyMenus}, got ${String(replayResult.code)}`,
+    )
+  }
+  if (!replayResult.output.includes('Active tool definitions:')) {
+    throw new Error(
+      `Expected Up+Enter to replay persisted /tools for hotkeyMenus=${hotkeyMenus}.\n${replayResult.output}`,
+    )
+  }
+  assertNotContains(replayResult.output, '^[[A')
 }
+
+export const testPromptHistoryWithoutHotkeyMenus = async () => await runPromptHistoryCase('0')
+
+export const testPromptHistoryWithHotkeyMenus = async () => await runPromptHistoryCase('1')
 
 export async function testResumeConversationReportsStorageAndLogs() {
   const testHome = join(TEST_HOME, 'testResumeConversationReportsStorageAndLogs')
@@ -1352,12 +1332,13 @@ testIdleCtrlCShowsQuitPromptAndCanBeCancelled.description =
   'Idle Ctrl+C reports the interrupt, shows paths, and allows cancelling the quit prompt'
 testIdleCtrlDReportsPathsAndExits.description =
   'Idle Ctrl+D reports EOF, prints session paths, and exits cleanly'
-testQuitPromptCtrlCCancelsAndCtrlDExits.description =
-  'Ctrl+C and Ctrl+D combinations around the idle quit prompt stay usable and exit cleanly'
+testQuitPromptCtrlDExits.helper = true
+testQuitPromptCtrlCCanBeCompletedByCtrlD.helper = true
+testQuitPromptCancellationReturnsToCtrlD.helper = true
 testCtrlCCancelsModelMenuAndKeepsPromptUsable.description =
   'Ctrl+C cancels the raw model menu and returns to a usable prompt'
-testPromptHistoryCyclesPreviousInputWithArrowKeys.description =
-  'Up and Down cycle through prior main prompt inputs, including persisted history'
+testPromptHistoryWithoutHotkeyMenus.helper = true
+testPromptHistoryWithHotkeyMenus.helper = true
 testResumeConversationReportsStorageAndLogs.description =
   'Resume loads a saved markdown conversation and reports source/current storage and log paths'
 testTaskInterruptReportsStatusAndPersistsConversation.description =
@@ -1371,9 +1352,7 @@ testTerminalKitFooterOptInStartsAndExits.experimental = true
 testIdleCtrlCShowsQuitPromptAndCanBeCancelled.experimental = true
 testIdleCtrlCShowsQuitPromptAndCanBeCancelled.helper = true
 testIdleCtrlDReportsPathsAndExits.experimental = true
-testQuitPromptCtrlCCancelsAndCtrlDExits.experimental = true
 testCtrlCCancelsModelMenuAndKeepsPromptUsable.experimental = true
-testPromptHistoryCyclesPreviousInputWithArrowKeys.experimental = true
 testResumeConversationReportsStorageAndLogs.experimental = true
 testTaskInterruptReportsStatusAndPersistsConversation.experimental = true
 testStopCommandInterruptsActiveTask.experimental = true

@@ -10,8 +10,11 @@ import {
   testCliConcurrentSessionsStartWithSharedHome as runCliConcurrentSessionsStartWithSharedHome,
   testEmptyCliSessionDoesNotCreateConversationFile as runEmptyCliSessionDoesNotCreateConversationFile,
   testResumeConversationReportsStorageAndLogs as runResumeConversationReportsStorageAndLogs,
-  testPromptHistoryCyclesPreviousInputWithArrowKeys as runPromptHistoryCyclesPreviousInputWithArrowKeys,
-  testQuitPromptCtrlCCancelsAndCtrlDExits as runQuitPromptCtrlCCancelsAndCtrlDExits,
+  testPromptHistoryWithoutHotkeyMenus as runPromptHistoryWithoutHotkeyMenus,
+  testPromptHistoryWithHotkeyMenus as runPromptHistoryWithHotkeyMenus,
+  testQuitPromptCtrlDExits as runQuitPromptCtrlDExits,
+  testQuitPromptCtrlCCanBeCompletedByCtrlD as runQuitPromptCtrlCCanBeCompletedByCtrlD,
+  testQuitPromptCancellationReturnsToCtrlD as runQuitPromptCancellationReturnsToCtrlD,
   testCtrlCCancelsModelMenuAndKeepsPromptUsable as runCtrlCCancelsModelMenuAndKeepsPromptUsable,
   testEscapeCancelsModelMenuAndKeepsPromptUsable as runEscapeCancelsModelMenuAndKeepsPromptUsable,
   testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
@@ -179,7 +182,7 @@ export const testCliHelloWorldProducesAssistantResponse = async (
         input: '',
       },
       {
-        waitFor: '| finished |',
+        waitFor: '| finished',
         input: '/exit\n',
       },
     ],
@@ -612,19 +615,33 @@ testCliAiWorkstationCreatesAndOptimizesDagGraph.description =
   'Starts tycli with the local AI workstation prompt and verifies the agent creates, patches, studies, and recommends from a persisted DAG graph.'
 testCliAiWorkstationCreatesAndOptimizesDagGraph.timeoutMs = 340_000
 
-export const testCliQuitPromptCtrlCCancelsAndCtrlDExits = async () =>
-  await runQuitPromptCtrlCCancelsAndCtrlDExits()
+export const testCliQuitPromptCtrlDExits = async () => await runQuitPromptCtrlDExits()
+testCliQuitPromptCtrlDExits.description = 'Ctrl+D exits directly from the main prompt.'
+testCliQuitPromptCtrlDExits.timeoutMs = 40_000
 
-testCliQuitPromptCtrlCCancelsAndCtrlDExits.description =
-  'Starts yarn tycli and verifies Ctrl+C cancels the quit prompt while Ctrl+D still exits.'
-testCliQuitPromptCtrlCCancelsAndCtrlDExits.timeoutMs = 40_000
+export const testCliQuitPromptCtrlCCanBeCompletedByCtrlD = async () =>
+  await runQuitPromptCtrlCCanBeCompletedByCtrlD()
+testCliQuitPromptCtrlCCanBeCompletedByCtrlD.description =
+  'Ctrl+D completes the quit prompt opened by Ctrl+C.'
+testCliQuitPromptCtrlCCanBeCompletedByCtrlD.timeoutMs = 40_000
 
-export const testCliPromptHistoryCyclesPreviousInputWithArrowKeys = async () =>
-  await runPromptHistoryCyclesPreviousInputWithArrowKeys()
+export const testCliQuitPromptCancellationReturnsToCtrlD = async () =>
+  await runQuitPromptCancellationReturnsToCtrlD()
+testCliQuitPromptCancellationReturnsToCtrlD.description =
+  'Cancelling the quit prompt returns to a main prompt that Ctrl+D can exit.'
+testCliQuitPromptCancellationReturnsToCtrlD.timeoutMs = 40_000
 
-testCliPromptHistoryCyclesPreviousInputWithArrowKeys.description =
-  'Starts yarn tycli and verifies Up replays persisted prompt history without literal escape bytes.'
-testCliPromptHistoryCyclesPreviousInputWithArrowKeys.timeoutMs = 60_000
+export const testCliPromptHistoryWithoutHotkeyMenus = async () =>
+  await runPromptHistoryWithoutHotkeyMenus()
+testCliPromptHistoryWithoutHotkeyMenus.description =
+  'Up replays persisted prompt history with hotkey menus disabled.'
+testCliPromptHistoryWithoutHotkeyMenus.timeoutMs = 60_000
+
+export const testCliPromptHistoryWithHotkeyMenus = async () =>
+  await runPromptHistoryWithHotkeyMenus()
+testCliPromptHistoryWithHotkeyMenus.description =
+  'Up replays persisted prompt history with hotkey menus enabled.'
+testCliPromptHistoryWithHotkeyMenus.timeoutMs = 60_000
 
 export const testCliTaskRendererDoesNotPrintTransientWorkerProgress = () =>
   runTaskRendererDoesNotPrintTransientWorkerProgress()
