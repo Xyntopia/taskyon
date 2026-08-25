@@ -30,11 +30,13 @@ import type { StyleSpecification } from 'maplibre-gl'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import {
+  addPmtilesRasterLayer,
   addPmtilesVectorLayer,
   addRasterFallbackBaseLayer,
   defaultWorldPmtilesUrl,
   setupTaskyonMapLibreWorker,
   setupTaskyonPmtilesProtocol,
+  type TaskyonPmtilesRasterLayerSpec,
   type TaskyonPmtilesVectorLayerSpec,
 } from '../gis/maplibrePmtiles'
 import { onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
@@ -59,6 +61,7 @@ interface GenericMapProps {
   showParcelsLayer?: boolean
   autoFitParcelsBounds?: boolean
   pmtilesVectorLayers?: TaskyonPmtilesVectorLayerSpec[]
+  pmtilesRasterLayers?: readonly TaskyonPmtilesRasterLayerSpec[]
   showNavigationControls?: boolean
 }
 
@@ -72,6 +75,7 @@ const props = withDefaults(defineProps<GenericMapProps>(), {
   showParcelsLayer: false,
   autoFitParcelsBounds: false,
   pmtilesVectorLayers: () => [],
+  pmtilesRasterLayers: () => [],
   showNavigationControls: true,
 })
 
@@ -86,6 +90,7 @@ const emit = defineEmits([
   'location-resolved',
   'geocode-error',
   'parcels-feature-click',
+  'pmtiles-layer-error',
   'map-error',
 ])
 
@@ -219,8 +224,20 @@ const getDefaultPmtilesLayers = (): TaskyonPmtilesVectorLayerSpec[] => {
 const addConfiguredPmtilesLayers = async () => {
   const m = getMapInstance()
   if (!m) return
-  const layers = [...getDefaultPmtilesLayers(), ...props.pmtilesVectorLayers]
-  for (const layer of layers) {
+  for (const layer of props.pmtilesRasterLayers) {
+    try {
+      await addPmtilesRasterLayer(m, layer, props.storageClient)
+    } catch (error) {
+      console.warn(`${logPrefix} optional PMTiles raster layer unavailable`, {
+        layerId: layer.id,
+        error,
+      })
+      emit('pmtiles-layer-error', { layerId: layer.id, error })
+    }
+  }
+
+  const vectorLayers = [...getDefaultPmtilesLayers(), ...props.pmtilesVectorLayers]
+  for (const layer of vectorLayers) {
     await addPmtilesVectorLayer(m, layer, props.storageClient)
   }
 }

@@ -13,10 +13,13 @@ let workerRegistered = false
 
 export { defaultWorldPmtilesUrl }
 
-export interface TaskyonPmtilesVectorLayerSpec {
+interface TaskyonPmtilesSourceSpec {
   id: string
   url: string
   suffixes?: string[]
+}
+
+export interface TaskyonPmtilesVectorLayerSpec extends TaskyonPmtilesSourceSpec {
   baseOpacity?: number
   lineColor?: string
   lineWidth?: number
@@ -35,6 +38,13 @@ export interface TaskyonPmtilesVectorLayerSpec {
     geometry: unknown
     lngLat: { lng: number; lat: number }
   }) => void
+}
+
+export interface TaskyonPmtilesRasterLayerSpec extends TaskyonPmtilesSourceSpec {
+  tileSize?: number
+  encoding?: 'terrarium' | 'mapbox'
+  hillshadeExaggeration?: number
+  beforeLayerId?: string
 }
 
 interface LoadedPmtilesSource {
@@ -141,6 +151,34 @@ export const addPmtilesVectorLayer = async (
   }
 }
 
+export const addPmtilesRasterLayer = async (
+  map: MapLibreMap,
+  spec: TaskyonPmtilesRasterLayerSpec,
+  storageClient?: TaskyonStorageClient,
+): Promise<void> => {
+  if (map.getSource(spec.id)) return
+
+  const loaded = await loadPmtilesSource(spec, storageClient)
+  map.addSource(spec.id, {
+    type: 'raster-dem',
+    url: `pmtiles://${loaded.resolvedUrl}`,
+    tileSize: spec.tileSize ?? 512,
+    encoding: spec.encoding ?? 'terrarium',
+  })
+
+  map.addLayer(
+    {
+      id: `${spec.id}_hillshade`,
+      type: 'hillshade',
+      source: spec.id,
+      paint: {
+        'hillshade-exaggeration': spec.hillshadeExaggeration ?? 0.35,
+      },
+    },
+    spec.beforeLayerId,
+  )
+}
+
 const parseJson = (value: string): unknown => {
   try {
     return JSON.parse(value)
@@ -182,7 +220,7 @@ const parseBoundsFromHeader = (header: unknown): [number, number, number, number
 }
 
 const loadPmtilesSource = async (
-  spec: TaskyonPmtilesVectorLayerSpec,
+  spec: TaskyonPmtilesSourceSpec,
   storageClient?: TaskyonStorageClient,
 ): Promise<LoadedPmtilesSource> => {
   let lastError: unknown = null
