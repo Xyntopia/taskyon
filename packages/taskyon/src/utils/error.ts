@@ -1,4 +1,5 @@
 // error.ts
+import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { safeYamlDump } from './yamlUtils'
 
 interface SerializedError {
@@ -170,8 +171,13 @@ export function humanizeError(errorInput: unknown): string {
       (obj.metadata as Record<string, unknown> | undefined)?.raw ??
       ((obj.error as Record<string, unknown> | undefined)?.metadata as Record<string, unknown>)
         ?.raw ??
-      (((obj.data as Record<string, unknown> | undefined)?.error as Record<string, unknown> | undefined)
-        ?.metadata as Record<string, unknown> | undefined)?.raw
+      (
+        (
+          (obj.data as Record<string, unknown> | undefined)?.error as
+            | Record<string, unknown>
+            | undefined
+        )?.metadata as Record<string, unknown> | undefined
+      )?.raw
     const providerRawMsg = tryParseJsonMessage(providerRaw)
     if (providerRawMsg) append(providerRawMsg)
 
@@ -257,6 +263,19 @@ export function humanizeError(errorInput: unknown): string {
 
   traverse(errorInput)
   return lines.join('\n')
+}
+
+export function formatErrorForModel(errorInput: unknown): string {
+  const summary = humanizeError(errorInput)
+  const details = serializeObject(errorInput, {
+    format: 'yaml',
+    maxDepth: 8,
+    maxArrayLength: 40,
+    maxObjectKeys: 40,
+    maxStringLength: 8_000,
+    includeTruncationNotice: true,
+  })
+  return [`Error summary:\n${summary}`, `Structured error details:\n${details}`].join('\n\n')
 }
 
 /**

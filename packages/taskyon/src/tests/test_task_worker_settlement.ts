@@ -388,3 +388,67 @@ export const testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer = asyn
 
 testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer.description =
   'Ensures a sequential reducer waits for every branch in the prior parallel subtree.'
+
+export const testTaskWorkerCompletesDeterministicErrorRecovery = async () => {
+  const { ty, storage } = await createTaskWorkerTestRuntime()
+  let recoveryCalls = 0
+  const failingTool = createTool({
+    name: 'deterministicFailure',
+    description: 'Fail once so worker recovery can be verified without a model.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () => {
+      throw new Error('deterministic patch mismatch')
+    },
+  })
+  const recoveryTool = createTool({
+    name: 'entryNode',
+    description: 'Return a deterministic terminal result for the recovery regression.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () => {
+      recoveryCalls += 1
+      return createSubtasksResult({
+        role: 'system',
+        content: { type: 'return', data: 'deterministic recovery complete' },
+      })
+    },
+  })
+  const registration = await registerToolRpcTools({
+    port: ty.port,
+    tools: [failingTool, recoveryTool],
+  })
+
+  try {
+    const result = await processTasksDetailed(ty.port)(
+      [[toolCall({ name: 'deterministicFailure', arguments: {} })]],
+      (task) =>
+        task.content.type === 'return' && task.content.data === 'deterministic recovery complete',
+      { timeoutMs: 5_000, throwOnError: false },
+    )
+
+    assert(result.status === 'matched', `Expected matched recovery result, got ${result.status}`)
+    assert(recoveryCalls === 1, `Expected one recovery call, got ${recoveryCalls}`)
+    assert(
+      result.observedTasks.some(
+        (task) =>
+          task.content.type === 'error' &&
+          JSON.stringify(task.content.data).includes('deterministic patch mismatch'),
+      ),
+      'Expected the failed call to remain inspectable as an error task',
+    )
+  } finally {
+    registration.destroy()
+    await ty.dispose('deterministic worker recovery diagnostic complete')
+    storage.destroy()
+  }
+}
+
+testTaskWorkerCompletesDeterministicErrorRecovery.description =
+  'Proves worker error recovery reaches its queued continuation without invoking a model.'

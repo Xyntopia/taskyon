@@ -644,7 +644,9 @@ const createEntryNodeRuntimeState = async (
     resolveAllowedToolsFromFailedTask(taskChain, previousTask, undefined) ??
     resolveAllowedToolsFromLatestCompletion(taskChain) ??
     config.defaultAllowedTools
-  const toolRestriction = resolveAllowedToolsForMode(mode, rawAllowedTools)
+  const toolRestriction = resolveAllowedToolsForMode(mode, rawAllowedTools)?.filter(
+    (toolName) => toolName !== entryNodeName,
+  )
   const allowedTools = toolRestriction ?? []
   const promptContext = {
     mode,

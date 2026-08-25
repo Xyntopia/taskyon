@@ -766,7 +766,13 @@ export const testChatCompletionMixedTextAndNativeToolCallContinuesWithTool = () 
 }
 
 export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () => {
-  let errorMessage = ''
+  let validationError:
+    | (Error & {
+        toolName?: unknown
+        validationErrors?: unknown
+        receivedArguments?: unknown
+      })
+    | undefined
 
   try {
     interpretAssistantMessage(
@@ -789,13 +795,32 @@ export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () =>
       createTaskVariablePresentationService(),
     )
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : String(error)
+    if (error instanceof Error) validationError = error
   }
 
   assert(
-    errorMessage.includes('Invalid arguments for tool "taskPlanner"') &&
-      errorMessage.includes('/tasks/1'),
-    `Expected malformed planner arguments to be rejected at the provider boundary, got ${errorMessage}`,
+    validationError?.name === 'ToolArgumentsValidationError' &&
+      validationError.toolName === 'taskPlanner',
+    'Expected malformed planner arguments to produce a structured validation error',
+  )
+  assert(
+    Array.isArray(validationError?.validationErrors) &&
+      validationError.validationErrors.some(
+        (error) =>
+          typeof error === 'object' &&
+          error !== null &&
+          'instancePath' in error &&
+          error.instancePath === '/tasks/1',
+      ),
+    'Expected structured validation details to retain the invalid task path',
+  )
+  assert(
+    typeof validationError?.receivedArguments === 'object' &&
+      validationError.receivedArguments !== null &&
+      'tasks' in validationError.receivedArguments &&
+      Array.isArray(validationError.receivedArguments.tasks) &&
+      validationError.receivedArguments.tasks[1] === 'parallel=false] }',
+    'Expected structured validation details to retain the received arguments',
   )
 
   return { success: true }

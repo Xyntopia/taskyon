@@ -11,7 +11,12 @@ import type { TaskNodeMeta } from '../../types/chatCompletion'
 import type { Annotation } from '../../types/taskNode'
 import type { ToolBase } from '../../types/tools'
 import { FunctionArguments, FunctionCall } from '../../types/tools'
-import { createDeepTransformer, normalizeFalsyValues, pickProperties } from '../../utils/objHelpers'
+import {
+  createDeepTransformer,
+  normalizeFalsyValues,
+  pickProperties,
+  serializeForJson,
+} from '../../utils/objHelpers'
 import { augmentToolSchemaForTaskyonVariables } from './context'
 
 export const parseStructuredResponse = (message: string) => {
@@ -71,6 +76,17 @@ const createTaggedToolCallId = (input: string) => {
   return `tagged-${hash.toString(36)}`
 }
 
+const createToolArgumentsValidationError = (content: ToolCallPart, validationErrors: unknown) => {
+  const error = new Error(`Invalid arguments for tool "${content.toolName}".`)
+  error.name = 'ToolArgumentsValidationError'
+  Object.assign(error, {
+    toolName: content.toolName,
+    validationErrors: serializeForJson(validationErrors),
+    receivedArguments: serializeForJson(content.input),
+  })
+  return error
+}
+
 export const normalizeAssistantMessageForToolCall = (
   message: AssistantModelMessage | ToolModelMessage,
   availableTools: Record<string, ToolBase>,
@@ -128,17 +144,13 @@ export const convertFunctionCall = (
 
   const parsedArguments = FunctionArguments.safeParse(content.input)
   if (!parsedArguments.success) {
-    throw new Error(
-      `Invalid arguments for tool "${content.toolName}": ${parsedArguments.error.message}`,
-    )
+    throw createToolArgumentsValidationError(content, parsedArguments.error.issues)
   }
 
   const ajv = new Ajv()
   const validate = ajv.compile(augmentToolSchemaForTaskyonVariables(tool.parameters) as object)
   if (!validate(parsedArguments.data)) {
-    throw new Error(
-      `Invalid arguments for tool "${content.toolName}": ${ajv.errorsText(validate.errors)}`,
-    )
+    throw createToolArgumentsValidationError(content, validate.errors)
   }
 
   const functionCall: FunctionCall = {

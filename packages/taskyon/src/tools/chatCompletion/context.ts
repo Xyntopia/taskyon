@@ -24,7 +24,7 @@ import { toPromptMessages, type PromptInjection } from '../../llm/promptMessages
 import type { FileAttachment, TaskGetter, TaskNode } from '../../types/taskNode'
 import type { ContentHash, ToolBase } from '../../types/tools'
 import { charHash } from '../../utils/crypto'
-import { humanizeError } from '../../utils/error'
+import { formatErrorForModel } from '../../utils/error'
 import { deriveBindingParameters } from '../../core/scopedTools'
 import { convertFileToText } from '../../utils/loadFiles'
 import { isEmpty } from '../../utils/objHelpers'
@@ -473,7 +473,7 @@ const convertTaskNodeToOpenAIMessage = async (
         role: 'system',
         content: renderTaskyonVariableBlock(
           variableService.getOrAssignVariableName(task, tasksById),
-          humanizeError(task.content.data),
+          formatErrorForModel(task.content.data),
         ),
       },
     ]

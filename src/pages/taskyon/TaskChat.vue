@@ -124,7 +124,13 @@
 
 <script setup lang="ts">
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
-import { createTaskNode, fetchMarkdown, getTextFile, sleep } from '@taskyon/taskyon'
+import {
+  createTaskNode,
+  fetchMarkdown,
+  getTextFile,
+  serializeForJson,
+  sleep,
+} from '@taskyon/taskyon'
 import { createTaskChainFromMarkdown, createTaskyonClient } from '@taskyon/tyclient'
 import { isTauri } from '@tauri-apps/api/core'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
@@ -283,20 +289,20 @@ async function updateChatThread() {
         newTaskId = await createTaskChainFromMarkdown(taskyonClient, markdownContent)
       } catch (error) {
         console.error(error)
-        const message = error instanceof Error ? error.message : String(error)
         const task = await createTaskNode({
           content: {
             type: 'error',
-            data: `# Markdown Import Failed
+            data: {
+              kind: 'markdown-import-failed',
+              filePath: props.filePath,
+              message: `# Markdown Import Failed
 
 Taskyon loaded the markdown file \`${props.filePath}\`, but it could not import the task chain.
 
 ## Import error
-
-\`\`\`
-${message}
-\`\`\`
 `,
+              error: serializeForJson(error),
+            },
           },
           role: 'system',
         })
@@ -308,9 +314,10 @@ ${message}
       const task = await createTaskNode({
         content: {
           type: 'error',
-          data: `# 404 - Markdown Not Found
-
-${error instanceof Error ? error.message : String(error)}
+          data: {
+            kind: 'markdown-not-found',
+            filePath: props.filePath,
+            message: `# 404 - Markdown Not Found
 
 The markdown file \`${props.filePath}\` does not exist.
 
@@ -322,6 +329,8 @@ The markdown file \`${props.filePath}\` does not exist.
 
 Please check the path and try again.
 `,
+            error: serializeForJson(error),
+          },
         },
         role: 'system',
       })

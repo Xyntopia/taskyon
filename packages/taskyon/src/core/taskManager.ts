@@ -636,7 +636,11 @@ export async function useTyTaskManager(
           role: 'system',
           content: {
             type: 'error',
-            data: `We can not access Task #${tid}`,
+            data: {
+              kind: 'missing-task',
+              taskId: tid,
+              message: `We can not access Task #${tid}`,
+            },
           },
         } satisfies TaskNode
       }),

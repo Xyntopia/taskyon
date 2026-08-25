@@ -27,7 +27,7 @@ import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
 import type { ContentHash, ToolBase } from '../types/tools'
 import { humanizeError, serializeError } from '../utils/error'
-import { createDotPathTransformer } from '../utils/objHelpers'
+import { createDotPathTransformer, serializeForJson } from '../utils/objHelpers'
 import {
   prepareChatCompletionContext,
   resolveToolDefinitionsForTaskChain,
@@ -576,7 +576,20 @@ export function createChatCompletionTool(
               : {}),
             content: {
               type: 'error',
-              data: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}\n\n${failureDetails}`,
+              data: {
+                message: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}\n\n${failureDetails}`,
+                error: serializeForJson(effectiveErr),
+                context: {
+                  shortReason: failure.shortReason,
+                  systemNote: failure.systemNote,
+                  failureDetails,
+                  hasPartialOutput: partialContent.length > 0,
+                  selectedApi,
+                  selectedModel,
+                  providerToolCalling: useProviderToolCalling,
+                  declaredToolCount: Object.keys(chatInfo.tools).length,
+                },
+              },
             },
           },
           ...(retryState

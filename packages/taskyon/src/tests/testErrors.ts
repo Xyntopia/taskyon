@@ -1,6 +1,6 @@
 // testErrors.ts
 
-import { humanizeError, serializeError } from '../utils/error'
+import { formatErrorForModel, humanizeError, serializeError } from '../utils/error'
 
 type TestCase = {
   name: string
@@ -320,4 +320,31 @@ export function testHumanizeErr(): TestSummary {
     failed: failedResults.length,
     results,
   }
+}
+
+export function testFormatErrorForModelPreservesStructuredDetails() {
+  const output = formatErrorForModel({
+    error: {
+      name: 'ToolArgumentsValidationError',
+      message: 'Invalid arguments for tool "taskPlanner".',
+      receivedArguments: {
+        tasks: [['List available tools', 'Get the weather'], 'parallel=false] }'],
+      },
+    },
+    context: {
+      shortReason: 'failed',
+      failureDetails: 'The provider returned arguments outside the declared schema.',
+    },
+  })
+
+  if (!output.includes('ToolArgumentsValidationError')) {
+    throw new Error('Expected the model summary to include the error name.')
+  }
+  if (!output.includes('parallel=false] }')) {
+    throw new Error('Expected the model details to include received arguments.')
+  }
+  if (!output.includes('Structured error details:')) {
+    throw new Error('Expected the model formatter to mark the structured detail section.')
+  }
+  return { success: true }
 }

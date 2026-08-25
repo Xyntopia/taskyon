@@ -1167,6 +1167,63 @@ export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
   return { success: true }
 }
 
+export const testEntryNodeDoesNotExposeItsOwnRouter = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'router-user',
+      role: 'user',
+      content: { type: 'message', data: 'Continue the task.' },
+    },
+    {
+      id: 'router-completion',
+      role: 'function',
+      priorID: 'router-user',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'chatCompletion',
+          arguments: { allowedTools: ['entryNode', 'selectTaskyonTools'] },
+        },
+      },
+    },
+    {
+      id: 'router-reentry',
+      role: 'function',
+      priorID: 'router-completion',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+  ]
+  const result = await entryNodeTool.function?.(
+    { prompt_templates: testPromptTemplates },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-router-window-test',
+    },
+  )
+  assert(
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected EntryNode to create a recovery continuation.',
+  )
+  const chatArguments = findFunctionCall(result.taskChainList[0], 'chatCompletion')?.arguments
+  assert(
+    chatArguments &&
+      typeof chatArguments === 'object' &&
+      Array.isArray(chatArguments.allowedTools) &&
+      chatArguments.allowedTools.includes('selectTaskyonTools') &&
+      !chatArguments.allowedTools.includes('entryNode'),
+    'Expected the EntryNode router itself to stay out of the callable tool window',
+  )
+  return { success: true }
+}
+
 export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = async () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
@@ -1655,3 +1712,5 @@ testEntryNodeForwardsContractedResultSchema.description =
   'EntryNode should forward contracted structured result requirements to final chat completions.'
 testEntryNodeHonorsExplicitAllowedToolRestrictions.description =
   'EntryNode should enforce empty and restricted allowedTools overrides against the configured tool catalog.'
+testEntryNodeDoesNotExposeItsOwnRouter.description =
+  'EntryNode should keep its internal router out of provider-callable tool windows.'
