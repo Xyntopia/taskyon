@@ -52,6 +52,45 @@ function retainedSandboxKey(
 
 const isBrowserRuntime = () => typeof window !== 'undefined' && typeof document !== 'undefined'
 
+const getRetainedSandbox = async (
+  options: {
+    id: string
+    browserRuntime?: 'iframe' | 'worker'
+    nodeRuntime?: 'node' | 'deno'
+    maxOldSpaceSizeMb?: number
+    reuse: Exclude<SandboxReusePolicy, { mode: 'disposable' }>
+  },
+  reserve: boolean,
+): Promise<{ sandbox: ExecutableSandbox; entry: RetainedSandbox }> => {
+  const kind = runtimeKind(options)
+  const key = retainedSandboxKey(kind, options.id, options.reuse)
+  const existing = retainedSandboxes.get(key)
+  if (existing) {
+    existing.activeUses += reserve ? 1 : 0
+    existing.lastUsed = ++sandboxUseSequence
+    return { sandbox: await existing.sandbox, entry: existing }
+  }
+
+  const create = async () => {
+    const transport = await createTransport(kind, options.id, options)
+    return createExecutableSandboxClient(transport, {
+      onTerminate: () => retainedSandboxes.delete(key),
+    })
+  }
+  const sandbox = create().catch((error) => {
+    retainedSandboxes.delete(key)
+    throw error
+  })
+  const entry = {
+    sandbox,
+    activeUses: reserve ? 1 : 0,
+    lastUsed: ++sandboxUseSequence,
+  }
+  retainedSandboxes.set(key, entry)
+  if (!reserve) void evictIdleImmutableSandboxes()
+  return { sandbox: await sandbox, entry }
+}
+
 function runtimeKind(options: {
   browserRuntime?: ExecuteInWorkerSandboxOptions['browserRuntime'] | undefined
   nodeRuntime?: ExecuteInWorkerSandboxOptions['nodeRuntime'] | undefined
@@ -99,36 +138,12 @@ export async function createExecutableSandbox(options: {
   maxOldSpaceSizeMb?: number
   reuse?: SandboxReusePolicy
 }): Promise<ExecutableSandbox> {
-  const kind = runtimeKind(options)
   const reuse = options.reuse ?? { mode: 'affinity', key: options.id }
-  const key = reuse.mode === 'disposable' ? undefined : retainedSandboxKey(kind, options.id, reuse)
-  const create = async () => {
-    const transport = await createTransport(kind, options.id, options)
-    return createExecutableSandboxClient(transport, {
-      onTerminate: () => {
-        if (key) retainedSandboxes.delete(key)
-      },
-    })
+  if (reuse.mode === 'disposable') {
+    const transport = await createTransport(runtimeKind(options), options.id, options)
+    return createExecutableSandboxClient(transport)
   }
-  if (reuse.mode === 'disposable') return await create()
-  if (!key) throw new Error('Retained sandbox identity was not created')
-
-  const existing = retainedSandboxes.get(key)
-  if (existing) {
-    existing.lastUsed = ++sandboxUseSequence
-    return await existing.sandbox
-  }
-  const sandbox = create().catch((error) => {
-    retainedSandboxes.delete(key)
-    throw error
-  })
-  retainedSandboxes.set(key, {
-    sandbox,
-    activeUses: 0,
-    lastUsed: ++sandboxUseSequence,
-  })
-  void evictIdleImmutableSandboxes()
-  return await sandbox
+  return (await getRetainedSandbox({ ...options, reuse }, false)).sandbox
 }
 
 export async function acquireExecutableSandbox(options: {
@@ -138,11 +153,7 @@ export async function acquireExecutableSandbox(options: {
   maxOldSpaceSizeMb?: number
   reuse: Exclude<SandboxReusePolicy, { mode: 'disposable' }>
 }): Promise<{ sandbox: ExecutableSandbox; release: () => void }> {
-  const key = retainedSandboxKey(runtimeKind(options), options.id, options.reuse)
-  const sandbox = await createExecutableSandbox(options)
-  const entry = retainedSandboxes.get(key)
-  if (!entry) throw new Error(`Retained sandbox ${key} is unavailable.`)
-  entry.activeUses += 1
+  const { sandbox, entry } = await getRetainedSandbox(options, true)
   entry.lastUsed = ++sandboxUseSequence
   let released = false
   return {

@@ -2,7 +2,11 @@ import {
   createExecutableSandboxClient,
   type SandboxTransport,
 } from './sandbox/executableSandbox.ts'
-import { createExecutableSandbox } from './sandbox/workerSandbox.ts'
+import {
+  acquireExecutableSandbox,
+  createExecutableSandbox,
+  terminateRetainedExecutableSandboxes,
+} from './sandbox/workerSandbox.ts'
 import { connectFrpSandboxService } from './sandbox/frpSandbox.ts'
 import { defineFrpProtocol } from './frpBus.ts'
 import { createEnvironmentWorker } from './environmentWorker.ts'
@@ -179,6 +183,28 @@ export const testInstalledSandboxModuleSharesOnlyItsOwnState = async () => {
 
 testInstalledSandboxModuleSharesOnlyItsOwnState.description =
   'Retains installed module globals within one sandbox while isolating different sandboxes.'
+
+export const testConcurrentImmutableSandboxAcquisitionSurvivesPoolEviction = async () => {
+  const suffix = `${Date.now()}-${Math.random()}`
+  const ids = Array.from({ length: 12 }, (_, index) => `pool-pressure-${suffix}-${index}`)
+  try {
+    const leases = await Promise.all(
+      ids.map((id) =>
+        acquireExecutableSandbox({
+          id,
+          reuse: { mode: 'immutable', contentId: `sha256:${id.padEnd(43, 'x')}` },
+        }),
+      ),
+    )
+    leases.forEach(({ release }) => release())
+    return { success: true }
+  } finally {
+    await terminateRetainedExecutableSandboxes()
+  }
+}
+
+testConcurrentImmutableSandboxAcquisitionSurvivesPoolEviction.description =
+  'Keeps concurrent immutable sandbox acquisitions alive while the bounded pool evicts idle entries.'
 
 export const testNodeSandboxClonesInputsIntoItsVmContext = async () => {
   const sandbox = await createExecutableSandbox({
