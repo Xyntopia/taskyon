@@ -444,10 +444,14 @@ export const createCachedDagRunCodeCompiler = (
       left.name.localeCompare(right.name),
     )
     const cacheId = canonicalHash({
-      kind: 'taskyon.dagRunCode.v2',
+      kind: 'taskyon.dagRunCode.v3',
       compilerAbi: compiler.compilerAbi,
       nodeId: input.nodeId,
+      importsSource: input.importsSource ?? null,
+      preambleSource: input.preambleSource ?? null,
+      runSource: input.runSource,
       moduleLockId: input.lock?.id ?? null,
+      moduleIds: Object.keys(input.modules).sort(),
       packages,
     })
     return { cacheId, packages }

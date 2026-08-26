@@ -23,7 +23,11 @@ import { z } from 'zod'
 import {
   createMediatedFetch,
   type FetchAuthorization,
+  type SandboxFetchOptions,
+  type FetchWithPolicy,
 } from '@taskyon/common/modules/webFetching/mediatedFetch'
+
+export type { FetchWithPolicy, SandboxFetchOptions }
 
 const dagNodeUseProtocol = defineFrpServiceProtocol({
   service: 'dagNodeUse',
@@ -77,6 +81,17 @@ const dagNodeUseProtocol = defineFrpServiceProtocol({
             body: z.string().optional(),
           })
           .optional(),
+        options: z
+          .object({
+            policy: z.enum(['default', 'direct', 'proxy']).optional(),
+            proxy: z
+              .object({
+                cacheBust: z.boolean().optional(),
+                stripHeaders: z.boolean().optional(),
+              })
+              .optional(),
+          })
+          .optional(),
       }),
       response: z.object({
         status: z.number(),
@@ -116,7 +131,7 @@ const buildSandboxRunModule = (runCode: string, preambleSource = ''): string => 
           }
           return Object.entries(headers || {}).map(([key, value]) => [key, String(value)]);
         };
-        const sandboxFetch = async (input, init = {}) => {
+        const sandboxFetch = async (input, init = {}, options = {}) => {
           const response = await client.call('fetch', {
             input: input && typeof input === 'object' && 'url' in input
               ? String(input.url)
@@ -128,6 +143,7 @@ const buildSandboxRunModule = (runCode: string, preambleSource = ''): string => 
                 : { headers: normalizeHeaders(init.headers) }),
               ...(init.body === undefined ? {} : { body: String(init.body) }),
             },
+            ...(options === undefined ? {} : { options }),
           });
           const bodyBytes = response.bodyBytes;
           return {
@@ -200,6 +216,8 @@ export const executeDagNodeRun = async (args: {
   params: Record<string, unknown>
   use: Record<string, DagInputAccessor>
   fetch?: typeof fetch
+  fetchWithPolicy?: FetchWithPolicy
+  fetchPolicy?: SandboxFetchOptions
   capabilities?: readonly string[]
   callCapability?: (id: string, input: unknown) => Promise<unknown>
 }) => {
@@ -288,13 +306,17 @@ export const executeDagNodeRun = async (args: {
                 ? await query.map(target, bindings as Record<string, DagQueryBinding>)
                 : await query.apply(target, bindings as Record<string, DagQueryBinding>)
             },
-            fetch: async ({ input, init }) => {
-              if (!args.fetch) throw new Error(`DAG node ${args.id}: fetch is unavailable`)
-              const response = await args.fetch(input, {
+            fetch: async ({ input, init, options }) => {
+              const requestInit = {
                 ...(init?.method ? { method: init.method } : {}),
                 ...(init?.headers ? { headers: init.headers } : {}),
                 ...(init?.body ? { body: init.body } : {}),
-              })
+              }
+              const response = args.fetchWithPolicy
+                ? await args.fetchWithPolicy(input, requestInit, options ?? args.fetchPolicy)
+                : args.fetch
+                  ? await args.fetch(input, requestInit)
+                  : await Promise.reject(new Error(`DAG node ${args.id}: fetch is unavailable`))
               const headers: [string, string][] = []
               response.headers.forEach((value, key) => headers.push([key, value]))
               const bodyBytes = new Uint8Array(await response.arrayBuffer())
@@ -351,6 +373,8 @@ export const compileDagNodeRecord = (args: {
   nodeById: Record<string, DagNode>
   authorizeFetch?: FetchAuthorization
   fetch?: typeof fetch
+  fetchWithPolicy?: FetchWithPolicy
+  fetchPolicy?: SandboxFetchOptions
   callCapability?: (id: string, input: unknown) => Promise<unknown>
   loadRunCode?: (record: DagNodeRecord) => Promise<string>
 }): DagNode => {
@@ -406,12 +430,15 @@ export const compileDagNodeRecord = (args: {
     ? createMediatedFetch({
         authorize: args.authorizeFetch,
         ...(args.fetch ? { fetch: args.fetch } : {}),
+        ...(args.fetchWithPolicy ? { fetchWithPolicy: args.fetchWithPolicy } : {}),
+        ...(args.fetchPolicy ? { fetchPolicy: args.fetchPolicy } : {}),
       })
     : undefined
   const directRunCode =
     !args.record.runCode && !args.record.importsSource ? args.record.runSource : undefined
   const runCode = args.record.runCode ?? directRunCode
   const nodeFetch = mediatedFetch ?? args.fetch
+  const nodeFetchWithPolicy = mediatedFetch ?? args.fetchWithPolicy
 
   return createNode<
     DagJsonSchema,
@@ -449,6 +476,8 @@ export const compileDagNodeRecord = (args: {
         ...(args.record.capabilities ? { capabilities: args.record.capabilities } : {}),
         ...(args.callCapability ? { callCapability: args.callCapability } : {}),
         ...(nodeFetch ? { fetch: nodeFetch } : {}),
+        ...(nodeFetchWithPolicy ? { fetchWithPolicy: nodeFetchWithPolicy } : {}),
+        ...(args.fetchPolicy ? { fetchPolicy: args.fetchPolicy } : {}),
       })
     },
   })

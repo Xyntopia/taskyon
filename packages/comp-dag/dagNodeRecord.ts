@@ -2,6 +2,7 @@ import type { Hash } from './caching.ts'
 import type { DagInputAccessor, DagNodeEffect } from './dagCore.ts'
 import { hashCanonicalDagNodeSource } from './dagNodeIdentity.ts'
 import type { DagJsonSchema } from './dagSchema.ts'
+import type { FetchWithPolicy } from '@taskyon/common/modules/webFetching/mediatedFetch.ts'
 import { assertDagNodeEffectSource } from './dagNodeEffectCheck.ts'
 
 export type DagNodeInputRefSingle = { nodeId: Hash }
@@ -23,7 +24,7 @@ export type DagNodeRunContext = {
   params: Record<string, unknown>
   use: Record<string, DagInputAccessor>
   services: {
-    fetch: typeof fetch
+    fetch: FetchWithPolicy
     callCapability: (id: string, input: unknown) => Promise<unknown>
   }
 }

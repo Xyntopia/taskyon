@@ -16,6 +16,7 @@ import { compileLockedDagNodeRunCode } from './dagModuleCompiler.ts'
 import { executeDagNodeRun } from './dagNodeRecordCompiler.ts'
 import { defineDagNodeRecord } from './dagNodeRecord.ts'
 import { compileDagNodeRecordGraph } from './dagNodeRecordGraph.ts'
+import type { SandboxFetchOptions } from '@taskyon/common/modules/webFetching/mediatedFetch.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -248,6 +249,43 @@ export const testCompiledDagNodeRecordReceivesFetchService = async () => {
 
 testCompiledDagNodeRecordReceivesFetchService.description =
   'Passes the host fetch service into compiled stored graph nodes.'
+
+export const testCompiledDagNodePassesFetchPolicyToHost = async () => {
+  let receivedOptions: SandboxFetchOptions | undefined
+  const record = await defineDagNodeRecord({
+    formatVersion: 2,
+    localName: 'compiled_fetch_policy_test',
+    label: 'Compiled Fetch Policy Test',
+    version: 1,
+    localParamsSchema: {},
+    outputSchema: { type: 'string' },
+    inputs: {},
+    runSource:
+      "async ({ services }) => (await services.fetch('https://example.test/value', {}, { policy: 'proxy', proxy: { stripHeaders: true, cacheBust: true } })).text()",
+    runCode:
+      "async ({ services }) => (await services.fetch('https://example.test/value', {}, { policy: 'proxy', proxy: { stripHeaders: true, cacheBust: true } })).text()",
+  })
+  const compiled = compileDagNodeRecordGraph({
+    graph: { [record.id]: record },
+    rootHash: record.id,
+    fetch: () => Promise.resolve(new Response('direct-result')),
+    fetchWithPolicy: (_input, _init, options) => {
+      receivedOptions = options
+      return Promise.resolve(new Response('policy-result'))
+    },
+    fetchPolicy: { policy: 'direct' },
+  })
+  const result = await compiled[record.id]!.call({}).run(undefined, {
+    execution: { mode: 'local' },
+  })
+  assert(result.value === 'policy-result', 'Expected the policy-aware host fetch to provide data')
+  assert(receivedOptions?.policy === 'proxy', 'Expected the sandbox to select proxy fetch mode')
+  assert(receivedOptions.proxy?.stripHeaders === true, 'Expected proxy header stripping option')
+  assert(receivedOptions.proxy?.cacheBust === true, 'Expected proxy cache-busting option')
+}
+
+testCompiledDagNodePassesFetchPolicyToHost.description =
+  'Passes the configured sandbox fetch policy from stored code to the parent host.'
 
 export const testDagNodeRecordGraphCompilesStoredClosureInDependencyOrder = async () => {
   const upstream = await defineDagNodeRecord({
@@ -545,10 +583,17 @@ export const testCompilerCacheIncludesExactPackageProvider = async () => {
   const second = await compiler.compile(input)
   assert(compilationCount === 2, 'Expected the provider change to invalidate the artifact cache')
   assert(first.cacheId !== second.cacheId, 'Expected exact providers in compiled artifact identity')
+
+  const changedSource = await compiler.compile({ ...input, runSource: '() => 2' })
+  const changedCompilationCount = Number(compilationCount)
+  assert(
+    changedCompilationCount === 3 && changedSource.cacheId !== second.cacheId,
+    'Expected changed stored-node source to invalidate the artifact cache',
+  )
 }
 
 testCompilerCacheIncludesExactPackageProvider.description =
-  'Keys compiled artifacts by exact resolved package version and integrity.'
+  'Keys compiled artifacts by exact source and resolved package version and integrity.'
 
 export const testStoredDagNodeNormalizationRunsWithoutBrowserProcess = async () => {
   if (typeof window === 'undefined') {

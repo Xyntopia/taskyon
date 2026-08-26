@@ -6,6 +6,37 @@ export type FetchCapability = {
 
 export type FetchAuthorization = (capability: FetchCapability) => Promise<boolean>
 
+export type SandboxFetchPolicy = 'default' | 'direct' | 'proxy'
+
+export type SandboxProxyFetchOptions = {
+  cacheBust?: boolean | undefined
+  stripHeaders?: boolean | undefined
+}
+
+export type SandboxFetchOptions = {
+  policy?: SandboxFetchPolicy | undefined
+  proxy?: SandboxProxyFetchOptions | undefined
+}
+
+export type FetchWithPolicy = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: SandboxFetchOptions,
+) => Promise<Response>
+
+export function mergeSandboxFetchOptions(
+  defaults: SandboxFetchOptions | undefined,
+  requested: SandboxFetchOptions | undefined,
+): SandboxFetchOptions {
+  const requestedPolicy = requested?.policy ?? 'default'
+  const policy = requestedPolicy === 'default' ? (defaults?.policy ?? 'default') : requestedPolicy
+  const proxy = { ...defaults?.proxy, ...requested?.proxy }
+  return {
+    policy,
+    ...(defaults?.proxy || requested?.proxy ? { proxy } : {}),
+  }
+}
+
 const PRIVATE_IPV4 = [
   /^10\./,
   /^127\./,
@@ -58,6 +89,8 @@ export function validateSandboxFetchUrl(input: RequestInfo | URL): URL {
 export function createMediatedFetch(options: {
   authorize: FetchAuthorization
   fetch?: typeof fetch
+  fetchWithPolicy?: FetchWithPolicy
+  fetchPolicy?: SandboxFetchOptions
   maxResponseBytes?: number
   signal?: AbortSignal
   timeoutMs?: number
@@ -67,7 +100,7 @@ export function createMediatedFetch(options: {
   const timeoutMs = options.timeoutMs ?? 30_000
   const authorizationByCapability = new Map<string, Promise<boolean>>()
 
-  const mediatedFetch: typeof fetch = async (input, init = {}) => {
+  const mediatedFetch: FetchWithPolicy = async (input, init = {}, requestedOptions) => {
     const url = validateSandboxFetchUrl(input)
     const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
     const access = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' ? 'read' : 'write'
@@ -87,12 +120,16 @@ export function createMediatedFetch(options: {
       AbortSignal.timeout(timeoutMs),
     ].filter((signal): signal is AbortSignal => signal instanceof AbortSignal)
     const signal = AbortSignal.any(signals)
-    const response = await hostFetch(url, {
+    const requestInit = {
       ...init,
       credentials: 'omit',
       redirect: 'manual',
       signal,
-    })
+    } satisfies RequestInit
+    const fetchOptions = mergeSandboxFetchOptions(options.fetchPolicy, requestedOptions)
+    const response = options.fetchWithPolicy
+      ? await options.fetchWithPolicy(url, requestInit, fetchOptions)
+      : await hostFetch(url, requestInit)
     const contentLength = Number(response.headers.get('content-length'))
     if (Number.isFinite(contentLength) && contentLength > maxResponseBytes) {
       await response.body?.cancel('Response exceeds sandbox fetch limit')

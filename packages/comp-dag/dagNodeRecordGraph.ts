@@ -13,7 +13,11 @@ import {
   recordInputsToRuntimeInputs,
   type DagNodeRecord,
 } from './dagNodeRecord.ts'
-import { compileDagNodeRecord } from './dagNodeRecordCompiler.ts'
+import {
+  compileDagNodeRecord,
+  type FetchWithPolicy,
+  type SandboxFetchOptions,
+} from './dagNodeRecordCompiler.ts'
 import type { FetchCapability } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { objectSchema, oneOfSchema, type DagJsonSchema } from './dagSchema.ts'
 import {
@@ -393,6 +397,8 @@ export const compileDagNodeRecordGraph = (args: {
   rootHash?: Hash
   authorizeFetch?: (record: DagNodeRecord, capability: FetchCapability) => Promise<boolean>
   fetch?: typeof fetch
+  fetchWithPolicy?: FetchWithPolicy
+  fetchPolicy?: SandboxFetchOptions
   callCapability?: (id: string, input: unknown) => Promise<unknown>
   loadRunCode?: (record: DagNodeRecord) => Promise<string>
   onProgress?: (event: { record: DagNodeRecord; completed: number; total: number }) => void
@@ -417,6 +423,8 @@ export const compileDagNodeRecordGraph = (args: {
         ? { authorizeFetch: async (capability) => await args.authorizeFetch!(record, capability) }
         : {}),
       ...(args.fetch ? { fetch: args.fetch } : {}),
+      ...(args.fetchWithPolicy ? { fetchWithPolicy: args.fetchWithPolicy } : {}),
+      ...(args.fetchPolicy ? { fetchPolicy: args.fetchPolicy } : {}),
       ...(args.callCapability ? { callCapability: args.callCapability } : {}),
       ...(args.loadRunCode ? { loadRunCode: args.loadRunCode } : {}),
     })
