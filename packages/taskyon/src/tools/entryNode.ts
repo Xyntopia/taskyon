@@ -807,6 +807,7 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
         toolSearchEnabled: {
           type: 'boolean',
           default: true,
+          title: 'Tool Chooser',
           description: 'Expose focused and overview tool-catalog search to the model.',
         },
         recentToolCount: {
@@ -899,13 +900,7 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
           },
         },
         prompt_templates: {
-          required: [
-            'basePrompt',
-            'message',
-            'toolResult',
-            'error',
-            'retryExhausted',
-          ],
+          required: ['basePrompt', 'message', 'toolResult', 'error', 'retryExhausted'],
           type: 'object',
           properties: {
             basePrompt: { type: 'string' },

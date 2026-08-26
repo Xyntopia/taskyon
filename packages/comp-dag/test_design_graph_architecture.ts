@@ -1028,18 +1028,19 @@ testInvocationExecutionUsesCanonicalObjectivesAndConstraints.description =
 export const testInvocationArtifactStoreSplitsOversizedBlobChunks = async () => {
   const chunkSizes: number[] = []
   const storage: InvocationArtifactStorageClient = {
-    statBlob: async () => null,
-    beginBlobWrite: async () => ({ writeId: 'write-1' }),
-    writeBlobChunk: async ({ offset, data }) => {
+    statBlob: () => Promise.resolve(null),
+    beginBlobWrite: () => Promise.resolve({ writeId: 'write-1' }),
+    writeBlobChunk: ({ offset, data }) => {
       assert(data.byteLength <= 1024 * 1024, 'Expected artifact chunks to fit the blob limit')
       chunkSizes.push(data.byteLength)
-      return { nextOffset: offset + data.byteLength }
+      return Promise.resolve({ nextOffset: offset + data.byteLength })
     },
-    commitBlobWrite: async ({ expectedSize, targetId, writeId }) => ({
-      id: targetId,
-      size: expectedSize,
-      contentType: writeId,
-    }),
+    commitBlobWrite: ({ expectedSize, targetId, writeId }) =>
+      Promise.resolve({
+        id: targetId,
+        size: expectedSize,
+        contentType: writeId,
+      }),
     abortBlobWrite: async () => {},
   }
   const artifacts = createStorageInvocationArtifactStore(storage, () => 'test')

@@ -610,7 +610,7 @@ const patchNamedRoots = async (args: {
   const replacements = new Map<Hash, Hash>()
   const createdFiles = new Map<string, { path: string; source: string }>()
 
-  for (const [rootName, rootHash] of Object.entries(args.roots)) {
+  for (const rootName of Object.keys(args.roots)) {
     const localNames = getStoredDagSourceGraphLocalNameIndex({ storedGraph, rootName })
     for (const [localName, currentHash] of Object.entries(localNames)) {
       const namedCandidates = (args.incomingNodes.get(localName) ?? []).filter((candidate) =>
