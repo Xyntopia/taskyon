@@ -59,16 +59,20 @@ const height = computed(() => props.height)
 const formatTimestamp = (atMs: number): string =>
   new Date(atMs).toISOString().replace('T', ' ').slice(0, 19)
 
-const formatData = (value: unknown): string => {
+const formatData = (value: unknown, maxLength: number | undefined = 380): string => {
   if (value == null) return ''
   if (typeof value === 'string') return value
   try {
     const asText = JSON.stringify(value)
-    return asText.length > 380 ? `${asText.slice(0, 377)}...` : asText
+    return maxLength !== undefined && asText.length > maxLength
+      ? `${asText.slice(0, maxLength - 3)}...`
+      : asText
   } catch {
     return Object.prototype.toString.call(value)
   }
 }
+
+const formatDataForCopy = (value: unknown): string => formatData(value, undefined)
 
 const levelClass = (level: UnifiedLogEntry['level']): string => {
   if (level === 'error') return 'text-negative'
@@ -79,7 +83,7 @@ const levelClass = (level: UnifiedLogEntry['level']): string => {
 const copyText = computed(() =>
   logs.value
     .map((entry) => {
-      const data = formatData(entry.data)
+      const data = formatDataForCopy(entry.data)
       const base = `[${formatTimestamp(entry.atMs)}] [${entry.source}] [${entry.level}] ${entry.message}`
       return data ? `${base}\n  ${data}` : base
     })
