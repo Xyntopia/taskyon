@@ -19,8 +19,6 @@ const availableModelsTmp = async (
       headers: {
         ...headers,
         Authorization: `Bearer ${apiKey}`,
-        //'Cache-Control': 'max-stale=3600',
-        'Cache-Control': 'no-cache', // Ensure the freshest data is fetched as we're caching this function anyways...
       },
     })
 

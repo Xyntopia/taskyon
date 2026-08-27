@@ -10,6 +10,7 @@ export default defineConfig({
     'pglite.worker': 'src/utils/pglite.worker.ts',
     runtimeCore: 'src/runtimeCore.ts',
     entryNode: 'src/tools/entryNode.ts',
+    'taskyon-space': 'src/taskyon.space/public.ts',
   },
   outDir: process.env.TASKYON_PACKAGE_OUT_DIR ?? 'dist-integration',
   format: ['esm'],

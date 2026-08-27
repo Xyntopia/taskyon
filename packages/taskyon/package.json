@@ -32,6 +32,9 @@
     "./api": {
       "import": "./src/api/index.ts"
     },
+    "./taskyon-space": {
+      "import": "./src/taskyon.space/public.ts"
+    },
     "./test-support": {
       "import": "./src/testSupport/storageBackendContract.ts"
     },

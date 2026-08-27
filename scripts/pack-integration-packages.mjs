@@ -156,6 +156,10 @@ const taskyon = await stagePackage({
         types: './dist/entryNode.d.ts',
         import: './dist/entryNode.js',
       },
+      './taskyon-space': {
+        types: './dist/taskyon-space.d.ts',
+        import: './dist/taskyon-space.js',
+      },
     },
     dependencies: {
       ...Object.fromEntries(

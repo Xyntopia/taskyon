@@ -21,6 +21,7 @@ import {
 } from '@taskyon/taskyon/tools/entryNode'
 
 export { canonicalHash, createClientTool, toolCall }
+export { TASKYON_MODEL_CATALOG_URL } from '@taskyon/taskyon/taskyon-space'
 export type { InternalTool, Sha256Hash, TaskNode, TaskyonClient, partialTaskDraft }
 export type { EntryNodePromptTemplates }
 

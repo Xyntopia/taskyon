@@ -1,6 +1,6 @@
 import type { ChatCompletionProviderSettings } from '../types/chatCompletion'
 import { availableModels } from './chat'
-import { TOKEN_SERVICE_BASE_URL } from '../taskyon.space/tokenservice.types'
+import { TASKYON_MODEL_CATALOG_URL, TOKEN_SERVICE_BASE_URL } from '../taskyon.space/endpoints'
 import { joinUrl } from '../utils/httpUtils'
 
 type ModelDiscoveryOptions = {
@@ -16,7 +16,7 @@ const resolveModelEndpoint = (
     return `${TOKEN_SERVICE_BASE_URL}/api/models_openrouter`
   }
   if (api.provider === 'taskyon' && options.useTokenServiceForTaskyon) {
-    return `${TOKEN_SERVICE_BASE_URL}/api/models`
+    return TASKYON_MODEL_CATALOG_URL
   }
   return joinUrl(api.baseURL, api.routes.models)
 }

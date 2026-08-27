@@ -104,8 +104,7 @@ export type ReturnTokenResponse = ReturnTokenSuccessResponse | ReturnTokenErrorR
  * Base prefix used by the Edge Function router.
  * Use this when constructing client URLs to avoid diverging paths.
  */
-export const TOKEN_SERVICE_BASE_URL =
-  'https://sicynrpldixtrddgqnpm.supabase.co/functions/v1' as const
+export { TASKYON_MODEL_CATALOG_URL, TOKEN_SERVICE_BASE_URL } from './endpoints'
 export const TOKEN_SERVICE_PREFIX = '/tokenservice' as const
 
 export const TOKEN_SERVICE_ROUTES = {
