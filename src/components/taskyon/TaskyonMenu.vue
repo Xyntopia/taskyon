@@ -39,44 +39,34 @@
             <q-icon :name="mdiInformationVariant" />
           </q-item-section>
           <q-item-section> About </q-item-section>
-          <q-dialog v-model="showAboutDialog" auto-close>
-            <q-card>
-              <q-card-section class="text-h5">About Taskyon</q-card-section>
-              <q-card-section>
-                Taskyon is a local-first AI platform for personalized task management and seamless
-                web integration. It ensures data security with local processing while offering
-                powerful tools like task trees, function execution, and sandboxing. Learn more at
-                taskyon.space.
-              </q-card-section>
-              <q-card-actions>
-                <q-btn flat color="secondary" to="/diagnostics">
-                  <div class="q-pr-md">Open Diagnostics</div>
-                  <q-icon :name="mdiWrench"></q-icon>
-                  <q-icon :name="mdiHospital" size="md"></q-icon>
-                </q-btn>
-                <q-btn flat label="Reset Settings" to="/settings/profile" />
-              </q-card-actions>
-              <q-card-section class="text-info" style="font-size: 0.75em">
-                <div v-for="[name, value] of Object.entries(environmentInfo)" :key="name">
-                  {{ name }}: {{ value }}
-                </div>
-              </q-card-section>
-              <q-card-section>
-                <p>
-                  “This application uses <strong>Rumoca</strong>, a Modelica compiler written in
-                  Rust compiled to WebAssembly. Rumoca is licensed under the Apache‑2.0 License.”
-                </p>
-                <p style="font-size: 0.8em; color: var(--q-color-info‑text)">
-                  Rumoca — “A Modelica compiler written in Rust” (© 2024–2025 Condie, Woodbury,
-                  Goppert, Andersson & contributors). See
-                  <a href="https://github.com/condie‑etc/rumoca" target="_blank"
-                    >https://github.com/…/rumoca</a
-                  >
-                  and the included Apache‑2.0 license for details.
-                </p>
-              </q-card-section>
-            </q-card>
-          </q-dialog>
+          <AboutDialog
+            v-model="showAboutDialog"
+            app-name="Taskyon"
+            description="Taskyon is a local-first AI platform for personalized task management and seamless web integration. It ensures data security with local processing while offering powerful tools like task trees, function execution, and sandboxing. Learn more at taskyon.space."
+          >
+            <template #actions>
+              <q-btn flat color="secondary" to="/diagnostics">
+                <div class="q-pr-md">Open Diagnostics</div>
+                <q-icon :name="mdiWrench"></q-icon>
+                <q-icon :name="mdiHospital" size="md"></q-icon>
+              </q-btn>
+              <q-btn flat label="Reset Settings" to="/settings/profile" />
+            </template>
+            <template #legal>
+              <p>
+                “This application uses <strong>Rumoca</strong>, a Modelica compiler written in Rust
+                compiled to WebAssembly. Rumoca is licensed under the Apache‑2.0 License.”
+              </p>
+              <p style="font-size: 0.8em; color: var(--q-color-info‑text)">
+                Rumoca — “A Modelica compiler written in Rust” (© 2024–2025 Condie, Woodbury,
+                Goppert, Andersson & contributors). See
+                <a href="https://github.com/condie‑etc/rumoca" target="_blank"
+                  >https://github.com/…/rumoca</a
+                >
+                and the included Apache‑2.0 license for details.
+              </p>
+            </template>
+          </AboutDialog>
         </q-item>
         <q-separator />
         <q-item v-ripple clickable to="/pricing" exact active-class="text-secondary">
@@ -103,9 +93,9 @@
 <script setup lang="ts">
 import { matHelpOutline, matSettings } from '@quasar/extras/material-icons'
 import { mdiGithub, mdiHospital, mdiInformationVariant, mdiWrench } from '@quasar/extras/mdi-v6'
-import { getEnvironmentInfo } from '@taskyon/common/modules/utils'
 import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
+import AboutDialog from '@taskyon/ui/components/AboutDialog.vue'
 import DarkModeButton from '@taskyon/ui/components/DarkModeButton.vue'
 
 defineProps<{
@@ -114,8 +104,6 @@ defineProps<{
 
 const showAboutDialog = ref(false)
 const state = useAppStateStore()
-const environmentInfo = getEnvironmentInfo()
-console.log(environmentInfo)
 
 function onThemeChanged(newMode: boolean | 'auto') {
   state.appConfiguration.darkTheme = newMode

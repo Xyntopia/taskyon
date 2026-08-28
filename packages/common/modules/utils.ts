@@ -683,12 +683,20 @@ export function clearCookies() {
 }
 
 export const getEnvironmentInfo = () => {
-  const publishDateUTC = process.env.PUBLISH_DATE as unknown as string
+  const publishDateUTC =
+    typeof process !== 'undefined' && typeof process.env.PUBLISH_DATE === 'string'
+      ? process.env.PUBLISH_DATE
+      : undefined
+  const commitHash =
+    typeof process !== 'undefined' && typeof process.env.COMMIT_HASH === 'string'
+      ? process.env.COMMIT_HASH
+      : undefined
   return {
     publishDate: {
-      utc: publishDateUTC,
-      local: new Date(String(publishDateUTC)).toLocaleString(),
+      utc: publishDateUTC ?? 'unknown',
+      local: publishDateUTC ? new Date(publishDateUTC).toLocaleString() : 'unknown',
     },
+    commitHash: commitHash ?? 'unknown',
     isBrowser: typeof window !== 'undefined' && typeof window.document !== 'undefined',
     isNode:
       typeof process !== 'undefined' && process.versions != null && process.versions.node != null,
