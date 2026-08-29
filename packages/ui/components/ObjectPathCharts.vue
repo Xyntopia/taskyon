@@ -93,6 +93,11 @@
             dense
             color="amber-8"
             :icon="isChartFavorite(chart.config) ? matStar : matStarOutline"
+            :aria-label="
+              isChartFavorite(chart.config)
+                ? 'Remove chart from favorites'
+                : 'Add chart to favorites'
+            "
             @click="toggleChartFavorite(index, chart.config)"
           />
         </div>
@@ -220,6 +225,11 @@
                   dense
                   color="amber-8"
                   :icon="isChartFavorite(chart.config) ? matStar : matStarOutline"
+                  :aria-label="
+                    isChartFavorite(chart.config)
+                      ? 'Remove chart from favorites'
+                      : 'Add chart to favorites'
+                  "
                   @click.stop="toggleChartFavorite(index, chart.config)"
                 />
               </div>
@@ -1883,6 +1893,30 @@ const updateAllCharts = async () => {
     await updateChart(i)
   }
 }
+
+let viewOnlyRenderRequestId = 0
+const renderViewOnlyCharts = async (requestId: number) => {
+  await nextTick()
+  if (requestId !== viewOnlyRenderRequestId || !isViewOnly.value) return
+  for (let i = 0; i < chartList.value.length; i += 1) {
+    if (requestId !== viewOnlyRenderRequestId) return
+    await renderChart(i)
+  }
+}
+
+watch(
+  [chartIdentityList, dataVersion, mode, mapColumnOptions],
+  () => {
+    const requestId = ++viewOnlyRenderRequestId
+    if (!isViewOnly.value) return
+    void renderViewOnlyCharts(requestId).catch((error: unknown) => {
+      appendChartsLog('View-only chart rendering failed.', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+  },
+  { immediate: true, deep: false },
+)
 
 const selectedThumbnailChartIndex = computed(() => {
   if (!Number.isInteger(selectedThumbnailIndex.value)) return -1
