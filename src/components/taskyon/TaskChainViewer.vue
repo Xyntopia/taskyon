@@ -136,7 +136,7 @@ import {
 } from '@taskyon/taskyon'
 import Task from 'components/taskyon/TaskWidget.vue'
 import { asyncComputed } from 'src/modules/vueUtils'
-import { isTaskVisibleInChat } from '@taskyon/ui/components/taskyon/taskChatVisibility'
+import { selectTasksVisibleInChat } from '@taskyon/ui/components/taskyon/taskChatVisibility'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -218,15 +218,18 @@ const queueBranches = computed(() =>
 
 const queuedDisplayBranches = computed(() =>
   queueBranches.value
-    .map((branch) => ({
-      ...branch,
-      pendingTasks: branch.pendingTasks.filter((task) =>
-        isTaskVisibleInChat(task, tystate.allTools, props.expertMode ?? false),
-      ),
-      activeTasks: branch.activeTasks.filter((task) =>
-        isTaskVisibleInChat(task, tystate.allTools, props.expertMode ?? false),
-      ),
-    }))
+    .map((branch) => {
+      const visibleTaskIds = new Set(
+        selectTasksVisibleInChat(branch.tasks, tystate.allTools, props.expertMode ?? false).map(
+          ({ id }) => id,
+        ),
+      )
+      return {
+        ...branch,
+        pendingTasks: branch.pendingTasks.filter(({ id }) => visibleTaskIds.has(id)),
+        activeTasks: branch.activeTasks.filter(({ id }) => visibleTaskIds.has(id)),
+      }
+    })
     .filter((branch) => branch.pendingTasks.length > 0),
 )
 
@@ -249,10 +252,7 @@ const queueSummary = computed(() => {
 })
 
 const queueBranchLabel = (tasks: readonly TaskNode[]) => {
-  const task =
-    tasks.find((candidate) =>
-      isTaskVisibleInChat(candidate, tystate.allTools, props.expertMode ?? false),
-    ) ?? tasks[0]
+  const task = selectTasksVisibleInChat(tasks, tystate.allTools, props.expertMode ?? false).at(0)
   return task ? getTaskQueueLabel(task) : 'Queued branch'
 }
 

@@ -35,9 +35,11 @@ export const persistCliStorageSelection = async (
 export const createCliSelectedStorageService = async (options: {
   port: Port<TaskyonStorageMessage, TaskyonStorageMessage>
   dataDirectory: string
+  blobStorageRoot?: string
   selection: { records: CliStorageBackendKind; blobs: CliStorageBackendKind }
 }) => {
   const fileRoot = join(options.dataDirectory, 'storage')
+  const blobFileRoot = options.blobStorageRoot ?? fileRoot
   const needsSqlite = options.selection.records === 'sqlite' || options.selection.blobs === 'sqlite'
   const needsPgLite = options.selection.records === 'pglite' || options.selection.blobs === 'pglite'
   const sqlite = needsSqlite
@@ -62,7 +64,7 @@ export const createCliSelectedStorageService = async (options: {
   const blobs = (namespace: string) => {
     switch (options.selection.blobs) {
       case 'files':
-        return createCliFileBlobStorageBackend(fileRoot, namespace)
+        return createCliFileBlobStorageBackend(blobFileRoot, namespace)
       case 'sqlite':
         return sqlite!.provider.blobs!(namespace)
       case 'pglite':

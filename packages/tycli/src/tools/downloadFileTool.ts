@@ -1,7 +1,7 @@
 import { mkdir, open, rename, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { createTool } from '@taskyon/taskyon/api'
-import { assertPathInsideArtifactRoot, resolveWorkspacePath } from './workspacePaths'
+import { resolvePathInsideArtifactRoot, resolveWorkspacePath } from './workspacePaths'
 
 type DownloadFileArgs = {
   url?: string
@@ -48,7 +48,7 @@ export const downloadFileTool = createTool({
       filePath: {
         type: 'string',
         description:
-          'Relative workspace path to write. Use a task-specific directory and stable filename.',
+          'Relative workspace path to write. Use a task-specific directory and stable filename. When artifactRoot is provided, a simple filename is placed inside that root automatically; a prefixed path is also accepted.',
       },
       artifactRoot: {
         type: 'string',
@@ -87,8 +87,8 @@ export const downloadFileTool = createTool({
     )
     try {
       try {
-        assertPathInsideArtifactRoot(filePath, args.artifactRoot)
-        const fullPath = resolveWorkspacePath(filePath)
+        const resolvedFilePath = resolvePathInsideArtifactRoot(filePath, args.artifactRoot)
+        const fullPath = resolveWorkspacePath(resolvedFilePath)
         const response = await fetch(url, {
           signal: controller.signal,
           headers: {
@@ -160,7 +160,8 @@ export const downloadFileTool = createTool({
 
         return {
           ok: true,
-          filePath,
+          filePath: resolvedFilePath,
+          url,
           size,
           contentType,
         }

@@ -133,6 +133,7 @@ export async function applyCliRuntimeConfig(host: TaskyonHostClient, llmState: C
 
 export async function bootstrapCliTaskyon(args?: {
   nodePgLiteDataDir?: string
+  blobStorageRoot?: string
   selectedApi?: string
   model?: string
   storagePaths?: CliStoragePaths
@@ -147,6 +148,7 @@ export async function bootstrapCliTaskyon(args?: {
   selectedApi: string
   model?: string
   stored: StoredConfig
+  storageClient: ReturnType<typeof createStorageClient>
   providerSession?: DiagnosticsProviderSession
   taskyonAuth?: string
 }> {
@@ -185,6 +187,7 @@ export async function bootstrapCliTaskyon(args?: {
   await createCliSelectedStorageService({
     port: taskStorageServicePort,
     dataDirectory: dataDir,
+    ...(args?.blobStorageRoot ? { blobStorageRoot: args.blobStorageRoot } : {}),
     selection: resolveCliStorageSelection(stored),
   })
   const storageClient = createStorageClient(taskStorageClientPort, {
@@ -233,6 +236,7 @@ export async function bootstrapCliTaskyon(args?: {
     selectedApi,
     ...(model ? { model } : {}),
     stored,
+    storageClient,
     ...(providerSession ? { providerSession } : {}),
     ...(taskyonAuth ? { taskyonAuth } : {}),
   }

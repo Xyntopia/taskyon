@@ -6,7 +6,7 @@ import {
 } from '../hostNetwork'
 
 export const testPrivateToolTargetAlwaysUsesDirectHostFetch = () => {
-  for (const configured of ['wss', 'custom-proxy', 'direct'] as const) {
+  for (const configured of ['wss', 'custom-proxy', 'cors-proxy', 'direct'] as const) {
     const selected = resolveToolHostTransport({
       request: new Request('http://127.0.0.1:4321/mcp'),
       configured,
@@ -16,6 +16,23 @@ export const testPrivateToolTargetAlwaysUsesDirectHostFetch = () => {
     })
     assert(selected === 'direct', 'Private targets must always use direct host fetch')
   }
+  return { success: true }
+}
+
+export const testConfiguredCorsProxyRoutesPublicToolRequests = () => {
+  const selected = resolveToolHostTransport({
+    request: new Request('https://example.com/page'),
+    configured: 'cors-proxy',
+    policy: 'proxy',
+  })
+  assert(selected === 'cors-proxy', 'A configured CORS proxy must route public tool requests')
+
+  const direct = resolveToolHostTransport({
+    request: new Request('https://example.com/page'),
+    configured: 'cors-proxy',
+    policy: 'direct',
+  })
+  assert(direct === 'direct', 'An explicit direct policy must override the CORS proxy')
   return { success: true }
 }
 

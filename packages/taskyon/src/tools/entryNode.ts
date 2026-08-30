@@ -1,7 +1,6 @@
 import { createChatCompletionTask } from '../api'
 import { toPromptMessages } from '../llm/promptMessages'
 import { CLARIFICATION_TOOL_NAME } from './clarificationTool'
-import { match, P } from 'ts-pattern'
 import { createTool, toolCall } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
@@ -12,39 +11,14 @@ import {
   type TaskContract,
 } from '../types/taskContract'
 import { safeYamlDump } from '../utils/yamlUtils'
-import { bind, toolDefinitionTask } from './lambdaTool'
+import { bind } from './lambdaTool'
 
-const ENTRY_NODE_SELECTION_TOOL_NAME = 'selectTaskyonTools'
-const ENTRY_NODE_TOOL_SEARCH_BINDING_NAME = 'entryNodeToolSearch'
-const entryNodeSelectionParameters = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    allowedTools: {
-      type: 'array',
-      description: 'The exact tools which might help complete the current task.',
-      items: { type: 'string' },
-    },
-    toolSearch: {
-      type: 'object',
-      additionalProperties: false,
-      description:
-        'Search the full tool catalog and pass the matching tools directly to the next EntryNode call. Focused search is preferred; use overview only for broad multi-tool planning.',
-      properties: {
-        mode: {
-          type: 'string',
-          enum: ['focused', 'overview'],
-          default: 'focused',
-          description:
-            'Use focused for a small callable set. Use overview only to inspect many tools for broad planning; results are passed directly to the next EntryNode call.',
-        },
-        query: { type: 'string', minLength: 1 },
-        limit: { type: 'integer', minimum: 1, maximum: 50, default: 3 },
-      },
-      required: ['query'],
-    },
-  },
-} as const satisfies JSONSchema7
+export const ENTRY_NODE_SELECTION_TOOL_NAME = 'selectTaskyonTools'
+export const ENTRY_NODE_TOOL_SEARCH_BINDING_NAME = 'entryNodeToolSearch'
+export const isEntryNodeInternalToolName = (name: string) =>
+  name === ENTRY_NODE_SELECTION_TOOL_NAME ||
+  name === ENTRY_NODE_TOOL_SEARCH_BINDING_NAME ||
+  name === 'toolSearcher'
 
 type EntryNodeMode = 'message' | 'toolresult' | 'error' | 'structured' | 'fallback'
 
@@ -89,10 +63,9 @@ export type EntryNodePromptTemplates = {
 export type EntryNodeArgs = {
   toolResultSection?: string
   allowedTools?: string[]
+  requireToolCall?: boolean
   toolSearch?: { mode?: 'focused' | 'overview'; query: string; limit?: number }
-  toolSearchMode?: 'focused' | 'overview'
   toolSearchInput?: Record<string, unknown>
-  toolSearchResults?: EntryNodeToolCatalog & { mode?: 'focused' | 'overview' }
   taskContract?: TaskContract
   pinnedTools?: string[]
   toolSearchEnabled?: boolean
@@ -185,7 +158,7 @@ export const normalizeEntryNodeSettings = (
 
   return {
     ...(taskContract ? { taskContract } : {}),
-    pinnedTools: input?.pinnedTools ?? [],
+    pinnedTools: Array.from(new Set(input?.pinnedTools ?? [])),
     toolSearchEnabled: input?.toolSearchEnabled ?? true,
     use_baseprompt: input?.use_baseprompt ?? true,
     recentToolCount: input?.recentToolCount ?? 3,
@@ -308,13 +281,9 @@ type EntryNodePromptContext = {
   normalizedSettings: ResolvedEntryNodeSettings
 }
 
-type EntryNodeRoutingContext = {
-  mode: EntryNodeMode
-  webSearchEnabled: boolean
-}
-
 type EntryNodeRuntimeState = {
   allowedTools: string[]
+  requireToolCall: boolean
   toolRestriction: string[] | undefined
   entryNodeName: string
   mode: EntryNodeMode
@@ -322,12 +291,9 @@ type EntryNodeRuntimeState = {
   previousTask: TaskNode | undefined
   prompt: string
   promptContext: EntryNodePromptContext
-  routingContext: EntryNodeRoutingContext
   toolResultSection?: string
   toolSearch?: { mode?: 'focused' | 'overview'; query: string; limit?: number }
-  toolSearchMode?: 'focused' | 'overview'
   toolSearchInput?: Record<string, unknown>
-  toolSearchResults?: EntryNodeToolCatalog & { mode?: 'focused' | 'overview' }
   taskChain: TaskNode[]
 }
 
@@ -339,28 +305,12 @@ type EntryNodeChatCompletionArgs = Omit<
   'allowedTools' | 'toolChoice'
 >
 
-const getEntryNodePersistentArguments = (settings: ResolvedEntryNodeSettings): EntryNodeArgs => ({
-  prompt_templates: settings.prompt_templates,
-  pinnedTools: settings.pinnedTools,
-  toolSearchEnabled: settings.toolSearchEnabled,
-  use_baseprompt: settings.use_baseprompt,
-  recentToolCount: settings.recentToolCount,
-  frequentToolCount: settings.frequentToolCount,
-  recentSearchToolCount: settings.recentSearchToolCount,
-  max_error_retries: settings.max_error_retries,
-  use_multimodal: settings.use_multimodal,
-  websearch: settings.websearch,
-  ...(settings.reasoning_effort ? { reasoning_effort: settings.reasoning_effort } : {}),
-  ...(settings.taskContract ? { taskContract: settings.taskContract } : {}),
-  ...(settings.trace ? { trace: settings.trace } : {}),
-})
-
 const createChatCompletionWithToolSelector = (
   entryNodeName: string,
   args: EntryNodeChatCompletionArgs,
   allowedTools: readonly string[],
-  persistentArguments: EntryNodeArgs,
   toolSearchEnabled: boolean,
+  toolSelectorDefined: boolean,
 ) => {
   if (!toolSearchEnabled) {
     return [
@@ -372,7 +322,7 @@ const createChatCompletionWithToolSelector = (
   }
   const visibleTools = Array.from(new Set([...allowedTools, ENTRY_NODE_SELECTION_TOOL_NAME]))
   return [
-    createToolSelectorBinding(entryNodeName, persistentArguments),
+    ...(toolSelectorDefined ? [] : [createToolSelectorBinding(entryNodeName)]),
     createChatCompletionTask({
       ...args,
       allowedTools: [...visibleTools],
@@ -380,15 +330,33 @@ const createChatCompletionWithToolSelector = (
   ]
 }
 
-const createToolSelectorBinding = (entryNodeName: string, fixedArguments: EntryNodeArgs) => {
+const hasCurrentTurnToolSelector = (taskChain: readonly TaskNode[], entryNodeName: string) => {
+  const userIndex = taskChain.findLastIndex((task) => task.role === 'user')
+  return taskChain.slice(userIndex + 1).some((task) => {
+    if (
+      task.content.type !== 'tooldefinition' ||
+      task.content.data.name !== ENTRY_NODE_SELECTION_TOOL_NAME
+    ) {
+      return false
+    }
+    const definition = task.content.data
+    return (
+      'implementation' in definition &&
+      definition.implementation.type === 'binding' &&
+      definition.implementation.target === entryNodeName &&
+      definition.implementation.fixedArguments.requireToolCall === true
+    )
+  })
+}
+
+const createToolSelectorBinding = (entryNodeName: string) => {
   const [definition] = bind({
     name: ENTRY_NODE_SELECTION_TOOL_NAME,
-    description:
-      'Search the full tool catalog and pass the matching tools directly to the next EntryNode call.',
+    description: 'Search the full tool catalog when the current callable tools are insufficient.',
     renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
     target: entryNodeName,
-    fixedArguments,
-    publicArguments: entryNodeSelectionParameters.properties,
+    fixedArguments: { requireToolCall: true },
+    publicArguments: { toolSearch: {} },
   })
   if (!definition) throw new Error('Failed to create the tool-selector binding.')
   return definition
@@ -397,12 +365,11 @@ const createToolSelectorBinding = (entryNodeName: string, fixedArguments: EntryN
 const resolveAllowedToolsForMode = (
   mode: EntryNodeMode,
   allowedTools: readonly string[] | undefined,
-) =>
-  mode === 'error'
+) => {
+  return mode === 'error'
     ? allowedTools?.filter((toolName) => toolName !== CLARIFICATION_TOOL_NAME)
     : allowedTools
-      ? [...allowedTools]
-      : undefined
+}
 
 const resolveAllowedToolsFromLatestCompletion = (taskChain: readonly TaskNode[]) => {
   for (const task of [...taskChain].reverse()) {
@@ -492,44 +459,32 @@ const normalizeToolSearchInput = (value: unknown): EntryNodeToolCatalog => {
 
 const createEntryNodeToolSearchTasks = (
   runtime: EntryNodeRuntimeState,
-  limit: number,
-  searchMode: 'focused' | 'overview',
-) => [
-  toolDefinitionTask({
+  search: NonNullable<EntryNodeRuntimeState['toolSearch']>,
+) => {
+  const mode = search.mode ?? 'focused'
+  const defaultLimit = mode === 'overview' ? 30 : runtime.normalizedSettings.recentSearchToolCount
+  const limit = Math.max(1, Math.min(search.limit ?? defaultLimit, 50))
+  const [definition] = bind({
     name: ENTRY_NODE_TOOL_SEARCH_BINDING_NAME,
     description: 'Search the available tool catalog for the current EntryNode request.',
     renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
-    implementation: {
-      type: 'binding',
-      target: 'toolSearcher',
-      fixedArguments: { analyze: false },
-      publicArguments: {
-        query: {
-          type: 'string',
-          minLength: 1,
-          description: 'Semantic capability query for the current task.',
-        },
-        limit: {
-          type: 'integer',
-          minimum: 1,
-          maximum: 50,
-          description: 'Maximum number of matching tools.',
-        },
-      },
-    },
-  }),
-  toolCall({
-    name: ENTRY_NODE_TOOL_SEARCH_BINDING_NAME,
-    arguments: { query: runtime.toolSearch!.query, limit },
-  }),
-  toolCall({
-    name: runtime.entryNodeName,
-    arguments: {
-      toolSearchMode: searchMode,
-      $use: { toolSearchInput: '$previousResult' },
-    },
-  }),
-]
+    target: 'toolSearcher',
+    fixedArguments: { analyze: false, focused: mode === 'focused' },
+    publicArguments: { query: {}, limit: {} },
+  })
+  if (!definition) throw new Error('Failed to create the EntryNode tool-search binding.')
+  return [
+    definition,
+    toolCall({
+      name: ENTRY_NODE_TOOL_SEARCH_BINDING_NAME,
+      arguments: { query: search.query, limit },
+    }),
+    toolCall({
+      name: runtime.entryNodeName,
+      arguments: { $use: { toolSearchInput: '$previousResult' } },
+    }),
+  ]
+}
 
 const resolveAvailableToolsForMessage = async (
   config: EntryNodeConfig,
@@ -593,17 +548,17 @@ const inheritEntryNodeArguments = (
       return inherited
     }
     const {
-      toolSearch: transientSearch,
-      toolSearchInput: transientSearchInput,
-      toolSearchMode: transientSearchMode,
-      toolSearchResults: transientSearchResults,
+      allowedTools: transientAllowedTools,
+      requireToolCall: transientRequireToolCall,
+      toolSearch: transientToolSearch,
+      toolSearchInput: transientToolSearchInput,
       websearch: transientWebSearch,
       ...persistentArgs
     } = task.content.data.arguments as EntryNodeArgs
-    void transientSearch
-    void transientSearchInput
-    void transientSearchMode
-    void transientSearchResults
+    void transientAllowedTools
+    void transientRequireToolCall
+    void transientToolSearch
+    void transientToolSearchInput
     void transientWebSearch
     return mergeEntryNodeArguments(inherited, persistentArgs)
   }, {})
@@ -621,10 +576,9 @@ const createEntryNodeRuntimeState = async (
   const {
     toolResultSection,
     allowedTools: allowedToolsOverride,
+    requireToolCall = false,
     toolSearch,
-    toolSearchMode,
     toolSearchInput,
-    toolSearchResults,
     ...settings
   } = inheritedArgs
   const previousTask = taskChain.at(-2)
@@ -656,9 +610,9 @@ const createEntryNodeRuntimeState = async (
     previousTask,
     normalizedSettings,
   }
-
   return {
     allowedTools,
+    requireToolCall,
     toolRestriction,
     entryNodeName,
     mode,
@@ -666,30 +620,50 @@ const createEntryNodeRuntimeState = async (
     previousTask,
     prompt,
     promptContext,
-    routingContext: {
-      mode,
-      webSearchEnabled: normalizedSettings.websearch.enabled,
-    },
     taskChain,
     ...(toolResultSection !== undefined ? { toolResultSection } : {}),
     ...(toolSearch ? { toolSearch } : {}),
-    ...(toolSearchMode ? { toolSearchMode } : {}),
     ...(toolSearchInput !== undefined ? { toolSearchInput } : {}),
-    ...(toolSearchResults ? { toolSearchResults } : {}),
   }
 }
 
 const createToolSearchContinuationTasks = (
   runtime: EntryNodeRuntimeState,
   searched: EntryNodeToolCatalog,
-) => [
-  [
-    toolCall({
-      name: runtime.entryNodeName,
-      arguments: { allowedTools: searched.tools.map((tool) => tool.name) },
-    }),
-  ],
-]
+) => {
+  const allowedTools = Array.from(
+    new Set([
+      ...runtime.allowedTools.filter((name) => name !== ENTRY_NODE_SELECTION_TOOL_NAME),
+      ...searched.tools.map((tool) => tool.name),
+    ]),
+  )
+
+  if (searched.tools.length === 0) {
+    return [
+      [
+        toolCall({
+          name: runtime.entryNodeName,
+          arguments: {
+            allowedTools,
+            toolSearchEnabled: false,
+          },
+        }),
+      ],
+    ]
+  }
+
+  return [
+    [
+      toolCall({
+        name: runtime.entryNodeName,
+        arguments: {
+          allowedTools,
+          requireToolCall: true,
+        },
+      }),
+    ],
+  ]
+}
 
 const shouldGiveUpAfterError = (
   taskChain: TaskNode[],
@@ -758,38 +732,47 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
           type: 'string',
           description: 'Optional additional context about the most recent tool result.',
         },
-        ...entryNodeSelectionParameters.properties,
-        toolSearchMode: {
-          type: 'string',
-          enum: ['focused', 'overview'],
-          description: 'Internal mode carried from the preceding EntryNode tool search.',
+        requireToolCall: {
+          type: 'boolean',
+          description:
+            'Internal control requiring one call from a focused tool-search result before answering.',
+        },
+        toolSearch: {
+          type: 'object',
+          additionalProperties: false,
+          description:
+            'Search the full catalog when the current callable tools do not provide the needed capability.',
+          properties: {
+            mode: {
+              type: 'string',
+              enum: ['focused', 'overview'],
+              default: 'focused',
+              description:
+                'Use focused normally. Use overview only after focused search fails or broad multi-tool planning is required.',
+            },
+            query: {
+              type: 'string',
+              minLength: 1,
+              description: 'Describe the capability needed for the current task.',
+            },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 50,
+              description: 'Maximum number of matching tools.',
+            },
+          },
+          required: ['query'],
         },
         toolSearchInput: {
           type: 'object',
           additionalProperties: true,
-          description: 'Internal result received from the regular toolSearcher binding.',
+          description: 'Internal result from the immediately preceding EntryNode catalog search.',
         },
-        toolSearchResults: {
-          type: 'object',
-          additionalProperties: false,
-          description: 'Internal catalog result passed by the task-tree EntryNode search tool.',
-          properties: {
-            mode: { type: 'string', enum: ['focused', 'overview'] },
-            tools: {
-              type: 'array',
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  name: { type: 'string' },
-                  description: { type: 'string' },
-                },
-                required: ['name', 'description'],
-              },
-            },
-            total: { type: 'integer', minimum: 0 },
-          },
-          required: ['tools', 'total'],
+        allowedTools: {
+          type: 'array',
+          description: 'Exact tools available to the next chat completion.',
+          items: { type: 'string' },
         },
         taskContract: entryNodeTaskContractSchema,
         use_baseprompt: {
@@ -936,13 +919,9 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
         if (!runtime.normalizedSettings.toolSearchEnabled) {
           throw new Error('Entry-node tool search is disabled for this run.')
         }
-        const searchMode = runtime.toolSearch.mode ?? 'focused'
-        const defaultLimit =
-          searchMode === 'overview' ? 30 : runtime.normalizedSettings.recentSearchToolCount
-        const limit = Math.max(1, Math.min(runtime.toolSearch.limit ?? defaultLimit, 50))
-        return context.createSubtasksResult(
-          createEntryNodeToolSearchTasks(runtime, limit, searchMode),
-        )
+        return context.createSubtasksResult([
+          createEntryNodeToolSearchTasks(runtime, runtime.toolSearch),
+        ])
       }
 
       if (runtime.toolSearchInput !== undefined) {
@@ -950,10 +929,23 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
         return context.createSubtasksResult(createToolSearchContinuationTasks(runtime, searched))
       }
 
-      if (runtime.toolSearchResults) {
-        return context.createSubtasksResult(
-          createToolSearchContinuationTasks(runtime, runtime.toolSearchResults),
-        )
+      if (runtime.requireToolCall) {
+        if (runtime.allowedTools.length === 0) {
+          throw new Error('A focused tool search cannot continue without a matching tool.')
+        }
+        return context.createSubtasksResult([
+          createChatCompletionTask({
+            use_multimodal: runtime.normalizedSettings.use_multimodal,
+            allowedTools: runtime.allowedTools,
+            toolChoice: { type: 'required' },
+            appendSystemPrompts: promptAugmentations.appendSystemPrompts,
+            prependSystemPrompts: promptAugmentations.prependSystemPrompts,
+            ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
+            ...(runtime.normalizedSettings.trace
+              ? { trace: runtime.normalizedSettings.trace }
+              : {}),
+          }),
+        ])
       }
 
       const giveUpAfterError = shouldGiveUpAfterError(
@@ -984,109 +976,53 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
         ])
       }
 
-      const subtaskDrafts = await match(runtime.routingContext)
-        // Web-search button path: send the message through chatCompletion with hosted search enabled.
-        .with({ webSearchEnabled: true }, () =>
-          createChatCompletionWithToolSelector(
-            runtime.entryNodeName,
-            {
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
-              ...withTaskContractResult(runtime.normalizedSettings.taskContract),
-              appendSystemPrompts: promptAugmentations.appendSystemPrompts,
-              prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-              websearch: {
-                enabled: true,
-                mode: runtime.normalizedSettings.websearch.mode,
-                max_results: runtime.normalizedSettings.websearch.max_results,
-              },
-              ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
-              ...(runtime.normalizedSettings.trace
-                ? { trace: runtime.normalizedSettings.trace }
-                : {}),
-            },
-            runtime.allowedTools,
-            getEntryNodePersistentArguments(runtime.normalizedSettings),
-            runtime.normalizedSettings.toolSearchEnabled,
-          ),
-        )
-        // Plain user message path: expose the focused callable window directly and let the model search when needed.
-        .with({ mode: 'message' }, async () => {
-          const { availableTools } = await resolveAvailableToolsForMessage(
-            config,
-            runtime.toolRestriction,
-            runtime.taskChain,
-            runtime.normalizedSettings,
-          )
-          const messagePromptAugmentations = resolveEntryNodePromptAugmentations(
-            runtime.promptContext,
-          )
+      const webSearchEnabled = runtime.normalizedSettings.websearch.enabled
+      const isNewMessage = runtime.mode === 'message'
+      const availableTools =
+        webSearchEnabled || isNewMessage
+          ? (
+              await resolveAvailableToolsForMessage(
+                config,
+                runtime.toolRestriction,
+                runtime.taskChain,
+                runtime.normalizedSettings,
+              )
+            ).availableTools
+          : runtime.allowedTools
+      const requireSelectedTool = runtime.mode === 'fallback' && runtime.allowedTools.length === 1
+      const allowToolSearch =
+        runtime.normalizedSettings.toolSearchEnabled &&
+        !(webSearchEnabled && runtime.normalizedSettings.websearch.mode === 'required')
 
-          return createChatCompletionWithToolSelector(
-            runtime.entryNodeName,
-            {
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
-              ...withTaskContractResult(runtime.normalizedSettings.taskContract),
-              appendSystemPrompts: messagePromptAugmentations.appendSystemPrompts,
-              prependSystemPrompts: messagePromptAugmentations.prependSystemPrompts,
-              ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
-              ...(runtime.normalizedSettings.trace
-                ? { trace: runtime.normalizedSettings.trace }
-                : {}),
-            },
-            availableTools,
-            getEntryNodePersistentArguments(runtime.normalizedSettings),
-            runtime.normalizedSettings.toolSearchEnabled,
-          )
-        })
-        // Re-entry after tool results, recoverable errors, or fallback states.
-        .with({ mode: P.union('toolresult', 'error', 'fallback', 'structured') }, () => {
-          const executeSelectedTool =
-            runtime.mode === 'fallback' && runtime.allowedTools.length === 1
-          return createChatCompletionWithToolSelector(
-            runtime.entryNodeName,
-            {
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
-              ...(executeSelectedTool
-                ? {}
-                : withTaskContractResult(runtime.normalizedSettings.taskContract)),
-              appendSystemPrompts: promptAugmentations.appendSystemPrompts,
-              prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-              ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
-              ...(runtime.normalizedSettings.trace
-                ? { trace: runtime.normalizedSettings.trace }
-                : {}),
-            },
-            runtime.allowedTools,
-            getEntryNodePersistentArguments(runtime.normalizedSettings),
-            runtime.normalizedSettings.toolSearchEnabled,
-          )
-        })
-        // Defensive fallback for future routing modes.
-        .otherwise(() => {
-          return [
-            createChatCompletionTask({
-              use_multimodal: runtime.normalizedSettings.use_multimodal,
-              ...withTaskContractResult(runtime.normalizedSettings.taskContract),
-              ...(runtime.allowedTools.length > 0 ? { allowedTools: runtime.allowedTools } : {}),
-              ...(runtime.allowedTools.length === 1
-                ? {
-                    toolChoice: {
-                      type: 'tool' as const,
-                      toolName: runtime.allowedTools[0] as string,
-                    },
-                  }
-                : {}),
-              appendSystemPrompts: promptAugmentations.appendSystemPrompts,
-              prependSystemPrompts: promptAugmentations.prependSystemPrompts,
-              ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
-              ...(runtime.normalizedSettings.trace
-                ? { trace: runtime.normalizedSettings.trace }
-                : {}),
-            }),
-          ]
-        })
-
-      return context.createSubtasksResult(subtaskDrafts)
+      return context.createSubtasksResult(
+        createChatCompletionWithToolSelector(
+          runtime.entryNodeName,
+          {
+            use_multimodal: runtime.normalizedSettings.use_multimodal,
+            ...(requireSelectedTool
+              ? {}
+              : withTaskContractResult(runtime.normalizedSettings.taskContract)),
+            appendSystemPrompts: promptAugmentations.appendSystemPrompts,
+            prependSystemPrompts: promptAugmentations.prependSystemPrompts,
+            ...(webSearchEnabled
+              ? {
+                  websearch: {
+                    enabled: true,
+                    mode: runtime.normalizedSettings.websearch.mode,
+                    max_results: runtime.normalizedSettings.websearch.max_results,
+                  },
+                }
+              : {}),
+            ...withReasoningEffort(runtime.normalizedSettings.reasoning_effort),
+            ...(runtime.normalizedSettings.trace
+              ? { trace: runtime.normalizedSettings.trace }
+              : {}),
+          },
+          availableTools,
+          allowToolSearch,
+          hasCurrentTurnToolSelector(runtime.taskChain, runtime.entryNodeName),
+        ),
+      )
     },
   })
 }

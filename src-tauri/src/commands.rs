@@ -30,8 +30,12 @@ fn workspace_root() -> Result<PathBuf, String> {
     std::env::current_dir()
         .map_err(|err| format!("Could not resolve current working directory: {err}"))
         .and_then(|dir| {
-            dir.canonicalize()
-                .map_err(|err| format!("Could not canonicalize workspace directory {}: {err}", dir.display()))
+            dir.canonicalize().map_err(|err| {
+                format!(
+                    "Could not canonicalize workspace directory {}: {err}",
+                    dir.display()
+                )
+            })
         })
 }
 
@@ -42,9 +46,7 @@ fn resolve_workspace_path(root: &Path, relative_path: &str) -> Result<PathBuf, S
     }
 
     let candidate = root.join(trimmed);
-    let normalized = candidate
-        .components()
-        .collect::<PathBuf>();
+    let normalized = candidate.components().collect::<PathBuf>();
 
     if normalized.starts_with(root) {
         Ok(normalized)

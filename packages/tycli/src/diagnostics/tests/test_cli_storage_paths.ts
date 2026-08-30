@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { resolveProviderSelection } from '../../cli/config'
-import { resolveCliStoragePaths } from '../../cli/storagePaths'
+import { resolveCliInvocationDirectory, resolveCliStoragePaths } from '../../cli/storagePaths'
 
 const assertEqual = (actual: string, expected: string, label: string) => {
   if (actual !== expected) {
@@ -51,6 +51,22 @@ export const testCliStoragePathsHonorRootAndCategoryOverrides = () => {
 
 testCliStoragePathsHonorRootAndCategoryOverrides.description =
   'Verifies application home and category-specific environment overrides resolve predictably.'
+
+export const testCliInvocationDirectoryUsesTopLevelProjectCwd = () => {
+  const directory = resolveCliInvocationDirectory(
+    'TYCLI',
+    {
+      INIT_CWD: '/project/packages/tycli',
+      PROJECT_CWD: '/project',
+    },
+    '/project/packages/tycli',
+  )
+
+  assertEqual(directory, '/project', 'top-level CLI invocation directory')
+}
+
+testCliInvocationDirectoryUsesTopLevelProjectCwd.description =
+  'Keeps CLI blobs at the top-level Yarn project when a workspace command changes INIT_CWD.'
 
 export const testCliProviderSelectionIgnoresCredentialEnvironment = () => {
   const environment = {

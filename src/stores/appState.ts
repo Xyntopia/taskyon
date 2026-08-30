@@ -203,7 +203,7 @@ function getInitialState() {
 
 type initialState = ReturnType<typeof getInitialState>['initialState']
 
-const reconcileStoredTaskyonState = (
+export const reconcileStoredTaskyonState = (
   stored: Partial<initialState>,
   defaults: initialState,
 ): initialState => {
@@ -235,8 +235,13 @@ const reconcileStoredTaskyonState = (
     resolveToolchainConfig(reconciled.toolchainProfiles, stored.selectedToolchainProfile)
     reconciled.selectedToolchainProfile = stored.selectedToolchainProfile
   }
-  return reconciled
+  return withRuntimeAppStateDefaults(reconciled)
 }
+
+export const withRuntimeAppStateDefaults = <T extends { initialLoad: boolean }>(state: T): T => ({
+  ...state,
+  initialLoad: true,
+})
 
 export const taskyonProfileSections = [
   'appConfiguration',
@@ -352,7 +357,7 @@ export function buildTaskyonProfileSectionResetPatch(
 }
 
 function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<initialState>) {
-  void axios
+  return axios
     .get<
       | {
           version?: number
@@ -723,7 +728,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // that way we can configure our webapp even if its already compiled...
   // this is done asynchrounously, because we want to be able to dynamically
   // change our config without having to recompile taskyon.
-  loadConfigurationFile(initialState, stateRefs)
+  const configurationReady = loadConfigurationFile(initialState, stateRefs)
 
   // TODO: check if we can do this maybe a bit more elegant using pinia functions?  like using "clear" or something like that?
   function $reset() {
@@ -987,6 +992,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // evrything in "stateRefs/allRefs". The reason for this is, that we have a store
   // hydration mechanism to automatically save & load the store from localStorage
   return {
+    awaitConfigurationReady: () => configurationReady,
     authToken,
     iframeApiKey,
     effectiveTaskyonCredential,

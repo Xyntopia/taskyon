@@ -464,15 +464,20 @@ const createTaskProcessor = (
         // those for continuation, otherwise
         // we create a generic task result.
         // TODO: maybe remove "defaultTask" from here and put it into our entrynode in some sort of way?
-        const partialTasks = parseResultForTaskChains(funcR) ?? [
-          [
-            {
-              role: 'system',
-              content: { type: 'toolresult', data: funcR },
-            },
-            defaultTask,
-          ],
-        ]
+        const explicitSuccessorExists = (await taskManager.searchNextSibling(task.id)).size > 0
+        const partialTasks =
+          parseResultForTaskChains(funcR) ??
+          (explicitSuccessorExists
+            ? [[{ role: 'system', content: { type: 'toolresult', data: funcR } }]]
+            : [
+                [
+                  {
+                    role: 'system',
+                    content: { type: 'toolresult', data: funcR },
+                  },
+                  defaultTask,
+                ],
+              ])
 
         // we can immediately persist all of our tasks here to the taskManager, as
         // they're immutable and won't change anymore..
@@ -576,6 +581,7 @@ const setupRun = (
   const activeTaskIds = new Set<string>()
   const routingTasks = new Set<Promise<void>>()
   const reconciliationTasks = new Set<Promise<void>>()
+  let activeReconciliation: Promise<void> | undefined
   const taskTracker = createTaskTracker(taskManager)
   let routingTaskCount = 0
   let didEmitAllProcessed = false
@@ -724,7 +730,12 @@ const setupRun = (
       if (getTasksInProgress() <= 0 && readyQueue.count() === 0 && pendingByPrior.size > 0) {
         streamEmit({ stage: 'waiting' })
       }
-      const reconciliationTask = reconcilePendingTasks().finally(() => emitAllProcessedIfIdle())
+      if (activeReconciliation) return
+      const reconciliationTask = reconcilePendingTasks().finally(() => {
+        activeReconciliation = undefined
+        emitAllProcessedIfIdle()
+      })
+      activeReconciliation = reconciliationTask
       reconciliationTasks.add(reconciliationTask)
       void reconciliationTask.then(
         () => reconciliationTasks.delete(reconciliationTask),

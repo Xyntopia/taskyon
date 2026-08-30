@@ -9,29 +9,27 @@
 </template>
 
 <script setup lang="ts">
-import { getActiveP2pNode } from '@taskyon/taskyon'
+import { chatCompletionProviderSettings } from '@taskyon/taskyon'
 import { until } from '@vueuse/core'
 import { dump } from 'js-yaml'
 import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
-import { useTaskyonStore } from 'src/stores/taskyonState'
-import { useAppStateStore } from 'src/stores/appState'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   buildDiagnosticsRegistry,
+  getDiagnosticsSkipReason,
   runDiagnosticsTests,
+  type DiagnosticsRunOptions,
+  type DiagnosticsTestContext,
   type TaskyonTestFn,
   type TestRecord,
 } from '@taskyon/common/modules/diagnosticsRunner'
 import { getEnvironmentInfo } from '@taskyon/common/modules/utils'
 
 const route = useRoute()
-const state = useTaskyonStore()
-const appState = useAppStateStore()
-const p2p = getActiveP2pNode()
 const status = ref('booting')
 const peerId = ref<string | null>(null)
 const started = ref(false)
@@ -136,6 +134,19 @@ function applyTestFilter(tests: TestRecord, filter: string): TestRecord {
 function diagnosticsYamlReport(results: Awaited<ReturnType<typeof runDiagnosticsTests>>) {
   let out = `report_date: ${new Date().toISOString()}\n`
   for (const result of results) {
+    const skippedReason = getDiagnosticsSkipReason(result.details)
+    if (skippedReason !== undefined) {
+      out += dump(
+        {
+          [result.name]: {
+            status: 'SKIPPED',
+            reason: skippedReason,
+          },
+        },
+        { skipInvalid: true, noRefs: true },
+      )
+      continue
+    }
     if (result.ok) {
       out += dump(
         {
@@ -156,10 +167,11 @@ function diagnosticsYamlReport(results: Awaited<ReturnType<typeof runDiagnostics
     out += dump(
       {
         [result.name]: {
-          status: result.modelBased ? 'MODEL MISS' : 'ERROR',
-          message: result.modelBased
-            ? 'The selected model did not satisfy this capability evaluation.'
-            : 'An error occurred during this test.',
+          status: result.modelBased && !result.preparationFailed ? 'MODEL MISS' : 'ERROR',
+          message:
+            result.modelBased && !result.preparationFailed
+              ? 'The selected model did not satisfy this capability evaluation.'
+              : 'An error occurred during this test.',
           error: result.error,
         },
       },
@@ -209,36 +221,67 @@ async function runDiagnosticsMode() {
   if (!Object.keys(tests).length) {
     throw new Error(`No diagnostics tests matched filter: "${filterArg}"`)
   }
-  let tyauth = state.getTaskyonKeyString()
-  if (typeof tyauth !== 'string' || tyauth.length === 0) {
-    // Headless boots quickly and can race key initialization from the store.
-    await state.initModelsAndStoredKeys()
-    tyauth = state.getTaskyonKeyString()
+  const modelArg = route.query.diagnosticsModel
+  const diagnosticModel = typeof modelArg === 'string' ? modelArg : undefined
+  if (
+    diagnosticModel &&
+    diagnosticModel !== 'openai/gpt-5.6-luna' &&
+    diagnosticModel !== 'z-ai/glm-5.3-flash'
+  ) {
+    throw new Error('Invalid Taskyon model for workflow diagnostics')
   }
-  const chatCompletionConfig = appState.effectiveToolchainConfig.chatCompletion
-  const selectedApi =
-    typeof chatCompletionConfig === 'object' &&
-    chatCompletionConfig !== null &&
-    'provider' in chatCompletionConfig &&
-    typeof chatCompletionConfig.provider === 'string'
-      ? chatCompletionConfig.provider
-      : undefined
-  const runOptions: Parameters<typeof runDiagnosticsTests>[1] = {
+  const createRunOptions = (model?: string): DiagnosticsRunOptions => ({
     details: diagnosticsDetailed.value,
     context: {
-      ...(typeof tyauth === 'string' ? { tyauth } : {}),
-      ...(selectedApi ? { selectedApi } : {}),
-      ...(state.currentModelId ? { model: state.currentModelId } : {}),
-      llmSettings: appState.llmSettings,
-      toolchainConfig: appState.effectiveToolchainConfig,
-      ...(selectedApi
-        ? {
-            providerSession: state.createDiagnosticsProviderSession(
-              selectedApi,
-              state.currentModelId,
-            ),
-          }
-        : {}),
+      allowLongRun: route.query.allowLongRun === '1',
+    },
+    contextForTest: async (_name: string, test: TaskyonTestFn, context: DiagnosticsTestContext) => {
+      if (!test.modelBased && !test.requiresAuth) return context
+      const [{ useAppStateStore }, { useTaskyonStore }] = await Promise.all([
+        import('src/stores/appState'),
+        import('src/stores/taskyonState'),
+      ])
+      const appState = useAppStateStore()
+      await appState.awaitConfigurationReady()
+      if (context.abortSignal?.aborted) throw new Error('Diagnostic preparation was canceled')
+      appState.appConfiguration.enableGdriveSync = false
+      const state = useTaskyonStore()
+      await until(() => state.tyready.value).toBe(true, { timeout: 30_000 })
+      if (context.abortSignal?.aborted) throw new Error('Diagnostic preparation was canceled')
+      let tyauth = state.getTaskyonKeyString()
+      if (!tyauth) {
+        await state.initModelsAndStoredKeys()
+        tyauth = state.getTaskyonKeyString()
+      }
+      const chatCompletionConfig = appState.effectiveToolchainConfig.chatCompletion
+      const providerSettings = chatCompletionProviderSettings.safeParse(chatCompletionConfig)
+      const selectedApi = providerSettings.success ? providerSettings.data.provider : undefined
+      const selectedModel = model ?? state.currentModelId
+      if (model && (selectedApi !== 'taskyon' || !providerSettings.success)) {
+        throw new Error('The requested diagnostic model requires the Taskyon provider')
+      }
+      return {
+        ...context,
+        ...(tyauth ? { tyauth } : {}),
+        ...(selectedApi ? { selectedApi } : {}),
+        ...(selectedModel ? { model: selectedModel } : {}),
+        llmSettings: appState.llmSettings,
+        toolchainConfig:
+          model && providerSettings.success
+            ? {
+                ...appState.effectiveToolchainConfig,
+                chatCompletion: { ...providerSettings.data, model: selectedModel },
+              }
+            : appState.effectiveToolchainConfig,
+        workflowDiagnosticsHost: state.workflowDiagnosticsHost,
+        storageClient: state.storageClient,
+        storageDownload: state.storageDownload,
+        ...(selectedApi
+          ? {
+              providerSession: state.createDiagnosticsProviderSession(selectedApi, selectedModel),
+            }
+          : {}),
+      }
     },
     onProgress: (progress) => {
       void emitHeadlessEvent('headless-diagnostics-progress', {
@@ -249,16 +292,26 @@ async function runDiagnosticsMode() {
       })
     },
     onResult: (result) => {
-      if (!result.ok && !result.modelBased) {
+      if (!result.ok && (!result.modelBased || result.preparationFailed)) {
         console.error(`${HEADLESS_KEEP_TAG}[TEST][FAIL] ${result.name}`, result.error)
       }
     },
-  }
-  const results = await runDiagnosticsTests(tests, runOptions)
+  })
+  const namedTests = diagnosticModel
+    ? Object.fromEntries(
+        Object.entries(tests).map(([name, fn]) => [`${name} [${diagnosticModel}]`, fn]),
+      )
+    : tests
+  const results = await runDiagnosticsTests(namedTests, createRunOptions(diagnosticModel))
 
   const total = results.length
-  const failed = results.filter((result) => !result.ok && !result.modelBased).length
-  const modelResults = results.filter((result) => result.modelBased)
+  const executableResults = results.filter(
+    (result) => getDiagnosticsSkipReason(result.details) === undefined,
+  )
+  const failed = executableResults.filter((result) => !result.ok).length
+  const modelResults = executableResults.filter(
+    (result) => result.modelBased && !result.preparationFailed,
+  )
   const modelPassed = modelResults.filter((result) => result.ok).length
   const passed = failed === 0
   const report = diagnosticsYamlReport(results)
@@ -296,16 +349,18 @@ onMounted(async () => {
 
   try {
     if (runDiagnostics.value) {
-      appState.appConfiguration.enableGdriveSync = false
-    }
-    status.value = 'waiting for taskyon core'
-    await until(() => state.tyready.value).toBe(true, { timeout: 30_000 })
-
-    if (runDiagnostics.value) {
       await runDiagnosticsMode()
       return
     }
 
+    status.value = 'waiting for taskyon core'
+    const [{ useTaskyonStore }, { getActiveP2pNode }] = await Promise.all([
+      import('src/stores/taskyonState'),
+      import('@taskyon/taskyon'),
+    ])
+    const state = useTaskyonStore()
+    await until(() => state.tyready.value).toBe(true, { timeout: 30_000 })
+    const p2p = getActiveP2pNode()
     status.value = 'starting p2p'
     await p2p.start({ chatTopic: chatTopic.value })
     peerId.value = (await p2p.id()) ?? null

@@ -1,3 +1,5 @@
+import { secureFetchCacheNamespace } from '@taskyon/taskyon/api'
+
 export const browserRecordNamespacePrefixes = [
   'dag/',
   'design-graph/',
@@ -7,6 +9,7 @@ export const browserRecordNamespacePrefixes = [
   'modelica/',
   'pmtiles/',
   'ranking/',
+  `${secureFetchCacheNamespace}/`,
   'spaceships/',
   'taskyon/local/',
   'taskyon/ui-state/',

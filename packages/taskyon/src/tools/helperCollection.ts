@@ -1,7 +1,43 @@
 import type { JSONSchema7 } from 'json-schema'
+import type { FetchWithPolicy } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { createTool } from '../types/toolApi'
 import { parsePoliteHttpPolicy, politeFetch, politeHttpPolicySchema } from '../utils/politeHttp'
-import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
+import { canUseTauriHttpPlugin } from '../utils/tauriHttpPlugin'
+
+export const readPublicWebPageAsMarkdown = async (
+  url: string,
+  httpPolicy?: Parameters<typeof parsePoliteHttpPolicy>[0],
+  request: FetchWithPolicy = globalThis.fetch,
+) => {
+  const policy = parsePoliteHttpPolicy(httpPolicy)
+  const preferredFetch: typeof fetch = (input, init) => request(input, init, { preferProxy: true })
+  const response = await politeFetch(`https://r.jina.ai/${url}`, undefined, policy, preferredFetch)
+  if (response.ok) return await response.text()
+
+  const jinaError = `Jina Reader failed: ${response.status} ${response.statusText}`
+  try {
+    const directResponse = await politeFetch(
+      url,
+      { headers: { Accept: 'text/html,application/pdf;q=0.9,*/*;q=0.8' } },
+      policy,
+      preferredFetch,
+    )
+    if (!directResponse.ok) {
+      throw new Error(`direct fetch failed: ${directResponse.status} ${directResponse.statusText}`)
+    }
+    const contentType = directResponse.headers.get('content-type') ?? 'unknown'
+    if (contentType.toLowerCase().includes('pdf')) {
+      const data = new Uint8Array(await directResponse.arrayBuffer())
+      const header = new TextDecoder().decode(data.slice(0, 5))
+      if (header !== '%PDF-') throw new Error('direct fetch did not return valid PDF bytes')
+      return `Fetched PDF artifact\nURL: ${url}\nContent-Type: ${contentType}\nSize: ${data.byteLength} bytes\nHeader: ${header}`
+    }
+    return await directResponse.text()
+  } catch (error) {
+    const directError = error instanceof Error ? error.message : String(error)
+    throw new Error(`${jinaError}; ${directError}`)
+  }
+}
 
 const jinaMarkdownReader = createTool({
   description: 'Read a public web page as normalized Markdown through Jina Reader.',
@@ -23,24 +59,18 @@ const jinaMarkdownReader = createTool({
       httpPolicy: politeHttpPolicySchema,
     },
   } as const satisfies JSONSchema7,
-  function: async ({ url, httpPolicy }, ctx) => {
+  function: async ({ url, httpPolicy }, context) => {
     if (typeof url !== 'string') throw new Error('jinaMarkdownReader requires a string URL.')
-    const hostFetch = ctx.fetch
+    const hostFetch = context.fetch
     if (!hostFetch) throw new Error('Mediated fetch is unavailable.')
-    const response = await politeFetch(
-      `https://r.jina.ai/${url}`,
-      undefined,
-      parsePoliteHttpPolicy(httpPolicy),
-      (input, init) => hostFetch(input, init, { preferProxy: true }),
-    )
-    return await response.text()
+    return await readPublicWebPageAsMarkdown(url, httpPolicy, hostFetch)
   },
 })
 
 const tauriHttpWebReader = createTool({
-  description: 'Read an HTTP or HTTPS page directly through the Tauri desktop network runtime.',
+  description: 'Read an HTTP or HTTPS page through Taskyon mediated fetch.',
   longDescription:
-    'This desktop-only capability uses the Tauri HTTP plugin rather than browser fetch, so ordinary browser CORS restrictions do not apply. Requests still follow Taskyon’s polite HTTP policy and return the remote response body without article normalization.',
+    'Taskyon host policy chooses direct, WSS, or a configured proxy. In Tauri, the direct host route uses the native HTTP runtime. Requests follow the polite HTTP policy and return the remote body without article normalization.',
   name: 'tauriHttpWebReader',
   renderOptions: {
     hideChat: false,
@@ -57,24 +87,23 @@ const tauriHttpWebReader = createTool({
       httpPolicy: politeHttpPolicySchema,
     },
   } as const satisfies JSONSchema7,
-  function: async ({ url, httpPolicy }) => {
-    if (!canUseTauriHttpPlugin()) {
-      throw new Error('tauriHttpWebReader is only available in Tauri desktop runtime')
-    }
-
+  function: async ({ url, httpPolicy }, context) => {
+    const hostFetch = context.fetch
     const target = String(url).trim()
     if (!/^https?:\/\//i.test(target)) {
       throw new Error(`Invalid URL '${target}'. Please provide an absolute http(s) URL.`)
     }
-
-    const parsedHttpPolicy = parsePoliteHttpPolicy(httpPolicy)
-    const response = await tauriHttpGetText(target, {
-      ...(parsedHttpPolicy ? { httpPolicy: parsedHttpPolicy } : {}),
-    })
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Tauri HTTP request failed: ${response.status} ${response.statusText}`)
+    if (!hostFetch) throw new Error('Mediated fetch is unavailable.')
+    const response = await politeFetch(
+      target,
+      undefined,
+      parsePoliteHttpPolicy(httpPolicy),
+      (input, init) => hostFetch(input, init, { preferProxy: true }),
+    )
+    if (!response.ok) {
+      throw new Error(`HTTP request failed: ${response.status} ${response.statusText}`)
     }
-    return response.body
+    return await response.text()
   },
 })
 

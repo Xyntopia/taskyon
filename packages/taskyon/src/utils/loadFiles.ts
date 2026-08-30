@@ -10,19 +10,19 @@ export type ConvertFileToTextOptions = {
   htmlMode?: 'clean' | 'raw'
 }
 
-let pdfWorkerInitialized = false
-
 async function read_pdf(file: File) {
-  const pdfjsLib = await import('pdfjs-dist')
+  const isNode = typeof process !== 'undefined' && Boolean(process.versions?.node)
+  const pdfjsLib = isNode
+    ? await import('pdfjs-dist/legacy/build/pdf.mjs')
+    : await import('pdfjs-dist')
 
-  if (!pdfWorkerInitialized) {
+  if (!isNode) {
     const { GlobalWorkerOptions } = pdfjsLib
 
     // Vite will bundle this worker as an asset and give you a correct URL
     const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
 
     GlobalWorkerOptions.workerSrc = workerUrl
-    pdfWorkerInitialized = true
   }
 
   const typedArray = await file.arrayBuffer()

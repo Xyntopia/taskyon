@@ -4,6 +4,7 @@ import {
   getSelectedToolchainConfig,
   setReasoningEffort,
 } from '../../cli/models'
+import { DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES } from '../../cli'
 import { CLI_FLOW_TOOL_NAME, cliToolchainProfiles } from '../../cli/toolchainSettings'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -28,18 +29,17 @@ export const testCliUsesCompleteCliFlowToolchainSettings = () => {
     'Expected CLI prompt templates in the shipped toolchain declaration',
   )
   const promptTemplates = cliFlow.prompt_templates
-  for (const field of [
-    'basePrompt',
-    'message',
-    'toolResult',
-    'error',
-    'retryExhausted',
-  ] as const) {
+  for (const field of ['basePrompt', 'message', 'toolResult', 'error', 'retryExhausted'] as const) {
     assert(
       typeof promptTemplates[field] === 'string' && promptTemplates[field].length > 0,
       `Expected a non-empty CLI ${field} prompt template`,
     )
   }
+  assert(
+    JSON.stringify(promptTemplates) ===
+      JSON.stringify(cliToolchainProfiles.base.cliFlow?.prompt_templates),
+    'Expected the resolved prompts to match the shipped CLI declaration without injected policy text',
+  )
   assert(
     selected.chatCompletion?.model === 'configured-model',
     'Expected the selected model to override the shipped provider model',
@@ -96,3 +96,16 @@ export const testCliReasoningEffortCanBeChangedWithoutMutatingShippedProfiles = 
 
 testCliReasoningEffortCanBeChangedWithoutMutatingShippedProfiles.description =
   'Updates CLI reasoning effort through the toolchain config boundary without mutating bundled settings.'
+
+export const testCliExcludesBrowserMcpBootstrapTools = () => {
+  for (const toolName of ['ensureBrowserMcpTools', 'importBrowserMcpTools']) {
+    assert(
+      DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES.has(toolName),
+      `Expected the CLI to exclude browser-only tool ${toolName}`,
+    )
+  }
+  return { excluded: ['ensureBrowserMcpTools', 'importBrowserMcpTools'] }
+}
+
+testCliExcludesBrowserMcpBootstrapTools.description =
+  'Keeps browser MCP onboarding tools out of the terminal CLI tool window.'

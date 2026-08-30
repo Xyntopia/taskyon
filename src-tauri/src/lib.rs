@@ -21,6 +21,8 @@ struct RunConfig {
     diagnostics_detailed: bool,
     diagnostics_no_gui: bool,
     diagnostics_filter: Option<String>,
+    diagnostics_model: Option<String>,
+    diagnostics_allow_long_run: bool,
     diagnostics_stdout: bool,
     all_logs: bool,
 }
@@ -124,6 +126,8 @@ fn detect_run_config() -> RunConfig {
         diagnostics_detailed: args.iter().any(|arg| arg == "--diagnostics-detailed"),
         diagnostics_no_gui: !args.iter().any(|arg| arg == "--diagnostics-gui"),
         diagnostics_filter,
+        diagnostics_model: arg_value(&args, "--diagnostics-model"),
+        diagnostics_allow_long_run: has_arg(&args, "--diagnostics-allow-long-run"),
         diagnostics_stdout: run_diagnostics
             || has_arg(&args, "--stdout")
             || has_arg(&args, "--diagnostics-stdout")
@@ -145,6 +149,13 @@ fn headless_url(config: &RunConfig) -> String {
         if let Some(filter) = config.diagnostics_filter.as_deref() {
             url.push_str("&testFilter=");
             url.push_str(&url_encode_query_value(filter));
+        }
+        if config.diagnostics_allow_long_run {
+            url.push_str("&allowLongRun=1");
+        }
+        if let Some(model) = config.diagnostics_model.as_deref() {
+            url.push_str("&diagnosticsModel=");
+            url.push_str(&url_encode_query_value(model));
         }
         if config.diagnostics_stdout {
             url.push_str("&stdout=1");
@@ -500,6 +511,8 @@ mod tests {
             diagnostics_detailed: false,
             diagnostics_no_gui: true,
             diagnostics_filter: None,
+            diagnostics_model: None,
+            diagnostics_allow_long_run: false,
             diagnostics_stdout: false,
             all_logs: false,
         }
@@ -538,6 +551,14 @@ mod tests {
             classify_headless_log_policy(&cfg),
             HeadlessLogPolicy::AllLogs
         );
+    }
+
+    #[test]
+    fn headless_diagnostics_can_enable_long_running_tests() {
+        let mut cfg = test_run_config();
+        cfg.run_diagnostics = true;
+        cfg.diagnostics_allow_long_run = true;
+        assert!(headless_url(&cfg).contains("allowLongRun=1"));
     }
 
     #[test]

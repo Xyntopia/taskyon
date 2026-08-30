@@ -10,9 +10,16 @@ test.describe('task chat presentation', () => {
     await expect(page.getByText('Visible task error')).toBeVisible()
     await expect(page.getByText('visibleTool')).toBeVisible()
     await expect(page.getByText('hiddenTool')).toHaveCount(0)
+    await expect(page.getByText('selectTaskyonTools')).toHaveCount(0)
     await expect(page.getByText('hidden result')).toHaveCount(0)
     await expect(page.getByText('hidden system message')).toHaveCount(0)
     await expect(page.getByText('collapsed arguments')).toHaveCount(0)
+    await expect(page.locator('[data-task-id="reloaded-selector-call"]')).toHaveCount(0)
+
+    await page.reload()
+    await expect(page.getByText('Visible user message')).toBeVisible()
+    await expect(page.getByText('selectTaskyonTools')).toHaveCount(0)
+    await expect(page.locator('[data-task-id="reloaded-selector-call"]')).toHaveCount(0)
 
     const visibleCall = page.locator('[data-task-id="visible-call"]')
     await expect(visibleCall).toHaveClass(/functioncall/)
@@ -61,4 +68,91 @@ test.describe('task chat presentation', () => {
       await expect(progress).toHaveCSS('width', `${size.width - 32}px`)
     })
   }
+
+  test('renders a stored file operation with an immediate download action', async ({ page }) => {
+    await page.goto('/task-chat-presentation-test')
+
+    const storageCard = page.locator('[data-task-id="storage-download-call"]')
+    await expect(storageCard.getByText('tool-files/presentation-test.pdf')).toBeVisible()
+    await expect(storageCard.getByText('https://example.test/presentation-test.pdf')).toBeVisible()
+
+    const downloadEvent = page.waitForEvent('download')
+    await storageCard.locator('[data-cy="download-storage-object"]').click()
+    const download = await downloadEvent
+
+    expect(download.suggestedFilename()).toBe('presentation-test.pdf')
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    expect(Buffer.concat(chunks).toString()).toContain('%PDF-1.7')
+
+    await storageCard.locator('[data-cy="view-storage-object"]').click()
+    await expect(page).toHaveURL(
+      /\/storage\?namespace=tool-files&kind=blob&id=presentation-test.pdf/,
+    )
+    await expect(page.locator('[data-storage-object-id="presentation-test.pdf"]')).toHaveClass(
+      /bg-blue-1/,
+    )
+    await expect(page.getByRole('tab', { name: 'Physical OPFS' })).toBeVisible()
+  })
+
+  test('renders workspace file operations through the same file actions', async ({ page }) => {
+    await page.goto('/task-chat-presentation-test')
+
+    const workspaceCard = page.locator('[data-task-id="workspace-write-call"]')
+    await expect(workspaceCard.getByText('workspace-files/v1/docs/note.txt')).toBeVisible()
+    await expect(workspaceCard.getByRole('button', { name: 'Download' })).toBeEnabled()
+    await expect(workspaceCard.getByRole('button', { name: 'View' })).toBeEnabled()
+
+    const downloadEvent = page.waitForEvent('download')
+    await workspaceCard.getByRole('button', { name: 'Download' }).click()
+    const download = await downloadEvent
+    expect(download.suggestedFilename()).toBe('note.txt')
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    expect(Buffer.concat(chunks).toString()).toBe('Workspace fixture')
+
+    await workspaceCard.getByRole('button', { name: 'View' }).click()
+    await expect(page).toHaveURL(
+      /\/storage\?namespace=workspace-files\/v1&kind=record&id=docs\/note.txt/,
+    )
+    await expect(page.locator('[data-storage-object-id="docs/note.txt"]')).toHaveClass(/bg-blue-1/)
+  })
+
+  test('keeps source actions usable when browser storage download fails', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.open = (url) => {
+        sessionStorage.setItem('last-window-open-url', String(url))
+        return null
+      }
+    })
+    await page.route('https://example.test/failed-download.pdf', async (route) => {
+      await route.fulfill({
+        contentType: 'application/pdf',
+        headers: { 'content-disposition': 'attachment; filename="failed-download.pdf"' },
+        body: '%PDF-1.7\nSource fallback fixture',
+      })
+    })
+    await page.goto('/task-chat-presentation-test')
+
+    const storageCard = page.locator('[data-task-id="failed-storage-download-call"]')
+    const downloadButton = storageCard.locator('[data-cy="download-storage-object"]')
+    const viewButton = storageCard.locator('[data-cy="view-storage-object"]')
+    await expect(storageCard.getByText(/Download file failed/)).toBeVisible()
+    await expect(downloadButton).toHaveText(/Download source/)
+    await expect(viewButton).toHaveText(/View source/)
+    await expect(downloadButton).toBeEnabled()
+    await expect(viewButton).toBeEnabled()
+
+    const downloadEvent = page.waitForEvent('download')
+    await downloadButton.click()
+    const download = await downloadEvent
+    expect(download.suggestedFilename()).toBe('failed-download.pdf')
+
+    await viewButton.click()
+    await expect
+      .poll(() => page.evaluate(() => sessionStorage.getItem('last-window-open-url')))
+      .toBe('https://example.test/failed-download.pdf')
+  })
 })

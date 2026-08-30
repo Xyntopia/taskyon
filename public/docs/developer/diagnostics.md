@@ -37,6 +37,43 @@ The first command builds the diagnostics frontend. The `devserver` variants reus
 Quasar server, and the `xvfb` variants support Linux environments without a desktop session. Add
 `:all-logs` only when the default tagged diagnostic output hides information needed for debugging.
 
+To run one browser diagnostic in headless Tauri, start the dev server in one terminal:
+
+```bash
+TASKYON_HTTP=1 yarn dev \
+  --hostname 127.0.0.1 --port 9000
+```
+
+Then run the focused diagnostic in another terminal:
+
+```bash
+bash scripts/run-with-xvfb.sh \
+  yarn tauri dev \
+  -c \
+  src-tauri/tauri.diagnostics.devserver.conf.json \
+  --no-watch --no-dev-server-wait -- -- \
+  --headless --run-diagnostics \
+  --test-filter=Greeting \
+  --diagnostics-detailed
+```
+
+The filter matches test names case-insensitively. The command prints each selected test's result
+and a final `HEADLESS_DIAGNOSTICS_RESULT` summary. A model-based test may report `MODEL MISS` while
+the process exits normally; inspect the test status as well as the summary. Add
+`--diagnostics-allow-long-run` for a test marked `requiresLongRun`, and `--all-logs` when the normal
+output is insufficient. Treat `--all-logs` output as sensitive and do not publish it without
+review. The browser run uses its active profile, provider session, pinned tools,
+standard browser tool registrations, and user-installed JavaScript tools. Its isolated test
+conversations do not enter the user's chat history. Native or external user-installed tools cannot
+be copied into the isolated runtime automatically; test them through their own host integration.
+
+Headless diagnostics do not wait for the main Taskyon runtime before listing or running tests.
+Tests that need a browser profile, key, or Taskyon runtime prepare those dependencies when that
+test starts, within its own timeout. A preparation failure is reported as `ERROR` for that test,
+not as a model capability miss, and the runner can continue with other tests. A focused browser
+run may also select `--diagnostics-model=openai/gpt-5.6-luna` or
+`--diagnostics-model=z-ai/glm-5.3-flash` without changing the saved profile.
+
 Playwright writes reports to `playwright-report/` and run artifacts to `test-results/`. The normal
 `yarn test:e2e` command starts the local development server. `yarn test:e2e:production` builds the
 SPA, serves that local production build, and runs the same suite. Use `yarn test:e2e:ui` for an
@@ -69,6 +106,48 @@ enabling all live runtime output.
 
 Online diagnostics are opt-in. They reuse the selected CLI provider/model unless the command
 explicitly overrides them.
+
+The `ideal-workflows` folder contains five individual workflow diagnostics and one matrix
+diagnostic. Each individual diagnostic uses the selected CLI provider and model:
+
+```bash
+yarn tycli:diagnostics --online \
+  --allow-long-run \
+  --filter ideal-workflows \
+  --provider chatgpt-codex \
+  --model gpt-5.6-luna
+yarn tycli:diagnostics --online \
+  --allow-long-run \
+  --filter ideal-workflows \
+  --provider taskyon \
+  --model z-ai/glm-5.3-flash
+```
+
+Inspect `MODEL PASS` and `MODEL MISS` for each model; the process can exit successfully despite
+model misses. Browser diagnostics still use the active browser profile, so this CLI pair complements
+rather than replaces a focused browser run.
+
+The sixth test, **Ideal Workflow Matrix With Luna And Glm**, is an ordinary long-running diagnostic
+on the `/diagnostics` page. It calls the same five functions with `openai/gpt-5.6-luna` and
+`z-ai/glm-5.3-flash`, keeps the saved browser profile unchanged, and reports all ten results
+together. Each workflow creates and disposes its own isolated Taskyon test core while the page stays
+open. An unexpected task sequence cancels its current workflow immediately; the matrix records that
+failure and continues with the remaining pairs.
+
+The same test can run through focused headless Tauri diagnostics without a separate matrix mode:
+
+```bash
+yarn tauri dev \
+  --no-watch \
+  -- --headless \
+  --run-diagnostics \
+  --diagnostics-allow-long-run \
+  --test-filter=\
+'Ideal Workflow Matrix With Luna And Glm'
+```
+
+A timed-out diagnostic signals its active test to cancel; a provider request already in flight may
+still incur a charge.
 
 For request-shape, usage, or prompt-cache debugging, start interactive `yarn tycli --debug`.
 This enables live runtime diagnostics and redacted `chatCompletionTool` provider-request records

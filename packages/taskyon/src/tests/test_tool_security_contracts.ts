@@ -5,6 +5,7 @@ import {
   validateSandboxFetchUrl,
 } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { executePythonScript } from '../tools/executePython'
+import { executeJavaScript } from '../tools/executeJavaScript'
 import { createSubtasksResult } from '../types/toolApi'
 import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 
@@ -74,6 +75,75 @@ export const testCapabilityDecisionsCanBeReset = async () => {
 testCapabilityDecisionsCanBeReset.description =
   'Capability policy reset clears decisions while popup and network permissions remain independent.'
 
+export async function testSessionWidePublicReadGrantStaysScoped() {
+  const stored = new Map<string, 'allow' | 'deny'>()
+  const prompted: string[] = []
+  const policy = createCapabilityPolicy({
+    storage: {
+      get: (key) => Promise.resolve(stored.get(key) ?? null),
+      set: (key, decision) => {
+        stored.set(key, decision)
+        return Promise.resolve()
+      },
+      delete: (key) => {
+        stored.delete(key)
+        return Promise.resolve()
+      },
+      clear: () => {
+        stored.clear()
+        return Promise.resolve()
+      },
+    },
+    prompt: (request) => {
+      if (request.capability.action !== 'fetch') {
+        throw new Error('Unexpected popup request')
+      }
+      prompted.push(
+        `${request.tool.revision}:${request.capability.access}:${request.capability.origin}`,
+      )
+      if (request.capability.origin === 'https://denied.example') {
+        return Promise.resolve({ decision: 'deny', scope: 'permanent' })
+      }
+      if (request.capability.origin === 'https://first.example') {
+        return Promise.resolve({ decision: 'allow', scope: 'session-all-public-read' })
+      }
+      return Promise.resolve({ decision: 'deny', scope: 'once' })
+    },
+  })
+  const request = (
+    origin: string,
+    access: 'read' | 'write' = 'read',
+    revision: CapabilityRequest['tool']['revision'] = 'sha256:first-revision',
+  ): CapabilityRequest => ({
+    tool: { publisherId: 'test', name: 'researchTool', revision },
+    capability: { action: 'fetch', origin, access },
+  })
+
+  assert(!(await policy.authorize(request('https://denied.example'))), 'Expected an exact denial')
+  assert(await policy.authorize(request('https://first.example')), 'Expected the broad grant')
+  assert(await policy.authorize(request('http://second.example')), 'Expected another public origin')
+  assert(prompted.length === 2, 'The broad grant should skip another read prompt')
+  assert(stored.size === 1, 'The broad grant must not be persisted')
+  assert(!(await policy.authorize(request('https://denied.example'))), 'Exact denial must win')
+  assert(
+    !(await policy.authorize(request('https://second.example', 'write'))),
+    'Writes need approval',
+  )
+  assert(
+    !(await policy.authorize(request('https://second.example', 'read', 'sha256:other-revision'))),
+    'Another tool revision needs approval',
+  )
+  assert(
+    !(await policy.authorize(request('http://127.0.0.1'))),
+    'Local targets must not inherit it',
+  )
+  policy.clearSession()
+  assert(!(await policy.authorize(request('http://second.example'))), 'Session grant must expire')
+}
+
+testSessionWidePublicReadGrantStaysScoped.description =
+  'A session-wide public read grant stays within one tool revision and preserves exact denials.'
+
 export async function tool_security_contractsMediatedFetchReusesSessionApproval() {
   const storedDecisions = new Map<string, 'allow' | 'deny'>()
   let promptCount = 0
@@ -119,6 +189,9 @@ export async function tool_security_contractsMediatedFetchReusesSessionApproval(
   )
 }
 
+tool_security_contractsMediatedFetchReusesSessionApproval.description =
+  'A session capability decision covers repeated requests to the same origin while each fetch rechecks the policy.'
+
 export const testMediatedFetchPassesProxyPreferenceToHost = async () => {
   let promptedWithPreference = false
   let routedWithPreference = false
@@ -137,9 +210,6 @@ export const testMediatedFetchPassesProxyPreferenceToHost = async () => {
   assert(routedWithPreference, 'Tool recommendation must reach host routing')
   return { success: true }
 }
-
-tool_security_contractsMediatedFetchReusesSessionApproval.description =
-  'A session capability decision covers repeated requests to the same origin while each fetch rechecks the policy.'
 
 export async function tool_security_contractsMediatedFetchSupportsHttpAndHttps() {
   const requestedUrls: string[] = []
@@ -196,7 +266,8 @@ tool_security_contractsMediatedFetchBlocksPrivateNetworks.description =
 
 export async function testMediatedFetchRequiresApprovalForPrivateTarget() {
   let approved = false
-  let calls = 0
+  const calls = { count: 0 }
+  const getCallCount = () => calls.count
   const mediatedFetch = createMediatedFetch({
     allowPrivateTargets: true,
     authorize: (capability) => {
@@ -205,7 +276,7 @@ export async function testMediatedFetchRequiresApprovalForPrivateTarget() {
       return Promise.resolve(approved)
     },
     fetch: () => {
-      calls += 1
+      calls.count += 1
       return Promise.resolve(new Response('ok'))
     },
   })
@@ -215,18 +286,21 @@ export async function testMediatedFetchRequiresApprovalForPrivateTarget() {
     },
     () => undefined,
   )
-  assert(calls === 0, 'Denied private target must not reach host fetch')
+  assert(getCallCount() === 0, 'Denied private target must not reach host fetch')
   approved = true
   const permittedFetch = createMediatedFetch({
     allowPrivateTargets: true,
     authorize: () => Promise.resolve(approved),
     fetch: () => {
-      calls += 1
+      calls.count += 1
       return Promise.resolve(new Response('ok'))
     },
   })
-  assert((await (await permittedFetch('http://127.0.0.1:3210/mcp')).text()) === 'ok')
-  assert(calls === 1, 'Approved private target must reach host fetch')
+  assert(
+    (await (await permittedFetch('http://127.0.0.1:3210/mcp')).text()) === 'ok',
+    'Approved private request should return host response',
+  )
+  assert(getCallCount() === 1, 'Approved private target must reach host fetch')
 }
 
 export async function testMediatedFetchDoesNotReuseOneTimeApproval() {
@@ -392,6 +466,115 @@ export const testSandboxToolForwardsProxyPreference = async () => {
 
 tool_security_contractsSandboxUsesOnlyMediatedFetch.description =
   'Browser and CLI sandboxes route global and context fetch through the typed host capability.'
+
+export async function testExecuteJavaScriptAwaitsMediatedFetch() {
+  const stopController = new AbortController()
+  const requests: string[] = []
+  const result = await executeToolInWorkerSandbox(
+    executeJavaScript.code,
+    {
+      params: {
+        code: "const response = await fetch('https://example.com/data'); console.log(await response.text());",
+      },
+      context: {
+        getExecutionTaskChain: () => Promise.resolve([]),
+        createSubtasksResult,
+        getSecret: () => Promise.resolve(null),
+        setSecret: () => Promise.resolve(),
+        stopSignal: stopController.signal,
+        toolId: `security-javascript-fetch-${Date.now()}`,
+        fetch: (input) => {
+          requests.push(validateSandboxFetchUrl(input).href)
+          return Promise.resolve(new Response('mediated response'))
+        },
+      },
+    },
+    'execute-javascript-fetch.js',
+    stopController.signal,
+  )
+  assert(requests[0] === 'https://example.com/data', 'Expected mediated fetch to receive the URL')
+  assert(
+    typeof result === 'object' &&
+      result !== null &&
+      'console.log' in result &&
+      Array.isArray(result['console.log']) &&
+      result['console.log'][0] === 'mediated response',
+    'Expected the awaited response to reach executeJavaScript output',
+  )
+}
+
+testExecuteJavaScriptAwaitsMediatedFetch.description =
+  'executeJavaScript supports top-level await while keeping fetch on the mediated host capability.'
+
+export async function testExecuteJavaScriptSupportsReturnValues() {
+  for (const [code, expected] of [
+    ['return 2 + 2;', 4],
+    ['[1,2].map(x => { return x * 2 })', [2, 4]],
+    ['"return"', 'return'],
+    ['/* return */ 42', 42],
+    ['return await Promise.resolve(4)', 4],
+  ] as const) {
+    const result = await executeToolInWorkerSandbox(
+      executeJavaScript.code,
+      {
+        params: { code },
+        context: {
+          getExecutionTaskChain: () => Promise.resolve([]),
+          createSubtasksResult,
+          getSecret: () => Promise.resolve(null),
+          setSecret: () => Promise.resolve(),
+          stopSignal: new AbortController().signal,
+          toolId: `security-javascript-return-${Date.now()}`,
+        },
+      },
+      'execute-javascript-return.js',
+      new AbortController().signal,
+    )
+    assert(
+      typeof result === 'object' &&
+        result !== null &&
+        'result' in result &&
+        JSON.stringify(result.result) === JSON.stringify(expected),
+      'Expected executeJavaScript to return the evaluated value',
+    )
+  }
+}
+
+testExecuteJavaScriptSupportsReturnValues.description =
+  'executeJavaScript supports a top-level return value as documented.'
+
+export async function testExecuteJavaScriptDoesNotRetryRuntimeSyntaxErrors() {
+  let requests = 0
+  let message = ''
+  try {
+    await executeToolInWorkerSandbox(
+      executeJavaScript.code,
+      {
+        params: {
+          code: "fetch('https://example.test/once'); throw new SyntaxError('runtime failure')",
+        },
+        context: {
+          getExecutionTaskChain: () => Promise.resolve([]),
+          createSubtasksResult,
+          getSecret: () => Promise.resolve(null),
+          setSecret: () => Promise.resolve(),
+          stopSignal: new AbortController().signal,
+          toolId: 'javascript-runtime-syntax-error',
+          fetch: () => {
+            requests += 1
+            return Promise.resolve(new Response('ok'))
+          },
+        },
+      },
+      'javascript-runtime-syntax-error.js',
+      new AbortController().signal,
+    )
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error)
+  }
+  assert(message.includes('runtime failure'), 'Expected the original runtime error')
+  assert(requests === 1, 'Runtime errors must not repeat side effects')
+}
 
 export async function tool_security_contractsSandboxStopsCpuLoops() {
   const startedAt = Date.now()

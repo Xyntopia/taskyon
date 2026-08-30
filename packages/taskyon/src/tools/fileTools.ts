@@ -1,9 +1,14 @@
 import type { JSONSchema7 } from 'json-schema'
-import { createChatCompletionTask } from '../api'
 import type { TaskyonStorageClient } from '../api/storageProtocol'
-import { createTool } from '../types/toolApi'
+import { createTool, type toolContext } from '../types/toolApi'
+import type { TaskNode } from '../types/taskNode'
 import { convertFileToText } from '../utils/loadFiles'
-import { parsePoliteHttpPolicy, politeFetch, politeHttpPolicySchema } from '../utils/politeHttp'
+import {
+  parseHttpUrl,
+  parsePoliteHttpPolicy,
+  politeHttpPolicySchema,
+  waitForPoliteHttpTurn,
+} from '../utils/politeHttp'
 
 const looksLikePdfBytes = (bytes: Uint8Array) =>
   bytes.length >= 5 &&
@@ -18,6 +23,15 @@ const bytesFromBase64 = (content: string) => {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0))
 }
 
+const shouldValidatePdf = (args: {
+  expectedFileType?: string | undefined
+  id?: string | undefined
+  url?: string | undefined
+}) =>
+  args.expectedFileType === 'pdf' ||
+  args.id?.toLowerCase().endsWith('.pdf') === true ||
+  args.url?.toLowerCase().split(/[?#]/, 1)[0]?.endsWith('.pdf') === true
+
 const objectIdFromUrl = (url: string) => {
   try {
     const pathName = new URL(url).pathname
@@ -28,6 +42,15 @@ const objectIdFromUrl = (url: string) => {
   }
 }
 
+export const resolveStorageDownloadResultUrl = (taskChain: readonly TaskNode[]) =>
+  [...taskChain]
+    .reverse()
+    .map((task) => (task.content.type === 'toolresult' ? task.content.data : undefined))
+    .find(
+      (data): data is { url: string } =>
+        typeof data === 'object' && data !== null && 'url' in data && typeof data.url === 'string',
+    )?.url
+
 const assertArtifactNamespace = (namespace: string, artifactRoot?: string) => {
   const root = artifactRoot?.trim().replace(/^\/+|\/+$/g, '')
   if (!root) return
@@ -37,7 +60,15 @@ const assertArtifactNamespace = (namespace: string, artifactRoot?: string) => {
   }
 }
 
-export const createStorageTool = (storageClient: TaskyonStorageClient) =>
+const resolveStorageNamespace = (namespace: string, artifactRoot?: string) => {
+  const root = artifactRoot?.trim().replace(/^\/+|\/+$/g, '')
+  return namespace === 'tool-files' && root ? root : namespace
+}
+
+export const createStorageTool = (
+  storageClient: TaskyonStorageClient,
+  download: typeof fetch = globalThis.fetch,
+) =>
   createTool({
     name: 'storage',
     description: 'Save, download, read, list, delete, or check persistent binary Taskyon objects.',
@@ -50,7 +81,8 @@ worker, remote, object-store, and future peer-backed storage providers.`,
         action: {
           type: 'string',
           enum: ['save', 'download', 'read', 'list', 'delete', 'exists'],
-          description: 'The storage operation to perform',
+          description:
+            'The storage operation to perform. Use download for a URL; use save only when the file bytes are already supplied as base64 content.',
         },
         namespace: {
           type: 'string',
@@ -63,11 +95,13 @@ worker, remote, object-store, and future peer-backed storage providers.`,
         },
         url: {
           type: 'string',
-          description: 'Source URL to fetch and save for the download action',
+          description:
+            'Source URL to fetch and save for the download action. Do not use save with a URL.',
         },
         content: {
           type: 'string',
-          description: 'Base64 file content for the save action',
+          description:
+            'Base64 file content for the save action. Do not use placeholders, an empty string, or a URL here; use download when the source is a URL.',
         },
         mimeType: {
           type: 'string',
@@ -100,91 +134,118 @@ worker, remote, object-store, and future peer-backed storage providers.`,
         artifactRoot,
         httpPolicy,
       },
-      ctx,
+      context?: toolContext,
     ) => {
-      assertArtifactNamespace(namespace, artifactRoot)
+      let executionTaskChain: TaskNode[] = []
+      if (context) {
+        try {
+          executionTaskChain = await context.getExecutionTaskChain()
+        } catch {
+          // External storage clients do not expose task-tree traversal. Explicit arguments remain authoritative.
+        }
+      }
+      const storageNamespace = resolveStorageNamespace(namespace, artifactRoot)
+      const storageObjectId = id
+      assertArtifactNamespace(storageNamespace, artifactRoot)
       let result: unknown
 
       switch (action) {
         case 'save': {
-          if (!id) throw new Error('Object id is required for save action')
+          if (!storageObjectId) throw new Error('Object id is required for save action')
           if (!content) throw new Error('Content is required for save action')
           const metadata = await storageClient.setBlob({
-            namespace,
-            id,
+            namespace: storageNamespace,
+            id: storageObjectId,
             data: bytesFromBase64(content),
             contentType: mimeType,
           })
-          result = { success: true, namespace, id, metadata }
+          result = { success: true, namespace: storageNamespace, id: storageObjectId, metadata }
           break
         }
         case 'download': {
           if (!url) throw new Error('Url is required for download action')
-          const response = await politeFetch(url, undefined, parsePoliteHttpPolicy(httpPolicy))
+          const parsedUrl = parseHttpUrl(url)
+          await waitForPoliteHttpTurn(parsedUrl, parsePoliteHttpPolicy(httpPolicy))
+          const response = await download(parsedUrl)
           if (!response.ok) {
             throw new Error(`Download failed with HTTP ${response.status}: ${response.statusText}`)
           }
           const data = new Uint8Array(await response.arrayBuffer())
           const contentType = response.headers.get('content-type') ?? mimeType
-          if (expectedFileType === 'pdf' && !looksLikePdfBytes(data)) {
+          const objectId = storageObjectId || objectIdFromUrl(url)
+          if (
+            shouldValidatePdf({ expectedFileType, id: objectId, url }) &&
+            !looksLikePdfBytes(data)
+          ) {
             throw new Error(`Download did not return PDF bytes. Content-Type was ${contentType}`)
           }
-          const objectId = id || objectIdFromUrl(url)
           const metadata = await storageClient.setBlob({
-            namespace,
+            namespace: storageNamespace,
             id: objectId,
             data,
             contentType,
           })
-          result = { success: true, namespace, id: objectId, metadata }
+          result = {
+            success: true,
+            namespace: storageNamespace,
+            id: objectId,
+            url,
+            metadata,
+          }
           break
         }
         case 'read': {
-          if (!id) throw new Error('Object id is required for read action')
-          const stored = await storageClient.getBlob({ namespace, id })
-          if (!stored) throw new Error(`Stored object not found: ${namespace}/${id}`)
-          const file = new File([stored.data], id, {
+          if (!storageObjectId) throw new Error('Object id is required for read action')
+          const stored = await storageClient.getBlob({
+            namespace: storageNamespace,
+            id: storageObjectId,
+          })
+          if (!stored) {
+            throw new Error(`Stored object not found: ${storageNamespace}/${storageObjectId}`)
+          }
+          const file = new File([stored.data], storageObjectId, {
             type: stored.metadata.contentType ?? mimeType,
           })
+          const sourceUrl = resolveStorageDownloadResultUrl(executionTaskChain)
           result = {
             success: true,
-            namespace,
-            id,
+            namespace: storageNamespace,
+            id: storageObjectId,
             fileText: await convertFileToText(file),
             metadata: stored.metadata,
+            ...(sourceUrl ? { sourceUrl } : {}),
           }
           break
         }
         case 'list':
           result = {
             success: true,
-            namespace,
-            objects: (await storageClient.listBlobs({ namespace })).blobs,
+            namespace: storageNamespace,
+            objects: (await storageClient.listBlobs({ namespace: storageNamespace })).blobs,
           }
           break
         case 'delete':
-          if (!id) throw new Error('Object id is required for delete action')
-          await storageClient.deleteBlob({ namespace, id })
-          result = { success: true, namespace, id }
+          if (!storageObjectId) throw new Error('Object id is required for delete action')
+          await storageClient.deleteBlob({ namespace: storageNamespace, id: storageObjectId })
+          result = { success: true, namespace: storageNamespace, id: storageObjectId }
           break
         case 'exists':
-          if (!id) throw new Error('Object id is required for exists action')
+          if (!storageObjectId) throw new Error('Object id is required for exists action')
           result = {
             success: true,
-            namespace,
-            id,
-            exists: (await storageClient.statBlob({ namespace, id })) !== null,
+            namespace: storageNamespace,
+            id: storageObjectId,
+            exists:
+              (await storageClient.statBlob({
+                namespace: storageNamespace,
+                id: storageObjectId,
+              })) !== null,
           }
           break
         default:
           throw new Error(`Unknown storage action: ${String(action)}`)
       }
 
-      return ctx.createSubtasksResult([
-        [
-          { role: 'system', content: { type: 'toolresult', data: result } },
-          createChatCompletionTask({}),
-        ],
-      ])
+      return result
     },
   })

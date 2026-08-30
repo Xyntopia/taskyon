@@ -5,8 +5,17 @@ import { defineConfig } from '#q-app/wrappers'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { ViteDevServer } from 'vite'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 import { sandboxArtifacts } from './packages/taskyon/src/sandbox/sandboxArtifacts'
+import {
+  createTaskyonDevCorsProxy,
+  isTaskyonDevCorsProxyRequestAllowed,
+  rewriteTaskyonDevCorsProxyLocation,
+  TASKYON_DEV_CORS_PROXY_PATH,
+  TASKYON_DEV_CORS_PROXY_SECRET_HEADER,
+  withoutHttp2HopByHopHeaders,
+} from './scripts/devCorsProxy'
 
 // --- helper to copy pyodide runtime ---
 function viteStaticCopySandboxArtifacts() {
@@ -77,6 +86,11 @@ export default defineConfig((ctx) => {
     process.env.TAURI_ENV_PLATFORM || process.env.TAURI_ENV_TARGET_TRIPLE,
   )
   const fastDevBuild = process.env.TASKYON_FAST_DEV_BUILD === '1'
+  const devCorsProxyPort = Number(process.env.TASKYON_CORS_PROXY_PORT ?? 9001)
+  if (!Number.isInteger(devCorsProxyPort) || devCorsProxyPort < 1 || devCorsProxyPort > 65535) {
+    throw new Error('TASKYON_CORS_PROXY_PORT must be an integer between 1 and 65535.')
+  }
+  const devCorsProxy = ctx.dev ? createTaskyonDevCorsProxy({ port: devCorsProxyPort }) : undefined
   const keepConsoleLogging = process.env.LOGGING === 'true' || isTauriBuild
   const droplogging = ctx.prod && !keepConsoleLogging
   console.log('drop logging:', droplogging)
@@ -374,6 +388,25 @@ export default defineConfig((ctx) => {
         ],
 
         ...(ctx.prod && !fastDevBuild ? [checkerPlugin] : []),
+        ...(devCorsProxy
+          ? [
+              {
+                name: 'taskyon-dev-cors-proxy',
+                configureServer: async (server: ViteDevServer) => {
+                  const proxyOrigin = await devCorsProxy.start()
+                  console.log(`Taskyon development CORS proxy: ${proxyOrigin}`)
+                  server.middlewares.use(TASKYON_DEV_CORS_PROXY_PATH, (request, response, next) => {
+                    if (isTaskyonDevCorsProxyRequestAllowed(request.headers)) return next()
+                    response.writeHead(403, { 'content-type': 'text/plain' })
+                    response.end('The Taskyon development proxy only accepts same-origin requests.')
+                  })
+                  server.httpServer?.once('close', () => {
+                    void devCorsProxy.close()
+                  })
+                },
+              },
+            ]
+          : []),
       ],
 
       //  optimizeDeps: {
@@ -387,6 +420,36 @@ export default defineConfig((ctx) => {
       //vueDevtools: true,
       https: process.env.TASKYON_HTTP ? false : true,
       open: false, // opens browser window automatically
+      ...(devCorsProxy
+        ? {
+            proxy: {
+              [TASKYON_DEV_CORS_PROXY_PATH]: {
+                target: `http://127.0.0.1:${devCorsProxyPort}`,
+                headers: {
+                  [TASKYON_DEV_CORS_PROXY_SECRET_HEADER]: devCorsProxy.secret,
+                  'x-forwarded-proto': process.env.TASKYON_HTTP ? 'http' : 'https',
+                },
+                configure: (proxy) => {
+                  proxy.on('proxyRes', (proxyResponse) => {
+                    const safeHeaders = withoutHttp2HopByHopHeaders(proxyResponse.headers)
+                    const locationHeader = safeHeaders.location
+                    const location = Array.isArray(locationHeader)
+                      ? locationHeader[0]
+                      : locationHeader
+                    if (location) {
+                      safeHeaders.location = rewriteTaskyonDevCorsProxyLocation(location)
+                    }
+                    for (const name of Object.keys(proxyResponse.headers)) {
+                      delete proxyResponse.headers[name]
+                    }
+                    Object.assign(proxyResponse.headers, safeHeaders)
+                  })
+                },
+                rewrite: (path) => path.replace(TASKYON_DEV_CORS_PROXY_PATH, '/'),
+              },
+            },
+          }
+        : {}),
     },
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework

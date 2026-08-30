@@ -48,10 +48,11 @@ import { until } from '@vueuse/core'
 import {
   buildTaskyonProfileSectionResetPatch,
   validateTaskyonProfileSettingsPatch,
+  withRuntimeAppStateDefaults,
   useAppStateStore,
   type TaskyonProfileSettings,
 } from 'src/stores/appState'
-import { useTaskyonStore } from 'src/stores/taskyonState'
+import { resolveDiagnosticsProviderCredential, useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
 import { getCurrentActiveProfileName, getStoredStateString } from '../ui/initialState'
@@ -67,18 +68,67 @@ import {
   parseRankingState,
   trainPythonModel,
 } from '../../pages/apps/ranking'
+import { installPortableDiagnosticsTools } from './workflowDiagnosticsTools'
 
 // Assuming hasMarkdownElements and containsHtmlTags are in scope
 // import { hasMarkdownElements, containsHtmlTags } from './your-module'
-
-const tystate = useTaskyonStore()
-const state = useAppStateStore()
 
 function assert(condition: boolean, msg?: string): asserts condition {
   if (!condition) {
     throw new Error(msg ?? 'Assertion failed')
   }
 }
+
+export const testPortableDiagnosticsToolsOnlyCopyExecutableCode = async () => {
+  const installed: string[] = []
+  const definitions = {
+    scripted: {
+      name: 'scripted',
+      description: 'Synthetic JavaScript tool',
+      parameters: { type: 'object' as const, properties: {} },
+      code: 'return 4',
+    },
+    native: {
+      name: 'native',
+      description: 'Synthetic native tool',
+      parameters: { type: 'object' as const, properties: {} },
+    },
+  }
+
+  await installPortableDiagnosticsTools(
+    () => Promise.resolve(definitions),
+    (tool) => {
+      installed.push(tool.name)
+      return Promise.resolve()
+    },
+  )
+
+  assert(
+    installed.join(',') === 'scripted',
+    `Only self-contained code tools should be copied; got ${installed.join(',')}`,
+  )
+}
+
+testPortableDiagnosticsToolsOnlyCopyExecutableCode.description =
+  'Copies user-installed JavaScript tools into isolated workflow diagnostics without copying native tools.'
+
+export function testDiagnosticsProviderPrefersActiveCredential() {
+  assert(
+    resolveDiagnosticsProviderCredential('active-free-key', 'stored-key') === 'active-free-key',
+    'Expected diagnostics to use the active credential used by normal chat',
+  )
+  assert(
+    resolveDiagnosticsProviderCredential(undefined, 'stored-key') === 'stored-key',
+    'Expected diagnostics to fall back to a stored credential',
+  )
+  assert(
+    resolveDiagnosticsProviderCredential('', 'stored-key') === 'stored-key',
+    'Expected an empty active credential to fall back to a stored credential',
+  )
+}
+
+testDiagnosticsProviderPrefersActiveCredential.description =
+  'Uses the active provider credential, including the built-in free key, before reading the secret store.'
 
 export function testTaskChainNavigationUsesStoredIds() {
   const shownRequestIds = new Set<string>()
@@ -231,6 +281,7 @@ testVariableGraphIgnoresNestedIconMaps.description =
   'Keeps nested icon maps out of QIcon while resolving leaf icons for variable fields.'
 
 const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
+  const state = useAppStateStore()
   const snapshot = state.getProfileSnapshot().sections
   assert(snapshot.appConfiguration !== undefined, 'Expected appConfiguration in profile snapshot')
   assert(snapshot.llmSettings !== undefined, 'Expected llmSettings in profile snapshot')
@@ -289,6 +340,7 @@ export function testTaskyonMapWidgetStateParser() {
 }
 
 export function testTaskyonProfileSettingsHelpers() {
+  const state = useAppStateStore()
   const current = getCurrentProfileSettingsForDiagnostics()
   const patched = validateTaskyonProfileSettingsPatch(current, {
     appConfiguration: { primaryColor: '#123456' },
@@ -394,6 +446,15 @@ export function testTaskyonProfileSettingsHelpers() {
 testTaskyonProfileSettingsHelpers.description =
   'Validates Taskyon profile patch/reset helpers for appConfiguration, llmSettings, and toolchainProfiles.'
 
+export function testPersistedProfilesCannotRestoreInitialLoadState() {
+  const restored = withRuntimeAppStateDefaults({ initialLoad: false })
+  assert(restored.initialLoad, 'Expected initialLoad to remain runtime-only after profile restore')
+  return { success: true }
+}
+
+testPersistedProfilesCannotRestoreInitialLoadState.description =
+  'Prevents persisted UI profiles from turning startup configuration array replacement into repeated concatenation.'
+
 // Define types for the stored crypto key data
 type StoredCryptoKeyPair =
   | CryptoKeyPair
@@ -436,6 +497,7 @@ type TestReport = {
 }
 
 export const testSessionSwitching = async () => {
+  const state = useAppStateStore()
   const logs: Record<string, unknown> = {}
   const keyPair = await generateAssymetricKeyDeriver()
   const pkey = keyPair.publicKey
@@ -988,6 +1050,7 @@ export async function testCryptoSession() {
 
 // Enhanced integration test for concurrent uploads
 export async function testMultipleArchiveUploadDownload() {
+  const tystate = useTaskyonStore()
   const results: Record<string, unknown> = {}
 
   type DriveFile = {
@@ -1194,6 +1257,7 @@ testMultipleArchiveUploadDownload.gui = true
 
 // quick-n-dirty integration test
 export async function testArchiveUploadDownload() {
+  const tystate = useTaskyonStore()
   const results: Record<string, unknown> = {}
 
   const dir = 'taskyon/test-archive-dir'
@@ -1231,6 +1295,7 @@ export async function testArchiveUploadDownload() {
 testArchiveUploadDownload.gui = true
 
 export const testPyodide = async () => {
+  const tystate = useTaskyonStore()
   const resolved = await tystate.taskyonClient.tools.resolve({ name: 'executePythonScript' })
   assert(resolved?.tool.code !== undefined, 'Expected the browser Python tool to use sandbox code')
   return { revision: resolved.identity.revision }
@@ -1277,6 +1342,7 @@ export async function oauthTests() {
 oauthTests.gui = true
 
 export async function testGdriveZipRoundtrip() {
+  const tystate = useTaskyonStore()
   const t0 = Date.now()
   const logs: string[] = []
   const steps: Array<{ step: string; ok: boolean; detail?: unknown }> = []
@@ -1416,6 +1482,7 @@ export async function testGdriveZipRoundtrip() {
 testGdriveZipRoundtrip.gui = true
 
 export const testSecretStore = async () => {
+  const tystate = useTaskyonStore()
   console.log('request a random secret from the store')
 
   const ty = await tystate.taskyon
@@ -1441,6 +1508,7 @@ export const testSecretStore = async () => {
 }
 
 export async function testToolList() {
+  const tystate = useTaskyonStore()
   console.log('gather all available tools in a list!')
 
   const ty = await tystate.taskyon
@@ -1462,6 +1530,8 @@ export function testJsonSchemas() {
 }
 
 export async function testGdriveUpload() {
+  const tystate = useTaskyonStore()
+  const state = useAppStateStore()
   const { publishMarkdown } = useGdrive(tystate.getGdriveToken)
 
   const markdownContent =
@@ -1482,6 +1552,7 @@ export async function testGdriveUpload() {
 testGdriveUpload.gui = true
 
 export const testChatCompletionWebSearch = async () => {
+  const tystate = useTaskyonStore()
   console.log('do a websearch using chatCompletion')
 
   const taskList: partialTaskDraft[][] = [
@@ -1514,6 +1585,7 @@ testChatCompletionWebSearch.description = 'test taskyon chatCompletion websearch
 testChatCompletionWebSearch.modelBased = true
 
 export const testChatCompletion = async () => {
+  const tystate = useTaskyonStore()
   const taskResult = await runTasks(tystate.api)(
     [
       [
@@ -1568,6 +1640,8 @@ export const testChatCompletion = async () => {
 testChatCompletion.modelBased = true
 
 export const testChatCompletionTaskyonProxyMint = async () => {
+  const tystate = useTaskyonStore()
+  const state = useAppStateStore()
   const prevSelectedProfile = state.selectedToolchainProfile
   state.setSelectedToolchainProfile('taskyon')
 
@@ -1676,6 +1750,8 @@ testChatCompletionTaskyonProxyMint.description =
   'test chatCompletion via delegated taskyon SSR proxy backend'
 
 export const testChatCompletionTaskyonProxyMintCosts = async () => {
+  const tystate = useTaskyonStore()
+  const state = useAppStateStore()
   const ty = await tystate.taskyon
   const prevSelectedProfile = state.selectedToolchainProfile
   const taskyonCredential = state.effectiveTaskyonCredential
@@ -1820,6 +1896,8 @@ testChatCompletionTaskyonProxyMintCosts.description =
 testChatCompletionTaskyonProxyMintCosts.modelBased = true
 
 export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: string }) => {
+  const tystate = useTaskyonStore()
+  const state = useAppStateStore()
   const ty = await tystate.taskyon
   const prevSelectedProfile = state.selectedToolchainProfile
   const prevTaskyonKey = tystate.getTaskyonKeyString()
@@ -1904,6 +1982,7 @@ testChatCompletionTaskyonProxyMetadata.description =
 testChatCompletionTaskyonProxyMetadata.modelBased = true
 
 export const testFileUpload = async () => {
+  const tystate = useTaskyonStore()
   const testPdf = await urlToFile('/tests/product_specs_long.pdf')
 
   const id = await tystate.addFile(testPdf)
@@ -1959,6 +2038,7 @@ export const testFileUpload = async () => {
 testFileUpload.modelBased = true
 
 export const testMetaDb = async () => {
+  const tystate = useTaskyonStore()
   const ty = await tystate.taskyon
   const id = 'meta_diagnostics_test'
   await ty.metaUpsert(id, { name: 'lets test!' }, 'shallow_merge')
@@ -2078,6 +2158,7 @@ export async function testVectorizeText() {
 }
 
 export async function markdownGeneration() {
+  const tystate = useTaskyonStore()
   const ty = await tystate.taskyon
   // first load the chat as markdown
   const yamlContent = await getTextFile('/tests/test_conversation.yaml')
@@ -2096,6 +2177,8 @@ export async function markdownGeneration() {
 }
 
 export async function getTestMetaData() {
+  const tystate = useTaskyonStore()
+  const state = useAppStateStore()
   async function completionMessage() {
     const ty = await tystate.taskyon
     const tyChat: Record<string, unknown> = {

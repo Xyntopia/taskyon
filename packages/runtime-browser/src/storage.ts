@@ -441,8 +441,11 @@ export const createOpfsStorageRecordFileAdapter = async (
 }
 
 export const createOpfsStorageBackendResolver = (options: OpfsStorageOptions = {}) => {
-  const adapter = createOpfsStorageRecordFileAdapter(options)
-  return async (namespace: string) => createStorageRecordFileBackend(await adapter, namespace)
+  let adapter: Promise<StorageRecordFileAdapter> | undefined
+  return async (namespace: string) => {
+    adapter ??= createOpfsStorageRecordFileAdapter(options)
+    return createStorageRecordFileBackend(await adapter, namespace)
+  }
 }
 
 export const createOpfsStorageService = (

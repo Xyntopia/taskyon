@@ -22,6 +22,22 @@ export const testDiagnosticsRunnerStartsTimeoutBeforeInvokingTest = async () => 
   return { success: true }
 }
 
+export const testDiagnosticsRunnerSignalsTimedOutTest = async () => {
+  let signaled = false
+  const slowTest: TaskyonTestFn = (context) => {
+    context?.abortSignal?.addEventListener('abort', () => {
+      signaled = true
+    })
+    return new Promise<void>(() => undefined)
+  }
+  slowTest.timeoutMs = 5
+
+  const [result] = await runDiagnosticsTests({ slowTest })
+  assert(result?.ok === false, 'Expected the slow diagnostic to time out')
+  assert(signaled, 'Expected the timed-out test to receive cancellation')
+  return { success: true }
+}
+
 export const testDiagnosticsRunnerSkipsLongRunWithoutPermission = async () => {
   const longTest = (() => {
     throw new Error('Long-running diagnostic should not start')
@@ -38,5 +54,59 @@ export const testDiagnosticsRunnerSkipsLongRunWithoutPermission = async () => {
       result.details.skipped === true,
     'Expected the skip result to identify a long-running diagnostic',
   )
+  return { success: true }
+}
+
+export const testDiagnosticsRunnerPreparesOnlyTheSelectedTest = async () => {
+  const prepared: string[] = []
+  const [result] = await runDiagnosticsTests(
+    { selected: (context) => context?.model, unselected: () => 'unselected' },
+    {
+      contextForTest: (name) => {
+        prepared.push(name)
+        return Promise.resolve({ model: 'prepared' })
+      },
+      shouldAbort: () => prepared.length > 0,
+    },
+  )
+  assert(result?.ok === true, 'Expected the selected test to pass')
+  assert(prepared.join(',') === 'selected', 'Preparation must only run for the selected test')
+  return { success: true }
+}
+
+export const testDiagnosticsRunnerReportsPreparationFailureAndContinues = async () => {
+  let nextRan = false
+  const results = await runDiagnosticsTests(
+    {
+      broken: () => {
+        throw new Error('Test should not run after preparation fails')
+      },
+      next: () => {
+        nextRan = true
+      },
+    },
+    {
+      contextForTest: (name) => {
+        if (name === 'broken') throw new Error('runtime unavailable')
+        return {}
+      },
+    },
+  )
+  assert(results[0]?.ok === false, 'Expected preparation failure to belong to its test')
+  assert(results[0]?.preparationFailed === true, 'Expected preparation failure to be identified')
+  assert(results[1]?.ok === true && nextRan, 'Expected the next diagnostic to run')
+  return { success: true }
+}
+
+export const testDiagnosticsRunnerBoundsPreparationByTestTimeout = async () => {
+  const modelTest = (() => undefined) as TaskyonTestFn
+  modelTest.modelBased = true
+  modelTest.timeoutMs = 5
+  const [result] = await runDiagnosticsTests(
+    { modelTest },
+    { contextForTest: () => new Promise<never>(() => undefined) },
+  )
+  assert(result?.ok === false, 'Expected preparation to time out')
+  assert(result.preparationFailed === true, 'Expected timeout to be classified as preparation')
   return { success: true }
 }

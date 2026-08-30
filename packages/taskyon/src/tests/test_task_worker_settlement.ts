@@ -2,11 +2,13 @@ import { processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import type { TyTaskStreamData } from '../core/taskWorker'
 import { registerToolRpcTools } from '../core/toolRpc'
+import type { TaskyonStorageClient } from '../api/storageProtocol'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
+import { createStorageTool } from '../tools/fileTools'
 import { sleep } from '../utils/asyncUtils'
 import { createPortableTestStorage } from '../testSupport/portableTestStorage'
 
-const assert = (condition: unknown, message: string) => {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
@@ -82,6 +84,87 @@ const assertEventOrder = (
       .join(', ')}`,
   )
 }
+
+export const testStorageResultContinuesThroughConfiguredEntryNode = async () => {
+  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const storageClient = {
+    setBlob: ({ data }: { data: Uint8Array }) =>
+      Promise.resolve({
+        namespace: 'diagnostics',
+        id: 'document.pdf',
+        size: data.byteLength,
+        contentType: 'application/pdf',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+  } as unknown as TaskyonStorageClient
+  const storageTool = createStorageTool(storageClient, () =>
+    Promise.resolve(new Response('%PDF-test', { headers: { 'content-type': 'application/pdf' } })),
+  )
+  let entryCalls = 0
+  const entryNode = createTool({
+    name: 'entryNode',
+    description: 'Verify ordinary tool results return through the configured entry node.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () => {
+      entryCalls += 1
+      return createSubtasksResult({
+        role: 'system',
+        content: { type: 'return', data: 'storage entry continuation complete' },
+      })
+    },
+  })
+  const registration = await registerToolRpcTools({
+    port: ty.port,
+    tools: [storageTool, entryNode],
+  })
+
+  try {
+    const result = await processTasksDetailed(ty.port)(
+      [
+        [
+          toolCall({
+            name: 'storage',
+            arguments: {
+              action: 'download',
+              namespace: 'diagnostics',
+              id: 'document.pdf',
+              url: 'https://example.test/document.pdf',
+              expectedFileType: 'pdf',
+            },
+          }),
+        ],
+      ],
+      (task) =>
+        task.content.type === 'return' &&
+        task.content.data === 'storage entry continuation complete',
+      { timeoutMs: 5_000, throwOnError: false },
+    )
+
+    assert(result.status === 'matched', `Expected matched result, got ${result.status}`)
+    assert(entryCalls === 1, `Expected one entry-node continuation, got ${entryCalls}`)
+    const entryTask = result.observedTasks.find(
+      (task) => task.content.type === 'functioncall' && task.content.data.name === 'entryNode',
+    )
+    assert(entryTask, 'Expected storage completion to create the configured entry-node task.')
+    const previousTask = result.observedTasks.find((task) => task.id === entryTask.priorID)
+    assert(
+      previousTask?.content.type === 'toolresult',
+      `Expected entry-node re-entry after a tool result, got ${previousTask?.content.type}.`,
+    )
+  } finally {
+    registration.destroy()
+    await ty.dispose('storage entry continuation diagnostic complete')
+    storage.destroy()
+  }
+}
+
+testStorageResultContinuesThroughConfiguredEntryNode.description =
+  "Routes ordinary storage results through Taskyon's configured default entry node instead of directly invoking chatCompletion."
 
 export const testTaskWorkerEmitsProcessedBeforeFinishedForMessageSubtask = async () => {
   const { ty, storage } = await createTaskWorkerTestRuntime()
@@ -289,6 +372,89 @@ export const testTaskWorkerReleasesFunctionAfterDependentMessage = async () => {
 
 testTaskWorkerReleasesFunctionAfterDependentMessage.description =
   'Runs a sequential function after an intervening message whose prior function completed with an empty explicit task result.'
+
+export const testTaskWorkerDoesNotAddDefaultAfterExplicitSuccessor = async () => {
+  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const events: TyTaskStreamData[] = []
+  const unsubscribeWorkerStream = ty.workerStream((event) => {
+    events.push(event)
+  })
+  let implicitEntryCalls = 0
+  let readCalls = 0
+  const downloadTool = createTool({
+    name: 'precompiledDownload',
+    description: 'Return ordinary data before a precompiled successor task.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () => ({ downloaded: true }),
+  })
+  const readTool = createTool({
+    name: 'precompiledRead',
+    description: 'Complete the precompiled successor task.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () => {
+      readCalls += 1
+      return createSubtasksResult({
+        role: 'system',
+        content: { type: 'return', data: 'explicit successor complete' },
+      })
+    },
+  })
+  const entryNode = createTool({
+    name: 'entryNode',
+    description: 'Detect an unexpected implicit continuation.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    } as const,
+    function: () => {
+      implicitEntryCalls += 1
+      return createSubtasksResult([])
+    },
+  })
+  const registration = await registerToolRpcTools({
+    port: ty.port,
+    tools: [downloadTool, readTool, entryNode],
+  })
+
+  try {
+    const result = await processTasksDetailed(ty.port)(
+      [
+        [
+          toolCall({ name: 'precompiledDownload', arguments: {} }),
+          toolCall({ name: 'precompiledRead', arguments: {} }),
+        ],
+      ],
+      (task) =>
+        task.content.type === 'return' && task.content.data === 'explicit successor complete',
+      { timeoutMs: 5_000, throwOnError: false },
+    )
+
+    assert(result.status === 'matched', `Expected matched result, got ${result.status}`)
+    await waitForWorkerSettlement(events, 1_000)
+    assert(readCalls === 1, `Expected one explicit successor call, got ${readCalls}`)
+    assert(
+      implicitEntryCalls === 0,
+      `Expected no implicit entry-node continuation, got ${implicitEntryCalls}`,
+    )
+  } finally {
+    unsubscribeWorkerStream()
+    registration.destroy()
+    await ty.dispose('explicit successor continuation diagnostic complete')
+    storage.destroy()
+  }
+}
+
+testTaskWorkerDoesNotAddDefaultAfterExplicitSuccessor.description =
+  'Avoids adding the generic entry-node continuation when a function task already has a precompiled successor.'
 
 export const testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer = async () => {
   const { ty, storage } = await createTaskWorkerTestRuntime()

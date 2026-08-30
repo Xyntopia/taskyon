@@ -187,6 +187,48 @@ Normal entry-node calls go directly to `chatCompletion` with the small callable 
 immediate entry-node continuation with those tools added to the next window. The previous callable
 window does not restrict this explicit search.
 
+### Reference conversation flows
+
+These are the intended task sequences for the five basic conversation diagnostics. An internal
+`tooldefinition` can appear between the shown tasks; it does not count as a user-facing action.
+An assistant progress message emitted with a tool call is not the final answer and does not add a
+workflow step; the final assistant message is followed by `return`.
+`EntryNode` means `taskyonFlow` in the browser and `cliFlow` in the CLI.
+
+```text
+Greeting:                 user → EntryNode → chatCompletion → assistant message → return
+Web search only:          user → EntryNode → chatCompletion with web search → assistant message → return
+Direct tool:              user → EntryNode → chatCompletion → tool → tool result → EntryNode → chatCompletion → assistant message → return
+Web search + tool (one pass):
+                           user → EntryNode → chatCompletion with web search → tool using searched value → tool result → EntryNode → chatCompletion → assistant message → return
+Web search + tool (fallback):
+                           user → EntryNode → chatCompletion → tool → tool result → EntryNode → chatCompletion with web search → tool using searched value → tool result → EntryNode → chatCompletion → assistant message → return
+Discovered tool:          user → EntryNode → chatCompletion → catalog search → matching definition → EntryNode → chatCompletion → matched tool → tool result → EntryNode → chatCompletion → assistant message → return
+```
+
+Greeting and web-search-only flows must not invoke a catalog search or an ordinary tool. Direct
+tool use must not search the catalog. A discovered tool must be searched for before it is called.
+The five browser diagnostics use the same effective toolchain settings, standard browser tools,
+and portable user-installed JavaScript tools as a normal chat message. Their direct-tool example
+uses the host's pinned execution tool: `executeJavaScript` in the browser or `bash` in the CLI; the
+discovered-tool example registers one synthetic tool outside the pinned window.
+CLI diagnostics use the same `createCliWorkflowHost` tool setup, registration, catalog filtering,
+and runtime context as interactive CLI chat. Both hosts must supply their setup; the tests do not
+fall back to a separate generic tool catalog. Interactive approval remains unavailable in CLI diagnostics.
+The provider performs web search inside `chatCompletion`, so its search event may be visible in
+provider metadata rather than as a separate Taskyon task. Ordinary chat enables search in `auto`
+mode; the model decides whether and when to search. The combined diagnostic accepts only the two
+shapes above: search before the first tool, or a first tool followed by a search and a second tool.
+Both shapes must reverse the searched IANA registry date in the final answer and finish without unrelated
+tools, catalog searches, errors, or additional passes.
+The combined diagnostic checks search evidence before the final execution call and independently
+reads the registry through the existing public-page reader to verify its Last Updated date. A source
+lookup failure is a diagnostic failure, not evidence that the model used the correct value.
+
+`selectTaskyonTools` is the model-facing scoped binding to EntryNode. It exposes only EntryNode's
+`toolSearch` request and fixes the continuation to require a selected tool call. It does not copy
+EntryNode prompts, pinned tools, task contracts, or other settings into the binding.
+
 Entry-node search is a task-tree binding over the regular `toolSearcher`; it is not a second
 registered search implementation. The binding calls `toolSearcher` with `analyze: false`, then the
 next EntryNode consumes its terminal result through `$use: { toolSearchInput: "$previousResult" }`.

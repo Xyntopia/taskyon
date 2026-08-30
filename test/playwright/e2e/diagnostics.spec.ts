@@ -13,6 +13,8 @@ import {
 const diagnosticsTimeoutMs = 600_000
 const toolWorkflowTimeoutMs = 450_000
 const onlineEnv = readOnlineEnv(process.cwd())
+const researchProvider = process.env.PLAYWRIGHT_RESEARCH_PROVIDER ?? 'openrouter.ai'
+const researchModel = process.env.PLAYWRIGHT_RESEARCH_MODEL ?? 'openai/gpt-5.6-luna'
 
 test.describe('diagnostics page', () => {
   test.skip(!onlineEnv, 'requires playwright.env.json with Taskyon, OpenAI, and OpenRouter keys')
@@ -56,6 +58,82 @@ test.describe('diagnostics page', () => {
     expect(okCount).toBeGreaterThan(10)
     expect(diagnosticsText).toMatch(/failed tests: 0\/\d+/i)
     expect(diagnosticsText).not.toContain('status: ERROR')
+  })
+
+  test('runs the shared document retrieval diagnostic and validates stored PDFs', async ({
+    page,
+  }) => {
+    if (!onlineEnv) throw new Error('online env missing')
+
+    const browserFailures: string[] = []
+    page.on('pageerror', (error) => browserFailures.push(`page error: ${error.message}`))
+    page.on('console', (message) => {
+      const text = message.text()
+      if (/error|warn|storage|completion|securetunnel/i.test(text)) {
+        browserFailures.push(`console ${message.type()}: ${text.slice(0, 500)}`)
+      }
+    })
+    page.on('response', (response) => {
+      if (/chat\/completions|tokenservice|ws-proxy|\/proxy/.test(response.url())) {
+        browserFailures.push(`response ${response.status()}: ${response.url()}`)
+      }
+    })
+    page.on('requestfailed', (request) =>
+      browserFailures.push(
+        `request failed: ${request.method()} ${request.url()} (${request.failure()?.errorText})`,
+      ),
+    )
+
+    await page.goto('/')
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
+    await expectTaskyonReady(page)
+    await addAiServices(page, onlineEnv)
+
+    await page.goto('/browser-access')
+    const fetchTransport = dataCy(page, 'sandbox-fetch-transport')
+    await fetchTransport.click()
+    await page.getByRole('option', { name: 'Local or configured CORS proxy', exact: true }).click()
+    await dataCy(page, 'check-cors-proxy').click()
+    await expect(dataCy(page, 'cors-proxy-status')).toContainText('CORS proxy is available')
+    await page.addLocatorHandler(
+      page.locator('.taskyon-capability-dialog--network-access'),
+      async (dialog) => {
+        await dialog.getByText('Allow network access this session', { exact: true }).click()
+        await dialog.getByRole('button', { name: 'Allow network', exact: true }).click()
+      },
+    )
+
+    await page.goto('/')
+    await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
+    await expectTaskyonReady(page)
+    await selectLlmModel(page, researchProvider, researchModel)
+    await expect(dataCy(page, 'model-select')).toHaveValue(researchModel)
+    await expect(dataCy(page, 'model-id')).toContainText(researchModel)
+    await page.locator('#ty-space-menu').click()
+    await page.getByText('About', { exact: true }).click()
+    await page.getByRole('link', { name: 'Open Diagnostics', exact: true }).click()
+    await expect(page).toHaveURL(/\/diagnostics$/)
+
+    await page.getByLabel('Filter tests').fill('testDocumentRetrievalStoresOfficialFederalRulesPdf')
+    await page.getByText('modelBasedTests', { exact: true }).click()
+    await page.getByText('Tests', { exact: true }).first().click()
+    const diagnosticButton = page.getByRole('button', {
+      name: 'Test Document Retrieval Stores Official Federal Rules Pdf',
+      exact: true,
+    })
+    await expect(diagnosticButton).toBeVisible()
+    await diagnosticButton.click()
+
+    await expect(dataCy(page, 'test-finished')).toContainText('Test Finished', {
+      timeout: diagnosticsTimeoutMs,
+    })
+    const diagnosticsText = (await dataCy(page, 'diagnostics-result').textContent()) ?? ''
+    expect(diagnosticsText, browserFailures.join('\n')).toContain('status: MODEL PASS')
+    expect(diagnosticsText).toMatch(/failed tests: 0\/1/i)
+    expect(diagnosticsText).toMatch(/model capability score: 1\/1/i)
+    expect(diagnosticsText).toContain('websearch auto is supplied by the chain builder')
+    expect(diagnosticsText).toMatch(/sha256:\s+sha256:[A-Za-z0-9_-]{43}/i)
+    expect(diagnosticsText).toContain('finished all tests!')
   })
 
   test('simple chat completes without routing errors', async ({ page, context }) => {

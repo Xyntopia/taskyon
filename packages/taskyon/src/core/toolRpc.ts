@@ -78,6 +78,7 @@ export const resolveRemoteFunctionTimeoutMs = (
 function errorFromRemoteResponse(name: string, requestId: string, error: unknown) {
   return new Error(
     `Remote function ${name} failed for request ${requestId}: ${humanizeError(error)}`,
+    { cause: error },
   )
 }
 

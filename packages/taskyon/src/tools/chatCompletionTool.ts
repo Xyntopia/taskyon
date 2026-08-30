@@ -1,6 +1,5 @@
 import { createStream } from '@taskyon/common/modules/frpBus'
 import { streamText, type ReasoningOutput } from 'ai'
-import { default as Ajv } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import type { ReadonlyDeep } from 'type-fest'
@@ -23,7 +22,7 @@ import {
   type ProviderRequestTrace,
   type TaskNodeMeta,
 } from '../types/chatCompletion'
-import type { Annotation, partialTaskDraft, TaskGetter, TaskNode } from '../types/taskNode'
+import type { partialTaskDraft, TaskGetter, TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
 import type { ContentHash, ToolBase } from '../types/tools'
@@ -38,11 +37,17 @@ import {
   normalizeNativeStructuredOutputSchema,
 } from './chatCompletion/providerRequest'
 import {
+  convertProviderSourceToAnnotation,
   interpretAssistantMessage,
   normalizeAssistantMessageForToolCall,
-  parseStructuredResponse,
+  parseStructuredResponseWithTrailingText,
+  validateStructuredResponse,
 } from './chatCompletion/response'
-import { cleanupRawStreamOutput, runChatCompletionStream } from './chatCompletion/streamResult'
+import {
+  cleanupRawStreamOutput,
+  hasProviderWebSearchObservation,
+  runChatCompletionStream,
+} from './chatCompletion/streamResult'
 import { writeChatCompletionTrace } from './chatCompletionTrace'
 import {
   buildChatCompletionRetryDelayTask,
@@ -130,7 +135,6 @@ export function createChatCompletionTool(
 ) {
   const providerConnection = resolveChatCompletionConnection(connection)
   const settlementConfirmation = createSettlementConfirmationLoader(providerConnection.baseURL)
-  const ajv = new Ajv()
   const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
   const chatCompletion = createTool({
     description: 'Generates a chat-based response using the OpenAI API for the previous message.',
@@ -139,7 +143,13 @@ export function createChatCompletionTool(
   It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
     list and generate a response`,
     name: chatCompletionToolName,
-    renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
+    renderOptions: {
+      hideChat: true,
+      hideLlm: true,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+    },
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -660,59 +670,42 @@ export function createChatCompletionTool(
         })
       }
       // convert sources
-      const sources = (await chatCompletion.sources)
-        .map<Annotation | undefined>((source) => {
-          switch (source.sourceType) {
-            case 'url':
-              return {
-                type: source.sourceType,
-                title: source.title,
-                url: source.url,
-                content: source.providerMetadata?.openrouter?.content as string | undefined,
-              } as Annotation
-            case 'document':
-              return {
-                type: source.sourceType,
-                title: source.title,
-              } as Annotation
-          }
-        })
-        .filter((s): s is Annotation => s !== undefined)
+      const sources = (await chatCompletion.sources).map(convertProviderSourceToAnnotation)
 
       if (schema) {
-        // convert the output manually here :)
-        let structResponse
-        if (typeof output === 'string') {
-          console.log('parsing custom schema', schema)
-          structResponse = parseStructuredResponse(output || '')
-
-          if (typeof schema === 'object' && schema !== null) {
-            // I *think* we can simply cast our schema here t ajv, because it
-            // will spit out an error anyways if our schema isn't compatible..
-            const validate = ajv.compile(schema)
-            const valid = validate(structResponse)
-            if (!valid) {
-              throw new Error(
-                'Chat response has the wrong format: ' + ajv.errorsText(validate.errors),
-              )
-            }
-          } else {
-            throw new Error('Schema needs to be an object!', { cause: schema })
-          }
-        } else structResponse = output
-        return context.createSubtasksResult([
-          ...(sources.length > 0
+        const parsedResponse: { data: unknown; trailingText?: string } =
+          typeof output === 'string'
+            ? parseStructuredResponseWithTrailingText(output || '')
+            : { data: output }
+        if (typeof schema !== 'object' || schema === null) {
+          throw new Error('Schema needs to be an object!', { cause: schema })
+        }
+        const structResponse = validateStructuredResponse(parsedResponse.data, schema)
+        const responseMessages = parsedResponse.trailingText
+          ? [
+              {
+                role: 'assistant' as const,
+                content: {
+                  type: 'message' as const,
+                  data: parsedResponse.trailingText,
+                  ...(sources.length > 0 ? { ann: sources } : {}),
+                },
+              },
+            ]
+          : sources.length > 0
             ? [
                 {
-                  role: 'assistant',
+                  role: 'assistant' as const,
                   content: {
-                    type: 'message',
+                    type: 'message' as const,
                     data: 'Provided sources for the structured response.',
                     ann: sources,
                   },
-                } as partialTaskDraft,
+                },
               ]
-            : []),
+            : []
+        return context.createSubtasksResult([
+          ...responseMessages,
           {
             role: 'assistant',
             content: { type: 'structured', data: structResponse },
@@ -732,6 +725,7 @@ export function createChatCompletionTool(
         useProviderToolCalling,
         toolDefs,
         chatInfo.variableService,
+        hasProviderWebSearchObservation(rawOutput),
       )
       const assistantOutputSanitation = outcome.sanitation.at(-1)
       if (currentTask && assistantOutputSanitation) {

@@ -116,6 +116,45 @@ export const testDownloadFileRejectsPathsOutsideArtifactRoot = async () =>
     return { success: true }
   })
 
+export const testDownloadFilePlacesBasenameInsideArtifactRoot = async () =>
+  await withTempCwd(
+    'tycli-download-file-artifact-root-basename',
+    async (dir) =>
+      await withMockFetch(
+        () =>
+          Promise.resolve(
+            new Response('%PDF-basename', {
+              headers: { 'content-type': 'application/pdf' },
+            }),
+          ),
+        async () => {
+          const result = await downloadFileTool.function?.({
+            url: 'https://example.test/result.pdf',
+            filePath: 'result.pdf',
+            artifactRoot: 'research/home-battery-specs',
+            expectedFileType: 'pdf',
+          })
+
+          assert(
+            result &&
+              typeof result === 'object' &&
+              'ok' in result &&
+              result.ok === true &&
+              'filePath' in result &&
+              result.filePath === 'research/home-battery-specs/result.pdf',
+            `Expected basename to be placed under artifact root, got ${JSON.stringify(result)}`,
+          )
+          assert(
+            (await readFile(join(dir, 'research/home-battery-specs/result.pdf'), 'utf8')) ===
+              '%PDF-basename',
+            'Expected basename download to be written below artifact root',
+          )
+
+          return { success: true }
+        },
+      ),
+  )
+
 export const testDownloadFileReturnsRecoverableFailureForMaxBytes = async () =>
   await withTempCwd(
     'tycli-download-file-max-bytes',
@@ -181,6 +220,13 @@ export const testDownloadFileStreamsResponseChunksToWorkspace = async () =>
             `Expected streamed download success, got ${JSON.stringify(result)}`,
           )
           assert(
+            result &&
+              typeof result === 'object' &&
+              'url' in result &&
+              result.url === 'https://example.test/streamed.pdf',
+            `Expected successful download to preserve the remote URL, got ${JSON.stringify(result)}`,
+          )
+          assert(
             (await readFile(join(dir, 'downloads/streamed.pdf'), 'utf8')) === '%PDF-streamed body',
             'Expected every response chunk to be written in order',
           )
@@ -194,6 +240,8 @@ testDownloadFileReturnsRecoverableFailureForNonPdfBytes.description =
   'downloadFile returns ok=false instead of throwing when a requested PDF URL returns HTML.'
 testDownloadFileRejectsPathsOutsideArtifactRoot.description =
   'downloadFile rejects research downloads that try to write outside the selected artifact root.'
+testDownloadFilePlacesBasenameInsideArtifactRoot.description =
+  'downloadFile places a simple filename below the selected artifact root for model-friendly calls.'
 testDownloadFileReturnsRecoverableFailureForMaxBytes.description =
   'downloadFile returns ok=false when a raw download exceeds the requested maxBytes limit.'
 testDownloadFileStreamsResponseChunksToWorkspace.description =

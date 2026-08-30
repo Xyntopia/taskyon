@@ -266,3 +266,55 @@ export async function testTaskCompilerUsesDraftRootLinksWhenNoLinksAreSupplied()
 
 testTaskCompilerUsesDraftRootLinksWhenNoLinksAreSupplied.description =
   'Uses a draft chain root link to continue and compile against an existing conversation lineage.'
+
+export async function testTaskCompilerHonorsPinnedRevisionThroughSameNameBinding() {
+  const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
+  const targetRevision = `sha256:${'a'.repeat(43)}` as const
+  const scopedDefinition = await createTaskNode({
+    role: 'system',
+    content: {
+      type: 'tooldefinition',
+      data: {
+        name: 'toolSearcher',
+        description: 'Narrow public tool search.',
+        implementation: {
+          type: 'binding',
+          target: 'toolSearcher',
+          targetRevision,
+          fixedArguments: { analyze: true },
+          publicArguments: { query: {}, limit: {} },
+        },
+      },
+    },
+  })
+
+  const [compiled] = await compileTaskChain(
+    [
+      {
+        role: 'function',
+        content: {
+          type: 'functioncall',
+          data: {
+            name: 'toolSearcher',
+            toolRevision: targetRevision,
+            arguments: { query: 'deck geometry', analyze: true },
+          },
+        },
+      },
+    ],
+    {
+      lineage: [scopedDefinition],
+      toolManager,
+      resolveInvocationRevisions: () => Promise.resolve({ toolRevision: targetRevision }),
+    },
+  )
+
+  assert(compiled?.content.type === 'functioncall', 'Expected a compiled function call')
+  assert(
+    compiled.content.data.toolRevision === targetRevision,
+    'Expected the explicit binding target revision instead of recursive scoped resolution',
+  )
+}
+
+testTaskCompilerHonorsPinnedRevisionThroughSameNameBinding.description =
+  'Allows a narrow scoped binding to delegate to a pinned registered tool with the same public name.'

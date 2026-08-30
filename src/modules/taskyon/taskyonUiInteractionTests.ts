@@ -7,8 +7,6 @@ import { processTasksDetailed, runTasks } from '@taskyon/tyclient'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { z } from 'zod'
 
-const tystate = useTaskyonStore()
-
 const toolCatalogResult = z.object({
   'Here are the currently available tools you can inspect': z.array(
     z.object({ name: z.string() }).passthrough(),
@@ -22,7 +20,7 @@ function assert(condition: boolean, msg?: string): asserts condition {
 }
 
 const getEntryNodeDraft = (): PartialTaskDraft => {
-  return partialTaskDraft.parse(structuredClone(tystate.entryNode))
+  return partialTaskDraft.parse(structuredClone(useTaskyonStore().entryNode))
 }
 
 const getSimpleMessageTask = (text: string): PartialTaskDraft => ({
@@ -56,6 +54,7 @@ const hasEnabledWebSearch = (value: unknown): boolean => {
 }
 
 const waitForRegisteredTool = async (toolName: string, timeoutMs = 2_000) => {
+  const tystate = useTaskyonStore()
   const started = Date.now()
   while (Date.now() - started < timeoutMs) {
     const tool = tystate.allTools[toolName]
@@ -66,6 +65,7 @@ const waitForRegisteredTool = async (toolName: string, timeoutMs = 2_000) => {
 }
 
 export const testTaskyonUiSimpleChatInteraction = async () => {
+  const tystate = useTaskyonStore()
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
     draftTask: getSimpleMessageTask('Please answer with one short plain-text sentence only.'),
@@ -90,6 +90,7 @@ testTaskyonUiSimpleChatInteraction.description =
 testTaskyonUiSimpleChatInteraction.modelBased = true
 
 export const testTaskyonUiWebSearchInteraction = async () => {
+  const tystate = useTaskyonStore()
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
     draftTask: getSimpleMessageTask(
@@ -126,6 +127,7 @@ testTaskyonUiWebSearchInteraction.description =
 testTaskyonUiWebSearchInteraction.modelBased = true
 
 export const testTaskyonUiToolInteraction = async () => {
+  const tystate = useTaskyonStore()
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
     draftTask: getClockToolTask(),
@@ -152,6 +154,7 @@ testTaskyonUiToolInteraction.description =
   'Builds the same initial function-call chain the UI would send for a tool task and expects the clock tool result.'
 
 export const testTaskyonUiListsAndUsesAvailableTools = async () => {
+  const tystate = useTaskyonStore()
   await tystate.taskyon
 
   const taskChain = buildCreateNewTaskChain({
@@ -265,6 +268,7 @@ testTaskyonUiListsAndUsesAvailableTools.description =
 testTaskyonUiListsAndUsesAvailableTools.modelBased = true
 
 export const testTaskyonUiProfileManagementToolRegistration = async () => {
+  const tystate = useTaskyonStore()
   await tystate.taskyon
   const tool = await waitForRegisteredTool('manageTaskyonProfile')
   assert(!!tool, 'Expected manageTaskyonProfile to be registered as a Taskyon UI tool')
@@ -277,6 +281,7 @@ testTaskyonUiProfileManagementToolRegistration.description =
   'Verifies the Taskyon UI registers the profile-management tool.'
 
 export const testTaskyonUiDocumentationToolsRegistration = async () => {
+  const tystate = useTaskyonStore()
   await tystate.taskyon
   const workflowTool = await waitForRegisteredTool('taskyonDocumentation')
   const indexTool = await waitForRegisteredTool('documentationIndex')

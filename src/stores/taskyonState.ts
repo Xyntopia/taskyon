@@ -56,7 +56,12 @@ import {
 } from '@taskyon/taskyon/api'
 import type { ChatCompletionProviderSettings, ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
-import { type FetchWithPolicy } from '@taskyon/common/modules/webFetching/mediatedFetch'
+import {
+  isPrivateSandboxFetchUrl,
+  type FetchWithPolicy,
+  type SandboxFetchTransport,
+} from '@taskyon/common/modules/webFetching/mediatedFetch'
+import { createCorsAnywhereFetch } from '@taskyon/common/modules/webFetching/index'
 import { createCachedSecureFetch } from '@taskyon/secure-tunnel'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '@taskyon/taskyon/token-service-types'
 import {
@@ -69,8 +74,7 @@ import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browse
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
 import {
   createDefaultTaskyonToolSetup,
-  resolveAgentToolCatalog,
-  resolveTaskTreeAgentToolWindow,
+  createTaskTreeAgentToolCatalog,
 } from '@taskyon/taskyon/tools'
 import {
   createDocumentationIndexClientTool,
@@ -88,14 +92,11 @@ import {
   initCryptoSessionFromBrowser,
   isHostedBrowserProviderRuntime,
   persistBrowserCryptoSession,
+  selectBrowserStorageProvider,
   type TaskyonDirectFallbackRequest,
   type HostFetchContext,
 } from '@taskyon/runtime-browser'
-import {
-  createOpfsBlobStorageBackend,
-  createOpfsStorageBackendResolver,
-  requestBrowserStoragePersistence,
-} from '@taskyon/runtime-browser/storage'
+import { requestBrowserStoragePersistence } from '@taskyon/runtime-browser/storage'
 import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import { useConversationHistory } from '@taskyon/ui/modules/useConversationHistory'
 import {
@@ -118,6 +119,7 @@ import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from '@taskyon/common/modules/markdownUtils '
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
+import { installPortableDiagnosticsTools } from 'src/modules/taskyon/workflowDiagnosticsTools'
 import {
   resolveShownTaskChainResponse,
   trackShownTaskChainRequest,
@@ -635,7 +637,7 @@ function getBrowserCapabilityPolicy() {
               cardClass: 'taskyon-capability-dialog taskyon-capability-dialog--network-access',
               color: 'info' as const,
               title: '🌐 Network access request',
-              message: `${request.tool.name} wants to ${request.capability.access} data from ${request.capability.origin}.${request.capability.privateTarget ? ' This is a local or private network address and will use direct host fetch.' : request.capability.preferProxy ? ' This tool recommends a proxy if you have configured one.' : ''} This permission does not allow the tool to open a browser window.`,
+              message: `${request.tool.name} wants to ${request.capability.access} data from ${request.capability.origin}.${request.capability.privateTarget ? ' This is a local or private network address and will use direct host fetch.' : request.capability.preferProxy ? ' This tool recommends a proxy if you have configured one.' : ''}${request.capability.access === 'read' && !request.capability.privateTarget ? ' The session-wide option also lets this tool read other public websites for this tool revision.' : ''} This permission does not allow the tool to open a browser window.`,
               onceLabel: 'Allow this network access once',
               sessionLabel: 'Allow network access this session',
               permanentLabel: 'Always allow this network access',
@@ -669,6 +671,16 @@ function getBrowserCapabilityPolicy() {
             items: [
               { label: presentation.onceLabel, value: 'once' },
               { label: presentation.sessionLabel, value: 'session' },
+              ...(request.capability.action === 'fetch' &&
+              request.capability.access === 'read' &&
+              !request.capability.privateTarget
+                ? [
+                    {
+                      label: 'Allow this tool to read all public websites this session',
+                      value: 'session-all-public-read',
+                    },
+                  ]
+                : []),
               { label: presentation.permanentLabel, value: 'permanent' },
             ],
           },
@@ -726,6 +738,11 @@ function resolveTaskyonKey(args: {
 
 export const AiProvideKeyStoreName = 'AiProviderKey'
 
+export const resolveDiagnosticsProviderCredential = (
+  activeCredential: string | undefined,
+  storedCredential: string | null,
+): string | null => (activeCredential?.trim() ? activeCredential : storedCredential)
+
 const useApiManagement = (
   stateRefs: ReturnType<typeof useAppStateStore>,
   taskyon: Thunk<Promise<Taskyon>>,
@@ -748,7 +765,10 @@ const useApiManagement = (
     provider,
     ...(model ? { model } : {}),
     authenticate: async (runtime) => {
-      const credential = await getProviderApiKey(provider)
+      const credential = resolveDiagnosticsProviderCredential(
+        availableKeys.value[provider],
+        await getProviderApiKey(provider),
+      )
       if (!credential) return false
       await runtime.updateChatCompletionApiKey(provider, credential)
       return true
@@ -1330,7 +1350,6 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       return initCs
     }
   })()
-  const opfsStorageBackend = createOpfsStorageBackendResolver()
   const storageNamespacePrefix = 'taskyon'
   let getTaskyonFetchCredential: () => Promise<string> = () =>
     Promise.resolve(
@@ -1361,6 +1380,95 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     process.env.CLIENT && canUseTauriHttpPlugin()
       ? tauriHttpFetch
       : globalThis.fetch.bind(globalThis)
+  let verifiedCorsProxyUrl: string | undefined
+  let pendingFetchTransport: Promise<SandboxFetchTransport> | undefined
+  const getCorsProxyUrl = () => {
+    const configured = stateRefs.appConfiguration.sandboxCorsProxyUrl.trim()
+    const url = new URL(configured, window.location.origin)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('The CORS proxy URL must use HTTP or HTTPS.')
+    }
+    return url.href.endsWith('/') ? url.href : `${url.href}/`
+  }
+  const isCorsProxyVerified = () => {
+    try {
+      return verifiedCorsProxyUrl === getCorsProxyUrl()
+    } catch {
+      return false
+    }
+  }
+  const checkCorsProxyAvailability = async () => {
+    try {
+      const proxyUrl = getCorsProxyUrl()
+      const response = await directFetch(`${proxyUrl}iscorsneeded`, {
+        headers: { 'x-requested-with': 'Taskyon' },
+        signal: AbortSignal.timeout(3000),
+      })
+      const available = response.ok && (await response.text()) === 'no'
+      verifiedCorsProxyUrl = available ? proxyUrl : undefined
+      return available
+    } catch {
+      verifiedCorsProxyUrl = undefined
+      return false
+    }
+  }
+  const promptForFetchTransport = async (preferProxy: boolean): Promise<SandboxFetchTransport> => {
+    const corsAvailable = isCorsProxyVerified() || (await checkCorsProxyAvailability())
+    const customProxy = stateRefs.appConfiguration.customProxyTemplate.trim()
+    const preferredTransport = preferProxy
+      ? customProxy
+        ? 'custom-proxy'
+        : corsAvailable
+          ? 'cors-proxy'
+          : 'wss'
+      : corsAvailable
+        ? 'cors-proxy'
+        : 'wss'
+    return await new Promise((resolve, reject) => {
+      Dialog.create({
+        class: 'taskyon-capability-dialog taskyon-capability-dialog--network-access',
+        color: 'info',
+        title: '🌐 Choose tool fetch transport',
+        message: `${preferProxy ? 'This tool recommends using a proxy. ' : ''}A CORS or custom proxy can read request and response contents. WSS keeps HTTPS encrypted until the target.`,
+        options: {
+          type: 'radio',
+          model: preferredTransport,
+          items: [
+            ...(corsAvailable
+              ? [{ label: 'CORS proxy', value: 'cors-proxy' }]
+              : [{ label: 'CORS proxy (unavailable)', value: 'cors-proxy', disable: true }]),
+            { label: 'Secure Taskyon WSS tunnel', value: 'wss' },
+            ...(customProxy ? [{ label: 'Custom proxy', value: 'custom-proxy' }] : []),
+            { label: 'Direct host fetch', value: 'direct' },
+          ],
+        },
+        ok: { label: 'Use transport', color: 'info' },
+        cancel: { label: 'Cancel', color: 'negative', flat: true },
+      })
+        .onOk((transport: SandboxFetchTransport) => {
+          stateRefs.appConfiguration.sandboxFetchTransport = transport
+          resolve(transport)
+        })
+        .onDismiss(() => reject(new Error('No tool fetch transport was selected.')))
+    })
+  }
+  const resolveFetchTransport = async (preferProxy: boolean) => {
+    const selected = stateRefs.appConfiguration.sandboxFetchTransport
+    if (selected !== 'ask') {
+      if (
+        selected !== 'cors-proxy' ||
+        isCorsProxyVerified() ||
+        (await checkCorsProxyAvailability())
+      ) {
+        return selected
+      }
+      stateRefs.appConfiguration.sandboxFetchTransport = 'ask'
+    }
+    pendingFetchTransport ??= promptForFetchTransport(preferProxy).finally(() => {
+      pendingFetchTransport = undefined
+    })
+    return await pendingFetchTransport
+  }
   const providerNetwork = createHostNetwork({
     directFetch,
     getWssFetch: (purpose) =>
@@ -1462,15 +1570,25 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         return await providerNetwork.providerFetch(context)(request)
       }
       const customProxy = stateRefs.appConfiguration.customProxyTemplate
+      const policy = context.options?.policy ?? 'default'
+      const configured =
+        policy === 'direct' || isPrivateSandboxFetchUrl(request)
+          ? 'direct'
+          : await resolveFetchTransport(context.options?.preferProxy === true)
       const transport = resolveToolHostTransport({
         request,
-        configured: stateRefs.appConfiguration.sandboxFetchTransport,
-        policy: context.options?.policy ?? 'default',
+        configured,
+        policy,
         ...(context.options?.preferProxy ? { preferProxy: true } : {}),
         ...(customProxy ? { customProxyTemplate: customProxy } : {}),
       })
       if (transport === 'direct') return await directFetch(request)
       if (transport === 'wss') return await sandboxWssFetch(request)
+      if (transport === 'cors-proxy') {
+        return await createCorsAnywhereFetch({ proxyUrl: getCorsProxyUrl(), fetch: directFetch })(
+          request,
+        )
+      }
       if (customProxy) return await createCustomProxyFetch(customProxy, directFetch)(request)
       throw new Error('Configure a custom proxy URL before selecting the custom proxy transport.')
     },
@@ -1484,6 +1602,24 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       },
     ) => authorizeBrowserSandboxFetch({ tool, capability }),
   }
+  const createBrowserFetchWithPolicy = (storageClient: TaskyonStorageClient) => {
+    const fetchWithPolicy: FetchWithPolicy = (input, init, options) =>
+      hostFetch.fetch({ kind: 'tool', ...(options ? { options } : {}) }, new Request(input, init))
+    return createCachedSecureFetch(
+      fetchWithPolicy,
+      createStorageClientSecureFetchCache(storageClient),
+    )
+  }
+  const createBrowserToolSetup = (storageClient: TaskyonStorageClient) => {
+    const fetchWithPolicy = createBrowserFetchWithPolicy(storageClient)
+    return createDefaultTaskyonToolSetup({
+      unavailableToolNames: getBrowserUnavailableToolNames(),
+      storageClient,
+      storageDownload: (input, init) => fetchWithPolicy(input, init),
+      workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
+      chatCompletionFetch: providerChatFetch,
+    })
+  }
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({
       ...stateRefs.llmSettings,
@@ -1493,44 +1629,33 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     toolchainConfig: stateRefs.effectiveToolchainConfig,
     taskSearchVectorizer: stateRefs.appConfiguration.taskSearchVectorizer,
     cryptoSession: initialCryptoSession,
-    toolSetup: (storageClient) =>
-      createDefaultTaskyonToolSetup({
-        unavailableToolNames: getBrowserUnavailableToolNames(),
-        storageClient,
-        workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
-        chatCompletionFetch: providerChatFetch,
-      }),
+    toolSetup: createBrowserToolSetup,
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
-    createFetchWithPolicy: (storageClient) => {
-      const fetchWithPolicy: FetchWithPolicy = (input, init, options) =>
-        hostFetch.fetch({ kind: 'tool', ...(options ? { options } : {}) }, new Request(input, init))
-      return createCachedSecureFetch(
-        fetchWithPolicy,
-        createStorageClientSecureFetchCache(storageClient),
-      )
-    },
+    createFetchWithPolicy: createBrowserFetchWithPolicy,
     fetchPolicy: { policy: 'default' },
     allowPrivateSandboxFetch: true,
     authorizePopup: authorizeBrowserPopup,
     storageNamespacePrefix,
     storage: {
       kind: 'service',
-      createService: (port) =>
-        createPgLiteTaskManagerStorageService(
+      createService: async (port) => {
+        const { provider } = await selectBrowserStorageProvider()
+        return createPgLiteTaskManagerStorageService(
           port,
           storageNamespacePrefix,
           getDatabase,
-          (namespace) => {
+          async (namespace) => {
             const logicalNamespace = getLogicalStorageNamespace(namespace, storageNamespacePrefix)
             if (logicalNamespace === null || !isBrowserRecordNamespace(logicalNamespace)) {
               throw new Error(
                 `No browser storage backend is configured for namespace "${namespace}".`,
               )
             }
-            return opfsStorageBackend(namespace)
+            return await provider.records(namespace)
           },
-          async (namespace) => await createOpfsBlobStorageBackend(namespace),
-        ),
+          async (namespace) => await provider.blobs(namespace),
+        )
+      },
     },
   })
   onScopeDispose(() => {
@@ -1547,6 +1672,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     { deep: true },
   )
   const storageClient = runtime.storageClient
+  const storageDownload = createBrowserFetchWithPolicy(storageClient)
   const templateCacheNamespace = 'taskyon/local/task-template-render/v1'
   const taskTemplateRenderer = createTaskTemplateRenderer({
     getTaskById: async (taskId) => await taskyonClient.task.get({ id: taskId }),
@@ -1607,46 +1733,28 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const documentationReady = documentationBases.register(taskyonDocumentationManifest, 'taskyon')
   const allTools = reactiveTools(taskyon, taskyonClient)
 
-  const listBrowserTools = () =>
-    taskyonClient.tools.list({
-      includeHidden: true,
+  const registerBrowserWorkflowTools = async (ty: Taskyon, extraTools: InternalTool[] = []) => {
+    const client = createTaskyonClient(ty.port)
+    const entryNodeTool = createStandardEntryNodeTool({
+      name: getEntryNodeToolName(buildEntryNodeDraft()),
+      renderOptions: { hideChat: true, hideLlm: true },
+      getToolCatalog: createTaskTreeAgentToolCatalog(
+        () => client.tools.list({ includeHidden: true }),
+        getBrowserUnavailableToolNames(),
+      ),
     })
-  const entryNodeTool = createStandardEntryNodeTool({
-    name: getEntryNodeToolName(buildEntryNodeDraft()),
-    renderOptions: { hideChat: true, hideLlm: true },
-    getToolCatalog: async ({
-      taskChain,
-      allowedTools,
-      pinnedToolNames,
-      recentToolCount,
-      frequentToolCount,
-    }) => {
-      const currentTools: Record<string, ToolBase> = await listBrowserTools()
-      const unavailableToolNames = getBrowserUnavailableToolNames()
-      return {
-        tools: resolveTaskTreeAgentToolWindow(
-          currentTools,
-          taskChain,
-          unavailableToolNames,
-          recentToolCount,
-          frequentToolCount,
-          allowedTools,
-          pinnedToolNames,
-        ),
-        total: resolveAgentToolCatalog(currentTools, unavailableToolNames).length,
-      }
-    },
-  })
-
-  const uiToolRpcHost = taskyon.then(async (ty) => {
-    const host = await registerToolRpcTools({
+    return await registerToolRpcTools({
       port: ty.port,
       tools: () => [
         entryNodeTool,
-        ...defineTyGuiTools(stateRefs, ty, taskyonClient, documentationBases),
+        ...defineTyGuiTools(stateRefs, ty, client, documentationBases),
+        ...extraTools,
       ],
-      createContext: createTrustedUiToolContext(ty, taskyonClient),
+      createContext: createTrustedUiToolContext(ty, client),
     })
+  }
+  const uiToolRpcHost = taskyon.then(async (ty) => {
+    const host = await registerBrowserWorkflowTools(ty)
     await taskyonClient.tools.list({})
     return host
   })
@@ -2101,6 +2209,17 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     documentationBases,
     documentationReady,
     storageClient,
+    storageDownload,
+    workflowDiagnosticsHost: {
+      createToolSetup: createBrowserToolSetup,
+      registerTools: async (ty: Taskyon, extraTools: InternalTool[] = []) => {
+        await installPortableDiagnosticsTools(
+          () => taskyonClient.tools.list({ includeHidden: true }),
+          (tool) => ty.installTool(tool),
+        )
+        return await registerBrowserWorkflowTools(ty, extraTools)
+      },
+    },
     resetTaskyonLocalStorageState,
     dagStorageBackend,
     designProjectStore,
@@ -2119,6 +2238,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     currentTaskResolutionStatus,
     conversationHistory,
     resetCapabilityDecisions: () => getBrowserCapabilityPolicy().reset(),
+    checkCorsProxyAvailability,
+    resetFetchTransportSelection: () => {
+      verifiedCorsProxyUrl = undefined
+      stateRefs.appConfiguration.sandboxFetchTransport = 'ask'
+    },
     ...apiKeyManagement,
     stopWorker,
     taskWorkerWaiting,

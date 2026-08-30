@@ -11,7 +11,7 @@ import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import process from 'node:process'
-import { resolveTaskyonCliStoragePaths } from '../cli/storagePaths'
+import { resolveCliInvocationDirectory, resolveTaskyonCliStoragePaths } from '../cli/storagePaths'
 import { createDiagnosticsOutput, formatFailedDiagnostics } from './diagnosticsOutput'
 import { diagnosticsTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
 
@@ -322,11 +322,22 @@ async function loadTestModules(filter: string) {
   return { modules, discoveredFiles }
 }
 
-function filterTests(tests: TestRecord, filter: string): TestRecord {
+function filterTests(
+  tests: TestRecord,
+  filter: string,
+  testsByFolder: Record<string, TestRecord>,
+): TestRecord {
   if (!filter.trim()) return tests
   const normalized = filter.trim().toLowerCase()
+  const folderTests = new Set(
+    Object.entries(testsByFolder)
+      .filter(([folder]) => folder.toLowerCase().includes(normalized))
+      .flatMap(([, groupedTests]) => Object.keys(groupedTests)),
+  )
   return Object.fromEntries(
-    Object.entries(tests).filter(([name]) => name.toLowerCase().includes(normalized)),
+    Object.entries(tests).filter(
+      ([name]) => name.toLowerCase().includes(normalized) || folderTests.has(name),
+    ),
   )
 }
 
@@ -400,6 +411,9 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
       if (fn.description !== undefined) wrapped.description = fn.description
       if (fn.setup !== undefined) wrapped.setup = fn.setup
       if (fn.timeoutMs !== undefined) wrapped.timeoutMs = fn.timeoutMs
+      const requiresLongRun =
+        fn.requiresLongRun ?? diagnosticsTestMetadata[testIdentifier(name)]?.requiresLongRun
+      if (requiresLongRun !== undefined) wrapped.requiresLongRun = requiresLongRun
       const modelBased = fn.modelBased ?? diagnosticsTestMetadata[testIdentifier(name)]?.modelBased
       if (modelBased !== undefined) wrapped.modelBased = modelBased
       if (diagnosticsTestMetadata[testIdentifier(name)]?.requiresAuth) wrapped.requiresAuth = true
@@ -526,10 +540,12 @@ async function main(): Promise<number> {
         opts.category,
       ),
       opts.filter,
+      registry.testsByFolder,
     )
     const experimentalTests = filterTests(
       filterTestsByCategory(registry.experimentalTests, opts.category),
       opts.filter,
+      registry.testsByFolder,
     )
     console.log(`Discovered files: ${discoveredFiles.length}`)
     for (const file of discoveredFiles) console.log(`- ${file}`)
@@ -578,6 +594,7 @@ async function main(): Promise<number> {
         opts.category,
       ),
       opts.filter,
+      registry.testsByFolder,
     )
     const wrapped = wrapTests(filtered, opts)
     const selectedNames = Object.keys(wrapped)
@@ -598,10 +615,39 @@ async function main(): Promise<number> {
     const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
     const runtime = await bootstrapCliTaskyon({
       nodePgLiteDataDir: diagnosticsDataDir,
+      blobStorageRoot: resolveCliInvocationDirectory(),
       ...(opts.provider ? { selectedApi: opts.provider } : {}),
       ...(opts.model ? { model: opts.model } : {}),
     })
-    const context: DiagnosticsTestContext = {
+    const [
+      { createCliWorkflowHost, loadProjectInstructions },
+      { createTaskyonInteractiveCliHost },
+      { createNodeWorkspaceOperations },
+      { findNativePythonExecutable },
+    ] = await Promise.all([
+      import('../cli'),
+      import('../taskyonHost'),
+      import('../tools/nodeWorkspaceOperations'),
+      import('../cli/nativePythonTool'),
+    ])
+    const cliHost = createTaskyonInteractiveCliHost()
+    const explorationContextFiles: Record<string, string> = {}
+    const context = {
+      workflowDiagnosticsHost: createCliWorkflowHost({
+        host: cliHost,
+        projectInstructions: await loadProjectInstructions(
+          process.cwd(),
+          cliHost.environmentPrefix,
+        ),
+        workspaceOperations: createNodeWorkspaceOperations(process.cwd(), {
+          onDidWrite: (path) => delete explorationContextFiles[path],
+        }),
+        explorationContextFiles,
+        nativePythonExecutable: await findNativePythonExecutable(),
+        getReadline: () => undefined,
+        authorizePython: () =>
+          Promise.reject(new Error('Native Python requires interactive approval')),
+      }),
       ...(runtime.taskyonAuth ? { tyauth: runtime.taskyonAuth } : {}),
       allowLongRun: opts.allowLongRun,
       selectedApi: runtime.selectedApi,
@@ -609,6 +655,7 @@ async function main(): Promise<number> {
       toolchainConfig: getSelectedToolchainConfig(runtime.llmState),
       ...(runtime.model ? { model: runtime.model } : {}),
       ...(runtime.providerSession ? { providerSession: runtime.providerSession } : {}),
+      storageClient: runtime.storageClient,
     }
 
     const startedAt = Date.now()

@@ -82,7 +82,7 @@ export const applyWebSearchIntent = (
           ...previousArguments,
           websearch: {
             ...previousWebSearch,
-            enabled: mode === 'websearch',
+            enabled: true,
             mode: mode === 'websearch' ? 'required' : 'auto',
           },
         },

@@ -16,7 +16,11 @@ export type UnsupportedModuleFallback = {
 }
 
 export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = {
-  testTimeQuestionConversationUsesClockTool: {
+  testSimplePinnedToolConversationUsesNormalTaskyonFlow: {
+    requiresNetwork: true,
+    modelBased: true,
+  },
+  testSimpleGreetingConversationUsesNormalTaskyonFlow: {
     requiresNetwork: true,
     modelBased: true,
   },
@@ -70,6 +74,23 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
     modelBased: true,
   },
   testEntryNodeWebsearchProducesHostedSearchUsage: {
+    requiresNetwork: true,
+    modelBased: true,
+  },
+  testWebSearchThenToolUsesSearchedValue: {
+    requiresNetwork: true,
+    modelBased: true,
+  },
+  testCatalogSearchThenUsesDiscoveredTool: {
+    requiresNetwork: true,
+    modelBased: true,
+  },
+  testIdealWorkflowMatrixWithLunaAndGlm: {
+    requiresNetwork: true,
+    requiresLongRun: true,
+    modelBased: true,
+  },
+  testDocumentRetrievalStoresOfficialFederalRulesPdf: {
     requiresNetwork: true,
     modelBased: true,
   },

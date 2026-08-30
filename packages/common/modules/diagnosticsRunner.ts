@@ -6,7 +6,26 @@ export type DiagnosticsProviderSession = {
   }) => Promise<boolean>
 }
 
+export type DiagnosticsStorageClient = {
+  getBlob: (request: { namespace: string; id: string }) => Promise<{
+    data: Uint8Array
+    metadata: {
+      id: string
+      size: number
+      contentType?: string | undefined
+      sha256?: string | undefined
+      modifiedAt: string
+    }
+  } | null>
+}
+
+export type DiagnosticsStorageDownload = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>
+
 export type DiagnosticsTestContext = {
+  abortSignal?: AbortSignal
   tyauth?: string
   allowLongRun?: boolean
   isCypress?: boolean
@@ -15,6 +34,8 @@ export type DiagnosticsTestContext = {
   llmSettings?: unknown
   toolchainConfig?: unknown
   providerSession?: DiagnosticsProviderSession
+  storageClient?: DiagnosticsStorageClient
+  storageDownload?: DiagnosticsStorageDownload
 }
 
 export interface TaskyonTestFn {
@@ -58,8 +79,45 @@ export type DiagnosticsRunResult = {
   name: string
   ok: boolean
   modelBased: boolean
+  preparationFailed?: boolean
   details?: unknown
   error?: unknown
+}
+
+export type DiagnosticsRunOptions = {
+  details?: boolean
+  tyauth?: string
+  timeoutMs?: number
+  isCypress?: boolean
+  context?: DiagnosticsTestContext
+  contextForTest?: (
+    name: string,
+    test: TaskyonTestFn,
+    context: DiagnosticsTestContext,
+  ) => DiagnosticsTestContext | Promise<DiagnosticsTestContext>
+  onProgress?: (progress: {
+    phase: 'start' | 'finish'
+    test: string
+    ok?: boolean
+    error?: unknown
+  }) => void
+  onResult?: (result: DiagnosticsRunResult) => void
+  shouldAbort?: () => boolean
+  onAbort?: (nextTest: string) => void
+}
+
+export function getDiagnosticsSkipReason(details: unknown): string | undefined {
+  if (
+    typeof details !== 'object' ||
+    details === null ||
+    !('skipped' in details) ||
+    details.skipped !== true
+  ) {
+    return undefined
+  }
+  return 'reason' in details && typeof details.reason === 'string'
+    ? details.reason
+    : 'Required runtime capability is unavailable.'
 }
 
 const DEFAULT_DIAGNOSTICS_TEST_TIMEOUT_MS = 20_000
@@ -148,32 +206,23 @@ export function buildDiagnosticsRegistry(args: {
 
 export async function runDiagnosticsTests(
   tests: TestRecord,
-  opts?: {
-    details?: boolean
-    tyauth?: string
-    timeoutMs?: number
-    isCypress?: boolean
-    context?: DiagnosticsTestContext
-    onProgress?: (progress: {
-      phase: 'start' | 'finish'
-      test: string
-      ok?: boolean
-      error?: unknown
-    }) => void
-    onResult?: (result: DiagnosticsRunResult) => void
-    shouldAbort?: () => boolean
-    onAbort?: (nextTest: string) => void
-  },
+  opts?: DiagnosticsRunOptions,
 ): Promise<DiagnosticsRunResult[]> {
   const details = opts?.details ?? false
   const requestedDefaultTimeoutMs = opts?.timeoutMs ?? DEFAULT_DIAGNOSTICS_TEST_TIMEOUT_MS
   const defaultTimeoutMs = Math.min(requestedDefaultTimeoutMs, MAX_DIAGNOSTICS_TEST_TIMEOUT_MS)
   const out: DiagnosticsRunResult[] = []
 
-  const withTimeout = async (name: string, timeoutMs: number, fn: () => Promise<unknown>) => {
+  const withTimeout = async (
+    name: string,
+    timeoutMs: number,
+    fn: () => Promise<unknown>,
+    controller: AbortController,
+  ) => {
     let timer: ReturnType<typeof setTimeout> | null = null
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
+        controller.abort(`Test timed out after ${timeoutMs}ms: ${name}`)
         reject(new Error(`Test timed out after ${timeoutMs}ms: ${name}`))
       }, timeoutMs)
     })
@@ -190,6 +239,8 @@ export async function runDiagnosticsTests(
       break
     }
     opts?.onProgress?.({ phase: 'start', test: name })
+    const controller = new AbortController()
+    let preparing = false
     try {
       const fallbackContext =
         opts?.tyauth !== undefined || opts?.isCypress !== undefined
@@ -198,25 +249,30 @@ export async function runDiagnosticsTests(
               ...(opts?.isCypress !== undefined ? { isCypress: opts.isCypress } : {}),
             }
           : undefined
-      const testOpts: DiagnosticsTestContext | undefined = opts?.context ?? fallbackContext
-      const unavailable =
-        testFn.requiresAuth && !testOpts?.tyauth
-          ? {
-              skipped: true,
-              reason: 'Requires an authenticated Taskyon user session.',
-            }
-          : testFn.requiresLongRun && !testOpts?.allowLongRun
-            ? {
-                skipped: true,
-                reason: 'Requires explicit permission for long-running diagnostics.',
-              }
-            : undefined
-      if (!unavailable && typeof testFn.setup === 'function') {
-        await Promise.resolve(testFn.setup(testOpts))
+      const baseContext: DiagnosticsTestContext = {
+        ...(opts?.context ?? fallbackContext),
+        abortSignal: controller.signal,
       }
       const timeoutMs = testFn.timeoutMs ?? defaultTimeoutMs
-      const run = () => Promise.resolve(testFn(testOpts))
-      const result = unavailable ?? (await withTimeout(name, timeoutMs, run))
+      const run = async () => {
+        if (testFn.requiresLongRun && !baseContext.allowLongRun) {
+          return {
+            skipped: true,
+            reason: 'Requires explicit permission for long-running diagnostics.',
+          }
+        }
+        preparing = opts?.contextForTest !== undefined
+        const testOpts = opts?.contextForTest
+          ? await opts.contextForTest(name, testFn, baseContext)
+          : baseContext
+        preparing = false
+        if (testFn.requiresAuth && !testOpts.tyauth) {
+          return { skipped: true, reason: 'Requires an authenticated Taskyon user session.' }
+        }
+        if (typeof testFn.setup === 'function') await testFn.setup(testOpts)
+        return await testFn(testOpts)
+      }
+      const result = await withTimeout(name, timeoutMs, run, controller)
       const skipped =
         typeof result === 'object' &&
         result !== null &&
@@ -239,6 +295,7 @@ export async function runDiagnosticsTests(
         name,
         ok: false,
         modelBased: testFn.modelBased === true,
+        ...(preparing ? { preparationFailed: true } : {}),
         error: normalizedError,
       })
       opts?.onResult?.(out[out.length - 1]!)

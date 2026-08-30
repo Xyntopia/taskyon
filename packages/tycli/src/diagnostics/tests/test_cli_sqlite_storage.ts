@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { mkdtemp } from 'node:fs/promises'
+import { access, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
@@ -7,6 +7,7 @@ import { createStorageClient, taskyonStorageProtocol } from '@taskyon/taskyon/ap
 import { createCliFileBlobStorageBackend, createCliFileStorageBackend } from '../../cli/fileStorage'
 import { createCliSqliteStorageProvider } from '../../cli/sqliteStorage'
 import { createCliSelectedStorageService } from '../../cli/storageService'
+import { resolveCliBlobStoragePath } from '../../cli/fileStorage'
 
 export const testCliSqliteImplementsStorageBackendContract = async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tycli-sqlite-contract-'))
@@ -50,6 +51,56 @@ export const testCliComposesRecordAndBlobBackendsIndependently = async () => {
 
 testCliComposesRecordAndBlobBackendsIndependently.description =
   'Uses SQLite records and file blobs through one location-transparent StorageClient.'
+
+export const testCliRoutesBlobFilesToConfiguredInvocationRoot = async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tycli-invocation-storage-'))
+  const invocationRoot = join(directory, 'invocation')
+  const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
+  const stop = await createCliSelectedStorageService({
+    port: servicePort,
+    dataDirectory: join(directory, 'persistent-data'),
+    blobStorageRoot: invocationRoot,
+    selection: { records: 'files', blobs: 'files' },
+  })
+  const storage = createStorageClient(clientPort, {
+    namespacePrefix: 'taskyon',
+    distribution: 'local-only',
+  })
+
+  try {
+    await storage.setBlob({
+      namespace: 'diagnostics/document-retrieval/v1',
+      id: 'document.pdf',
+      data: new TextEncoder().encode('%PDF-test'),
+      contentType: 'application/pdf',
+    })
+    const invocationPath = resolveCliBlobStoragePath(
+      invocationRoot,
+      'taskyon/diagnostics/document-retrieval/v1',
+      'document.pdf',
+    )
+    const persistentPath = resolveCliBlobStoragePath(
+      join(directory, 'persistent-data', 'storage'),
+      'taskyon/diagnostics/document-retrieval/v1',
+      'document.pdf',
+    )
+    await access(invocationPath)
+    let persistentPathExists = true
+    try {
+      await access(persistentPath)
+    } catch {
+      persistentPathExists = false
+    }
+    if (persistentPathExists) {
+      throw new Error('Invocation-scoped blob unexpectedly used the persistent storage root.')
+    }
+  } finally {
+    stop()
+  }
+}
+
+testCliRoutesBlobFilesToConfiguredInvocationRoot.description =
+  'Routes CLI file-backed blobs to the configured invocation root while keeping records persistent.'
 
 export const testCliScopesSelectedStorageForHost = async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tycli-scoped-storage-'))

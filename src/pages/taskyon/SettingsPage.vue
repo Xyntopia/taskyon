@@ -56,8 +56,13 @@
             <SandboxFetchSettings
               v-model:transport="state.appConfiguration.sandboxFetchTransport"
               v-model:wss-url="state.appConfiguration.sandboxFetchWssUrl"
+              v-model:cors-proxy-url="state.appConfiguration.sandboxCorsProxyUrl"
               v-model:custom-proxy-template="state.appConfiguration.customProxyTemplate"
             />
+            <div class="row items-center q-gutter-sm">
+              <q-btn outline label="Check CORS proxy" @click="checkCorsProxy" />
+              <span v-if="corsProxyStatus" class="text-caption">{{ corsProxyStatus }}</span>
+            </div>
           </div>
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
@@ -234,9 +239,11 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const corsProxyStatus = ref('')
 const appConfigurationWithoutSandboxFetch = TyProfile.shape.appConfiguration.omit({
   sandboxFetchTransport: true,
   sandboxFetchWssUrl: true,
+  sandboxCorsProxyUrl: true,
   customProxyTemplate: true,
 })
 const appConfigurationModel = computed<Record<string, unknown>>({
@@ -244,7 +251,12 @@ const appConfigurationModel = computed<Record<string, unknown>>({
     Object.fromEntries(
       Object.entries(state.appConfiguration).filter(
         ([key]) =>
-          !['sandboxFetchTransport', 'sandboxFetchWssUrl', 'customProxyTemplate'].includes(key),
+          ![
+            'sandboxFetchTransport',
+            'sandboxFetchWssUrl',
+            'sandboxCorsProxyUrl',
+            'customProxyTemplate',
+          ].includes(key),
       ),
     ),
   set: (nextValue) => {
@@ -253,6 +265,12 @@ const appConfigurationModel = computed<Record<string, unknown>>({
 })
 
 const tabPanelClass = 'column items-center'
+
+const checkCorsProxy = async () => {
+  corsProxyStatus.value = 'Checking…'
+  const available = await tystate.checkCorsProxyAvailability()
+  corsProxyStatus.value = available ? 'Available' : 'Unavailable'
+}
 
 const toolchainProfileNames = computed(() => Object.keys(state.toolchainProfiles.profiles).sort())
 const toolchainProfileOptions = computed(() => [

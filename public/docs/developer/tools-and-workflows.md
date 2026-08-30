@@ -114,19 +114,21 @@ some fixed arguments and a smaller public schema:
 ```ts
 bind({
   name: 'selectTaskyonTools',
-  description: 'Select relevant tools.',
-  target: 'taskyonFlow',
+  description: 'Search for a missing capability.',
+  target: 'entryNode',
+  fixedArguments: {
+    requireToolCall: true,
+  },
   publicArguments: {
-    allowedTools: {
-      description: 'Candidate tool names.',
-      maxItems: 20,
-    },
+    toolSearch: {},
   },
 })
 ```
 
 The public argument entries refine the target's existing JSON Schema rather than replacing its
-types. Fixed arguments cannot also be public. Core compiles the generated target call with an
+types, so `{}` selects the owning target parameter without copying its schema into the binding.
+Fixed arguments cannot also be public. Binding definitions must not copy target settings; core
+compiles the generated target call with an
 immutable tool revision and an opaque per-tool settings revision. Defaults and settings are applied
 only during execution, so settings values are not exposed in the task tree. Repeated definition
 occurrences remain in the call stack while equal definition content shares storage. Definition

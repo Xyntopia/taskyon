@@ -4,15 +4,20 @@ import {
   resolveProxyWebReaderArgs,
   type ResolvedProxyWebReaderArgs,
 } from '@taskyon/common/modules/webFetching/index'
-import { buildTaskPlannerTaskChains } from './TaskPlannerTool'
+import { createChatCompletionTask } from '../api'
 import { createTool, toolCall, type toolContext } from '../types/toolApi'
-import type { partialTaskDraft } from '../types/taskNode'
+import type { partialTaskDraft, TaskNode } from '../types/taskNode'
+import {
+  resolveStorageTargetFromTaskChain,
+  storageTargetFromArguments,
+} from './researchStorageTarget'
 import {
   parsePoliteHttpPolicy,
   politeFetch,
   politeHttpPolicySchema,
   waitForPoliteHttpTurn,
 } from '../utils/politeHttp'
+import { readPublicWebPageAsMarkdown } from './helperCollection'
 
 type BrowserMcpImportArgs = {
   serverUrl?: string
@@ -27,8 +32,11 @@ type EnsureBrowserMcpToolsArgs = BrowserMcpImportArgs & {
 
 type WebResearchPlannerArgs = {
   objective: string
-  searchQueries: string[]
+  searchQueries?: string[]
   artifactRoot?: string
+  storageNamespace?: string
+  storageObjectId?: string
+  storageExpectedFileType?: 'pdf'
   researchMode?: ResearchMode
   browserTools?: string[]
   supportTools?: string[]
@@ -45,7 +53,6 @@ type WebResearchPlannerArgs = {
 const researchModes = ['websearch-first', 'browser-mcp-first', 'websearch-only'] as const
 type ResearchMode = (typeof researchModes)[number]
 
-const defaultResearchSupportTools = ['updateFiles', 'downloadFile', 'bash', 'jinaMarkdownReader']
 const defaultBrowserMcpStartupInstructions = [
   'Start your browser MCP server outside Taskyon so it exposes an HTTP MCP endpoint.',
   'A common pattern is to run a local container or local process that serves MCP on the configured port.',
@@ -154,31 +161,14 @@ const ensureNonEmptyString = (value: string | undefined, fieldName: string) => {
 const trimNonEmptyStrings = (values: readonly string[] | undefined) =>
   (values ?? []).map((value) => value.trim()).filter((value) => value.length > 0)
 
-const uniqueStrings = (values: readonly string[]) => Array.from(new Set(values))
-
-const isSingleOfficialDocumentationObjective = (objective: string) => {
-  const normalized = objective.toLowerCase()
-  const targetsOfficialDocumentation =
-    /\b(?:official|public)\s+(?:api\s+)?(?:documentation|docs)\b/.test(normalized)
-  const asksForComparison =
-    /\b(?:compare|comparison|alternatives?|multiple|several|different)\b/.test(normalized)
-  return targetsOfficialDocumentation && !asksForComparison
+const resolveRequestedStorageTarget = (
+  args: WebResearchPlannerArgs,
+  taskChain: readonly TaskNode[],
+) => {
+  const explicitTarget = storageTargetFromArguments(args)
+  if (explicitTarget) return explicitTarget
+  return resolveStorageTargetFromTaskChain(taskChain)
 }
-
-const constrainResearchScope = (args: WebResearchPlannerArgs): WebResearchPlannerArgs => {
-  if (!isSingleOfficialDocumentationObjective(args.objective)) return args
-
-  const [firstQuery] = trimNonEmptyStrings(args.searchQueries)
-  return {
-    ...args,
-    searchQueries: firstQuery ? [firstQuery] : [],
-    maxSourcesPerQuery: 1,
-    webSearchMaxResults: 1,
-  }
-}
-
-const joinHints = (label: string, hints: readonly string[]) =>
-  hints.length > 0 ? `${label}: ${hints.join(', ')}.` : ''
 
 const slugifyResearchObjective = (value: string) => {
   const slug = value
@@ -212,192 +202,6 @@ const normalizeArtifactRoot = (value: string) => {
 
 const resolveResearchArtifactRoot = (args: WebResearchPlannerArgs, objective: string) =>
   normalizeArtifactRoot(args.artifactRoot ?? `research/${slugifyResearchObjective(objective)}`)
-
-const resolveResearchMode = (mode: ResearchMode | undefined): ResearchMode => {
-  if (mode === 'browser-mcp-first' || mode === 'websearch-only') return mode
-  return 'websearch-first'
-}
-
-const buildResearchTaskToolset = (args: WebResearchPlannerArgs) => {
-  const researchMode = resolveResearchMode(args.researchMode)
-  const useBrowserTools = researchMode === 'browser-mcp-first' || args.ensureBrowserMcp === true
-  const browserTools =
-    researchMode === 'websearch-only' || !useBrowserTools
-      ? []
-      : trimNonEmptyStrings(args.browserTools)
-  const configuredSupportTools = trimNonEmptyStrings(args.supportTools)
-  const supportTools = uniqueStrings(
-    configuredSupportTools.length > 0 ? configuredSupportTools : defaultResearchSupportTools,
-  )
-  const allowedTools = uniqueStrings([...browserTools, ...supportTools])
-  if (allowedTools.length === 0 && args.enableWebSearch === false) {
-    throw new Error(
-      'webResearchPlanner needs web search enabled or at least one browserTools/supportTools entry so delegated subtasks stay explicit.',
-    )
-  }
-  return { browserTools, supportTools, allowedTools }
-}
-
-const shouldEnsureBrowserMcp = (args: WebResearchPlannerArgs) => {
-  const researchMode = resolveResearchMode(args.researchMode)
-  if (researchMode === 'websearch-only') return false
-  if (researchMode === 'browser-mcp-first') return args.ensureBrowserMcp !== false
-  return args.ensureBrowserMcp === true && trimNonEmptyStrings(args.browserTools).length > 0
-}
-
-const buildResearchEntryNodeArguments = (args: WebResearchPlannerArgs) => {
-  if (args.enableWebSearch === false) return undefined
-  return {
-    websearch: {
-      enabled: true,
-      max_results: Math.max(1, Math.trunc(args.webSearchMaxResults ?? 5)),
-    },
-  }
-}
-
-const buildDiscoveryTask = (
-  objective: string,
-  query: string,
-  artifactRoot: string,
-  maxSourcesPerQuery: number,
-  fileTypeHints: readonly string[],
-  siteHints: readonly string[],
-  deliverable?: string,
-) =>
-  [
-    `Research objective: ${objective}.`,
-    `Use this search query: ${query}.`,
-    `Use exactly this artifact root for the whole request: ${artifactRoot}.`,
-    `Find up to ${maxSourcesPerQuery} strong candidate sources.`,
-    'Use chatCompletion web search first for discovery when it is enabled.',
-    'Treat every exact product, provider, service, domain, and URL named in the objective as a hard identity constraint. Quote exact product names in searches. Do not substitute or relabel a different provider merely because it offers the same kind of API.',
-    'Prioritize official manufacturer pages, product pages, and direct specification documents.',
-    'For each candidate, capture manufacturer, product or model name, source page URL, direct document URL when available, and a short evidence note.',
-    'Avoid duplicate products and prefer current official documents over reposted PDFs.',
-    joinHints('Preferred file types', fileTypeHints),
-    joinHints('Site hints', siteHints),
-    deliverable ? `Target output: ${deliverable}.` : '',
-  ]
-    .filter((line) => line.length > 0)
-    .join(' ')
-
-const buildValidationTask = (
-  objective: string,
-  query: string,
-  artifactRoot: string,
-  mustDownload: boolean,
-  fileTypeHints: readonly string[],
-  deliverable?: string,
-) =>
-  [
-    `Validate the best candidates for "${objective}" found via "${query}".`,
-    `The only output directory for this research request is ${artifactRoot}. Save every downloaded file, generated text file, manifest, index, and note under this directory. Do not create sibling directories such as task_artifacts, task_battery_specs, taskyon, or alternate spellings of the task name.`,
-    'Open the pages with browser tooling when available, confirm the source is relevant, and extract the strongest direct source URLs.',
-    'Verify source identity before accepting a candidate: the page branding, provider, and domain must actually belong to every exact named product or service in the objective. A different service in the same category is not a match. If the discovered candidate fails this check, reject it and use web search with the quoted exact name to find the correct source; never describe the mismatched source as official documentation for the requested product.',
-    'Deduplicate products before returning results; do not count the same product or document twice.',
-    'Keep raw source downloads budgeted. For HTML, article pages, or documentation pages, save extracted notes, citations, and a manifest instead of a full raw page unless the user explicitly requested a raw archive. If downloadFile is used for raw text or HTML, set a reasonable maxBytes limit.',
-    mustDownload
-      ? 'The requested deliverable includes saved research artifacts, not just links. Use whichever storage or download tool is available in this runtime. In tycli or other local runtimes, prefer downloadFile for accessible URL downloads because it validates file bytes, then use bash only as a fallback when downloadFile is unavailable or clearly unsuitable. If bash is used to download a requested PDF, verify the saved file starts with the %PDF- magic bytes before counting it; delete, rename, or mark any HTML/access-denied/error response as blocked instead of leaving it with a .pdf filename. Use updateFiles for text artifacts such as Markdown, JSON, CSV, or manifests. In browser runtimes, use storage download with expectedFileType set to pdf for accessible PDF URLs, or storage save for generated artifacts and file bytes that browser tooling exposes as base64. Verify each saved artifact exists and is non-empty when the tool supports verification. For PDF requests, count a saved artifact only when it is confirmed to be real PDF content, not an HTML error page or URL-only entry. If a requested artifact cannot be saved, record it as a blocked download with the reason; do not treat URL-only entries as completed downloads.'
-      : 'Capture the strongest direct source URLs exactly.',
-    [
-      'If the original user asked to save the results, save them without asking for extra confirmation.',
-      mustDownload
-        ? `Use this single shared task-specific layout for the whole user request: files live below ${artifactRoot}; multiple artifacts should include ${artifactRoot}index.md or a manifest with every local path or storage path. Do not create competing branch-specific directories.`
-        : `Use this single task-specific layout: files live below ${artifactRoot}. For a small single-file result, save one clear Markdown file under ${artifactRoot}; for multiple files, put the files plus an index.md there.`,
-      `Use stable descriptive filenames under ${artifactRoot} and record each local path or storage object next to the source URL. When using updateFiles or downloadFile, pass artifactRoot: ${artifactRoot} and make filePath start with ${artifactRoot}. When using storage, use ${artifactRoot.replace(/\/+$/, '')} as both artifactRoot and namespace, and use the filename as the object id.`,
-      'For storage saves, base64-encode file content, set the best matching MIME type, and keep text formats such as Markdown, JSON, CSV, and HTML readable when loaded back.',
-      'If a page reader such as jinaMarkdownReader is available, use it to validate candidate pages and find direct artifact URLs before falling back to shell-only guesses. If a file-writing tool such as updateFiles or storage is available, create or update the index or manifest with the validated results and saved artifact paths.',
-    ].join(' '),
-    joinHints('Preferred file types', fileTypeHints),
-    deliverable ? `Keep the final material aligned with: ${deliverable}.` : '',
-  ]
-    .filter((line) => line.length > 0)
-    .join(' ')
-
-export const buildWebResearchTaskGroups = (args: WebResearchPlannerArgs) => {
-  const scopedArgs = constrainResearchScope(args)
-  const objective = ensureNonEmptyString(scopedArgs.objective, 'objective')
-  const searchQueries = trimNonEmptyStrings(scopedArgs.searchQueries)
-  if (searchQueries.length === 0) {
-    throw new Error('webResearchPlanner requires at least one non-empty search query.')
-  }
-
-  const { allowedTools } = buildResearchTaskToolset(scopedArgs)
-  const maxSourcesPerQuery = Math.max(1, Math.trunc(scopedArgs.maxSourcesPerQuery ?? 5))
-  const fileTypeHints = trimNonEmptyStrings(scopedArgs.fileTypeHints)
-  const siteHints = trimNonEmptyStrings(scopedArgs.siteHints)
-  const mustDownload = scopedArgs.mustDownload ?? true
-  const artifactRoot = resolveResearchArtifactRoot(scopedArgs, objective)
-
-  return searchQueries.map((query) => [
-    {
-      task: buildDiscoveryTask(
-        objective,
-        query,
-        artifactRoot,
-        maxSourcesPerQuery,
-        fileTypeHints,
-        siteHints,
-        scopedArgs.deliverable,
-      ),
-      allowedTools,
-    },
-    {
-      task: buildValidationTask(
-        objective,
-        query,
-        artifactRoot,
-        mustDownload,
-        fileTypeHints,
-        scopedArgs.deliverable,
-      ),
-      allowedTools,
-    },
-  ])
-}
-
-const buildResearchSynthesisTaskChain = (args: WebResearchPlannerArgs): partialTaskDraft[] => {
-  const objective = ensureNonEmptyString(args.objective, 'objective')
-  const artifactRoot = resolveResearchArtifactRoot(args, objective)
-  const entryNodeArguments = buildResearchEntryNodeArguments({
-    ...args,
-    supportTools: ['updateFiles', 'bash'],
-  })
-
-  return [
-    {
-      role: 'user',
-      content: {
-        type: 'message',
-        data: [
-          'Research synthesis checkpoint.',
-          '',
-          `Original research objective: ${objective}.`,
-          `Shared artifact root: ${artifactRoot}.`,
-          args.deliverable ? `Requested deliverable: ${args.deliverable}.` : '',
-          '',
-          'Review the completed research notes and saved artifacts in the task tree and local artifact root.',
-          'Before synthesizing, verify that source branding, provider, and domain match every exact product, service, domain, or URL named in the objective. Reject and replace same-category substitutes; use web search with the quoted exact name when the saved candidates have the wrong identity.',
-          'Create the final user-facing deliverable requested by the original objective instead of leaving only branch-local notes.',
-          'If the task asks for a memo, report, comparison, summary, or recommendation, write one clear final Markdown file under the shared artifact root and update or create an index that points to it.',
-          'Also create a top-level README.md with one simple command a human can run from the project root to inspect the result.',
-          'If the requested deliverable includes a visual artifact, make the README command open, render, or verify that visual artifact directly, not only print the text report. In headless/local CLI contexts, a small python or shell command that parses or checks the visual file is acceptable.',
-          'When using updateFiles for both artifact-root files and top-level README.md, omit artifactRoot and use full relative paths for every file, or split the README.md write into a separate updateFiles call. Do not pass artifactRoot while writing README.md.',
-          'Use a command that works locally without login; for research artifacts this is usually a cat command for the final Markdown file.',
-          'Finish with concise verification evidence and the human-check command.',
-        ]
-          .filter((line) => line.length > 0)
-          .join('\n'),
-      },
-    },
-    toolCall({
-      name: 'entryNode',
-      arguments: entryNodeArguments ?? {
-        allowedTools: ['updateFiles', 'bash'],
-      },
-    }),
-  ]
-}
 
 const formatStartupInstructions = (startupInstructions: string) =>
   startupInstructions
@@ -557,6 +361,7 @@ const requestProxyText = async (
 
 export const importBrowserMcpTools = createTool({
   name: 'importBrowserMcpTools',
+  renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: false },
   description:
     'Import tools from a browser MCP server that is already running on a local or reachable HTTP endpoint.',
   longDescription: `This workflow delegates the MCP handshake and registry installation to Taskyon's general MCP importer. It connects only to an existing HTTP endpoint; browser-neutral Taskyon core never spawns the MCP server process.`,
@@ -585,6 +390,7 @@ export const importBrowserMcpTools = createTool({
 
 export const ensureBrowserMcpTools = createTool({
   name: 'ensureBrowserMcpTools',
+  renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: false },
   description:
     'Ensure that a configured browser MCP endpoint is reachable, guide manual startup if needed, and then import its tools.',
   longDescription: `This visible onboarding workflow probes the endpoint first. When unavailable, it presents startup instructions, pauses for user continuation, retries the same endpoint, and imports the selected MCP tools after connectivity succeeds. It does not spawn local processes.`,
@@ -683,11 +489,701 @@ export const ensureBrowserMcpTools = createTool({
   },
 })
 
+type WebResearchCandidate = {
+  title: string
+  sourcePageUrl: string
+  directArtifactUrl?: string
+  publisher?: string
+  evidence: string
+}
+
+type ValidatedWebResearchCandidate = WebResearchCandidate & {
+  fetchedUrl: string
+  status: 'verified' | 'failed'
+  excerpt?: string
+  error?: string
+}
+
+const researchCandidateSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string' },
+    sourcePageUrl: { type: 'string' },
+    directArtifactUrl: { type: 'string' },
+    publisher: { type: 'string' },
+    evidence: { type: 'string' },
+  },
+  required: ['title', 'sourcePageUrl', 'evidence'],
+} as const satisfies JSONSchema7
+
+const researchSearchResultSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    candidates: {
+      type: 'array',
+      maxItems: 5,
+      items: researchCandidateSchema,
+    },
+  },
+  required: ['candidates'],
+} as const satisfies JSONSchema7
+
+const researchVerificationSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    acceptedCandidates: {
+      type: 'array',
+      maxItems: 5,
+      items: researchCandidateSchema,
+      description:
+        'Optional accepted subset. If omitted, the selected URL is resolved against the validated candidate list.',
+    },
+    selectedUrl: { type: 'string' },
+    verificationSummary: { type: 'string' },
+  },
+  required: ['selectedUrl', 'verificationSummary'],
+} as const satisfies JSONSchema7
+
+const queryGenerationSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    queries: {
+      type: 'array',
+      minItems: 2,
+      maxItems: 4,
+      items: { type: 'string' },
+    },
+  },
+  required: ['queries'],
+} as const satisfies JSONSchema7
+
+const artifactVerificationSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    verified: { type: 'boolean' },
+    title: { type: 'string' },
+    revision: { type: 'string' },
+    evidence: { type: 'string' },
+  },
+  required: ['verified', 'evidence'],
+} as const satisfies JSONSchema7
+
+const isWebResearchCandidate = (value: unknown): value is WebResearchCandidate => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as Partial<WebResearchCandidate>
+  return (
+    typeof candidate.title === 'string' &&
+    typeof candidate.sourcePageUrl === 'string' &&
+    typeof candidate.evidence === 'string' &&
+    (candidate.directArtifactUrl === undefined ||
+      typeof candidate.directArtifactUrl === 'string') &&
+    (candidate.publisher === undefined || typeof candidate.publisher === 'string')
+  )
+}
+
+const isVerifiedWebResearchCandidate = (value: unknown): value is ValidatedWebResearchCandidate =>
+  isWebResearchCandidate(value) &&
+  'status' in value &&
+  value.status === 'verified' &&
+  'fetchedUrl' in value &&
+  typeof value.fetchedUrl === 'string'
+
+const normalizeCandidateUrl = (value: string) => {
+  const url = new URL(value.trim())
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(`Research candidate URL must use HTTP or HTTPS: ${value}`)
+  }
+  url.hash = ''
+  return url.href
+}
+
+export const normalizeWebResearchCandidates = (
+  values: readonly WebResearchCandidate[],
+  limit = 5,
+) => {
+  const candidates = new Map<string, WebResearchCandidate>()
+  for (const value of values) {
+    try {
+      const sourcePageUrl = normalizeCandidateUrl(value.sourcePageUrl)
+      const directArtifactUrl = value.directArtifactUrl
+        ? normalizeCandidateUrl(value.directArtifactUrl)
+        : undefined
+      if (candidates.has(sourcePageUrl)) continue
+      candidates.set(sourcePageUrl, {
+        title: value.title.trim(),
+        sourcePageUrl,
+        evidence: value.evidence.trim(),
+        ...(directArtifactUrl ? { directArtifactUrl } : {}),
+        ...(value.publisher?.trim() ? { publisher: value.publisher.trim() } : {}),
+      })
+    } catch {
+      continue
+    }
+    if (candidates.size >= Math.max(1, Math.trunc(limit))) break
+  }
+  return [...candidates.values()]
+}
+
+export const validateWebResearchCandidates = async (
+  candidates: readonly WebResearchCandidate[],
+  readPage: (url: string) => Promise<string>,
+  requireArtifact = false,
+): Promise<ValidatedWebResearchCandidate[]> =>
+  await Promise.all(
+    candidates.map(async (candidate) => {
+      const fetchedUrl = candidate.sourcePageUrl
+      try {
+        const page = await readPage(fetchedUrl)
+        const sourceExcerpt = page.trim()
+        if (!sourceExcerpt) throw new Error('The fetched page was empty.')
+        const artifactExcerpt = requireArtifact
+          ? await (async () => {
+              if (!candidate.directArtifactUrl) {
+                throw new Error('The candidate did not provide a direct artifact URL.')
+              }
+              const artifact = (await readPage(candidate.directArtifactUrl)).trim()
+              if (!artifact) throw new Error('The fetched artifact was empty.')
+              return `\n\nDirect artifact preflight:\n${artifact}`
+            })()
+          : ''
+        const excerpt = `${sourceExcerpt}${artifactExcerpt}`.slice(0, 12_000)
+        return { ...candidate, fetchedUrl, status: 'verified' as const, excerpt }
+      } catch (error) {
+        return {
+          ...candidate,
+          fetchedUrl,
+          status: 'failed' as const,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
+    }),
+  )
+
+const parseSearchCandidates = (value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('candidates' in value)) {
+    throw new Error('Research search output did not contain a candidates array.')
+  }
+  const candidates = value.candidates
+  if (!Array.isArray(candidates)) {
+    throw new Error('Research search output candidates must be an array.')
+  }
+  return candidates.filter(isWebResearchCandidate)
+}
+
+const parseGeneratedQueries = (value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('queries' in value)) {
+    throw new Error('Research query generation did not return queries.')
+  }
+  return trimNonEmptyStrings(
+    Array.isArray(value.queries)
+      ? value.queries.filter((item): item is string => typeof item === 'string')
+      : [],
+  ).slice(0, 4)
+}
+
+const researchStateArguments = (
+  args: WebResearchPlannerArgs,
+  queries: readonly string[],
+  candidates: readonly WebResearchCandidate[],
+) => ({
+  objective: args.objective,
+  queries: [...queries],
+  candidates: [...candidates],
+  artifactRoot: resolveResearchArtifactRoot(args, args.objective),
+  maxSources: Math.min(5, Math.max(1, Math.trunc(args.maxSourcesPerQuery ?? 5))),
+  mustDownload: args.mustDownload ?? false,
+  fileTypeHints: trimNonEmptyStrings(args.fileTypeHints),
+  siteHints: trimNonEmptyStrings(args.siteHints),
+  ...(args.storageNamespace ? { storageNamespace: args.storageNamespace } : {}),
+  ...(args.storageObjectId ? { storageObjectId: args.storageObjectId } : {}),
+  ...(args.storageExpectedFileType
+    ? { storageExpectedFileType: args.storageExpectedFileType }
+    : {}),
+  ...(args.deliverable ? { deliverable: args.deliverable } : {}),
+})
+
+const buildResearchSearchStage = (
+  state: ReturnType<typeof researchStateArguments>,
+  queryIndex: number,
+  retryCount = 0,
+): partialTaskDraft[] => {
+  const query = state.queries[queryIndex]
+  if (!query) throw new Error(`Missing research query at index ${queryIndex}.`)
+  return [
+    {
+      role: 'user',
+      content: {
+        type: 'message',
+        data: [
+          `Research objective: ${state.objective}`,
+          `Run this web search now: ${query}`,
+          state.fileTypeHints.length > 0
+            ? `Preferred file types: ${state.fileTypeHints.join(', ')}.`
+            : '',
+          state.siteHints.length > 0 ? `Preferred sites: ${state.siteHints.join(', ')}.` : '',
+          'Return up to five strong candidates. Preserve exact source and direct artifact URLs.',
+          'Output the requested object with a candidates array; do not output or describe its JSON schema.',
+          retryCount > 0
+            ? 'The previous result had no valid candidates. Correct that exact failure once.'
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      },
+    },
+    createChatCompletionTask({
+      allowedTools: [],
+      reasoning_effort: 'low',
+      schema: researchSearchResultSchema,
+      websearch: { enabled: true, mode: 'required', max_results: state.maxSources },
+    }),
+    toolCall({
+      name: 'webResearchPipeline',
+      arguments: {
+        stage: 'search',
+        ...state,
+        queryIndex,
+        retryCount,
+        $use: { searchResult: '$previousResult' },
+      },
+    }),
+  ]
+}
+
+const buildResearchVerificationStage = (
+  state: ReturnType<typeof researchStateArguments>,
+  retryCount = 0,
+): partialTaskDraft[] => [
+  {
+    role: 'user',
+    content: {
+      type: 'message',
+      data: [
+        `Verify the fetched candidates against this objective: ${state.objective}`,
+        'Accept only candidates supported by the fetched page evidence. Copy candidate URLs exactly.',
+        state.mustDownload
+          ? 'Select a direct artifact URL suitable for the requested download.'
+          : 'Select the strongest accepted source URL.',
+        state.fileTypeHints.length > 0
+          ? `Required or preferred file types: ${state.fileTypeHints.join(', ')}.`
+          : '',
+        retryCount > 0
+          ? 'The previous selection was not present in the validated candidate set. Correct it once.'
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    },
+  },
+  createChatCompletionTask({
+    allowedTools: [],
+    reasoning_effort: 'low',
+    schema: researchVerificationSchema,
+  }),
+  toolCall({
+    name: 'webResearchPipeline',
+    arguments: {
+      stage: 'verification',
+      ...state,
+      retryCount,
+      $use: { verificationResult: '$previousResult' },
+    },
+  }),
+]
+
+const objectIdFromResearchUrl = (url: string) => {
+  try {
+    return (
+      decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? '') ||
+      'artifact'
+    )
+  } catch {
+    return 'artifact'
+  }
+}
+
+const buildResearchSynthesisStage = (
+  state: ReturnType<typeof researchStateArguments>,
+): partialTaskDraft[] => [
+  {
+    role: 'user',
+    content: {
+      type: 'message',
+      data: [
+        `Answer the original research objective now: ${state.objective}`,
+        state.deliverable ? `Requested deliverable: ${state.deliverable}` : '',
+        state.storageNamespace && state.storageObjectId
+          ? `Stored artifact location: namespace "${state.storageNamespace}", object ID "${state.storageObjectId}". Include both values exactly in the answer.`
+          : '',
+        'Use only the validated evidence and completed artifact operations visible above.',
+        'Include exact source URLs. If evidence is incomplete, say precisely what could not be verified.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    },
+  },
+  createChatCompletionTask({ allowedTools: [], reasoning_effort: 'low' }),
+]
+
+const buildArtifactVerificationStage = (
+  state: ReturnType<typeof researchStateArguments>,
+  retryCount = 0,
+): partialTaskDraft[] => [
+  {
+    role: 'user',
+    content: {
+      type: 'message',
+      data: [
+        `Verify the downloaded and read artifact against this objective: ${state.objective}`,
+        'Confirm its identity, expected file type, title, revision or date when available, and required content from the storage read result.',
+        retryCount > 0
+          ? 'The previous artifact verification was invalid or unsupported. Correct it once from the stored evidence.'
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    },
+  },
+  createChatCompletionTask({
+    allowedTools: [],
+    reasoning_effort: 'low',
+    schema: artifactVerificationSchema,
+  }),
+  toolCall({
+    name: 'webResearchPipeline',
+    arguments: {
+      stage: 'artifact',
+      ...state,
+      retryCount,
+      $use: { artifactResult: '$previousResult' },
+    },
+  }),
+]
+
+export const buildWebResearchStartChain = (args: WebResearchPlannerArgs): partialTaskDraft[] => {
+  const objective = ensureNonEmptyString(args.objective, 'objective')
+  const queries = trimNonEmptyStrings(args.searchQueries)
+  if (queries.length === 0) {
+    return [
+      {
+        role: 'user',
+        content: {
+          type: 'message',
+          data: `Create two to four focused, non-duplicate web-search queries for this research objective: ${objective}`,
+        },
+      },
+      createChatCompletionTask({
+        allowedTools: [],
+        reasoning_effort: 'low',
+        schema: queryGenerationSchema,
+      }),
+      toolCall({
+        name: 'webResearchPipeline',
+        arguments: {
+          stage: 'queries',
+          ...researchStateArguments({ ...args, objective }, [], []),
+          $use: { queryResult: '$previousResult' },
+        },
+      }),
+    ]
+  }
+  return buildResearchSearchStage(
+    researchStateArguments({ ...args, objective }, queries.slice(0, 8), []),
+    0,
+  )
+}
+
+const webResearchCandidateValidator = createTool({
+  name: 'webResearchCandidateValidator',
+  description: 'Fetch and normalize the shortlisted sources for a web-research workflow.',
+  renderOptions: {
+    hideChat: true,
+    hideLlm: false,
+    hideVector: true,
+    hideToolSearch: true,
+  },
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      candidates: { type: 'array', maxItems: 5, items: researchCandidateSchema },
+      requireArtifact: { type: 'boolean', default: false },
+    },
+    required: ['candidates'],
+  } as const satisfies JSONSchema7,
+  function: async ({ candidates, requireArtifact }, context) => {
+    if (!context.fetch) throw new Error('Web research validation requires a fetch capability.')
+    const validated = await validateWebResearchCandidates(
+      candidates,
+      async (url) => await readPublicWebPageAsMarkdown(url, undefined, context.fetch),
+      requireArtifact,
+    )
+    await context.reportProgress?.({
+      message: `Validated ${validated.filter(({ status }) => status === 'verified').length} of ${validated.length} research candidates.`,
+      completed: validated.length,
+      total: validated.length,
+      checkpoint: true,
+    })
+    return { candidates: validated }
+  },
+})
+
+const webResearchPipeline = createTool({
+  name: 'webResearchPipeline',
+  description: 'Advance one typed stage of an active web-research workflow.',
+  renderOptions: {
+    hideChat: true,
+    hideLlm: true,
+    hideVector: true,
+    hideVectorResult: true,
+    hideToolSearch: true,
+  },
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      stage: {
+        type: 'string',
+        enum: ['queries', 'search', 'validation', 'verification', 'artifact'],
+      },
+      objective: { type: 'string' },
+      queries: { type: 'array', items: { type: 'string' } },
+      candidates: { type: 'array', maxItems: 5, items: researchCandidateSchema },
+      artifactRoot: { type: 'string' },
+      maxSources: { type: 'integer', minimum: 1, maximum: 5 },
+      mustDownload: { type: 'boolean' },
+      fileTypeHints: { type: 'array', items: { type: 'string' } },
+      siteHints: { type: 'array', items: { type: 'string' } },
+      storageNamespace: { type: 'string' },
+      storageObjectId: { type: 'string' },
+      storageExpectedFileType: { type: 'string', enum: ['pdf'] },
+      deliverable: { type: 'string' },
+      queryIndex: { type: 'integer', minimum: 0 },
+      retryCount: { type: 'integer', minimum: 0, maximum: 1 },
+      queryResult: { type: 'object', additionalProperties: true },
+      searchResult: { type: 'object', additionalProperties: true },
+      validationResult: { type: 'object', additionalProperties: true },
+      verificationResult: { type: 'object', additionalProperties: true },
+      artifactResult: { type: 'object', additionalProperties: true },
+    },
+    required: [
+      'stage',
+      'objective',
+      'queries',
+      'candidates',
+      'artifactRoot',
+      'maxSources',
+      'mustDownload',
+      'fileTypeHints',
+      'siteHints',
+    ],
+  } as const satisfies JSONSchema7,
+  function: (args, context) => {
+    const state = researchStateArguments(
+      {
+        objective: args.objective,
+        searchQueries: args.queries,
+        artifactRoot: args.artifactRoot,
+        maxSourcesPerQuery: args.maxSources,
+        mustDownload: args.mustDownload,
+        fileTypeHints: args.fileTypeHints,
+        siteHints: args.siteHints,
+        ...(args.storageNamespace ? { storageNamespace: args.storageNamespace } : {}),
+        ...(args.storageObjectId ? { storageObjectId: args.storageObjectId } : {}),
+        ...(args.storageExpectedFileType
+          ? { storageExpectedFileType: args.storageExpectedFileType }
+          : {}),
+        ...(args.deliverable ? { deliverable: args.deliverable } : {}),
+      },
+      args.queries,
+      args.candidates,
+    )
+
+    switch (args.stage) {
+      case 'queries': {
+        const queries = parseGeneratedQueries(args.queryResult)
+        if (queries.length < 2)
+          throw new Error('Research query generation returned fewer than two valid queries.')
+        return context.createSubtasksResult([buildResearchSearchStage({ ...state, queries }, 0)])
+      }
+      case 'search': {
+        const queryIndex = args.queryIndex ?? 0
+        const retryCount = args.retryCount ?? 0
+        const found = normalizeWebResearchCandidates(
+          parseSearchCandidates(args.searchResult),
+          state.maxSources,
+        )
+        if (found.length === 0) {
+          if (retryCount >= 1)
+            throw new Error(
+              `Research search ${queryIndex + 1} returned no valid candidates after one retry.`,
+            )
+          return context.createSubtasksResult([buildResearchSearchStage(state, queryIndex, 1)])
+        }
+        const candidates = normalizeWebResearchCandidates([...state.candidates, ...found], 5)
+        const hasEnoughIndependentEvidence =
+          queryIndex >= 1 && new Set(candidates.map(({ sourcePageUrl }) => sourcePageUrl)).size >= 2
+        if (!hasEnoughIndependentEvidence && queryIndex + 1 < state.queries.length) {
+          return context.createSubtasksResult([
+            buildResearchSearchStage({ ...state, candidates }, queryIndex + 1),
+          ])
+        }
+        return context.createSubtasksResult([
+          [
+            toolCall({
+              name: 'webResearchCandidateValidator',
+              arguments: { candidates, requireArtifact: state.mustDownload },
+            }),
+            toolCall({
+              name: 'webResearchPipeline',
+              arguments: {
+                stage: 'validation',
+                ...state,
+                candidates,
+                $use: { validationResult: '$previousResult' },
+              },
+            }),
+          ],
+        ])
+      }
+      case 'validation': {
+        const validated =
+          args.validationResult &&
+          typeof args.validationResult === 'object' &&
+          !Array.isArray(args.validationResult) &&
+          'candidates' in args.validationResult &&
+          Array.isArray(args.validationResult.candidates)
+            ? args.validationResult.candidates.filter(isVerifiedWebResearchCandidate)
+            : []
+        if (validated.length === 0)
+          throw new Error(
+            'None of the shortlisted research candidates could be fetched and verified.',
+          )
+        const candidates = normalizeWebResearchCandidates(validated, 5)
+        return context.createSubtasksResult([
+          buildResearchVerificationStage({ ...state, candidates }),
+        ])
+      }
+      case 'verification': {
+        const retryCount = args.retryCount ?? 0
+        const result = args.verificationResult
+        if (
+          !result ||
+          typeof result !== 'object' ||
+          Array.isArray(result) ||
+          !('selectedUrl' in result) ||
+          typeof result.selectedUrl !== 'string' ||
+          !('verificationSummary' in result) ||
+          typeof result.verificationSummary !== 'string'
+        ) {
+          if (retryCount >= 1)
+            throw new Error('Research verification returned no selected URL after one retry.')
+          return context.createSubtasksResult([buildResearchVerificationStage(state, 1)])
+        }
+        const selectedUrl = normalizeCandidateUrl(result.selectedUrl)
+        const candidateUrls = new Set(
+          state.candidates.flatMap((candidate) =>
+            [candidate.sourcePageUrl, candidate.directArtifactUrl].filter(
+              (url): url is string => !!url,
+            ),
+          ),
+        )
+        const acceptedCandidates = normalizeWebResearchCandidates(
+          'acceptedCandidates' in result && Array.isArray(result.acceptedCandidates)
+            ? result.acceptedCandidates.filter(isWebResearchCandidate)
+            : state.candidates.filter(
+                (candidate) =>
+                  candidate.sourcePageUrl === selectedUrl ||
+                  candidate.directArtifactUrl === selectedUrl,
+              ),
+          5,
+        )
+        const acceptedUrlsAreValidated =
+          acceptedCandidates.length > 0 &&
+          acceptedCandidates.every(
+            (candidate) =>
+              candidateUrls.has(candidate.sourcePageUrl) &&
+              (!candidate.directArtifactUrl || candidateUrls.has(candidate.directArtifactUrl)),
+          )
+        const artifactUrls = new Set(
+          state.candidates.flatMap((candidate) =>
+            candidate.directArtifactUrl ? [candidate.directArtifactUrl] : [],
+          ),
+        )
+        if (
+          !candidateUrls.has(selectedUrl) ||
+          !acceptedUrlsAreValidated ||
+          (state.mustDownload && !artifactUrls.has(selectedUrl))
+        ) {
+          if (retryCount >= 1)
+            throw new Error(
+              'Research verification selected a URL outside the validated candidate set.',
+            )
+          return context.createSubtasksResult([buildResearchVerificationStage(state, 1)])
+        }
+        if (!state.mustDownload)
+          return context.createSubtasksResult([buildResearchSynthesisStage(state)])
+        const namespace = args.storageNamespace ?? state.artifactRoot.replace(/\/+$/, '')
+        const objectId = args.storageObjectId ?? objectIdFromResearchUrl(selectedUrl)
+        return context.createSubtasksResult([
+          [
+            toolCall({
+              name: 'storage',
+              arguments: {
+                action: 'download',
+                namespace,
+                id: objectId,
+                url: selectedUrl,
+                ...(args.storageNamespace ? {} : { artifactRoot: state.artifactRoot }),
+                ...(args.storageExpectedFileType
+                  ? { expectedFileType: args.storageExpectedFileType }
+                  : {}),
+              },
+            }),
+            toolCall({ name: 'storage', arguments: { action: 'read', namespace, id: objectId } }),
+            ...buildArtifactVerificationStage(state),
+          ],
+        ])
+      }
+      case 'artifact': {
+        const retryCount = args.retryCount ?? 0
+        const result = args.artifactResult
+        const verified =
+          result &&
+          typeof result === 'object' &&
+          !Array.isArray(result) &&
+          'verified' in result &&
+          result.verified === true &&
+          'evidence' in result &&
+          typeof result.evidence === 'string' &&
+          result.evidence.trim().length > 0
+        if (!verified) {
+          if (retryCount >= 1) {
+            throw new Error(
+              'The downloaded artifact could not be semantically verified after one retry.',
+            )
+          }
+          return context.createSubtasksResult([buildArtifactVerificationStage(state, 1)])
+        }
+        return context.createSubtasksResult([buildResearchSynthesisStage(state)])
+      }
+    }
+  },
+})
+
 export const webResearchPlanner = createTool({
   name: 'webResearchPlanner',
+  renderOptions: { hideVector: true, hideToolSearch: false },
   description:
     'For a research-only leaf that needs multiple queries, source validation, downloads, saved artifacts, or synthesis; skip it for one narrow lookup.',
-  longDescription: `This tool creates a visible map/reduce research workflow. Each query becomes an independent branch whose discovery step is followed by source validation or downloading; a final reducer synthesizes the branch evidence and saved artifacts.
+  longDescription: `This tool creates a visible, typed research pipeline. It runs bounded web searches, fetches the shortlisted sources, verifies their evidence, optionally downloads an explicitly requested artifact, and synthesizes the result without delegating open-ended sub-agents.
+
+Pass user-specified storageNamespace, storageObjectId, and storageExpectedFileType as literal values. Use Taskyon $use only when an argument must come from a prior task result.
 
 Use it when research itself is the current objective and needs durable evidence or multiple source families. Keep later building, installation, or verification work in separate planned tasks. Exact named products, providers, domains, and URLs remain identity constraints throughout discovery and validation.`,
   parameters: {
@@ -700,15 +1196,31 @@ Use it when research itself is the current objective and needs durable evidence 
       },
       searchQueries: {
         type: 'array',
-        maxItems: 4,
+        maxItems: 8,
         items: { type: 'string' },
         description:
-          'One query per distinct research packet. Use exactly one query when the user supplied one official documentation URL or one named source. Use 2-3 only for genuinely distinct source families, and 4 only when the deliverable explicitly needs that breadth.',
+          'Optional focused queries. When omitted, the pipeline asks the active model for two to four queries before searching.',
       },
       artifactRoot: {
         type: 'string',
         description:
           'Optional relative output directory for all research artifacts. Defaults to research/<objective-slug>/. All delegated branches must use the same root.',
+      },
+      storageNamespace: {
+        type: 'string',
+        description:
+          'Optional exact logical storage namespace explicitly requested by the user. Preserve it for the final downloaded object.',
+      },
+      storageObjectId: {
+        type: 'string',
+        description:
+          'Optional exact storage object ID explicitly requested by the user. Preserve it for the final downloaded object.',
+      },
+      storageExpectedFileType: {
+        type: 'string',
+        enum: ['pdf'],
+        description:
+          'Optional expected type for an explicitly requested storage download. Pass the literal value "pdf"; only use Taskyon $use if deriving the type from an earlier task.',
       },
       researchMode: {
         type: 'string',
@@ -727,7 +1239,7 @@ Use it when research itself is the current objective and needs durable evidence 
         type: 'array',
         items: { type: 'string' },
         description:
-          'Additional explicit helper tools for each delegated branch. Defaults to updateFiles, downloadFile, bash, and jinaMarkdownReader so local save requests, verified local downloads, shell fallback, and page validation work in tycli/local runtimes; browser storage and browser/proxy fetchers stay opt-in.',
+          'Additional explicit helper tools for each delegated branch. Defaults to updateFiles, downloadFile, bash, and jinaMarkdownReader for tycli/local runtimes; browser profiles should provide storage and jinaMarkdownReader so browser downloads and page validation use the available storage boundary.',
       },
       enableWebSearch: {
         type: 'boolean',
@@ -755,9 +1267,9 @@ Use it when research itself is the current objective and needs durable evidence 
       },
       mustDownload: {
         type: 'boolean',
-        default: true,
+        default: false,
         description:
-          'When true, delegated tasks should save requested source files or artifacts to the local filesystem or browser storage when tooling supports it, otherwise record the blocker next to the direct URL.',
+          'Download and inspect the selected artifact through storage. Set this only when the user explicitly requested a file or durable saved artifact.',
       },
       fileTypeHints: {
         type: 'array',
@@ -769,67 +1281,38 @@ Use it when research itself is the current objective and needs durable evidence 
         items: { type: 'string' },
         description: 'Optional site filters or manufacturer hints.',
       },
+      response_length: {
+        type: 'string',
+        enum: ['short', 'medium', 'long'],
+        description:
+          'Provider-native response length accepted for compatibility and ignored by the research pipeline.',
+      },
       deliverable: {
         type: 'string',
         description:
           'Optional expected output, for example "manufacturer, model, spec URL, direct PDF URL".',
       },
     },
-    required: ['objective', 'searchQueries'],
+    required: ['objective'],
   } as const satisfies JSONSchema7,
-  function: (args, context) => {
-    const scopedArgs = constrainResearchScope(args)
-    const browserTools = trimNonEmptyStrings(scopedArgs.browserTools)
-    if (shouldEnsureBrowserMcp(scopedArgs)) {
-      return Promise.resolve(
-        context.createSubtasksResult([
-          [
-            {
-              role: 'assistant',
-              content: {
-                type: 'message',
-                data: 'Ensuring browser MCP access before launching the research branches.',
-              },
-            },
-            toolCall({
-              name: 'ensureBrowserMcpTools',
-              arguments: browserTools.length > 0 ? { toolNames: browserTools } : {},
-            }),
-            toolCall({
-              name: 'webResearchPlanner',
-              arguments: {
-                ...scopedArgs,
-                ensureBrowserMcp: false,
-              },
-            }),
-          ],
-        ]),
-      )
-    }
-
-    const taskGroups = buildWebResearchTaskGroups(scopedArgs)
-    const delegatedChains = buildTaskPlannerTaskChains(taskGroups).map((chain) => {
-      const entryNodeArguments = buildResearchEntryNodeArguments(scopedArgs)
-      if (!entryNodeArguments) return chain
-      return chain.map((task) => {
-        if (task.content.type !== 'functioncall' || task.content.data.name !== 'entryNode') {
-          return task
+  function: async (args, context) => {
+    const scopedArgs = args
+    const requestedStorageTarget = resolveRequestedStorageTarget(
+      scopedArgs,
+      await context.getExecutionTaskChain(),
+    )
+    const effectiveArgs = requestedStorageTarget
+      ? {
+          ...scopedArgs,
+          storageNamespace: requestedStorageTarget.namespace,
+          storageObjectId: requestedStorageTarget.objectId,
+          mustDownload: true,
+          ...(requestedStorageTarget.expectedFileType
+            ? { storageExpectedFileType: requestedStorageTarget.expectedFileType }
+            : {}),
         }
-        return toolCall({
-          name: 'entryNode',
-          arguments: {
-            ...(task.content.data.arguments || {}),
-            ...entryNodeArguments,
-          },
-        })
-      })
-    })
-    const researchWorkflow = [
-      ...delegatedChains.flat(),
-      ...buildResearchSynthesisTaskChain(scopedArgs),
-    ]
-
-    return Promise.resolve(context.createSubtasksResult([researchWorkflow]))
+      : scopedArgs
+    return context.createSubtasksResult([buildWebResearchStartChain(effectiveArgs)])
   },
 })
 
@@ -1005,5 +1488,7 @@ export const webResearchTools = [
   importBrowserMcpTools,
   ensureBrowserMcpTools,
   webResearchPlanner,
+  webResearchPipeline,
+  webResearchCandidateValidator,
   proxyWebReader,
 ]

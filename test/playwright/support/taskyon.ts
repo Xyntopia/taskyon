@@ -139,6 +139,33 @@ export const selectLlmModel = async (page: Page, provider?: string, modelId = ''
   }
 
   await page.keyboard.press('Escape')
+  if (modelId) {
+    const expectedModel = await dataCy(page, 'model-select').inputValue()
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const decodeQuasarString = (value: string | null) =>
+              value?.startsWith('__q_strn|') ? value.slice('__q_strn|'.length) : value
+            const profileName = decodeQuasarString(localStorage.getItem('currentProfile'))
+            if (!profileName) return null
+            const rawProfile = decodeQuasarString(localStorage.getItem(`uiProfile:${profileName}`))
+            if (!rawProfile) return null
+            const profile = JSON.parse(rawProfile) as {
+              selectedToolchainProfile?: string
+              toolchainProfiles?: {
+                profiles?: Record<string, { chatCompletion?: { model?: string } }>
+              }
+            }
+            const selectedProfile = profile.selectedToolchainProfile
+            return selectedProfile
+              ? profile.toolchainProfiles?.profiles?.[selectedProfile]?.chatCompletion?.model
+              : undefined
+          }),
+        { message: 'selected model persisted' },
+      )
+      .toBe(expectedModel)
+  }
 }
 
 export const writeMessage = async (page: Page | Locator, message: string) => {

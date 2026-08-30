@@ -1,6 +1,13 @@
-import type { AssistantModelMessage, ModelMessage, ToolCallPart, ToolModelMessage } from 'ai'
-import Ajv from 'ajv'
+import type {
+  AssistantModelMessage,
+  ModelMessage,
+  streamText,
+  ToolCallPart,
+  ToolModelMessage,
+} from 'ai'
+import Ajv, { type SchemaObject } from 'ajv'
 import { load } from 'js-yaml'
+import type { JSONSchema7 } from 'json-schema'
 import {
   compileTaskyonFunctionArguments,
   compileTaskyonMessageString,
@@ -19,17 +26,75 @@ import {
 } from '../../utils/objHelpers'
 import { augmentToolSchemaForTaskyonVariables } from './context'
 
-export const parseStructuredResponse = (message: string) => {
-  let yamlContent = message.trim()
-  const yamlMatch = /```(?:yaml|YAML|[^\n]*)\n?([\s\S]*?)\n?```/.exec(yamlContent)
-  if (yamlMatch?.[1]) yamlContent = yamlMatch[1]
+type ProviderSource = Awaited<ReturnType<typeof streamText>['sources']>[number]
 
-  try {
-    return load(yamlContent)
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error)
-    throw new Error(
-      `Not able to convert the response to yaml:
+const getOpenRouterSourceContent = (source: ProviderSource) => {
+  const content = source.providerMetadata?.openrouter?.content
+  return typeof content === 'string' ? content : undefined
+}
+
+export const convertProviderSourceToAnnotation = (source: ProviderSource): Annotation => {
+  const providerContent = getOpenRouterSourceContent(source)
+  if (source.sourceType === 'url') {
+    return {
+      type: 'url',
+      id: source.id,
+      title: source.title,
+      url: source.url,
+      ...(providerContent ? { content: providerContent } : {}),
+    }
+  }
+
+  return {
+    type: 'document',
+    id: source.id,
+    title: source.title,
+    filename: source.filename,
+    mediaType: source.mediaType,
+    ...(providerContent ? { content: providerContent } : {}),
+  }
+}
+
+const parseLeadingJsonDocument = (value: string) => {
+  const start = value.search(/\S/)
+  if (start < 0 || !['{', '['].includes(value[start] ?? '')) return undefined
+
+  const closing = new Map([
+    ['{', '}'],
+    ['[', ']'],
+  ])
+  const expectedClosings: string[] = []
+  let insideString = false
+  let escaped = false
+
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index]
+    if (character === undefined) continue
+    if (insideString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') insideString = false
+      continue
+    }
+    if (character === '"') insideString = true
+    else if (closing.has(character)) expectedClosings.push(closing.get(character) ?? '')
+    else if (character === '}' || character === ']') {
+      if (expectedClosings.pop() !== character) return undefined
+      if (expectedClosings.length === 0) {
+        return {
+          document: value.slice(start, index + 1),
+          trailingText: value.slice(index + 1).trim(),
+        }
+      }
+    }
+  }
+  return undefined
+}
+
+const structuredResponseParseError = (message: string, content: string, error: unknown) => {
+  const errorMessage = error instanceof Error ? error.message : JSON.stringify(error)
+  return new Error(
+    `Not able to convert the response to yaml:
 
 We got:
 
@@ -39,14 +104,64 @@ and the Error:
 
 ${errorMessage}
 `,
-      {
-        cause: {
-          yamlString: yamlContent,
-          error,
-        },
-      },
+    { cause: { yamlString: content, error } },
+  )
+}
+
+export const parseStructuredResponseWithTrailingText = (
+  message: string,
+): { data: unknown; trailingText?: string } => {
+  const fence = /```(?:yaml|YAML|json|JSON|[^\n]*)\n?([\s\S]*?)\n?```/.exec(message)
+  const content = (fence?.[1] ?? message).trim()
+  const surroundingText = fence
+    ? [message.slice(0, fence.index), message.slice(fence.index + fence[0].length)]
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : []
+
+  try {
+    const data = load(content)
+    const trailingText = surroundingText.join('\n\n')
+    return { data, ...(trailingText ? { trailingText } : {}) }
+  } catch (yamlError) {
+    const json = parseLeadingJsonDocument(content)
+    if (!json) throw structuredResponseParseError(message, content, yamlError)
+    try {
+      const data = JSON.parse(json.document) as unknown
+      const trailingText = [...surroundingText, json.trailingText].filter(Boolean).join('\n\n')
+      return { data, ...(trailingText ? { trailingText } : {}) }
+    } catch (jsonError) {
+      throw structuredResponseParseError(message, content, jsonError)
+    }
+  }
+}
+
+export const parseStructuredResponse = (message: string) => {
+  const parsed = parseStructuredResponseWithTrailingText(message)
+  if (parsed.trailingText) {
+    throw structuredResponseParseError(
+      message,
+      message.trim(),
+      new Error('Unexpected text followed the structured response.'),
     )
   }
+  return parsed.data
+}
+
+export const validateStructuredResponse = (data: unknown, schema: JSONSchema7) => {
+  const ajv = new Ajv()
+  // JSONSchema7 allows explicitly undefined optional fields; Ajv's exact-optional schema type does not.
+  const validate = ajv.compile(schema as SchemaObject)
+  if (validate(data)) return data
+
+  const errors = validate.errors ?? []
+  // Keep provider extras intact while enforcing all other schema constraints.
+  if (errors.length > 0 && errors.every((error) => error.keyword === 'additionalProperties')) {
+    return data
+  }
+  throw new Error('Chat response has the wrong format: ' + ajv.errorsText(errors), {
+    cause: { validationErrors: errors },
+  })
 }
 
 const extractTaggedToolCall = (message: string) => {
@@ -85,6 +200,11 @@ const createToolArgumentsValidationError = (content: ToolCallPart, validationErr
     receivedArguments: serializeForJson(content.input),
   })
   return error
+}
+
+const normalizeProviderToolArguments = (input: unknown) => {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) return input
+  return Object.fromEntries(Object.entries(input).filter(([key]) => key.trim().length > 0))
 }
 
 export const normalizeAssistantMessageForToolCall = (
@@ -142,7 +262,7 @@ export const convertFunctionCall = (
   const tool = tools[content.toolName]
   if (!tool) return undefined
 
-  const parsedArguments = FunctionArguments.safeParse(content.input)
+  const parsedArguments = FunctionArguments.safeParse(normalizeProviderToolArguments(content.input))
   if (!parsedArguments.success) {
     throw createToolArgumentsValidationError(content, parsedArguments.error.issues)
   }
@@ -168,6 +288,7 @@ export const interpretAssistantMessage = (
   useProviderToolCalling: boolean,
   availableTools: Record<string, ToolBase>,
   variableService: ReturnType<typeof createTaskVariablePresentationService>,
+  webSearchPerformed = false,
 ) => {
   if (!Array.isArray(message.content)) return { kind: 'empty' as const, sanitation: [] }
 
@@ -207,8 +328,22 @@ export const interpretAssistantMessage = (
   })
 
   if (answers.length === 0) {
-    return calls.length > 0
-      ? { kind: 'tool-calls' as const, calls, sanitation }
+    const searchObservation =
+      sources.length > 0
+        ? { content: '', annotations: sources }
+        : webSearchPerformed
+          ? { content: 'Hosted web search activity was reported.' }
+          : undefined
+    if (calls.length > 0) {
+      return {
+        kind: 'tool-calls' as const,
+        calls,
+        ...(searchObservation ? { assistantMessages: [searchObservation] } : {}),
+        sanitation,
+      }
+    }
+    return searchObservation
+      ? { kind: 'answers' as const, answers: [searchObservation], sanitation }
       : { kind: 'empty' as const, sanitation }
   }
 
@@ -216,10 +351,15 @@ export const interpretAssistantMessage = (
     return {
       kind: 'tool-calls' as const,
       calls,
-      assistantMessages: answers.map((answer, index) => ({
-        ...answer,
-        ...(index === 0 && sources.length > 0 ? { annotations: sources } : {}),
-      })),
+      assistantMessages: [
+        ...(webSearchPerformed && sources.length === 0
+          ? [{ content: 'Hosted web search activity was reported.' }]
+          : []),
+        ...answers.map((answer, index) => ({
+          ...answer,
+          ...(index === 0 && sources.length > 0 ? { annotations: sources } : {}),
+        })),
+      ],
       sanitation,
     }
   }

@@ -82,6 +82,69 @@ export async function testTaskFunctionExecutorResolvesRevisionPinnedScopedCaller
 testTaskFunctionExecutorResolvesRevisionPinnedScopedCaller.description =
   'Revision-pinned scoped callers retain their task identity and resolve through the same task-tree lookup used for execution.'
 
+export async function testTaskFunctionExecutorRunsPinnedSameNameBindingTarget() {
+  const targetRevision = `sha256:${'a'.repeat(43)}` as const
+  const taskChain = await forgeTaskChain([
+    [
+      {
+        role: 'system',
+        content: {
+          type: 'tooldefinition',
+          data: {
+            name: 'toolSearcher',
+            description: 'Narrow public tool search.',
+            implementation: {
+              type: 'binding',
+              target: 'toolSearcher',
+              targetRevision,
+              fixedArguments: { analyze: true },
+              publicArguments: { query: {}, limit: {} },
+            },
+          },
+        },
+      },
+      {
+        role: 'function',
+        content: {
+          type: 'functioncall',
+          data: {
+            name: 'toolSearcher',
+            toolRevision: targetRevision,
+            arguments: { query: 'weather', analyze: true },
+          },
+        },
+      },
+    ],
+  ])
+  const call = taskChain[1]
+  assert(call?.content.type === 'functioncall', 'Expected the delegated target call')
+  const tasks = new Map(taskChain.map((task) => [task.id, task]))
+  const resolved = await createInvocationToolResolver({
+    getExecutionTask: (id) => Promise.resolve(tasks.get(id) ?? null),
+    getTaskLineage: () => Promise.resolve(taskChain),
+    resolveRegisteredTool: (_name, revision) =>
+      Promise.resolve({
+        identity: {
+          publisherId: 'test',
+          name: 'toolSearcher',
+          revision: revision ?? targetRevision,
+        },
+        tool: {
+          name: 'toolSearcher',
+          description: 'Registered full catalog search.',
+          parameters: { type: 'object', properties: {} },
+          function: () => undefined,
+        },
+      }),
+  })('toolSearcher', { taskId: call.id, toolRevision: targetRevision })
+
+  assert(resolved.source === 'registry', 'Expected the pinned binding target from the registry')
+  assert(resolved.identity?.revision === targetRevision, 'Expected the exact target revision')
+}
+
+testTaskFunctionExecutorRunsPinnedSameNameBindingTarget.description =
+  'Executes a pinned registered target when a narrow scoped binding intentionally shares its name.'
+
 export async function testTaskFunctionExecutorAppliesOnlyPinnedSettings() {
   const toolRevision = `sha256:${'c'.repeat(43)}` as const
   const settingsRevision = `sha256:${'d'.repeat(43)}` as const
@@ -266,7 +329,9 @@ export async function testPreviousResultResolvesNestedToolResultLeaf() {
         role: 'system',
         content: {
           type: 'toolresult',
-          data: { 'Here are the matching tools': [{ name: 'exploration', description: 'Explore files.' }] },
+          data: {
+            'Here are the matching tools': [{ name: 'exploration', description: 'Explore files.' }],
+          },
         },
       },
     ],

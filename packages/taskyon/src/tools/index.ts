@@ -29,6 +29,7 @@ import { wfcGenerator } from './wavefunctioncollapse'
 import { createStandardWorkspaceTools, type WorkspaceOperations } from './workspaceTools'
 
 export {
+  createTaskTreeAgentToolCatalog,
   resolveAgentToolCatalog,
   resolveInitialAgentToolCatalog,
   resolveTaskTreeAgentToolWindow,
@@ -41,6 +42,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
   storageClient?: TaskyonStorageClient
   prepareGraphRepository?: () => Promise<void>
   pythonTool?: InternalTool | null
+  storageDownload?: typeof fetch
   workspaceOperations?: WorkspaceOperations
   chatCompletionFetch?: (
     connection: ReturnType<typeof resolveChatCompletionConnection>,
@@ -58,7 +60,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
     ...testingTools,
     ...(options?.storageClient
       ? [
-          createStorageTool(options.storageClient),
+          createStorageTool(options.storageClient, options.storageDownload),
           createDagGraphProjectTool(options.storageClient, options.prepareGraphRepository),
         ]
       : []),

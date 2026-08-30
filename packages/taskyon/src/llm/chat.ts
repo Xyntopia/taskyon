@@ -1,5 +1,6 @@
 import type { Model } from 'openai/resources/models.mjs'
 import { asyncTimeLruCache } from '../utils/caching'
+import { canUseTauriHttpPlugin, tauriHttpFetch } from '../utils/tauriHttpPlugin'
 // TODO: can we use this:  https://github.com/rexxars/eventsource-parser?
 
 const readStringProperty = (value: unknown, property: string): string | undefined => {
@@ -67,15 +68,16 @@ export const fetchAvailableModels = async (
   apiKey: string,
   headers: Record<string, string>,
   invalidateCache = false,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
 ): Promise<Record<string, Model>> => {
   try {
     // Construct the URL with an optional cache-busting query parameter
     const url = invalidateCache ? `${modelsUrl}?_=${new Date().getTime()}` : modelsUrl
+    const requestFetch = fetchImpl ?? (canUseTauriHttpPlugin() ? tauriHttpFetch : globalThis.fetch)
 
     console.log('downloading model list')
     // Setting up the Fetch request
-    const response = await fetchImpl(url, {
+    const response = await requestFetch(url, {
       method: 'GET',
       headers: {
         ...headers,

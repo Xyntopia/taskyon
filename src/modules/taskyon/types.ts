@@ -1,9 +1,7 @@
 import { llmSettings, partialTaskDraft, ToolchainProfiles } from '@taskyon/taskyon/api'
 import { TASKYON_WSS_PROXY_URL } from '@taskyon/taskyon/token-service-types'
-import {
-  DEFAULT_SANDBOX_FETCH_TRANSPORT,
-  SANDBOX_FETCH_TRANSPORTS,
-} from '@taskyon/common/modules/webFetching/mediatedFetch'
+import { SANDBOX_FETCH_TRANSPORT_SELECTIONS } from '@taskyon/common/modules/webFetching/mediatedFetch'
+import { TASKYON_DEV_CORS_PROXY_PATH } from '@taskyon/common/modules/webFetching/index'
 import { z } from 'zod'
 
 export const taskTemplateTypes = {
@@ -128,16 +126,21 @@ export const appConfiguration = z.object({
   sandboxFetchTransport: z
     .preprocess(
       (value) => (value === 'http' ? 'custom-proxy' : value),
-      z.enum(SANDBOX_FETCH_TRANSPORTS).default(DEFAULT_SANDBOX_FETCH_TRANSPORT),
+      z.enum(SANDBOX_FETCH_TRANSPORT_SELECTIONS).default('ask'),
     )
     .meta({
       title: 'Sandbox Fetch Transport',
       description:
-        'Host transport for sandbox network requests. Secure WSS is the default; HTTP is an explicit legacy fallback and direct bypasses mediation.',
+        'Host transport for mediated tool requests. Choose a transport or ask on first use.',
     }),
   sandboxFetchWssUrl: z.string().url().default(TASKYON_WSS_PROXY_URL).meta({
     title: 'Sandbox WSS Tunnel',
     description: 'Authenticated WSS tunnel used for the secure sandbox fetch transport.',
+  }),
+  sandboxCorsProxyUrl: z.string().default(TASKYON_DEV_CORS_PROXY_PATH).meta({
+    title: 'CORS Proxy Prefix',
+    description:
+      'CORS-compatible proxy prefix for tool requests. Relative paths use the current Taskyon origin. The proxy can read request and response contents.',
   }),
   customProxyTemplate: z.string().default('').meta({
     title: 'Custom Network Proxy',

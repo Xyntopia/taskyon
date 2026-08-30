@@ -33,35 +33,47 @@
             />
             <input ref="fileInput" type="file" hidden multiple @change="uploadFiles" />
           </div>
-          <q-list bordered separator>
-            <q-item v-for="entry in logicalEntries" :key="entry.id">
-              <q-item-section>
-                <q-item-label>{{ entry.id }}</q-item-label>
-                <q-item-label caption>{{ entry.caption }}</q-item-label>
-              </q-item-section>
-              <q-item-section side class="row no-wrap">
+          <q-tree
+            v-if="logicalTree.length > 0"
+            :nodes="logicalTree"
+            node-key="path"
+            default-expand-all
+          >
+            <template #default-header="{ node }">
+              <div
+                :data-storage-object-id="node.entry?.id"
+                :class="[
+                  'row items-center full-width q-py-xs',
+                  node.entry?.id === initialObjectId ? 'bg-blue-1 text-blue-10' : '',
+                ]"
+              >
+                <q-icon :name="node.entry ? matDescription : matFolder" />
+                <div class="q-ml-sm">
+                  <div>{{ node.label }}</div>
+                  <div v-if="node.entry" class="text-caption text-grey-7">
+                    {{ node.entry.caption }}
+                  </div>
+                </div>
+                <q-space />
                 <q-btn
-                  v-if="objectKind === 'blob'"
+                  v-if="node.entry && objectKind === 'blob'"
                   flat
                   round
                   :icon="matDownload"
-                  @click="downloadLogicalBlob(entry.id)"
+                  @click.stop="downloadLogicalBlob(node.entry.id)"
                 />
                 <q-btn
+                  v-if="node.entry"
                   flat
                   round
                   color="negative"
                   :icon="matDelete"
-                  @click="deleteLogical(entry.id)"
+                  @click.stop="deleteLogical(node.entry.id)"
                 />
-              </q-item-section>
-            </q-item>
-            <q-item v-if="logicalEntries.length === 0">
-              <q-item-section>
-                <q-item-label caption>No stored objects.</q-item-label>
-              </q-item-section>
-            </q-item>
-          </q-list>
+              </div>
+            </template>
+          </q-tree>
+          <div v-else class="text-caption">No stored objects.</div>
         </q-tab-panel>
 
         <q-tab-panel v-if="showPhysical" name="physical" class="column q-gutter-md">
@@ -105,9 +117,15 @@ import {
   matUpload,
 } from '@quasar/extras/material-icons'
 import type { TaskyonStorageClient } from '@taskyon/taskyon'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 type LogicalEntry = { id: string; caption: string }
+type LogicalNode = {
+  label: string
+  path: string
+  entry?: LogicalEntry
+  children?: LogicalNode[]
+}
 type PhysicalNode = {
   label: string
   path: string
@@ -120,16 +138,20 @@ type PhysicalNode = {
 const {
   storageClient,
   initialNamespace = 'modelica/projects',
+  initialObjectKind = 'record',
+  initialObjectId = undefined,
   showPhysical = false,
 } = defineProps<{
   storageClient: TaskyonStorageClient
   initialNamespace?: string
+  initialObjectKind?: 'record' | 'blob'
+  initialObjectId?: string | undefined
   showPhysical?: boolean
 }>()
 
 const viewMode = ref<'logical' | 'physical'>('logical')
 const namespace = ref(initialNamespace)
-const objectKind = ref<'record' | 'blob'>('record')
+const objectKind = ref<'record' | 'blob'>(initialObjectKind)
 const kindOptions = [
   { label: 'Records', value: 'record' },
   { label: 'Blobs', value: 'blob' },
@@ -144,6 +166,52 @@ const formatSize = (size: number) =>
     : size >= 1024
       ? `${(size / 1024).toFixed(2)} KB`
       : `${size} B`
+
+const buildLogicalTree = (entries: readonly LogicalEntry[]) => {
+  const buildNodes = (
+    items: readonly { entry: LogicalEntry; segments: string[] }[],
+    parentPath = '',
+  ): LogicalNode[] =>
+    [
+      ...new Set(
+        items
+          .map(({ segments }) => segments[0])
+          .filter((segment): segment is string => segment !== undefined),
+      ),
+    ]
+      .map((segment) => {
+        const matching = items.filter(({ segments }) => segments[0] === segment)
+        const entry = matching.find(({ segments }) => segments.length === 1)?.entry
+        const descendants = matching
+          .filter(({ segments }) => segments.length > 1)
+          .map(({ entry: descendant, segments }) => ({
+            entry: descendant,
+            segments: segments.slice(1),
+          }))
+        const path = parentPath ? `${parentPath}/${segment}` : segment
+        return {
+          label: segment,
+          path,
+          ...(entry ? { entry } : {}),
+          ...(descendants.length ? { children: buildNodes(descendants, path) } : {}),
+        }
+      })
+      .sort((left, right) => {
+        const leftFolder = (left.children?.length ?? 0) > 0
+        const rightFolder = (right.children?.length ?? 0) > 0
+        return leftFolder === rightFolder
+          ? left.label.localeCompare(right.label)
+          : leftFolder
+            ? -1
+            : 1
+      })
+
+  return buildNodes(
+    entries.map((entry) => ({ entry, segments: entry.id.split('/').filter(Boolean) })),
+  )
+}
+
+const logicalTree = computed(() => buildLogicalTree(logicalEntries.value))
 
 const refreshLogical = async () => {
   const selectedNamespace = namespace.value.trim()

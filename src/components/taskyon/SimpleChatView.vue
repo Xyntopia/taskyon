@@ -9,11 +9,12 @@
     :show-all-tasks="showAllTasks"
     :expert-mode="expertMode"
   >
-    <template #task="{ task, nextTask }">
+    <template #task="{ task, previousTask, nextTask }">
       <Task
         :id="task.id"
         :class="[task.role, task.content.type]"
         :task="task"
+        :previous-task="previousTask"
         :message-debug="!!state.messageDebug[task.id]"
         :next-task="nextTask"
         :is-working="isProcessing(task.id)"

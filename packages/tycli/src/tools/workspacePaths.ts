@@ -13,9 +13,9 @@ export const resolveWorkspacePath = (filePath: string, workspaceRoot = process.c
   return fullPath
 }
 
-export const assertPathInsideArtifactRoot = (filePath: string, artifactRoot?: string) => {
+export const resolvePathInsideArtifactRoot = (filePath: string, artifactRoot?: string) => {
   const root = artifactRoot?.trim()
-  if (!root) return
+  if (!root) return filePath
 
   if (root.startsWith('/') || root.includes('..')) {
     throw new Error('artifactRoot must be a relative directory inside the current workspace.')
@@ -24,7 +24,11 @@ export const assertPathInsideArtifactRoot = (filePath: string, artifactRoot?: st
   const normalizedRoot = normalizeRelativeDirectory(root)
   const normalizedPath = filePath.replace(/\\/g, '/')
   const rootPrefix = `${normalizedRoot}/`
-  if (normalizedPath !== normalizedRoot && !normalizedPath.startsWith(rootPrefix)) {
-    throw new Error(`File path must be inside artifactRoot ${rootPrefix}.`)
-  }
+  if (normalizedPath === normalizedRoot || normalizedPath.startsWith(rootPrefix)) return filePath
+  if (!normalizedPath.includes('/')) return `${rootPrefix}${normalizedPath}`
+  throw new Error(`File path must be inside artifactRoot ${rootPrefix}.`)
+}
+
+export const assertPathInsideArtifactRoot = (filePath: string, artifactRoot?: string) => {
+  resolvePathInsideArtifactRoot(filePath, artifactRoot)
 }

@@ -23,6 +23,7 @@ import {
   createClientTool,
   createExternalToolContext,
   findContinuationLeafTaskIds,
+  buildCreateNewTaskChain,
   firstWordsTaskName,
   textRankTaskName,
   createStandardEntryNodeTool,
@@ -257,6 +258,89 @@ export type InteractiveCliHost = {
     onProgress?: (event: StepTimingEvent) => void,
   ) => Promise<void>
   documentation?: InteractiveCliDocumentation
+}
+
+export function createCliWorkflowHost(options: {
+  host: InteractiveCliHost
+  projectInstructions: string
+  workspaceOperations: ReturnType<typeof createNodeWorkspaceOperations>
+  explorationContextFiles: Record<string, string>
+  nativePythonExecutable: string | null
+  getReadline: () => ReturnType<typeof createInterface> | undefined
+  authorizePython: () => Promise<boolean>
+}) {
+  const { host, workspaceOperations, explorationContextFiles, nativePythonExecutable } = options
+  const unavailableToolNames = new Set(
+    host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES,
+  )
+  if (!nativePythonExecutable) unavailableToolNames.add('executePythonScript')
+  const createTools = (args: {
+    taskyon: Taskyon
+    entryTool?: ReturnType<typeof createCliEntryNodeTool>
+    documentation?: ReturnType<typeof createCliDocumentationRuntime>
+    getReadline?: () => ReturnType<typeof createInterface> | undefined
+    explorationTool?: ReturnType<typeof createExplorationTool>
+    updateFilesTool?: ReturnType<typeof createUpdateFilesTool>
+    extraTools?: InternalTool[]
+  }) =>
+    createCliToolSet(
+      host,
+      nativePythonExecutable ?? undefined,
+      args.documentation,
+      args.getReadline ?? options.getReadline,
+      args.explorationTool ?? createExplorationTool(explorationContextFiles, workspaceOperations),
+      args.updateFilesTool ?? createUpdateFilesTool(workspaceOperations),
+      args.entryTool ??
+        createCliEntryNodeTool(
+          host,
+          options.projectInstructions,
+          explorationContextFiles,
+          workspaceOperations,
+          unavailableToolNames,
+          { current: args.taskyon },
+        ),
+      options.authorizePython,
+      args.extraTools,
+    )
+  return {
+    unavailableToolNames,
+    createToolSetup: (
+      storageClient: ReturnType<typeof createStorageClient>,
+      prepareGraphRepository?: () => Promise<void>,
+    ) =>
+      createDefaultTaskyonToolSetup({
+        unavailableToolNames,
+        pythonTool: null,
+        storageClient,
+        workspaceOperations,
+        ...(prepareGraphRepository ? { prepareGraphRepository } : {}),
+      }),
+    createEntryTool: (taskyonRef: { current?: Taskyon }) =>
+      createCliEntryNodeTool(
+        host,
+        options.projectInstructions,
+        explorationContextFiles,
+        workspaceOperations,
+        unavailableToolNames,
+        taskyonRef,
+      ),
+    createTools,
+    registerTools: async (
+      ty: Taskyon,
+      extraTools: InternalTool[] = [],
+      runtime?: {
+        clientPort?: ReturnType<typeof createProtocolPort<typeof taskyonProtocol>>['x']
+        taskyonApi?: ReturnType<typeof createCliTaskyonClient>
+        tools?: InternalTool[]
+        timing?: Pick<Awaited<ReturnType<typeof createCliBootstrap>>, 'timeStartup'>
+      },
+    ) => {
+      const clientPort = runtime?.clientPort ?? ty.port
+      const taskyonApi = runtime?.taskyonApi ?? createCliTaskyonClient(clientPort)
+      const tools = runtime?.tools ?? createTools({ taskyon: ty, extraTools })
+      return await registerCliTools(taskyonApi, clientPort, tools, runtime?.timing)
+    },
+  }
 }
 
 type CliProviderSecrets = Pick<
@@ -1290,6 +1374,8 @@ function createCliClarificationTool(
 export const DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES = new Set([
   'animatedClock',
   'getGitlabInfo',
+  'ensureBrowserMcpTools',
+  'importBrowserMcpTools',
   'issueListGenerator',
   'location',
   'newWindowOpener',
@@ -2893,7 +2979,10 @@ async function handleSlashCommand(
   return true
 }
 
-async function loadProjectInstructions(cwd: string, environmentPrefix: string): Promise<string> {
+export async function loadProjectInstructions(
+  cwd: string,
+  environmentPrefix: string,
+): Promise<string> {
   const root = await resolveProjectInstructionRoot(
     cwd,
     process.env[`${environmentPrefix}_CWD`]?.trim(),
@@ -3539,8 +3628,7 @@ async function createCliTaskyonRuntime(
   host: InteractiveCliHost,
   bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
   storage: Awaited<ReturnType<typeof createCliStorageRuntime>>,
-  entryTool: InternalTool,
-  unavailableToolNames: Set<string>,
+  workflowHost: ReturnType<typeof createCliWorkflowHost>,
   sandboxCapabilityPolicy: ReturnType<typeof createCapabilityPolicy>,
 ) {
   const cliEntryTask = toolCall({ name: host.entryNodeName, arguments: {} })
@@ -3556,15 +3644,10 @@ async function createCliTaskyonRuntime(
       bootstrap.cryptoSession,
       {
         onInitializationProgress: bootstrap.reportStartup,
-        toolSetup: createDefaultTaskyonToolSetup({
-          unavailableToolNames,
-          pythonTool: null,
-          storageClient: storage.storageClient,
-          workspaceOperations: bootstrap.workspaceOperations,
-          ...(storage.prepareGraphRepository
-            ? { prepareGraphRepository: storage.prepareGraphRepository }
-            : {}),
-        }),
+        toolSetup: workflowHost.createToolSetup(
+          storage.storageClient,
+          storage.prepareGraphRepository,
+        ),
         createIframeMultiPlexer: () =>
           createUnavailableIframeMux('Iframe message bridging is not available in this CLI.'),
         indexTaskVectors: false,
@@ -3719,14 +3802,16 @@ function createCliToolSet(
   host: InteractiveCliHost,
   nativePythonExecutable: string | undefined,
   documentation: ReturnType<typeof createCliDocumentationRuntime>,
-  interactiveReadlineRef: { current?: ReturnType<typeof createInterface> },
+  getReadline: () => ReturnType<typeof createInterface> | undefined,
   explorationTool: ReturnType<typeof createExplorationTool>,
   updateFilesTool: ReturnType<typeof createUpdateFilesTool>,
   entryTool: ReturnType<typeof createCliEntryNodeTool>,
+  authorizePython: () => Promise<boolean>,
+  extraTools: InternalTool[] = [],
 ) {
   return [
     entryTool,
-    createCliClarificationTool(() => interactiveReadlineRef.current),
+    createCliClarificationTool(getReadline),
     explorationTool,
     updateFilesTool,
     downloadFileTool,
@@ -3739,15 +3824,7 @@ function createCliToolSet(
       ? [
           createNativePythonTool({
             executable: nativePythonExecutable,
-            authorize: async () => {
-              const readline = interactiveReadlineRef.current
-              if (!readline) throw new Error('Interactive approval is unavailable')
-              const answer = await askQuestion(
-                readline,
-                'Allow native Python full host filesystem and network access for this session? [y/N] ',
-              )
-              return ['y', 'yes'].includes(answer?.trim().toLowerCase() ?? '')
-            },
+            authorize: authorizePython,
           }),
         ]
       : []),
@@ -3756,6 +3833,7 @@ function createCliToolSet(
       : []),
     ...(documentation ? [documentation.documentation.tool] : []),
     ...(host.additionalTools ?? []),
+    ...extraTools,
   ].map((tool) => InternalToolSchema.parse(tool))
 }
 
@@ -3763,9 +3841,9 @@ async function registerCliTools(
   taskyonApi: ReturnType<typeof createCliTaskyonClient>,
   clientPort: ReturnType<typeof createProtocolPort<typeof taskyonProtocol>>['x'],
   tools: InternalTool[],
-  timing: Awaited<ReturnType<typeof createCliBootstrap>>,
+  timing?: Pick<Awaited<ReturnType<typeof createCliBootstrap>>, 'timeStartup'>,
 ) {
-  return timing.timeStartup('cli.tool-registration', () =>
+  const register = () =>
     registerToolRpcTools({
       port: clientPort,
       tools: () => tools,
@@ -3777,11 +3855,14 @@ async function registerCliTools(
                 'getExecutionTaskChain is not available for this tool call because no task id was provided.',
               )
             }
-            return taskyonApi.task.getChain({ id: call.taskId })
+            return taskyonApi.task.getChain({
+              id: call.taskId,
+              selection: { method: 'lineage', includeSubtaskResults: 'terminal-visible' },
+            })
           },
         }),
-    }),
-  )
+    })
+  return timing ? timing.timeStartup('cli.tool-registration', register) : register()
 }
 
 function createCliEngineSettings(bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>) {
@@ -3809,11 +3890,7 @@ async function loadCliEngineTooling(
   )
   const nativePythonExecutable =
     (await bootstrap.timeStartup('cli.python-detection', findNativePythonExecutable)) ?? undefined
-  const unavailableToolNames = new Set(
-    host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES,
-  )
-  if (!nativePythonExecutable) unavailableToolNames.add('executePythonScript')
-  return { projectInstructions, nativePythonExecutable, unavailableToolNames }
+  return { projectInstructions, nativePythonExecutable }
 }
 
 async function createCliEnginePreparation(
@@ -3821,19 +3898,31 @@ async function createCliEnginePreparation(
   bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
 ) {
   const { uiSettings, toolRenderOptions } = createCliEngineSettings(bootstrap)
-  const { projectInstructions, nativePythonExecutable, unavailableToolNames } =
-    await loadCliEngineTooling(host, bootstrap)
+  const { projectInstructions, nativePythonExecutable } = await loadCliEngineTooling(
+    host,
+    bootstrap,
+  )
   const taskyonRef: { current?: Taskyon } = {}
   const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
   const approvalUiRef: { current?: CliInteractiveApprovalUi } = {}
-  const entryTool = createCliEntryNodeTool(
+  const workflowHost = createCliWorkflowHost({
     host,
     projectInstructions,
-    bootstrap.explorationContextFiles,
-    bootstrap.workspaceOperations,
-    unavailableToolNames,
-    taskyonRef,
-  )
+    workspaceOperations: bootstrap.workspaceOperations,
+    explorationContextFiles: bootstrap.explorationContextFiles,
+    nativePythonExecutable: nativePythonExecutable ?? null,
+    getReadline: () => interactiveReadlineRef.current,
+    authorizePython: async () => {
+      const readline = interactiveReadlineRef.current
+      if (!readline) throw new Error('Interactive approval is unavailable')
+      const answer = await askQuestion(
+        readline,
+        'Allow native Python full host filesystem and network access for this session? [y/N] ',
+      )
+      return ['y', 'yes'].includes(answer?.trim().toLowerCase() ?? '')
+    },
+  })
+  const entryTool = workflowHost.createEntryTool(taskyonRef)
   const storage = await createCliStorageRuntime(host, bootstrap)
   const logging = createCliLoggingRuntime(bootstrap, bootstrap.sessionStartedAt)
   const sandboxCapabilityPolicy = createCliSandboxCapabilityPolicy(
@@ -3844,7 +3933,8 @@ async function createCliEnginePreparation(
     uiSettings,
     toolRenderOptions,
     nativePythonExecutable,
-    unavailableToolNames,
+    unavailableToolNames: workflowHost.unavailableToolNames,
+    workflowHost,
     taskyonRef,
     interactiveReadlineRef,
     approvalUiRef,
@@ -3864,8 +3954,7 @@ async function createCliEngineCore(
     host,
     bootstrap,
     preparation.storage,
-    preparation.entryTool,
-    preparation.unavailableToolNames,
+    preparation.workflowHost,
     preparation.sandboxCapabilityPolicy,
   )
   const taskyonHost = createTaskyonHostClient(taskyon.hostPort)
@@ -3906,21 +3995,20 @@ async function createCliEngineTools(
       ),
     )
   }
-  const tools = createCliToolSet(
-    host,
-    preparation.nativePythonExecutable,
+  const tools = preparation.workflowHost.createTools({
+    taskyon: core.taskyon,
+    entryTool: preparation.entryTool,
     documentation,
-    preparation.interactiveReadlineRef,
-    bootstrap.explorationTool,
-    bootstrap.updateFilesTool,
-    preparation.entryTool,
-  )
-  const cliToolRpcHost = await registerCliTools(
-    core.protocol.taskyonApi,
-    core.protocol.clientPort,
+    getReadline: () => preparation.interactiveReadlineRef.current,
+    explorationTool: bootstrap.explorationTool,
+    updateFilesTool: bootstrap.updateFilesTool,
+  })
+  const cliToolRpcHost = await preparation.workflowHost.registerTools(core.taskyon, [], {
+    clientPort: core.protocol.clientPort,
+    taskyonApi: core.protocol.taskyonApi,
     tools,
-    bootstrap,
-  )
+    timing: bootstrap,
+  })
   await bootstrap.timeStartup('cli.tool-display-metadata', () =>
     refreshToolRenderOptions(core.taskyon, preparation.toolRenderOptions),
   )
@@ -5566,15 +5654,24 @@ async function createCliTaskChain(runtime: CliInteractiveRuntime, input: string)
     return undefined
   }
   runtime.view.resetTransientMarkers()
-  const { ids } = await engine.taskyonApi.task.createChain({
-    tasks: [
-      {
-        role: 'user',
-        content: { type: 'message', data: input },
-        ...(state.currentLeafId ? { priorID: state.currentLeafId } : {}),
+  const taskChain = buildCreateNewTaskChain({
+    currentTask: state.currentLeafId ? runtime.workerState.taskById.get(state.currentLeafId) : null,
+    draftTask: {
+      role: 'user',
+      content: { type: 'message', data: input },
+    },
+    entryNode: {
+      role: 'system',
+      content: {
+        type: 'functioncall',
+        data: { name: host.entryNodeName, arguments: {} },
       },
-      toolCall({ name: host.entryNodeName, arguments: {} }),
-    ],
+    },
+    mode: 'message',
+    ...(state.currentLeafId ? { priorTaskId: state.currentLeafId } : {}),
+  })
+  const { ids } = await engine.taskyonApi.task.createChain({
+    tasks: taskChain,
     execute: true,
     show: true,
   })

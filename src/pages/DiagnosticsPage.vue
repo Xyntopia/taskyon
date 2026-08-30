@@ -123,7 +123,7 @@
                         :key="name"
                         type="button"
                         class="diagnostics-test-button"
-                        @click="runTests({ [`${name}`]: val }, true)"
+                        @click="runTests({ [`${name}`]: val }, true, val.requiresLongRun === true)"
                       >
                         {{ name }}
                       </button>
@@ -169,7 +169,9 @@ import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import {
   buildDiagnosticsRegistry,
+  type DiagnosticsRunOptions,
   type DiagnosticsTestContext,
+  getDiagnosticsSkipReason,
   runDiagnosticsTests,
   type TaskyonTestFn,
   type TestRecord,
@@ -298,7 +300,6 @@ const testsByFolder = registry.testsByFolder
 const testsByFile = registry.testsByFile
 const testLists = { tests, modelBasedTests, experimentalTests, guiTests }
 const testListKeys = Object.keys(testLists) as Array<keyof typeof testLists>
-
 type GroupedSection = {
   key: string
   label: string
@@ -439,35 +440,53 @@ function appendDiagnosticsLog(nextText: string) {
   void scrollDiagnosticsToBottom()
 }
 
-function getDiagnosticsSkipReason(details: unknown): string | undefined {
-  if (
-    typeof details !== 'object' ||
-    details === null ||
-    !('skipped' in details) ||
-    details.skipped !== true
-  ) {
-    return undefined
-  }
-  return 'reason' in details && typeof details.reason === 'string'
-    ? details.reason
-    : 'Required runtime capability is unavailable.'
+type DiagnosticsSummary = {
+  total: number
+  failed: number
+  modelPassed: number
+  modelFailed: number
+  aborted: boolean
 }
 
-async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
-  if (isRunning.value) return
-  isRunning.value = true
-  abortRequested.value = false
-  testFinished.value = false
+function appendDiagnosticResult(
+  result: Awaited<ReturnType<typeof runDiagnosticsTests>>[number],
+  details: boolean,
+  summary: DiagnosticsSummary,
+) {
+  summary.total += 1
+  const skippedReason = getDiagnosticsSkipReason(result.details)
+  const skipped = skippedReason !== undefined
+  const modelFailure = result.modelBased && !result.preparationFailed
+  if (result.modelBased && !skipped) {
+    if (result.ok) summary.modelPassed += 1
+    else summary.modelFailed += 1
+  } else if (!result.ok) {
+    summary.failed += 1
+  }
 
-  diagnostics.value = ''
-  const startTime = Date.now() // milliseconds since epoch
-  appendDiagnosticsLog(`report_date: ${new Date().toISOString()}\n`)
-  let total = 0
-  let failed = 0
-  let modelPassed = 0
-  let modelFailed = 0
-  let aborted = false
+  const status = result.ok
+    ? skipped
+      ? { status: 'SKIPPED', reason: skippedReason }
+      : details
+        ? { status: result.modelBased ? 'MODEL PASS' : 'OK', result: result.details }
+        : result.modelBased
+          ? 'MODEL PASS'
+          : 'OK'
+    : {
+        status: modelFailure ? 'MODEL MISS' : 'ERROR',
+        message: modelFailure
+          ? 'The selected model did not satisfy this capability evaluation.'
+          : 'An error occurred during this test.',
+        error: result.error,
+      }
+  appendDiagnosticsLog(dump({ [result.name]: status }, { skipInvalid: true, noRefs: true }))
+}
 
+function createDiagnosticsRunOptions(
+  details: boolean,
+  summary: DiagnosticsSummary,
+  allowLongRun = false,
+): DiagnosticsRunOptions {
   const tyauth = tystate.getTaskyonKeyString()
   const chatCompletionConfig = state.effectiveToolchainConfig.chatCompletion
   const selectedApi =
@@ -477,108 +496,84 @@ async function runTests(tests: Record<string, TaskyonTestFn>, details = false) {
     typeof chatCompletionConfig.provider === 'string'
       ? chatCompletionConfig.provider
       : undefined
+  const selectedModel = tystate.currentModelId
   const isCypress = typeof window !== 'undefined' && 'Cypress' in window
-  const runOptions: Parameters<typeof runDiagnosticsTests>[1] = {
+
+  return {
     details,
     isCypress,
     context: {
       ...(typeof tyauth === 'string' ? { tyauth } : {}),
       ...(selectedApi ? { selectedApi } : {}),
-      ...(tystate.currentModelId ? { model: tystate.currentModelId } : {}),
+      ...(selectedModel ? { model: selectedModel } : {}),
+      allowLongRun,
       llmSettings: state.llmSettings,
       toolchainConfig: state.effectiveToolchainConfig,
       ...(selectedApi
         ? {
-            providerSession: tystate.createDiagnosticsProviderSession(
-              selectedApi,
-              tystate.currentModelId,
-            ),
+            providerSession: tystate.createDiagnosticsProviderSession(selectedApi, selectedModel),
           }
         : {}),
+      storageClient: tystate.storageClient,
+      storageDownload: tystate.storageDownload,
+      ...{ workflowDiagnosticsHost: tystate.workflowDiagnosticsHost },
       isCypress,
     },
     shouldAbort: () => abortRequested.value,
     onAbort: (nextTest) => {
-      aborted = true
+      summary.aborted = true
       appendDiagnosticsLog(`\nabort requested - skipped remaining tests (next: ${nextTest})\n`)
     },
     onProgress: ({ phase, test }) => {
       console.log(`diagnostics test ${phase}:`, test)
     },
-    onResult: (result) => {
-      total += 1
-      const skippedReason = getDiagnosticsSkipReason(result.details)
-      const skipped = skippedReason !== undefined
-      if (result.modelBased && !skipped) {
-        if (result.ok) modelPassed += 1
-        else modelFailed += 1
-      } else if (!result.ok) failed += 1
-      if (result.ok) {
-        appendDiagnosticsLog(
-          dump(
-            {
-              [result.name]: skipped
-                ? {
-                    status: 'SKIPPED',
-                    reason: skippedReason,
-                  }
-                : details
-                  ? {
-                      status: result.modelBased ? 'MODEL PASS' : 'OK',
-                      result: result.details,
-                    }
-                  : result.modelBased
-                    ? 'MODEL PASS'
-                    : 'OK',
-            },
-            { skipInvalid: true, noRefs: true },
-          ),
-        )
-      } else if (result.modelBased) {
-        appendDiagnosticsLog(
-          dump(
-            {
-              [result.name]: {
-                status: 'MODEL MISS',
-                message: 'The selected model did not satisfy this capability evaluation.',
-                error: result.error,
-              },
-            },
-            { skipInvalid: true, noRefs: true },
-          ),
-        )
-      } else {
-        appendDiagnosticsLog(
-          dump(
-            {
-              [result.name]: {
-                status: 'ERROR',
-                message: 'an error occured during this test...',
-                error: result.error,
-              },
-            },
-            { skipInvalid: true, noRefs: true },
-          ),
-        )
-      }
-    },
+    onResult: (result) => appendDiagnosticResult(result, details, summary),
+  }
+}
+
+function beginDiagnosticsRun() {
+  isRunning.value = true
+  abortRequested.value = false
+  testFinished.value = false
+  diagnostics.value = ''
+  appendDiagnosticsLog(`report_date: ${new Date().toISOString()}\n`)
+}
+
+function finishDiagnosticsRun(startTime: number, summary: DiagnosticsSummary) {
+  appendDiagnosticsLog(`\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`)
+  appendDiagnosticsLog(`\nfailed tests: ${summary.failed}/${summary.total}`)
+  const modelTotal = summary.modelPassed + summary.modelFailed
+  if (modelTotal > 0) {
+    appendDiagnosticsLog(
+      `\nmodel capability score: ${summary.modelPassed}/${modelTotal} (${Math.round((100 * summary.modelPassed) / modelTotal)}%)`,
+    )
+  }
+  appendDiagnosticsLog(
+    summary.aborted ? '\naborted before all tests were finished' : '\nfinished all tests!',
+  )
+  console.log('diagnostics:', diagnostics.value)
+  testFinished.value = true
+  return summary.failed === 0
+}
+
+async function runTests(
+  tests: Record<string, TaskyonTestFn>,
+  details = false,
+  allowLongRun = false,
+) {
+  if (isRunning.value) return
+  beginDiagnosticsRun()
+  const startTime = Date.now()
+  const summary: DiagnosticsSummary = {
+    total: 0,
+    failed: 0,
+    modelPassed: 0,
+    modelFailed: 0,
+    aborted: false,
   }
   try {
-    await runDiagnosticsTests(tests, runOptions)
-
-    appendDiagnosticsLog(`\n\ntime to run tests: ${(Date.now() - startTime) / 1000}s`)
-    appendDiagnosticsLog(`\nfailed tests: ${failed}/${total}`)
-    const modelTotal = modelPassed + modelFailed
-    if (modelTotal > 0) {
-      appendDiagnosticsLog(
-        `\nmodel capability score: ${modelPassed}/${modelTotal} (${Math.round((100 * modelPassed) / modelTotal)}%)`,
-      )
-    }
-    appendDiagnosticsLog(
-      aborted ? '\naborted before all tests were finished' : '\nfinished all tests!',
-    )
-    console.log('diagnostics:', diagnostics.value)
-    testFinished.value = true
+    await runDiagnosticsTests(tests, createDiagnosticsRunOptions(details, summary, allowLongRun))
+    finishDiagnosticsRun(startTime, summary)
   } finally {
     isRunning.value = false
   }

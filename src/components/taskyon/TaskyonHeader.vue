@@ -235,7 +235,7 @@ const ResetButton = process.env.DEV
     )
   : undefined
 
-const taskChatPaths = new Set(['/chat', '/detailed'])
+const taskChatPaths = new Set(['/', '/chat', '/detailed'])
 const showTaskChatResetButton = computed(
   () =>
     Boolean(ResetButton) &&

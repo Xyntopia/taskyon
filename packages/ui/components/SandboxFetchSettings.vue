@@ -17,13 +17,21 @@
         data-cy="sandbox-fetch-transport"
       />
       <q-input
-        v-if="transport === 'wss'"
+        v-if="transport === 'ask' || transport === 'wss'"
         v-model="wssUrl"
         label="Taskyon WSS tunnel URL"
         hint="The authenticated remote tunnel used for approved sandbox requests."
         outlined
         dense
         data-cy="sandbox-fetch-wss-url"
+      />
+      <q-input
+        v-model="corsProxyUrl"
+        label="CORS proxy prefix"
+        hint="The proxy can read request and response contents. Relative paths use this Taskyon origin."
+        outlined
+        dense
+        data-cy="sandbox-cors-proxy-url"
       />
       <q-input
         v-model="customProxyTemplate"
@@ -40,10 +48,11 @@
 <script setup lang="ts">
 import {
   SANDBOX_FETCH_TRANSPORT_OPTIONS,
-  type SandboxFetchTransport,
+  type SandboxFetchTransportSelection,
 } from '@taskyon/common/modules/webFetching/mediatedFetch'
 
-const transport = defineModel<SandboxFetchTransport>('transport', { required: true })
+const transport = defineModel<SandboxFetchTransportSelection>('transport', { required: true })
 const wssUrl = defineModel<string>('wssUrl', { required: true })
+const corsProxyUrl = defineModel<string>('corsProxyUrl', { required: true })
 const customProxyTemplate = defineModel<string>('customProxyTemplate', { required: true })
 </script>

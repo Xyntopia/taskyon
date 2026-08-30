@@ -14,7 +14,12 @@ import {
   normalizeNativeStructuredOutputSchema,
 } from '../tools/chatCompletion/providerRequest'
 import { CODEX_MODELS_CLIENT_VERSION, fetchModelsForProvider } from '../llm/modelDiscovery'
-import { interpretAssistantMessage } from '../tools/chatCompletion/response'
+import {
+  convertProviderSourceToAnnotation,
+  interpretAssistantMessage,
+  parseStructuredResponseWithTrailingText,
+  validateStructuredResponse,
+} from '../tools/chatCompletion/response'
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import {
   resolveChatCompletionConnection,
@@ -23,9 +28,10 @@ import {
 } from '../types/chatCompletion'
 import { getTaskyonCosts } from '../taskyon.space/taskyon.space_api'
 import { taskPlanner } from '../tools/TaskPlannerTool'
+import { webResearchPlanner } from '../tools/webResearchTool'
 import { jsonSchema, streamText } from 'ai'
 import type { JSONSchema7 } from 'json-schema'
-import type { TaskNode } from '../types/taskNode'
+import { Annotation, type TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -46,6 +52,67 @@ const providerSettings = (
   recommendedTransport: provider === 'chatgpt-codex' ? 'wss' : 'direct',
   routes: { chatCompletion: '/chat/completions', models: '/models' },
 })
+
+export const testChatCompletionPreservesTextFollowingStructuredJson = () => {
+  const parsed = parseStructuredResponseWithTrailingText(
+    '{"candidates":[{"title":"Official rules"}]}\n\nThe selected document is ready.',
+  )
+  const data = parsed.data as { candidates?: { title?: string }[] }
+
+  assert(data.candidates?.[0]?.title === 'Official rules', 'Expected the structured data')
+  assert(
+    parsed.trailingText === 'The selected document is ready.',
+    'Expected trailing assistant text to remain available',
+  )
+  return { success: true }
+}
+
+export const testChatCompletionRetainsAdditionalStructuredFields = () => {
+  const value = {
+    candidates: [{ title: 'Official rules' }],
+    providerNote: 'Useful extra response data.',
+  }
+  const validated = validateStructuredResponse(value, {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      candidates: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { title: { type: 'string' } },
+          required: ['title'],
+        },
+      },
+    },
+    required: ['candidates'],
+  }) as typeof value
+
+  assert(
+    validated.providerNote === value.providerNote,
+    'Expected extra response data to be retained',
+  )
+  assert(
+    validated.candidates[0]?.title === 'Official rules',
+    'Expected schema fields to remain validated',
+  )
+  let rejectedInvalidOutput = false
+  try {
+    validateStructuredResponse(
+      { providerNote: 'missing candidates' },
+      {
+        type: 'object',
+        properties: { candidates: { type: 'array' } },
+        required: ['candidates'],
+      },
+    )
+  } catch {
+    rejectedInvalidOutput = true
+  }
+  assert(rejectedInvalidOutput, 'Expected missing required fields to remain an error')
+  return { success: true }
+}
 
 export const testNativeStructuredOutputSchemaAddsClosedObjectBoundaries = () => {
   const schema: JSONSchema7 = {
@@ -108,6 +175,43 @@ export const testNativeStructuredOutputSchemaRejectsPermissiveOrOptionalObjects 
 }
 
 const task = (node: TaskNode) => node
+
+export const testChatCompletionToolSchemaExplainsTaskyonUseMapping = async () => {
+  const context = await prepareChatCompletionContext({
+    taskChain: [
+      task({
+        id: 'variable-tool-user',
+        role: 'user',
+        content: { type: 'message', data: 'Create a project from the prior node.' },
+      }),
+    ],
+    allowedTools: ['projectTool'],
+    toolDefinitions: {
+      projectTool: {
+        name: 'projectTool',
+        description: 'Create a project.',
+        parameters: {
+          type: 'object',
+          properties: { rootNodeId: { type: 'string' } },
+        },
+      },
+    },
+    appendSystemPrompts: [],
+    prependSystemPrompts: [],
+    useVisionModels: false,
+    getTaskById: () => Promise.resolve(null),
+  })
+
+  const schema = JSON.stringify(context.tools.projectTool)
+  assert(
+    schema.includes('omit') && schema.includes('literal arguments'),
+    'Expected the provider tool contract to say $use-mapped arguments must be omitted from literal arguments',
+  )
+  return { success: true }
+}
+
+testChatCompletionToolSchemaExplainsTaskyonUseMapping.description =
+  'Explains to the model that $use supplies a value instead of a literal tool argument.'
 
 export const testChatCompletionDiscoversScopedToolsWithoutRenderingTheirDefinitions = async () => {
   const hiddenReferencedTask = task({
@@ -176,6 +280,186 @@ export const testChatCompletionDiscoversScopedToolsWithoutRenderingTheirDefiniti
 testChatCompletionDiscoversScopedToolsWithoutRenderingTheirDefinitions.description =
   'Discovers lineage-scoped tools while excluding their metadata, code, and references from provider messages.'
 
+export const testChatCompletionScopesPlannerSubtasksToTheirDelegatedObjective = async () => {
+  const tasks = [
+    task({
+      id: 'planner-parent-request',
+      role: 'user',
+      content: {
+        type: 'message',
+        data: 'Parent request: use taskPlanner once to inspect and summarize the project.',
+      },
+    }),
+    task({
+      id: 'planner-parent-call',
+      role: 'function',
+      priorID: 'planner-parent-request',
+      content: { type: 'functioncall', data: { name: 'taskPlanner', arguments: { tasks: [] } } },
+    }),
+    task({
+      id: 'planner-child-objective',
+      role: 'user',
+      parentID: 'planner-parent-call',
+      content: { type: 'message', data: 'Task objective: inspect the README and summarize it.' },
+    }),
+  ]
+  const context = await prepareChatCompletionContext({
+    taskChain: tasks,
+    allowedTools: [],
+    toolDefinitions: { taskPlanner },
+    appendSystemPrompts: [],
+    prependSystemPrompts: [],
+    useVisionModels: false,
+    getTaskById: () => Promise.resolve(null),
+  })
+  const renderedMessages = JSON.stringify(context.messages)
+
+  assert(
+    renderedMessages.includes('Task objective: inspect the README and summarize it.'),
+    'Expected a delegated task objective to remain in its model context',
+  )
+  assert(
+    !renderedMessages.includes('Parent request: use taskPlanner once'),
+    'Expected delegated tasks not to repeat the parent planning instruction',
+  )
+
+  const researchContext = await prepareChatCompletionContext({
+    taskChain: [
+      task({
+        id: 'research-parent-request',
+        role: 'user',
+        content: {
+          type: 'message',
+          data: 'Parent request: use webResearchPlanner once and save the official PDF.',
+        },
+      }),
+      task({
+        id: 'research-parent-call',
+        role: 'function',
+        priorID: 'research-parent-request',
+        content: { type: 'functioncall', data: { name: 'webResearchPlanner', arguments: {} } },
+      }),
+      task({
+        id: 'research-child-objective',
+        role: 'user',
+        parentID: 'research-parent-call',
+        content: {
+          type: 'message',
+          data: 'Research objective: find and verify the official current rules PDF.',
+        },
+      }),
+    ],
+    allowedTools: [],
+    toolDefinitions: { webResearchPlanner },
+    appendSystemPrompts: [],
+    prependSystemPrompts: [],
+    useVisionModels: false,
+    getTaskById: () => Promise.resolve(null),
+  })
+  const researchMessages = JSON.stringify(researchContext.messages)
+  assert(
+    researchMessages.includes(
+      'Research objective: find and verify the official current rules PDF.',
+    ),
+    'Expected the web research subtask objective to remain in its model context',
+  )
+  assert(
+    !researchMessages.includes('Parent request: use webResearchPlanner once'),
+    'Expected the web research subtask not to repeat the parent planner request',
+  )
+
+  const parentContinuation = await prepareChatCompletionContext({
+    taskChain: [
+      ...tasks,
+      task({
+        id: 'planner-child-result',
+        role: 'assistant',
+        parentID: 'planner-parent-call',
+        priorID: 'planner-child-objective',
+        content: { type: 'message', data: 'README summary handoff.' },
+      }),
+      task({
+        id: 'planner-parent-continuation',
+        role: 'user',
+        priorID: 'planner-parent-call',
+        content: { type: 'message', data: 'Summarize the completed delegated work.' },
+      }),
+    ],
+    allowedTools: [],
+    toolDefinitions: { taskPlanner },
+    appendSystemPrompts: [],
+    prependSystemPrompts: [],
+    useVisionModels: false,
+    getTaskById: () => Promise.resolve(null),
+    subtaskHandoffTaskIds: new Set(['planner-child-objective', 'planner-child-result']),
+  })
+  const continuationMessages = JSON.stringify(parentContinuation.messages)
+  assert(
+    continuationMessages.includes('Parent request: use taskPlanner once') &&
+      continuationMessages.includes('README summary handoff.') &&
+      continuationMessages.includes('Summarize the completed delegated work.'),
+    'Expected parent continuation to retain its request and the completed subtask handoff',
+  )
+}
+
+testChatCompletionScopesPlannerSubtasksToTheirDelegatedObjective.description =
+  'Starts a delegated planner task from its own objective instead of replaying the parent planning request.'
+
+export const testChatCompletionPreservesEvidenceWithinResearchStages = async () => {
+  const context = await prepareChatCompletionContext({
+    taskChain: [
+      task({
+        id: 'research-stage-call',
+        role: 'function',
+        content: {
+          type: 'functioncall',
+          data: { name: 'webResearchPipeline', arguments: { stage: 'artifact' } },
+        },
+      }),
+      task({
+        id: 'research-stage-storage-call',
+        role: 'function',
+        parentID: 'research-stage-call',
+        content: {
+          type: 'functioncall',
+          data: { name: 'storage', arguments: { action: 'read', id: 'rules.pdf' } },
+        },
+      }),
+      task({
+        id: 'research-stage-storage-result',
+        role: 'function',
+        parentID: 'research-stage-storage-call',
+        content: {
+          type: 'toolresult',
+          data: { id: 'rules.pdf', text: 'Verified PDF text from Rule 4.' },
+        },
+      }),
+      task({
+        id: 'research-stage-prompt',
+        role: 'user',
+        parentID: 'research-stage-call',
+        priorID: 'research-stage-storage-result',
+        content: { type: 'message', data: 'Verify the downloaded artifact.' },
+      }),
+    ],
+    allowedTools: [],
+    toolDefinitions: {},
+    appendSystemPrompts: [],
+    prependSystemPrompts: [],
+    useVisionModels: false,
+    getTaskById: () => Promise.resolve(null),
+  })
+
+  assert(
+    JSON.stringify(context.messages).includes('Verified PDF text from Rule 4.'),
+    'Expected a research stage to retain its preceding storage evidence',
+  )
+  return { success: true }
+}
+
+testChatCompletionPreservesEvidenceWithinResearchStages.description =
+  'Keeps prior tool evidence in internal research-stage completions.'
+
 export const testHiddenScopedSelectorDoesNotRenderMissingToolResponse = async () => {
   const scopedSelector = task({
     id: 'hidden-selector-definition',
@@ -183,19 +467,16 @@ export const testHiddenScopedSelectorDoesNotRenderMissingToolResponse = async ()
     content: {
       type: 'tooldefinition',
       data: {
-        name: 'selectTaskyonTools',
+        name: 'toolSearcher',
         description: 'Select relevant tools.',
         renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
         implementation: {
           type: 'binding',
-          target: 'entryNode',
+          target: 'toolSearcher',
           targetRevision: 'sha256:selector-target-revision',
-          fixedArguments: {},
+          fixedArguments: { analyze: true },
           publicArguments: {
-            allowedTools: {
-              type: 'array',
-              items: { type: 'string' },
-            },
+            query: { type: 'string' },
           },
         },
       },
@@ -207,23 +488,24 @@ export const testHiddenScopedSelectorDoesNotRenderMissingToolResponse = async ()
     parentID: scopedSelector.id,
     content: {
       type: 'functioncall',
-      data: { name: 'selectTaskyonTools', arguments: { allowedTools: ['exploration'] } },
+      data: { name: 'toolSearcher', arguments: { query: 'workspace exploration' } },
     },
   })
   const definitions = await resolveToolDefinitionsForTaskChain([scopedSelector, selectorCall], {
-    entryNode: {
-      name: 'entryNode',
-      description: 'Route a task.',
+    toolSearcher: {
+      name: 'toolSearcher',
+      description: 'Search tools.',
       parameters: {
         type: 'object',
         properties: {
-          allowedTools: { type: 'array', items: { type: 'string' } },
+          query: { type: 'string' },
+          analyze: { type: 'boolean' },
         },
       },
     },
   })
   assert(
-    definitions.selectTaskyonTools?.renderOptions?.hideLlm === true,
+    definitions.toolSearcher?.renderOptions?.hideLlm === true,
     'Expected scoped selector render options to survive binding resolution',
   )
   const messages = await convertTaskNodesToOpenAIChat(
@@ -516,6 +798,53 @@ export const testChatCompletionContextUsesLineageAndTerminalSubtaskResults = asy
   return { success: true }
 }
 
+export const testChatCompletionContextLabelsEmptyToolSearchAsNoMatch = async () => {
+  const tasks = [
+    task({
+      id: 'empty-search-call',
+      role: 'function',
+      content: { type: 'functioncall', data: { name: 'entryNodeToolSearch', arguments: {} } },
+    }),
+    task({
+      id: 'empty-search-result',
+      role: 'system',
+      parentID: 'empty-search-call',
+      content: {
+        type: 'toolresult',
+        data: {
+          'Here are the matching tools': [],
+          'Search status':
+            'No registered tool matched this query; no requested operation was executed.',
+        },
+      },
+    }),
+  ]
+  const messages = await convertTaskNodesToOpenAIChat(
+    tasks,
+    undefined,
+    false,
+    true,
+    {},
+    { subtaskHandoffTaskIds: new Set(tasks.map(({ id }) => id)) },
+  )
+  const searchHandoff = messages.find(
+    (message) => typeof message.content === 'string' && message.content.includes('Search status'),
+  )
+  const rendered = searchHandoff?.content
+  assert(
+    typeof rendered === 'string' && rendered.includes('Status: no matching capability'),
+    'Expected an empty tool search handoff to be labeled as unavailable',
+  )
+  assert(
+    typeof rendered === 'string' && !rendered.includes('Status: completed'),
+    'Expected an empty tool search handoff not to be labeled as completed',
+  )
+  return { success: true }
+}
+
+testChatCompletionContextLabelsEmptyToolSearchAsNoMatch.description =
+  'Labels an empty tool-search handoff as unavailable instead of completed.'
+
 export const testChatCompletionContextSizeTrimsAfterLineageSelection = async () => {
   const tasks = [
     task({
@@ -785,6 +1114,193 @@ export const testChatCompletionMixedTextAndNativeToolCallContinuesWithTool = () 
   return { success: true }
 }
 
+export const testChatCompletionPreservesSearchSourcesWithNativeToolCall = () => {
+  const source = {
+    type: 'url' as const,
+    title: 'HTTP Status Code Registry',
+    url: 'https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml',
+  }
+  const toolDefinition: ToolBase = {
+    name: 'executeJavaScript',
+    description: 'Execute JavaScript.',
+    parameters: {
+      type: 'object',
+      properties: { code: { type: 'string' } },
+      required: ['code'],
+      additionalProperties: false,
+    },
+  }
+  const outcome = interpretAssistantMessage(
+    [source],
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'javascript-call',
+          toolName: 'executeJavaScript',
+          input: { code: "return '2025-09-15'.split('').reverse().join('')" },
+        },
+      ],
+    },
+    true,
+    { executeJavaScript: toolDefinition },
+    createTaskVariablePresentationService(),
+  )
+
+  assert(outcome.kind === 'tool-calls', 'Expected native tool call to control continuation')
+  assert(
+    outcome.assistantMessages?.[0]?.annotations?.some(
+      (annotation) => annotation.type === 'url' && annotation.url === source.url,
+    ) === true,
+    'Expected hosted-search sources to survive a response containing only a tool call',
+  )
+  assert(
+    outcome.assistantMessages?.[0]?.content === '',
+    'Expected source annotations to stand on their own without synthetic assistant text',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionPreservesSourcesWithoutTextOrToolCalls = () => {
+  const source = {
+    type: 'url' as const,
+    title: 'HTTP Status Code Registry',
+    url: 'https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml',
+  }
+  const outcome = interpretAssistantMessage(
+    [source],
+    { role: 'assistant', content: [] },
+    true,
+    {},
+    createTaskVariablePresentationService(),
+  )
+
+  assert(outcome.kind === 'answers', 'Expected sources-only output to finish as an answer')
+  assert(outcome.answers[0]?.content === '', 'Expected an empty source-bearing assistant message')
+  assert(
+    outcome.answers[0]?.annotations?.[0] === source,
+    'Expected sources-only output to retain its annotations',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionConvertsDocumentSourcesWithoutDroppingDetails = () => {
+  const annotation = Annotation.parse(
+    convertProviderSourceToAnnotation({
+      type: 'source',
+      sourceType: 'document',
+      id: 'document-1',
+      title: 'HTTP Specification',
+      filename: 'http.pdf',
+      mediaType: 'application/pdf',
+    }),
+  )
+
+  assert(annotation.type === 'document', 'Expected a document annotation')
+  assert(annotation.title === 'HTTP Specification', 'Expected the document title to be retained')
+  assert(annotation.filename === 'http.pdf', 'Expected the filename to be retained')
+  assert(annotation.mediaType === 'application/pdf', 'Expected the media type to be retained')
+  assert(annotation.id === 'document-1', 'Expected the provider source ID to be retained')
+
+  return { success: true }
+}
+
+export const testChatCompletionPreservesSourceLessSearchWithNativeToolCall = () => {
+  const outcome = interpretAssistantMessage(
+    [],
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'javascript-call',
+          toolName: 'executeJavaScript',
+          input: { code: "return '2025-09-15'.split('').reverse().join('')" },
+        },
+      ],
+    },
+    true,
+    {
+      executeJavaScript: {
+        name: 'executeJavaScript',
+        description: 'Execute JavaScript.',
+        parameters: { type: 'object', properties: {} },
+      },
+    },
+    createTaskVariablePresentationService(),
+    true,
+  )
+
+  assert(outcome.kind === 'tool-calls', 'Expected native tool call to control continuation')
+  assert(
+    outcome.assistantMessages?.[0]?.content === 'Hosted web search activity was reported.',
+    'Expected source-less provider search to remain visible to the continuation',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionRendersAssistantSourcesInFollowingContext = async () => {
+  const sourceUrl = 'https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml'
+  const messages = await convertTaskNodesToOpenAIChat(
+    [
+      task({
+        id: 'searched-answer',
+        role: 'assistant',
+        created_at: 1,
+        content: {
+          type: 'message',
+          data: 'Hosted web search completed.',
+          ann: [
+            {
+              type: 'url',
+              title: 'HTTP Status Code Registry',
+              url: sourceUrl,
+              content: 'The registry was updated on 2025-09-15.',
+            },
+            {
+              type: 'document',
+              id: 'document-1',
+              title: 'HTTP Specification',
+              filename: 'http.pdf',
+              mediaType: 'application/pdf',
+              content: 'The specification defines HTTP semantics.',
+            },
+          ],
+        },
+      }),
+    ],
+    undefined,
+    false,
+    true,
+    {},
+  )
+
+  assert(messages[0]?.role === 'assistant', 'Expected assistant search context')
+  assert(
+    typeof messages[0]?.content === 'string' && messages[0].content.includes(sourceUrl),
+    'Expected the following completion to see the hosted-search source URL',
+  )
+  assert(
+    typeof messages[0]?.content === 'string' &&
+      messages[0].content.includes('The registry was updated on 2025-09-15.'),
+    'Expected the following completion to see the URL source excerpt',
+  )
+  assert(
+    typeof messages[0]?.content === 'string' &&
+      messages[0].content.includes('HTTP Specification') &&
+      messages[0].content.includes('http.pdf') &&
+      messages[0].content.includes('application/pdf') &&
+      messages[0].content.includes('The specification defines HTTP semantics.'),
+    'Expected the following completion to see document source details',
+  )
+
+  return { success: true }
+}
+
 export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () => {
   let validationError:
     | (Error & {
@@ -841,6 +1357,45 @@ export const testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema = () =>
       Array.isArray(validationError.receivedArguments.tasks) &&
       validationError.receivedArguments.tasks[1] === 'parallel=false] }',
     'Expected structured validation details to retain the received arguments',
+  )
+
+  return { success: true }
+}
+
+export const testChatCompletionIgnoresBlankProviderArgumentKeys = () => {
+  const outcome = interpretAssistantMessage(
+    [],
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: 'blank-argument-key',
+          toolName: 'clock',
+          input: { value: 'ok', '': 'provider artifact' },
+        },
+      ],
+    },
+    true,
+    {
+      clock: {
+        name: 'clock',
+        description: 'Read the clock.',
+        parameters: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          additionalProperties: false,
+        },
+      },
+    },
+    createTaskVariablePresentationService(),
+  )
+
+  assert(outcome.kind === 'tool-calls', 'Expected the valid tool call to continue')
+  assert(outcome.calls.length === 1, 'Expected one normalized tool call')
+  assert(
+    JSON.stringify(outcome.calls[0]?.arguments) === JSON.stringify({ value: 'ok' }),
+    'Expected blank provider argument keys to be removed before schema validation',
   )
 
   return { success: true }
@@ -975,6 +1530,52 @@ export const testChatCompletionOpenRouterWebSearchIsAProviderTool = async () => 
   )
   assert(webSearchTool.id === 'openrouter.web_search', 'Expected the OpenRouter web search tool id')
   assert(request.toolChoice === undefined, 'Expected automatic tool choice for OpenRouter search')
+  return { success: true }
+}
+
+export const testChatCompletionOpenRouterDisablesParallelToolCalls = async () => {
+  const originalFetch = globalThis.fetch
+  let requestBody: Record<string, unknown> | undefined
+  globalThis.fetch = (_input, init) => {
+    if (typeof init?.body !== 'string') throw new Error('Expected a JSON request body.')
+    requestBody = JSON.parse(init.body) as Record<string, unknown>
+    return Promise.resolve(
+      new Response(
+        'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    )
+  }
+
+  try {
+    const request = await buildChatProviderRequest({
+      messages: [{ role: 'user', content: 'Use the available tool once.' }],
+      tools: {
+        clock: {
+          description: 'Read the clock.',
+          inputSchema: jsonSchema({ type: 'object', properties: {} }),
+        },
+      },
+      selectedModel: 'openai/gpt-5-nano',
+      api: {
+        provider: 'taskyon',
+        name: 'taskyon',
+        model: 'openai/gpt-5-nano',
+        baseURL: 'https://provider.example',
+        streamSupport: true,
+        routes: { chatCompletion: '/v1/', models: '/v1/models' },
+      },
+      apiKey: 'diagnostic-key',
+    })
+    await streamText(request).text
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert(
+    requestBody?.parallel_tool_calls === false,
+    'Expected the Taskyon OpenRouter adapter to disable parallel tool calls',
+  )
   return { success: true }
 }
 
@@ -1575,8 +2176,20 @@ testChatCompletionContextVariableNamesAreInvocationScoped.description =
   'Independent chatCompletion invocations derive deterministic variable names without sharing mutable presentation state.'
 testChatCompletionMixedTextAndNativeToolCallContinuesWithTool.description =
   'A provider response containing both text and a native tool call continues with the tool instead of returning prematurely.'
+testChatCompletionPreservesSearchSourcesWithNativeToolCall.description =
+  'A provider response containing hosted-search sources and only a native tool call keeps the search observation for the continuation.'
+testChatCompletionPreservesSourcesWithoutTextOrToolCalls.description =
+  'A provider response containing only sources remains visible as an empty source-bearing assistant answer.'
+testChatCompletionConvertsDocumentSourcesWithoutDroppingDetails.description =
+  'Provider document sources retain their title, filename, media type, and source identifier.'
+testChatCompletionPreservesSourceLessSearchWithNativeToolCall.description =
+  'A provider search reported only by stream metadata remains visible before a native tool continuation.'
+testChatCompletionRendersAssistantSourcesInFollowingContext.description =
+  'Assistant source annotations remain visible to the following model completion.'
 testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema.description =
   'Provider-native tool calls are rejected before execution when their arguments violate the declared tool schema.'
+testChatCompletionIgnoresBlankProviderArgumentKeys.description =
+  'Provider-native tool calls ignore an empty argument key emitted as a malformed provider artifact.'
 testChatCompletionAcceptsDeclaredTaskyonUseMapping.description =
   'Provider-native tool calls accept the Taskyon $use extension declared in their LLM-facing schema.'
 testChatCompletionOpenAIWebSearchIsAvailableWithoutBeingForced.description =
@@ -1585,6 +2198,8 @@ testChatCompletionOpenAIWebSearchCanBeRequired.description =
   'Direct OpenAI requests can explicitly require the native web-search tool for a search action.'
 testChatCompletionOpenRouterWebSearchIsAProviderTool.description =
   'OpenRouter requests expose its model-controlled server web-search tool beside ordinary tools.'
+testChatCompletionOpenRouterDisablesParallelToolCalls.description =
+  'Taskyon OpenRouter requests serialize at most one tool call per model response.'
 testChatCompletionCodexRequestMovesLeadingSystemPromptToInstructions.description =
   'Codex provider requests move the leading system prompt into provider instructions without making a network request.'
 testChatCompletionCacheKeyAndBreakpointsFollowTaskTree.description =

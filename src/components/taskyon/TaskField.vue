@@ -241,6 +241,7 @@ const props = defineProps<{
   icon?: string | undefined
   iconColor?: string | undefined
   short?: boolean | undefined
+  initiallyExpanded?: boolean | undefined
   showMeta: boolean | undefined
   messageDebug: boolean
   rawConversationText?: string | undefined
@@ -268,7 +269,7 @@ const messageDebug = computed(() => props.messageDebug)
 
 const tystate = useTaskyonStore()
 
-const expandMessageContent = ref<boolean>(false)
+const expandMessageContent = ref(props.initiallyExpanded ?? false)
 const router = useRouter()
 
 //const tmButton = useTemplateRef('tmButton')

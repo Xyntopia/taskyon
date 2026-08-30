@@ -18,7 +18,7 @@ import {
 } from '../testSupport/onlineProviderSupport'
 import { FunctionCall } from '../types/tools'
 import type { ToolBase } from '../types/tools'
-import { humanizeError } from '../utils/error'
+import { formatErrorForModel } from '../utils/error'
 import {
   resolveInitialAgentToolCatalog,
   resolveTaskTreeAgentToolWindow,
@@ -26,7 +26,7 @@ import {
 } from '../tools/toolTools'
 import type { EntryNodePromptTemplates } from '../tools/entryNode'
 
-function assert(condition: unknown, message: string): asserts condition {
+function assert(condition: unknown, message = 'Assertion failed'): asserts condition {
   if (!condition) throw new Error(message)
 }
 
@@ -81,6 +81,12 @@ export const testInitialCatalogIncludesOrdinaryAndRecentDagTools = () => {
       parameters: { type: 'object', properties: {} },
       source: { kind: 'dag-node' as const, nodeName: 'unusedDag', version: 1 },
     },
+    internalContinuation: {
+      name: 'internalContinuation',
+      description: 'Internal workflow continuation.',
+      parameters: { type: 'object', properties: {} },
+      renderOptions: { hideVector: true },
+    },
   }
   const taskChain: TaskNode[] = [
     {
@@ -100,6 +106,10 @@ export const testInitialCatalogIncludesOrdinaryAndRecentDagTools = () => {
     'Expected recent DAG in initial list',
   )
   assert(!catalog.some((tool) => tool.name === 'unusedDag'), 'Expected unused DAG to stay hidden')
+  assert(
+    !catalog.some((tool) => tool.name === 'internalContinuation'),
+    'Expected tools hidden from semantic discovery to stay out of the agent catalog',
+  )
   const restrictedCatalog = resolveInitialAgentToolCatalog(tools, taskChain, new Set(), [
     'unusedDag',
   ])
@@ -137,6 +147,7 @@ export const testAgentToolWindowKeepsPinnedToolsAndFindsUnwindowedTools = () => 
       name: 'hiddenRequiredTool',
       description: 'Perform the capability required by the current task.',
       parameters: { type: 'object', properties: {} },
+      renderOptions: { hideVector: true },
     },
   }
   const window = resolveTaskTreeAgentToolWindow(
@@ -237,141 +248,14 @@ export const testAgentToolCatalogSearchIncludesDagNodes = () => {
 testAgentToolCatalogSearchIncludesDagNodes.description =
   'Searches ordinary tools and DAG-node tools through one concise catalog.'
 
-export const testEntryNodeToolSearchPassesOverviewResultsDirectly = async () => {
+export const testEntryNodeExposesNarrowSelectorBinding = async () => {
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
-  })
-  const taskChain: TaskNode[] = [
-    { id: 'user', role: 'user', content: { type: 'message', data: 'Calculate a deck.' } },
-    {
-      id: 'entry-search',
-      role: 'function',
-      priorID: 'user',
-      content: {
-        type: 'functioncall',
-        data: {
-          name: 'entryNode',
-          arguments: {
-            toolSearchMode: 'overview',
-            toolSearchInput: {
-              'Here are the matching tools': [
-                {
-                  name: 'constructionDecking',
-                  description: 'Calculates deck-board geometry.',
-                },
-              ],
-            },
-          },
-        },
-      },
-    },
-  ]
-  const result = await entryNodeTool.function?.(
-    {
-      toolSearchMode: 'overview',
-      toolSearchInput: {
-        'Here are the matching tools': [
-          {
-            name: 'constructionDecking',
-            description: 'Calculates deck-board geometry.',
-          },
-        ],
-      },
-      prompt_templates: testPromptTemplates,
-    },
-    {
-      getExecutionTaskChain: () => Promise.resolve(taskChain),
-      createSubtasksResult,
-      getSecret: () => Promise.resolve(null),
-      setSecret: () => Promise.resolve(),
-      stopSignal: new AbortController().signal,
-      toolId: 'entry-search-test',
-    },
-  )
-  assert(
-    result && typeof result === 'object' && 'taskChainList' in result,
-    'Expected continuation task',
-  )
-  const call = findFunctionCall(result.taskChainList[0], 'entryNode')
-  assert(
-    Array.isArray(call?.arguments.allowedTools) &&
-      call.arguments.allowedTools.includes('constructionDecking'),
-    'Expected overview search results to pass directly to the next entry node',
-  )
-  return { selected: 'constructionDecking' }
-}
-
-testEntryNodeToolSearchPassesOverviewResultsDirectly.description =
-  'Passes explicit broad tool-overview results directly into the next EntryNode call.'
-
-export const testEntryNodeFocusedToolSearchReturnsImmediateCallableWindow = async () => {
-  const entryNodeTool = createStandardEntryNodeTool({
-    name: 'entryNode',
-    renderOptions: { hideChat: true, hideLlm: true },
-  })
-  const result = await entryNodeTool.function?.(
-    {
-      toolSearchMode: 'focused',
-      toolSearchInput: {
-        'Here are the matching tools': [
-          {
-            name: 'constructionDecking',
-            description: 'Calculates deck-board geometry.',
-          },
-        ],
-      },
-      prompt_templates: testPromptTemplates,
-    },
-    {
-      getExecutionTaskChain: () =>
-        Promise.resolve([
-          { id: 'user', role: 'user', content: { type: 'message', data: 'Calculate a deck.' } },
-          {
-            id: 'entry-search',
-            role: 'function',
-            priorID: 'user',
-            content: {
-              type: 'functioncall',
-              data: { name: 'entryNode', arguments: { toolSearch: { query: 'deck geometry' } } },
-            },
-          },
-        ]),
-      createSubtasksResult,
-      getSecret: () => Promise.resolve(null),
-      setSecret: () => Promise.resolve(),
-      stopSignal: new AbortController().signal,
-      toolId: 'entry-focused-search-test',
-    },
-  )
-  assert(
-    result && typeof result === 'object' && 'taskChainList' in result,
-    'Expected search continuation',
-  )
-  const entryCall = findFunctionCall(result.taskChainList[0], 'entryNode')
-  assert(
-    Array.isArray(entryCall?.arguments.allowedTools) &&
-      entryCall.arguments.allowedTools.includes('constructionDecking'),
-    'Expected focused search to pass its result directly to the next entry node',
-  )
-  assert(
-    !findFunctionCall(result.taskChainList[0], 'chatCompletion'),
-    'Expected focused search not to create a separate routing completion',
-  )
-  return { selected: entryCall?.arguments.allowedTools }
-}
-
-testEntryNodeFocusedToolSearchReturnsImmediateCallableWindow.description =
-  'Passes focused full-catalog search results directly into the immediately following entry-node callable window.'
-
-export const testEntryNodeSearchRunsAsVisibleTaskTreeContinuation = async () => {
-  const entryNodeTool = createStandardEntryNodeTool({
-    name: 'entryNode',
-    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: [],
   })
   const entryResult = await entryNodeTool.function?.(
     {
-      toolSearch: { query: 'deck geometry', limit: 3 },
       prompt_templates: testPromptTemplates,
     },
     {
@@ -384,7 +268,7 @@ export const testEntryNodeSearchRunsAsVisibleTaskTreeContinuation = async () => 
             priorID: 'user',
             content: {
               type: 'functioncall',
-              data: { name: 'entryNode', arguments: { toolSearch: { query: 'deck geometry' } } },
+              data: { name: 'entryNode', arguments: {} },
             },
           },
         ]),
@@ -399,39 +283,272 @@ export const testEntryNodeSearchRunsAsVisibleTaskTreeContinuation = async () => 
     entryResult && typeof entryResult === 'object' && 'taskChainList' in entryResult,
     'Expected the EntryNode search chain result',
   )
-  const definition = entryResult.taskChainList[0]?.find(
-    (task) => task.content.type === 'tooldefinition',
-  )
-  assert(definition, 'Expected EntryNode to emit a task-tree search binding definition')
+  const continuation = entryResult.taskChainList[0]
+  const definitions = continuation?.filter((task) => task.content.type === 'tooldefinition') ?? []
+  const definition = definitions[0]
+  assert(definitions.length === 1, 'Expected one scoped model-facing selector definition')
   assert(
-    definition.content.type === 'tooldefinition' &&
+    definition?.content.type === 'tooldefinition' &&
+      definition.content.data.name === 'selectTaskyonTools' &&
       'implementation' in definition.content.data &&
       definition.content.data.implementation.type === 'binding' &&
-      definition.content.data.implementation.target === 'toolSearcher',
-    'Expected the EntryNode search binding to delegate to regular toolSearcher',
+      definition.content.data.implementation.target === 'entryNode' &&
+      definition.content.data.implementation.fixedArguments.requireToolCall === true &&
+      Object.keys(definition.content.data.implementation.publicArguments).sort().join(',') ===
+        'toolSearch',
+    'Expected one narrow selector binding to EntryNode without copied settings',
   )
-  const searchCall = findFunctionCall(entryResult.taskChainList[0], 'entryNodeToolSearch')
-  assert(searchCall, 'Expected EntryNode to emit the scoped search binding call')
+  const chatCall = findFunctionCall(continuation, 'chatCompletion')
   assert(
-    searchCall.arguments.query === 'deck geometry' && searchCall.arguments.limit === 3,
-    'Expected the scoped binding call to carry the model search request',
+    Array.isArray(chatCall?.arguments.allowedTools) &&
+      chatCall.arguments.allowedTools.length === 1 &&
+      chatCall.arguments.allowedTools[0] === 'selectTaskyonTools',
+    'Expected the model to receive only the dedicated searcher when no default tools match',
   )
-  const continuationEntryCall = findFunctionCall(entryResult.taskChainList[0], 'entryNode')
+  return { selector: definition.content.data.name }
+}
+
+testEntryNodeExposesNarrowSelectorBinding.description =
+  'Exposes a narrow model-facing selector binding while EntryNode retains catalog-search ownership.'
+
+export const testEntryNodeReusesCurrentTurnSelectorBinding = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: ['bash'],
+  })
+  const result = await entryNodeTool.function?.(
+    { prompt_templates: testPromptTemplates },
+    {
+      getExecutionTaskChain: () =>
+        Promise.resolve([
+          { id: 'user', role: 'user', content: { type: 'message', data: 'Continue.' } },
+          {
+            id: 'selector-definition',
+            role: 'system',
+            priorID: 'user',
+            content: {
+              type: 'tooldefinition',
+              data: {
+                name: 'selectTaskyonTools',
+                description: 'Search tools.',
+                implementation: {
+                  type: 'binding',
+                  target: 'entryNode',
+                  fixedArguments: { requireToolCall: true },
+                  publicArguments: { toolSearch: {} },
+                },
+              },
+            },
+          },
+          {
+            id: 'entry',
+            role: 'function',
+            priorID: 'selector-definition',
+            content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+          },
+        ]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-reuse-tool-searcher-test',
+    },
+  )
+  assert(result && typeof result === 'object' && 'taskChainList' in result)
   assert(
-    continuationEntryCall?.arguments.$use &&
-      typeof continuationEntryCall.arguments.$use === 'object' &&
-      (continuationEntryCall.arguments.$use as Record<string, unknown>).toolSearchInput ===
-        '$previousResult',
-    'Expected the follow-up EntryNode to consume the preceding terminal search result generically',
+    !result.taskChainList[0]?.some((task) => task.content.type === 'tooldefinition'),
+    'Expected EntryNode to reuse the current-turn selector definition',
   )
-  return {
-    searchTool: searchCall.name,
-    continuationTool: continuationEntryCall?.name,
+  assert(
+    findFunctionCall(result.taskChainList[0], 'chatCompletion'),
+    'Expected the completion to keep using the scoped selector from lineage',
+  )
+}
+
+testEntryNodeReusesCurrentTurnSelectorBinding.description =
+  'Avoids repeating the narrow selector definition within one user-turn lineage.'
+
+export const testEntryNodeSearchesThroughNarrowInternalBinding = async () => {
+  for (const mode of ['focused', 'overview'] as const) {
+    const entryNodeTool = createStandardEntryNodeTool({
+      name: 'entryNode',
+      renderOptions: { hideChat: true, hideLlm: true },
+      defaultAllowedTools: ['bash'],
+    })
+    const result = await entryNodeTool.function?.(
+      {
+        toolSearch: { query: 'deck geometry', limit: 3, mode },
+        prompt_templates: testPromptTemplates,
+      },
+      {
+        getExecutionTaskChain: () =>
+          Promise.resolve([
+            { id: 'user', role: 'user', content: { type: 'message', data: 'Calculate a deck.' } },
+            {
+              id: 'entry-search',
+              role: 'function',
+              priorID: 'user',
+              content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+            },
+          ]),
+        createSubtasksResult,
+        getSecret: () => Promise.resolve(null),
+        setSecret: () => Promise.resolve(),
+        stopSignal: new AbortController().signal,
+        toolId: 'entry-internal-search-binding-test',
+      },
+    )
+    assert(result && typeof result === 'object' && 'taskChainList' in result)
+    const tasks = result.taskChainList[0] ?? []
+    const definition = tasks.find((task) => task.content.type === 'tooldefinition')
+    assert(
+      definition?.content.type === 'tooldefinition' &&
+        definition.content.data.name === 'entryNodeToolSearch' &&
+        'implementation' in definition.content.data &&
+        definition.content.data.implementation.type === 'binding' &&
+        definition.content.data.implementation.target === 'toolSearcher' &&
+        definition.content.data.implementation.fixedArguments.analyze === false &&
+        definition.content.data.implementation.fixedArguments.focused === (mode === 'focused') &&
+        Object.keys(definition.content.data.implementation.publicArguments).sort().join(',') ===
+          'limit,query',
+      'Expected a narrow internal binding over the registered catalog searcher',
+    )
+    const searchCall = findFunctionCall(tasks, 'entryNodeToolSearch')
+    assert(searchCall?.arguments.query === 'deck geometry' && searchCall.arguments.limit === 3)
+    const continuation = findFunctionCall(tasks, 'entryNode')
+    assert(
+      continuation?.arguments.$use &&
+        typeof continuation.arguments.$use === 'object' &&
+        !Array.isArray(continuation.arguments.$use) &&
+        continuation.arguments.$use.toolSearchInput === '$previousResult',
+      'Expected the next EntryNode to consume the internal search result directly',
+    )
   }
 }
 
-testEntryNodeSearchRunsAsVisibleTaskTreeContinuation.description =
-  'Executes EntryNode search as an explicit task-tree tool call and preserves the direct follow-up EntryNode continuation.'
+testEntryNodeSearchesThroughNarrowInternalBinding.description =
+  'Routes model-requested tool search through the hidden EntryNode binding to the catalog searcher.'
+
+export const testEntryNodeAddsToolSearchResultsToItsCallableWindow = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: ['bash'],
+  })
+  const taskChain: TaskNode[] = [
+    { id: 'user', role: 'user', content: { type: 'message', data: 'Calculate a deck.' } },
+    {
+      id: 'previous-completion',
+      role: 'function',
+      priorID: 'user',
+      content: {
+        type: 'functioncall',
+        data: { name: 'chatCompletion', arguments: { allowedTools: ['bash'] } },
+      },
+    },
+    {
+      id: 'entry-after-search',
+      role: 'function',
+      priorID: 'previous-completion',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+  ]
+  const result = await entryNodeTool.function?.(
+    {
+      toolSearchInput: {
+        'Here are the matching tools': [
+          { name: 'constructionDecking', description: 'Calculates deck-board geometry.' },
+        ],
+      },
+      prompt_templates: testPromptTemplates,
+    },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-tool-search-result-test',
+    },
+  )
+  assert(result && typeof result === 'object' && 'taskChainList' in result)
+  const entryCall = findFunctionCall(result.taskChainList[0], 'entryNode')
+  assert(
+    Array.isArray(entryCall?.arguments.allowedTools) &&
+      entryCall.arguments.allowedTools.includes('bash') &&
+      entryCall.arguments.allowedTools.includes('constructionDecking'),
+    'Expected EntryNode to add search matches to its existing callable window',
+  )
+  assert(entryCall?.arguments.requireToolCall === true, 'Expected focused search to continue')
+  assert(
+    !findFunctionCall(result.taskChainList[0], 'chatCompletion'),
+    'Expected EntryNode to re-enter with the expanded list before another completion',
+  )
+  return { allowedTools: entryCall?.arguments.allowedTools }
+}
+
+testEntryNodeAddsToolSearchResultsToItsCallableWindow.description =
+  'Adds internal catalog-search results to the next EntryNode callable window.'
+
+export const testEntryNodeFallsBackWhenToolSearchFindsNoMatches = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'user',
+      role: 'user',
+      content: { type: 'message', data: 'Run a capability that is not registered.' },
+    },
+    {
+      id: 'previous-completion',
+      role: 'function',
+      priorID: 'user',
+      content: {
+        type: 'functioncall',
+        data: { name: 'chatCompletion', arguments: { allowedTools: ['selectTaskyonTools'] } },
+      },
+    },
+    {
+      id: 'entry-after-search',
+      role: 'function',
+      priorID: 'previous-completion',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+  ]
+  const result = await entryNodeTool.function?.(
+    {
+      toolSearchInput: { 'Here are the matching tools': [] },
+      prompt_templates: testPromptTemplates,
+    },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-empty-search-test',
+    },
+  )
+  assert(result && typeof result === 'object' && 'taskChainList' in result)
+  const continuation = findFunctionCall(result.taskChainList[0], 'entryNode')
+  assert(
+    Array.isArray(continuation?.arguments.allowedTools) &&
+      continuation.arguments.allowedTools.length === 0,
+    'Expected an empty search result to remove the internal selector from the next tool window',
+  )
+  assert(
+    continuation?.arguments.toolSearchEnabled === false &&
+      continuation.arguments.requireToolCall === undefined,
+    'Expected an empty search result to fall back to a normal answer instead of requiring another tool',
+  )
+  return { fallback: 'normal-answer' }
+}
+
+testEntryNodeFallsBackWhenToolSearchFindsNoMatches.description =
+  'Falls back to a normal answer when focused tool search finds no matching tools.'
 
 export const testAgentToolCatalogSearchUsesDocumentationAndSchema = () => {
   const tools: Record<string, ToolBase> = {
@@ -521,23 +638,12 @@ export const testEntryNodeToolSearchEscapesPreviousToolWindow = async () => {
       id: 'entry-search',
       role: 'function',
       priorID: 'previous-completion',
-      content: {
-        type: 'functioncall',
-        data: {
-          name: 'entryNode',
-          arguments: {
-            toolSearch: { query: 'list files in the workspace', limit: 5 },
-          },
-        },
-      },
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
     },
   ]
   const result = await entryNodeTool.function?.(
     {
-      toolSearchMode: 'focused',
-      toolSearchInput: {
-        'Here are the matching tools': [catalog.exploration],
-      },
+      toolSearchInput: { 'Here are the matching tools': [catalog.exploration] },
       prompt_templates: testPromptTemplates,
     },
     {
@@ -565,6 +671,58 @@ export const testEntryNodeToolSearchEscapesPreviousToolWindow = async () => {
 
 testEntryNodeToolSearchEscapesPreviousToolWindow.description =
   'Allows an entry-node catalog search to find a required tool that was absent from the previous callable window.'
+
+export const testEntryNodePreservesWorkspaceReadTool = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    getToolCatalog: () =>
+      Promise.resolve([
+        { name: 'storage', description: 'Persistent file storage.' },
+        { name: 'read', description: 'Read a workspace file.' },
+      ]),
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'storage-user',
+      role: 'user',
+      content: { type: 'message', data: 'Download a PDF into storage.' },
+    },
+    {
+      id: 'storage-entry',
+      role: 'function',
+      priorID: 'storage-user',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+  ]
+  const result = await entryNodeTool.function?.(
+    {
+      allowedTools: ['storage', 'read'],
+      prompt_templates: testPromptTemplates,
+    },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-storage-action-alias-test',
+    },
+  )
+  assert(result && typeof result === 'object' && 'taskChainList' in result)
+  const completion = findFunctionCall(result.taskChainList[0], 'chatCompletion')
+  assert(
+    completion &&
+      Array.isArray(completion.arguments.allowedTools) &&
+      completion.arguments.allowedTools.includes('storage') &&
+      completion.arguments.allowedTools.includes('read'),
+    'Expected the workspace read tool to remain distinct from storage',
+  )
+  return { success: true }
+}
+
+testEntryNodePreservesWorkspaceReadTool.description =
+  'Keeps actual tool names intact instead of interpreting them as storage actions.'
 
 export const testEntryNodeCarriesSelectedSearchToolIntoLaterUsageWindow = async () => {
   const catalog: Record<string, ToolBase> = {
@@ -631,7 +789,10 @@ export const testEntryNodeCarriesSelectedSearchToolIntoLaterUsageWindow = async 
       parentID: 'selector-completion',
       content: {
         type: 'functioncall',
-        data: { name: 'selectTaskyonTools', arguments: { allowedTools: ['exploration'] } },
+        data: {
+          name: 'selectTaskyonTools',
+          arguments: { toolSearch: { query: 'workspace exploration' } },
+        },
       },
     },
     {
@@ -640,12 +801,19 @@ export const testEntryNodeCarriesSelectedSearchToolIntoLaterUsageWindow = async 
       priorID: 'selector-call',
       content: {
         type: 'functioncall',
-        data: { name: 'entryNode', arguments: { allowedTools: ['exploration'] } },
+        data: {
+          name: 'entryNode',
+          arguments: { allowedTools: ['exploration'], requireToolCall: true },
+        },
       },
     },
   ]
   const selectedResult = await entryNodeTool.function?.(
-    { allowedTools: ['exploration'], prompt_templates: testPromptTemplates },
+    {
+      allowedTools: ['exploration'],
+      requireToolCall: true,
+      prompt_templates: testPromptTemplates,
+    },
     {
       getExecutionTaskChain: () => Promise.resolve(selectedTaskChain),
       createSubtasksResult,
@@ -668,6 +836,13 @@ export const testEntryNodeCarriesSelectedSearchToolIntoLaterUsageWindow = async 
     Array.isArray(selectedArguments.allowedTools) &&
       selectedArguments.allowedTools.includes('exploration'),
     'Expected the selected search result in the executor allowedTools list',
+  )
+  assert(
+    typeof selectedArguments.toolChoice === 'object' &&
+      selectedArguments.toolChoice !== null &&
+      !Array.isArray(selectedArguments.toolChoice) &&
+      selectedArguments.toolChoice.type === 'required',
+    'Expected the model to choose a callable tool after requesting a focused catalog search',
   )
 
   const subsequentTaskChain: TaskNode[] = [
@@ -745,6 +920,75 @@ export const testEntryNodeCarriesSelectedSearchToolIntoLaterUsageWindow = async 
 
 testEntryNodeCarriesSelectedSearchToolIntoLaterUsageWindow.description =
   'Carries a selected search result into executor tools and derives later entry-node windows from recent and frequent calls.'
+
+export const testEntryNodeDoesNotAutoPlanNestedResearchTask = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    defaultAllowedTools: ['bash'],
+    getToolCatalog: ({ allowedTools }) =>
+      Promise.resolve(
+        allowedTools?.includes('webResearchPlanner')
+          ? [{ name: 'webResearchPlanner', description: 'Run a research workflow.' }]
+          : [{ name: 'bash', description: 'Run a shell command.' }],
+      ),
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'root-research-request',
+      role: 'user',
+      content: { type: 'message', data: 'Research the requested document.' },
+    },
+    {
+      id: 'research-planner',
+      role: 'function',
+      priorID: 'root-research-request',
+      content: {
+        type: 'functioncall',
+        data: { name: 'webResearchPlanner', arguments: { objective: 'Research the document.' } },
+      },
+    },
+    {
+      id: 'nested-research-task',
+      role: 'user',
+      parentID: 'research-planner',
+      priorID: 'research-planner',
+      content: {
+        type: 'message',
+        data: 'Research objective: download and verify the official document.',
+      },
+    },
+    {
+      id: 'nested-research-entry',
+      role: 'function',
+      parentID: 'research-planner',
+      priorID: 'nested-research-task',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+  ]
+  const result = await entryNodeTool.function?.(
+    { prompt_templates: testPromptTemplates },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-nested-research-test',
+    },
+  )
+  assert(result && typeof result === 'object' && 'taskChainList' in result)
+  const chatArguments = findFunctionCall(result.taskChainList[0], 'chatCompletion')?.arguments
+  assert(chatArguments && typeof chatArguments === 'object', 'Expected nested task chat arguments')
+  assert(
+    !('toolChoice' in chatArguments),
+    'Expected nested research tasks to use their assigned tools without auto-planning again',
+  )
+  return { success: true }
+}
+
+testEntryNodeDoesNotAutoPlanNestedResearchTask.description =
+  'Keeps delegated research continuations from recursively forcing the top-level research planner.'
 
 export const testEntryNodePromptTemplatesSelectTheCurrentMode = () => {
   const templates = {
@@ -911,10 +1155,11 @@ export const testEntryNodePropagatesTaskContractWithoutPromptDuplication = async
   )
   const scopedDefinition = continuation?.find((task) => task.content.type === 'tooldefinition')
   assert(
-      continuation?.length === 2 &&
+    continuation?.length === 2 &&
       scopedDefinition?.content.type === 'tooldefinition' &&
       'implementation' in scopedDefinition.content.data &&
       scopedDefinition.content.data.implementation.target === 'entryNode' &&
+      scopedDefinition.content.data.implementation.fixedArguments.requireToolCall === true &&
       chatArguments &&
       typeof chatArguments === 'object' &&
       Array.isArray(chatArguments.allowedTools) &&
@@ -923,7 +1168,7 @@ export const testEntryNodePropagatesTaskContractWithoutPromptDuplication = async
       !('toolChoice' in chatArguments) &&
       !('schema' in chatArguments) &&
       !('resultMode' in chatArguments),
-    'Expected native tool calling with the task contract carried separately',
+    'Expected native tool calling with settings inherited from lineage instead of copied into the selector definition',
   )
 
   return { success: true }
@@ -1071,7 +1316,6 @@ export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
       ),
     'Expected direct chatCompletion to expose the configured callable window and optional search tool',
   )
-
   const noToolsResult = await entryNodeTool.function?.(
     { allowedTools: [], prompt_templates: testPromptTemplates },
     context,
@@ -1089,8 +1333,9 @@ export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
       typeof noToolsArguments === 'object' &&
       Array.isArray(noToolsArguments.allowedTools) &&
       noToolsArguments.allowedTools.length === 1 &&
-      noToolsArguments.allowedTools[0] === 'selectTaskyonTools',
-    'Expected an explicit empty allowedTools override to expose only focused tool search',
+      noToolsArguments.allowedTools[0] === 'selectTaskyonTools' &&
+      !('toolChoice' in noToolsArguments),
+    'Expected an empty callable window to expose optional focused tool search without forcing it',
   )
 
   const bashOnlyResult = await entryNodeTool.function?.(
@@ -1164,6 +1409,216 @@ export const testEntryNodeHonorsExplicitAllowedToolRestrictions = async () => {
     'Expected a previously selected tool to remain available without forcing it again after its result',
   )
 
+  return { success: true }
+}
+
+export const testEntryNodeLetsTheModelChooseResearchTools = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    getToolCatalog: ({ allowedTools, pinnedToolNames }) =>
+      Promise.resolve(
+        allowedTools?.includes('webResearchPlanner')
+          ? [{ name: 'webResearchPlanner', description: 'Run a verified research workflow.' }]
+          : [
+              { name: 'bash', description: 'Run a shell command.' },
+              ...(pinnedToolNames.includes('askClarifyingQuestions')
+                ? [{ name: 'askClarifyingQuestions', description: 'Ask the user.' }]
+                : []),
+            ],
+      ),
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'research-message',
+      role: 'user',
+      content: {
+        type: 'message',
+        data: 'Use web search to find, download, inspect, verify, and save the official PDF.',
+      },
+    },
+    {
+      id: 'research-entry',
+      role: 'function',
+      priorID: 'research-message',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+  ]
+  const context = {
+    getExecutionTaskChain: () => Promise.resolve(taskChain),
+    createSubtasksResult,
+    getSecret: () => Promise.resolve(null),
+    setSecret: () => Promise.resolve(),
+    stopSignal: new AbortController().signal,
+    toolId: 'entry-node-research-routing-test',
+  }
+
+  const initialResult = await entryNodeTool.function?.(
+    {
+      allowedTools: ['bash'],
+      websearch: { enabled: true, mode: 'required' },
+      prompt_templates: testPromptTemplates,
+    },
+    context,
+  )
+  assert(initialResult && typeof initialResult === 'object' && 'taskChainList' in initialResult)
+  const initialChatArguments = findFunctionCall(
+    initialResult.taskChainList[0],
+    'chatCompletion',
+  )?.arguments
+  assert(
+    initialChatArguments &&
+      typeof initialChatArguments === 'object' &&
+      !('toolChoice' in initialChatArguments),
+    'Expected research requests to leave the tool decision to the active model',
+  )
+  assert(
+    'websearch' in initialChatArguments,
+    'Expected normal EntryNode routing to preserve configured provider-native search',
+  )
+  assert(
+    Array.isArray(initialChatArguments.allowedTools) &&
+      initialChatArguments.allowedTools.includes('bash') &&
+      !initialChatArguments.allowedTools.includes('selectTaskyonTools') &&
+      !initialChatArguments.allowedTools.includes('webResearchPlanner'),
+    'Expected required provider search to use the focused callable window without Taskyon tool search',
+  )
+  const automaticResult = await entryNodeTool.function?.(
+    {
+      websearch: { enabled: true, mode: 'auto' },
+      pinnedTools: ['askClarifyingQuestions'],
+      prompt_templates: testPromptTemplates,
+    },
+    context,
+  )
+  assert(
+    automaticResult && typeof automaticResult === 'object' && 'taskChainList' in automaticResult,
+  )
+  const automaticArguments = findFunctionCall(
+    automaticResult.taskChainList[0],
+    'chatCompletion',
+  )?.arguments
+  assert(
+    automaticArguments &&
+      Array.isArray(automaticArguments.allowedTools) &&
+      automaticArguments.allowedTools.includes('askClarifyingQuestions') &&
+      automaticArguments.allowedTools.includes('selectTaskyonTools') &&
+      !('toolChoice' in automaticArguments),
+    'Expected automatic provider search to retain the pinned callable window and optional catalog search',
+  )
+  return { success: true }
+}
+
+export const testEntryNodeDeduplicatesPinnedTools = async () => {
+  let observedPinnedTools: readonly string[] = []
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    getToolCatalog: ({ pinnedToolNames }) => {
+      observedPinnedTools = pinnedToolNames
+      return Promise.resolve([{ name: 'bash', description: 'Run a shell command.' }])
+    },
+  })
+  await entryNodeTool.function?.(
+    {
+      pinnedTools: ['read', 'write', 'read', 'write'],
+      prompt_templates: testPromptTemplates,
+    },
+    {
+      getExecutionTaskChain: () =>
+        Promise.resolve([
+          { id: 'dedupe-user', role: 'user', content: { type: 'message', data: 'Continue.' } },
+          {
+            id: 'dedupe-entry',
+            role: 'function',
+            priorID: 'dedupe-user',
+            content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+          },
+        ]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-pinned-tool-dedupe-test',
+    },
+  )
+  assert(
+    JSON.stringify(observedPinnedTools) === JSON.stringify(['read', 'write']),
+    `Expected unique pinned tools, got ${JSON.stringify(observedPinnedTools)}`,
+  )
+  return { success: true }
+}
+
+export const testEntryNodeDoesNotLeakAllowedToolsIntoRecovery = async () => {
+  const entryNodeTool = createStandardEntryNodeTool({
+    name: 'entryNode',
+    renderOptions: { hideChat: true, hideLlm: true },
+    getToolCatalog: ({ allowedTools }) =>
+      Promise.resolve(
+        allowedTools?.includes('storage')
+          ? [{ name: 'storage', description: 'Download and read stored files.' }]
+          : [],
+      ),
+  })
+  const taskChain: TaskNode[] = [
+    {
+      id: 'recovery-user',
+      role: 'user',
+      content: { type: 'message', data: 'Continue the requested download.' },
+    },
+    {
+      id: 'stale-entry',
+      role: 'function',
+      priorID: 'recovery-user',
+      content: {
+        type: 'functioncall',
+        data: { name: 'entryNode', arguments: { allowedTools: ['staleTool'] } },
+      },
+    },
+    {
+      id: 'failed-completion',
+      role: 'function',
+      parentID: 'stale-entry',
+      content: {
+        type: 'functioncall',
+        data: { name: 'chatCompletion', arguments: { allowedTools: ['storage'] } },
+      },
+    },
+    {
+      id: 'recovery-error',
+      role: 'system',
+      parentID: 'failed-completion',
+      content: { type: 'error', data: { message: 'temporary failure' } },
+    },
+    {
+      id: 'recovery-entry',
+      role: 'function',
+      priorID: 'recovery-error',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+  ]
+
+  const result = await entryNodeTool.function?.(
+    { prompt_templates: testPromptTemplates },
+    {
+      getExecutionTaskChain: () => Promise.resolve(taskChain),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'entry-node-recovery-scope-test',
+    },
+  )
+  assert(result && typeof result === 'object' && 'taskChainList' in result)
+  const chatArguments = findFunctionCall(result.taskChainList[0], 'chatCompletion')?.arguments
+  assert(
+    chatArguments &&
+      typeof chatArguments === 'object' &&
+      Array.isArray(chatArguments.allowedTools) &&
+      chatArguments.allowedTools.includes('storage') &&
+      !chatArguments.allowedTools.includes('staleTool'),
+    'Expected recovery to use the failed completion scope instead of a stale entry-node scope',
+  )
   return { success: true }
 }
 
@@ -1289,7 +1744,7 @@ export const testEntryNodeSeparatesStructuredContractsFromNativeToolCalls = asyn
   const scopedDefinition = continuation?.find((task) => task.content.type === 'tooldefinition')
   const chatArguments = findFunctionCall(continuation, 'chatCompletion')?.arguments
   assert(
-      scopedDefinition?.content.type === 'tooldefinition' &&
+    scopedDefinition?.content.type === 'tooldefinition' &&
       'implementation' in scopedDefinition.content.data &&
       scopedDefinition.content.data.implementation.target === 'entryNode' &&
       chatArguments &&
@@ -1662,7 +2117,7 @@ export const testEntryNodeRecoversFromMalformedPythonToolCall = async (
     })
     const errorTasks = finish.tasks.filter((task) => task.content.type === 'error')
     const invalidArgumentsError = errorTasks.find((task) => {
-      const message = humanizeError(task.content.data)
+      const message = formatErrorForModel(task.content.data)
       return (
         message.includes('Invalid arguments for tool "executePythonScript"') &&
         message.includes("required property 'code'")

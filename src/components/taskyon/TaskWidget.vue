@@ -1,5 +1,5 @@
 <template>
-  <div class="task-container">
+  <div v-if="!isRenderedFileResult" class="task-container" :data-task-id="task.id">
     <!--Task-->
     <TaskField
       v-if="task.content.type === 'files'"
@@ -31,6 +31,67 @@
       @update:message-debug="onUpdateMessageDebug"
     >
       <TaskContentView :task="task" />
+    </TaskField>
+    <TaskField
+      v-else-if="storagePresentation"
+      :task="task"
+      :show-meta="showMeta"
+      :message-debug="resolvedMessageDebug"
+      :raw-conversation-text="rawConversationText"
+      short
+      initially-expanded
+      @update:message-debug="onUpdateMessageDebug"
+    >
+      <template #header>
+        <div class="row no-wrap q-gutter-sm items-center">
+          <q-spinner-orbit v-if="storagePresentation.status === 'running'" size="1.5em" />
+          <q-icon v-else :name="mdiFileDocument" size="1.5em" />
+          <span>{{ storageActionLabel }}</span>
+        </div>
+      </template>
+      <div class="storage-operation column q-gutter-xs">
+        <a
+          v-if="storagePresentation.sourceUrl"
+          :href="storagePresentation.sourceUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="ellipsis"
+        >
+          {{ storagePresentation.sourceUrl }}
+        </a>
+        <code v-if="storagePresentation.location" class="storage-operation__location">
+          {{ storagePresentation.location.namespace }}/{{ storagePresentation.location.id }}
+        </code>
+        <div v-if="storageMetadataLabel" class="text-caption text-grey-7">
+          {{ storageMetadataLabel }}
+        </div>
+        <div v-if="storagePresentation.status === 'failed'" class="text-caption text-negative">
+          {{ storageActionLabel }} failed. The source link remains available as a manual fallback.
+        </div>
+        <div class="row q-gutter-sm">
+          <q-btn
+            data-cy="download-storage-object"
+            dense
+            no-caps
+            color="primary"
+            :label="storageDownloadLabel"
+            :icon="matDownload"
+            :disable="!storagePresentation.downloadEnabled"
+            @click="downloadStorageObject"
+          />
+          <q-btn
+            data-cy="view-storage-object"
+            dense
+            no-caps
+            outline
+            color="primary"
+            :label="storageViewLabel"
+            :icon="matFolderOpen"
+            :disable="!storagePresentation.viewEnabled"
+            @click="viewStorageObject"
+          />
+        </div>
+      </div>
     </TaskField>
     <TaskField
       v-else-if="task.content.type === 'functioncall'"
@@ -206,6 +267,8 @@ import {
   matBuild,
   matCalculate,
   matClose,
+  matDownload,
+  matFolderOpen,
   matOpenInNew,
   matPause,
   matWarning,
@@ -217,6 +280,7 @@ import { humanizeError, type FileAttachment, type TaskNode } from '@taskyon/task
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, ref, toRefs } from 'vue'
+import { useRouter } from 'vue-router'
 import { createTaskMarkdownExtension } from 'src/modules/taskyon/taskMarkdownExtension'
 import TaskField from './TaskField.vue'
 import {
@@ -225,9 +289,11 @@ import {
   hasRawConversationDebug,
 } from './taskDebugConversation'
 import VariableInspectorDialog from './VariableInspectorDialog.vue'
+import { isFileFunctionCall, resolveStorageToolPresentation } from './storageToolPresentation'
 
 const props = defineProps<{
   task: TaskNode
+  previousTask?: TaskNode | undefined
   nextTask?: TaskNode | undefined
   isWorking?: boolean
   short?: boolean
@@ -239,6 +305,7 @@ const emit = defineEmits<{
 }>()
 
 const tystate = useTaskyonStore()
+const router = useRouter()
 
 const state = useAppStateStore()
 const { task, nextTask, isWorking, short, showMeta } = toRefs(props)
@@ -248,6 +315,40 @@ const sourceTaskForDialog = ref<TaskNode>()
 const variableTaskForDialog = ref<TaskNode>()
 const sourceTaskMessageDebug = ref(false)
 const resolvedMessageDebug = computed(() => props.messageDebug ?? false)
+const storagePresentation = computed(() =>
+  resolveStorageToolPresentation(task.value, nextTask.value),
+)
+const isRenderedFileResult = computed(
+  () => task.value.content.type === 'toolresult' && isFileFunctionCall(props.previousTask),
+)
+const storageActionLabel = computed(() => {
+  const action = storagePresentation.value?.action
+  if (!action) return 'Storage operation'
+  return `${action[0]?.toUpperCase()}${action.slice(1)} file`
+})
+const storageMetadataLabel = computed(() => {
+  const presentation = storagePresentation.value
+  if (!presentation) return ''
+  const size = presentation.size
+  const sizeLabel =
+    size === undefined
+      ? undefined
+      : size >= 1_048_576
+        ? `${(size / 1_048_576).toFixed(2)} MB`
+        : size >= 1024
+          ? `${(size / 1024).toFixed(2)} KB`
+          : `${size} B`
+  return [presentation.contentType, sizeLabel].filter(Boolean).join(' · ')
+})
+const usesSourceFallback = computed(
+  () =>
+    storagePresentation.value?.storedObjectAvailable === false &&
+    storagePresentation.value.sourceUrl !== undefined,
+)
+const storageDownloadLabel = computed(() =>
+  usesSourceFallback.value ? 'Download source' : 'Download',
+)
+const storageViewLabel = computed(() => (usesSourceFallback.value ? 'View source' : 'View'))
 const sourceTaskId = computed(() =>
   task.value.content.type === 'error' ? (task.value.parentID ?? task.value.priorID) : undefined,
 )
@@ -292,7 +393,71 @@ async function getFile(attachment: FileAttachment | string) {
   return await (await tystate.taskyon).getArtifact(attachment)
 }
 
+async function downloadStorageObject() {
+  const presentation = storagePresentation.value
+  const location = presentation?.location
+  if (!presentation) return
+  if (!presentation.storedObjectAvailable && presentation.sourceUrl) {
+    const sourceUrl = new URL(presentation.sourceUrl)
+    const anchor = document.createElement('a')
+    anchor.href = sourceUrl.href
+    anchor.download = location?.id.split('/').at(-1) ?? sourceUrl.pathname.split('/').at(-1) ?? ''
+    anchor.click()
+    return
+  }
+  if (!location) return
+  const file =
+    presentation.storedObjectAvailable && location.kind === 'blob'
+      ? await tystate.storageClient.getBlob(location).then((stored) =>
+          stored
+            ? new File([stored.data], location.id, {
+                type: stored.metadata.contentType ?? 'application/octet-stream',
+              })
+            : undefined,
+        )
+      : presentation.storedObjectAvailable
+        ? await tystate.storageClient.get(location).then((stored) => {
+            const value = stored.value
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+            const content = Reflect.get(value, 'content')
+            return typeof content === 'string'
+              ? new File([content], location.id.split('/').at(-1) ?? location.id, {
+                  type: 'text/plain',
+                })
+              : undefined
+          })
+        : undefined
+  if (!file) return
+  const url = URL.createObjectURL(file)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = file.name
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+async function viewStorageObject() {
+  const presentation = storagePresentation.value
+  const location = presentation?.location
+  if (!presentation) return
+  if (!presentation.storedObjectAvailable && presentation.sourceUrl) {
+    window.open(presentation.sourceUrl, '_blank', 'noopener,noreferrer')
+    return
+  }
+  if (!location) return
+  await router.push({
+    path: '/storage',
+    query: { namespace: location.namespace, kind: location.kind, id: location.id },
+  })
+}
+
 const onIframeMessage = (el: HTMLIFrameElement, id: string) => {
   void tystate.connectMessageIframe(id, el)
 }
 </script>
+
+<style scoped>
+.storage-operation__location {
+  overflow-wrap: anywhere;
+}
+</style>

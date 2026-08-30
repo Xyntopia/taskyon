@@ -1,5 +1,5 @@
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 export type CliStoragePaths = {
   configDir: string
@@ -89,4 +89,17 @@ export function resolveTaskyonCliStoragePaths(): CliStoragePaths {
     authDir: join(home, '.taskyon-cli', 'auth'),
     logDir: process.env.TYCLI_LOG_DIR?.trim() || join(paths.cacheDir, 'logs'),
   }
+}
+
+export function resolveCliInvocationDirectory(
+  environmentPrefix = 'TYCLI',
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  cwd = process.cwd(),
+) {
+  return resolve(
+    configuredPath(environment, `${environmentPrefix}_CWD`) ??
+      configuredPath(environment, 'PROJECT_CWD') ??
+      configuredPath(environment, 'INIT_CWD') ??
+      cwd,
+  )
 }

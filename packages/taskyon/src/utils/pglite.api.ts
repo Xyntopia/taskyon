@@ -102,6 +102,17 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
   }
 }
 
+export const createInMemoryDatabase = async (name: string): Promise<TyPGDB> => {
+  const database: TyPGDB = await PGlite.create({
+    dataDir: 'memory://',
+    extensions: {
+      vector,
+    },
+  })
+  database.name = name
+  return database
+}
+
 export const getInMemoryDatabase = async (name: string): Promise<TyPGDB> => {
   const existingDb = memoryPgInstances.get(name)
   if (existingDb) return existingDb
@@ -109,13 +120,7 @@ export const getInMemoryDatabase = async (name: string): Promise<TyPGDB> => {
   if (pendingDb) return await pendingDb
 
   const creation = (async () => {
-    const database: TyPGDB = await PGlite.create({
-      dataDir: 'memory://',
-      extensions: {
-        vector,
-      },
-    })
-    database.name = name
+    const database = await createInMemoryDatabase(name)
     memoryPgInstances.set(name, database)
     return database
   })()

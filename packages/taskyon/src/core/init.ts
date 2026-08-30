@@ -515,7 +515,10 @@ const dynamicContext =
                   'getExecutionTaskChain is not available for this tool call because no task id was provided.',
                 )
               }
-              return taskManagerInstance.getTaskChain(call.taskId)
+              return taskManagerInstance.getTaskChain(call.taskId, 1e9, {
+                method: 'lineage',
+                includeSubtaskResults: 'terminal-visible',
+              })
             },
             getCallingToolId: async () => {
               if (!call.taskId) return null

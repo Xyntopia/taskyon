@@ -6,6 +6,7 @@ import axios from 'axios'
 import { importSPKI, jwtVerify } from 'jose'
 import type { JsonObject } from 'type-fest'
 import { sleep } from '../utils/asyncUtils'
+import { canUseTauriHttpPlugin, tauriHttpFetch } from '../utils/tauriHttpPlugin'
 export { WsProxyCloseCode, WsProxyCloseError } from '@taskyon/common/modules/wsProxyClose'
 import {
   ServiceTokenPayloadSchema,
@@ -21,6 +22,20 @@ import {
   type ServiceTokenPayload,
 } from './tokenservice.types'
 
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  return JSON.parse(await response.text()) as T
+}
+
+async function readStringResponse(response: Response): Promise<string> {
+  const text = await response.text()
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return typeof parsed === 'string' ? parsed : text
+  } catch {
+    return text
+  }
+}
+
 /**
  * Very simple client-side helper to call the minting service using axios.
  *
@@ -35,6 +50,20 @@ import {
  */
 export async function mintToken(baseUrl: string, authToken: string, cnf?: TokenConfirmation) {
   const url = `${baseUrl}/mint`
+
+  if (canUseTauriHttpPlugin()) {
+    const response = await tauriHttpFetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(cnf ? { cnf } : null),
+    })
+    if (!response.ok) throw new Error(`Token mint failed: ${response.status}`)
+    const data = await readJsonResponse<MintTokenResponse>(response)
+    return data.token
+  }
 
   const response = await axios.post<MintTokenResponse>(url, cnf ? { cnf } : null, {
     headers: {
@@ -52,6 +81,20 @@ export async function mintTokens(
   authToken: string,
   requests: TokenRequestDefinition[],
 ) {
+  if (canUseTauriHttpPlugin()) {
+    const response = await tauriHttpFetch(`${baseUrl}/mint`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requests }),
+    })
+    if (!response.ok) throw new Error(`Token mint failed: ${response.status}`)
+    const data = await readJsonResponse<MintTokensResponse>(response)
+    return data.tokens
+  }
+
   const response = await axios.post<MintTokensResponse>(
     `${baseUrl}/mint`,
     { requests },
@@ -83,6 +126,20 @@ export async function getSettlementConfirmation(
   if (url.protocol === 'wss:') url.protocol = 'https:'
   if (url.protocol === 'ws:') url.protocol = 'http:'
   try {
+    if (canUseTauriHttpPlugin()) {
+      const response = await tauriHttpFetch(url.toString())
+      if (isSettlementConfirmationUnsupported(response.status)) return undefined
+      if (!response.ok) throw new Error(`Settlement confirmation failed: ${response.status}`)
+      const text = await response.text()
+      let data: unknown
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = undefined
+      }
+      return parseSettlementConfirmationResponse(data)
+    }
+
     const response = await axios.get<unknown>(url.toString())
     return parseSettlementConfirmationResponse(response.data)
   } catch (error) {
@@ -155,6 +212,16 @@ export async function returnToken(
     credits_spent_increase,
     reference_data: reference_data,
   }
+  if (canUseTauriHttpPlugin()) {
+    const response = await tauriHttpFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signSettlement ? { settlementJwt: await signSettlement(body) } : body),
+    })
+    if (!response.ok) throw new Error(`Token return failed: ${response.status}`)
+    return await readJsonResponse<ReturnTokenResponse>(response)
+  }
+
   const response = await axios.post<ReturnTokenResponse>(
     url,
     signSettlement ? { settlementJwt: await signSettlement(body) } : body,
@@ -189,6 +256,7 @@ export async function getTaskyonCosts(
   const initialDelayMs = tokenJti ? 6000 : 0
   const maxDelayMs = 30000
   const backoffMultiplier = 1.5
+  const runtimeFetch: typeof fetch = canUseTauriHttpPlugin() ? tauriHttpFetch : fetch
   let delayMs = initialDelayMs
   const attributionHeaders = {
     ...(providerHeaders?.['HTTP-Referer']
@@ -201,7 +269,7 @@ export async function getTaskyonCosts(
       await sleep(delayMs)
     }
 
-    const response = await fetch(url.toString(), {
+    const response = await runtimeFetch(url.toString(), {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
@@ -219,7 +287,7 @@ export async function getTaskyonCosts(
       })
       return undefined
     }
-    const data = await (response.json() as Promise<{ used_credits: number }[]>)
+    const data = await readJsonResponse<{ used_credits: number }[]>(response)
     const cost = data[0]?.used_credits
     if (typeof cost === 'number') return cost
 
@@ -262,7 +330,13 @@ export const getTyJwtPublicKey = async () => {
   console.log('[getTyJwtPublicKey] Fetching public key for JWT verification')
 
   const pkeyUrl = `${TOKEN_SERVICE_BASE_URL}${TOKEN_SERVICE_ROUTES.pkey}`
-  const PROXY_JWT_PUBLIC_KEY = (await axios.get(pkeyUrl)).data ?? process.env
+  const PROXY_JWT_PUBLIC_KEY = canUseTauriHttpPlugin()
+    ? await (async () => {
+        const response = await tauriHttpFetch(pkeyUrl)
+        if (!response.ok) throw new Error(`JWT public key request failed: ${response.status}`)
+        return await readStringResponse(response)
+      })()
+    : ((await axios.get(pkeyUrl)).data ?? process.env)
 
   if (!PROXY_JWT_PUBLIC_KEY) {
     console.error('[attachWsProxy] Missing PROXY_JWT_PUBLIC_KEY env var, WS proxy disabled')

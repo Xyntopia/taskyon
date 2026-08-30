@@ -176,6 +176,21 @@ invariants and current behavior; do not add deployment-specific proposal paths o
   Targeted checks are preferred.
 - Report which checks ran, what did not run, and any environmental limitation.
 
+### Focused browser diagnostics in headless Tauri
+
+The `/diagnostics` tests can run in a headless Tauri webview with the active browser profile,
+standard tool registration, portable user-installed JavaScript tools, and provider session used by
+chat. Start the Quasar dev server, then pass
+`--test-filter=<test name>` to `tauri dev` after its application argument separator. Use
+`--diagnostics-allow-long-run` only for tests marked `requiresLongRun`. The exact command and output
+format are documented in `public/docs/developer/diagnostics.md`. A passing test in a separate
+CLI harness does not prove that browser chat used the same pinned tools or prompt settings.
+
+For the five model-based ideal-workflow diagnostics, normally run the focused CLI group with both
+`gpt-5.6-luna` (`chatgpt-codex`) and `z-ai/glm-5.3-flash` (`taskyon`). The exact commands are in
+`public/docs/developer/diagnostics.md`. Keep browser runs tied to their active profile; do not
+silently switch its provider or credentials.
+
 ## Specialized Policy Routing
 
 Read every additional policy matching the work:

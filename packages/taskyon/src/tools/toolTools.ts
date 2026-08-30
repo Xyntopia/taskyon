@@ -21,13 +21,32 @@ export type AgentToolCatalogEntry = {
   kind: 'tool' | 'dag-node'
 }
 
+const resolveNamedAgentTools = (
+  tools: Readonly<Record<string, ToolBase>>,
+  names: readonly string[],
+  unavailableToolNames: ReadonlySet<string>,
+): AgentToolCatalogEntry[] =>
+  names.flatMap((name) => {
+    const tool = tools[name]
+    if (!tool || INTERNAL_AGENT_TOOL_NAMES.has(name) || unavailableToolNames.has(name)) return []
+    const entry: AgentToolCatalogEntry = {
+      name,
+      description: tool.description,
+      kind: tool.source?.kind ?? 'tool',
+    }
+    return [entry]
+  })
+
 export const resolveAgentToolCatalog = (
   tools: Readonly<Record<string, ToolBase>>,
   unavailableToolNames: ReadonlySet<string> = new Set(),
 ): AgentToolCatalogEntry[] =>
   Object.values(tools)
     .filter(
-      (tool) => !INTERNAL_AGENT_TOOL_NAMES.has(tool.name) && !unavailableToolNames.has(tool.name),
+      (tool) =>
+        !INTERNAL_AGENT_TOOL_NAMES.has(tool.name) &&
+        !unavailableToolNames.has(tool.name) &&
+        tool.renderOptions?.hideVector !== true,
     )
     .map(({ name, description, source }) => ({
       name,
@@ -43,8 +62,12 @@ export const resolveInitialAgentToolCatalog = (
   recentDagLimit = 5,
 ): AgentToolCatalogEntry[] => {
   const catalog = resolveAgentToolCatalog(tools, unavailableToolNames)
-  const byName = new Map(catalog.map((tool) => [tool.name, tool]))
-  const ordinary = catalog.filter((tool) => tool.kind === 'tool')
+  const explicit = resolveNamedAgentTools(tools, allowedToolNames, unavailableToolNames)
+  const byName = new Map([...catalog, ...explicit].map((tool) => [tool.name, tool]))
+  const ordinary = [...catalog, ...explicit].filter(
+    (tool, index, entries) =>
+      tool.kind === 'tool' && entries.findIndex((entry) => entry.name === tool.name) === index,
+  )
   const recentDag: AgentToolCatalogEntry[] = []
   const seen = new Set<string>()
 
@@ -77,7 +100,12 @@ export const resolveTaskTreeAgentToolWindow = (
   pinnedToolNames: readonly string[] = [],
 ): AgentToolCatalogEntry[] => {
   const catalog = resolveAgentToolCatalog(tools, unavailableToolNames)
-  const byName = new Map(catalog.map((tool) => [tool.name, tool]))
+  const explicit = resolveNamedAgentTools(
+    tools,
+    [...pinnedToolNames, ...allowedToolNames],
+    unavailableToolNames,
+  )
+  const byName = new Map([...catalog, ...explicit].map((tool) => [tool.name, tool]))
   const calls = taskChain.flatMap((task) =>
     task.content.type === 'functioncall' ? [task.content.data.name] : [],
   )
@@ -103,17 +131,52 @@ export const resolveTaskTreeAgentToolWindow = (
   return catalog.slice(0, recentLimit + frequentLimit)
 }
 
+export const createTaskTreeAgentToolCatalog =
+  (listTools: () => Promise<Record<string, ToolBase>>, unavailableToolNames: ReadonlySet<string>) =>
+  async ({
+    taskChain,
+    allowedTools,
+    pinnedToolNames,
+    recentToolCount,
+    frequentToolCount,
+  }: {
+    taskChain: readonly TaskNode[]
+    allowedTools: readonly string[] | undefined
+    pinnedToolNames: readonly string[]
+    recentToolCount: number
+    frequentToolCount: number
+  }) => {
+    const tools = await listTools()
+    return {
+      tools: resolveTaskTreeAgentToolWindow(
+        tools,
+        taskChain,
+        unavailableToolNames,
+        recentToolCount,
+        frequentToolCount,
+        allowedTools,
+        pinnedToolNames,
+      ),
+      total: resolveAgentToolCatalog(tools, unavailableToolNames).length,
+    }
+  }
+
 const searchToolCatalogEntries = (
   tools: Readonly<Record<string, ToolBase>>,
   catalog: readonly AgentToolCatalogEntry[],
   query: string,
   limit: number,
+  minimumMatchedTerms = 1,
 ): AgentToolCatalogEntry[] => {
   const visibleNames = new Set(catalog.map((tool) => tool.name))
   const rankedDefinitions = rankToolDefinitions(
     Object.values(tools).filter((tool) => visibleNames.has(tool.name)),
     query,
     limit,
+    {
+      minimumMatchedTerms,
+      exactTermMatches: minimumMatchedTerms > 1,
+    },
   )
   const catalogByName = new Map(catalog.map((entry) => [entry.name, entry]))
   return rankedDefinitions.flatMap((definition) => {
@@ -150,6 +213,7 @@ export const createToolSearcher = (
     description:
       'Search the available tool catalog, list tool names, or retrieve one complete tool definition.',
     longDescription: `Catalog searches return concise metadata, including projected DAG-node tools. Exact-name lookup returns the stored definition and source code when code is available; trusted internal implementations may not expose useful source. Results normally re-enter the conversation for interpretation, while authoring workflows can request a raw handoff.`,
+    renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
     parameters: {
       type: 'object',
       properties: {
@@ -181,10 +245,15 @@ export const createToolSearcher = (
           default: true,
           description: `Continue through the entry node so the result is interpreted and surfaced as a final answer. Set false only when the raw tool-result task is the intended terminal output.`,
         },
+        focused: {
+          type: 'boolean',
+          description:
+            'Require focused searches to match multiple meaningful query terms; reserved for EntryNode routing.',
+        },
       },
       required: [],
     } as const satisfies JSONSchema7,
-    function: async ({ query, limit, toolName, withCode, analyze }, ctx) => {
+    function: async ({ query, limit, toolName, withCode, analyze, focused }, ctx) => {
       const allTools = await toolManager.listToolDefinitions(true)
       const searchableTools = withCode
         ? Object.fromEntries(Object.entries(allTools).filter(([, tool]) => !!tool.code))
@@ -206,13 +275,21 @@ export const createToolSearcher = (
           'Here is the requested tool definition': normalizedTools[toolName.toLowerCase()],
         }
       } else if (query) {
+        const matchingTools = searchToolCatalogEntries(
+          searchableTools,
+          toolList,
+          query,
+          limit ?? 10,
+          focused ? 2 : 1,
+        )
         result = {
-          'Here are the matching tools': searchToolCatalogEntries(
-            searchableTools,
-            toolList,
-            query,
-            limit ?? 10,
-          ),
+          'Here are the matching tools': matchingTools,
+          ...(matchingTools.length === 0
+            ? {
+                'Search status':
+                  'No registered tool matched this query; no requested operation was executed.',
+              }
+            : {}),
         }
       } else if (toolName) {
         result = {

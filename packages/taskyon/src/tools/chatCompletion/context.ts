@@ -21,7 +21,7 @@ import {
 } from '../../core/taskVariables'
 import { mapFunctionNames } from '../../core/tools'
 import { toPromptMessages, type PromptInjection } from '../../llm/promptMessages'
-import type { FileAttachment, TaskGetter, TaskNode } from '../../types/taskNode'
+import type { Annotation, FileAttachment, TaskGetter, TaskNode } from '../../types/taskNode'
 import type { ContentHash, ToolBase } from '../../types/tools'
 import { charHash } from '../../utils/crypto'
 import { formatErrorForModel } from '../../utils/error'
@@ -39,7 +39,7 @@ export const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7) => {
       $use: {
         type: 'object',
         description:
-          'Taskyon extension. Map argument paths to visible task variables when a whole argument should come from a previous task result.',
+          'Taskyon extension. Map argument paths to visible task variables or $previousResult paths. Omit each mapped path from literal arguments; setting both is an error.',
         additionalProperties: {
           type: 'string',
         },
@@ -52,7 +52,7 @@ export const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7) => {
 const convertToChatCompletionTool = (definition: ToolBase): Tool =>
   tool({
     title: definition.name,
-    description: `${definition.longDescription ?? definition.description}\n\nTaskyon note: whole arguments may use the reserved $use mapping to reference previous task results.`,
+    description: `${definition.longDescription ?? definition.description}\n\nTaskyon note: To use a previous result, map its target argument in $use (for example, $use: {targetArgument: "$previousResult.field"}) and omit that target from the literal arguments.`,
     inputSchema: jsonSchema(augmentToolSchemaForTaskyonVariables(definition.parameters)),
   })
 
@@ -110,8 +110,13 @@ export const prepareChatCompletionContext = async (input: {
   subtaskHandoffTaskIds?: ReadonlySet<string>
 }) => {
   const variableService = createTaskVariablePresentationService()
+  const subtaskHandoffTaskIds = input.subtaskHandoffTaskIds ?? new Set<string>()
+  const contextTaskChain = selectPlannerSubtaskContext(input.taskChain, subtaskHandoffTaskIds)
+  const contextSubtaskHandoffTaskIds = new Set(
+    [...subtaskHandoffTaskIds].filter((id) => contextTaskChain.some((task) => task.id === id)),
+  )
   const taskMessages = await convertTaskNodesToOpenAIChat(
-    input.taskChain,
+    contextTaskChain,
     input.getArtifact,
     input.useVisionModels,
     input.allowedTools.length > 0,
@@ -119,9 +124,7 @@ export const prepareChatCompletionContext = async (input: {
     {
       getTaskById: input.getTaskById,
       variableService,
-      ...(input.subtaskHandoffTaskIds
-        ? { subtaskHandoffTaskIds: input.subtaskHandoffTaskIds }
-        : {}),
+      subtaskHandoffTaskIds: contextSubtaskHandoffTaskIds,
     },
   )
   const promptMessages = toPromptMessages(input.appendSystemPrompts, input.prependSystemPrompts)
@@ -181,6 +184,30 @@ const ensureToolResponses = (messages: ModelMessage[]) => {
   }
 
   return result
+}
+
+const selectPlannerSubtaskContext = (
+  taskChain: TaskNode[],
+  subtaskHandoffTaskIds: ReadonlySet<string>,
+) => {
+  // Planner calls start fresh objectives; internal workflow stages may need earlier evidence.
+  const plannerCallIds = new Set(
+    taskChain.flatMap((task) =>
+      task.content.type === 'functioncall' &&
+      ['taskPlanner', 'webResearchPlanner'].includes(task.content.data.name)
+        ? [task.id]
+        : [],
+    ),
+  )
+  const delegatedObjectiveIndex = taskChain.findLastIndex(
+    (task) =>
+      task.role === 'user' &&
+      task.content.type === 'message' &&
+      task.parentID !== undefined &&
+      plannerCallIds.has(task.parentID) &&
+      !subtaskHandoffTaskIds.has(task.id),
+  )
+  return delegatedObjectiveIndex < 0 ? taskChain : taskChain.slice(delegatedObjectiveIndex)
 }
 
 export async function convertTaskNodesToOpenAIChat(
@@ -273,18 +300,31 @@ const buildSubtaskHandoffGroups = (
   return groups
 }
 
+const isNoMatchingToolSearchResult = (task: TaskNode) =>
+  task.content.type === 'toolresult' &&
+  typeof task.content.data === 'object' &&
+  task.content.data !== null &&
+  !Array.isArray(task.content.data) &&
+  Reflect.get(task.content.data, 'Search status') ===
+    'No registered tool matched this query; no requested operation was executed.'
+
 const renderSubtaskHandoff = (tasks: readonly TaskNode[]): SystemModelMessage => {
   const objectives = tasks.flatMap((task) =>
     task.role === 'user' && task.content.type === 'message' ? [task.content.data] : [],
   )
   const results = tasks.filter((task) => task.role !== 'user' || task.content.type !== 'message')
   const failed = results.some((task) => task.content.type === 'error')
+  const status = failed
+    ? 'failed'
+    : results.some(isNoMatchingToolSearchResult)
+      ? 'no matching capability'
+      : 'completed'
   return {
     role: 'system',
     content: [
       'Subtask handoff',
       ...objectives.map((objective) => `Objective: ${objective}`),
-      `Status: ${failed ? 'failed' : 'completed'}`,
+      `Status: ${status}`,
       'Result:',
       ...(results.length > 0
         ? results.map((task) =>
@@ -351,6 +391,30 @@ const renderMissingReferencedTasksForLlm = async (
   }
 
   return injectedMessages
+}
+
+const renderSourceAnnotationsForLlm = (annotations: readonly Annotation[] | undefined) => {
+  const sources = annotations?.flatMap((annotation) => {
+    if (annotation.type === 'url' && annotation.url) {
+      const source = `- ${annotation.title ? `${annotation.title}: ` : ''}${annotation.url}`
+      return [annotation.content ? `${source}\n  ${annotation.content}` : source]
+    }
+    if (annotation.type === 'document') {
+      const label =
+        annotation.title ??
+        annotation.text ??
+        annotation.filename ??
+        annotation.id ??
+        'Document source'
+      const metadata = [annotation.filename, annotation.mediaType, annotation.id]
+        .filter((detail): detail is string => detail !== undefined)
+        .join(', ')
+      const details = [metadata, annotation.content].filter(Boolean).join('\n  ')
+      return [`- ${label}${details ? `\n  ${details}` : ''}`]
+    }
+    return []
+  })
+  return sources?.length ? `Sources used by this assistant response:\n${sources.join('\n')}` : ''
 }
 
 const convertTaskNodeToOpenAIMessage = async (
@@ -456,13 +520,15 @@ const convertTaskNodeToOpenAIMessage = async (
   }
 
   if (task.content.type === 'message' && task.role !== 'function') {
+    const message = renderTaskyonVariableBlock(
+      variableService.getOrAssignVariableName(task, tasksById),
+      task.content.data,
+    )
+    const sources = renderSourceAnnotationsForLlm(task.content.ann)
     return [
       {
         role: task.role,
-        content: renderTaskyonVariableBlock(
-          variableService.getOrAssignVariableName(task, tasksById),
-          task.content.data,
-        ),
+        content: sources ? `${message}\n\n${sources}` : message,
       },
     ]
   }

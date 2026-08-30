@@ -146,6 +146,50 @@ testRemoteFunctionBridgeHonorsToolTimeoutMs.description =
   'Honors a remote tool call timeoutMs value instead of timing out all remote bridge calls after 30 seconds.'
 testRemoteFunctionBridgeHonorsToolTimeoutMs.timeoutMs = 35_000
 
+export const testRemoteFunctionBridgePreservesStructuredErrorCause = async () => {
+  const { x: workerPort, y: remotePort } = createDuplexChannel<
+    ToolRpcCallMessage,
+    ToolRpcResponderMessage
+  >()
+  const unsubscribe = remotePort.receive((message) => {
+    if (message.type !== 'functionCall') return
+    remotePort.send({
+      type: 'functionResponse',
+      functionName: message.functionName,
+      requestId: message.requestId,
+      error: {
+        name: 'ToolArgumentsValidationError',
+        message: 'Invalid arguments for tool "remoteTool".',
+        receivedArguments: { script: 'print("broken")' },
+      },
+    })
+  })
+
+  let thrown: unknown
+  try {
+    await callToolOverRpc({ name: 'remoteTool', arguments: {} }, workerPort)
+  } catch (error) {
+    thrown = error
+  } finally {
+    unsubscribe()
+  }
+
+  if (!(thrown instanceof Error)) throw new Error('Expected the remote call to fail.')
+  const cause = thrown.cause
+  assert(
+    typeof cause === 'object' &&
+      cause !== null &&
+      'receivedArguments' in cause &&
+      JSON.stringify(cause.receivedArguments).includes('broken'),
+    'Expected the remote structured error to survive as the wrapper cause.',
+  )
+
+  return { success: true }
+}
+
+testRemoteFunctionBridgePreservesStructuredErrorCause.description =
+  'Preserves structured remote error details as the local wrapper cause for recovery and diagnostics.'
+
 export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
   const storage = createPortableTestStorage()
   const ty = await tyCore(

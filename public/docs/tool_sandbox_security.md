@@ -66,12 +66,23 @@ capabilities. Both global `fetch` and `context.fetch` use the same mediated netw
   target; it does not expose registry contents or settings values.
 
 1. Taskyon resolves the exact immutable tool identity.
-2. It accepts HTTPS only, rejects URL credentials, and blocks obvious local, private-network, and
+2. It accepts HTTP and HTTPS, rejects URL credentials, and blocks obvious local, private-network, and
    metadata-service targets.
 3. It classifies safe methods as read access and other methods as write access.
-4. The host authorizes that tool revision, origin, and access class.
-5. An allowed request runs without browser credentials or automatic redirects, with timeout and
+4. The host authorizes that tool revision, origin, and access class. Browser users may instead grant
+   one tool revision read access to all permitted public HTTP(S) origins for the current session.
+   This does not grant write access, override an exact-origin denial, or persist across sessions.
+5. In the browser, the host resolves the saved fetch transport. It either uses the configured
+   CORS Anywhere-compatible prefix or the authenticated WSS tunnel. This choice does not bypass
+   the origin authorization above, even if tool code requests a `direct` policy.
+6. An allowed request runs without browser credentials or automatic redirects, with timeout and
    response-size limits. Denial, cancellation, or a limit violation becomes a tool error.
+
+The development server starts its CORS proxy on loopback and forwards only requests carrying a
+per-process secret injected by Quasar's same-origin route. It rejects literal private, local, and
+metadata-service targets. This is a development convenience, not a production SSRF boundary: a
+CORS intermediary can read HTTPS contents, and DNS rebinding requires validation after DNS
+resolution at the deployed proxy. Use the WSS tunnel when that trust boundary is not acceptable.
 
 Browser popup access is a separate typed capability. Workers cannot open windows themselves. A
 trusted host tool must request permission for either `custom-html` or an exact HTTPS origin before

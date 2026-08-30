@@ -1,4 +1,5 @@
 export { createTaskNode } from './core/createTasks'
+export { buildCreateNewTaskChain } from './core/createNewTaskChain'
 export { createArtifactStore, type ArtifactStore } from './core/artifactStore'
 export { tyCore } from './core/init'
 export type { Taskyon } from './core/init'
@@ -30,7 +31,12 @@ export { createExternalToolContext, registerToolRpcTools } from './core/toolRpc'
 export { isTaskyonKey } from './core/tyCrypto'
 export { TOKEN_SERVICE_BASE_URL } from './taskyon.space/tokenservice.types'
 export { CODEX_MODELS_CLIENT_VERSION } from './llm/codexModels'
-export { createStandardEntryNodeTool } from './tools/entryNode'
+export {
+  createStandardEntryNodeTool,
+  ENTRY_NODE_SELECTION_TOOL_NAME,
+  ENTRY_NODE_TOOL_SEARCH_BINDING_NAME,
+  isEntryNodeInternalToolName,
+} from './tools/entryNode'
 export { AI_PROVIDER_KEY_STORE_NAME } from './utils/providerAuth'
 export { createCapabilityPolicy } from './security/capabilityPolicy'
 export { TaskyonMessage } from './api/index'

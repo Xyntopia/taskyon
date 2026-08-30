@@ -2,7 +2,7 @@ import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import type { TaskNode, TyTaskStreamData } from '@taskyon/taskyon'
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
 
@@ -22,6 +22,7 @@ export type RendererState = {
   showRoleTag: () => boolean
   showFullFunctionResults: () => boolean
   isFunctionHiddenInChat: (name: string) => boolean
+  getTaskById?: (id: string) => TaskNode | undefined
   writeDebugLine?: RendererWrite
   noteHiddenNode?: (toolName: string) => void
   flushHiddenNodeMarkers?: () => void
@@ -85,6 +86,65 @@ export const formatCompactFunctionCall = (task: TaskNode) => {
 
 const compactToolResult = (value: unknown) =>
   truncateToChars(compactValue(value), MAX_COMPACT_DISPLAY_CHARS)
+
+const removeTerminalControls = (text: string) =>
+  Array.from(text)
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0
+      return codePoint > 0x1f && codePoint !== 0x7f
+    })
+    .join('')
+
+const recordValue = (value: unknown): Record<string, unknown> | undefined =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
+
+const terminalHyperlink = (label: string, target: string) => {
+  if (!process.stdout.isTTY || process.env.TERM === 'dumb') return label
+  return `\u001b]8;;${target}\u001b\\${label}\u001b]8;;\u001b\\`
+}
+
+export const formatCliLocalFilePath = (filePath: string) => {
+  const rawPath = filePath.trim()
+  const displayPath = removeTerminalControls(rawPath)
+  if (!displayPath) return ''
+  return terminalHyperlink(displayPath, pathToFileURL(resolve(rawPath)).toString())
+}
+
+const renderFileOperationResult = (
+  task: TaskNode,
+  sourceTask: TaskNode | undefined,
+): string | undefined => {
+  if (task.content.type !== 'toolresult') return undefined
+  const result = recordValue(task.content.data)
+  if (!result) return undefined
+  const sourceToolName =
+    sourceTask?.content.type === 'functioncall' ? sourceTask.content.data.name : undefined
+  const isDownload = sourceToolName === 'downloadFile'
+  if (!isDownload && (result.ok === false || result.success === false)) return undefined
+  const filePath =
+    isDownload && typeof result.filePath === 'string'
+      ? result.filePath
+      : ['read', 'write', 'edit'].includes(sourceToolName ?? '') && typeof result.path === 'string'
+        ? result.path
+        : !sourceTask && typeof result.filePath === 'string'
+          ? result.filePath
+          : undefined
+  if (!filePath) return undefined
+  const localPath = formatCliLocalFilePath(filePath)
+  if (!localPath) return undefined
+  const remoteUrl =
+    typeof result.url === 'string' ? removeTerminalControls(result.url).trim() : undefined
+  const lines = remoteUrl
+    ? [`remote  ${remoteUrl}`, `local   ${localPath}`]
+    : [`local   ${localPath}`]
+  if (isDownload && typeof result.error === 'string') {
+    const error = removeTerminalControls(result.error).trim()
+    if (error) lines.push(`error   ${error}`)
+  }
+  return lines.join('\n')
+}
 
 const indentMultiline = (text: string, indent: string = CONTENT_INDENT) =>
   text
@@ -225,7 +285,12 @@ export const resolveWorkerStatusText = (
   return `${status}: ${compactCall}`
 }
 
-const renderTaskSummary = (task: TaskNode, showRoleTag: boolean, compact = false): string => {
+const renderTaskSummary = (
+  task: TaskNode,
+  showRoleTag: boolean,
+  compact = false,
+  getTaskById?: (id: string) => TaskNode | undefined,
+): string => {
   const role = task.role ?? 'unknown'
   if (task.content.type === 'message')
     return color(
@@ -248,6 +313,14 @@ const renderTaskSummary = (task: TaskNode, showRoleTag: boolean, compact = false
     )
   }
   if (task.content.type === 'toolresult') {
+    const sourceTask = task.parentID && getTaskById ? getTaskById(task.parentID) : undefined
+    const fileSummary = renderFileOperationResult(task, sourceTask)
+    if (fileSummary) {
+      return color(
+        showRoleTag ? `[${role}|toolresult]\n${indentMultiline(fileSummary)}` : fileSummary,
+        toolResultColorCode(),
+      )
+    }
     const summary = compact ? compactToolResult(task.content.data) : toYaml(task.content.data)
     return color(
       compact
@@ -307,7 +380,9 @@ export const renderTaskProgress = (
   const debugPrefix = previousSnapshotExists ? '[task updated] ' : '[task] '
   const prefix = detailedViewEnabled ? debugPrefix : ''
   if (!detailedViewEnabled && state.writeDebugLine) {
-    state.writeDebugLine(`${debugPrefix}${renderTaskSummary(task, state.showRoleTag(), false)}`)
+    state.writeDebugLine(
+      `${debugPrefix}${renderTaskSummary(task, state.showRoleTag(), false, state.getTaskById)}`,
+    )
   }
   if (
     !detailedViewEnabled &&
@@ -333,6 +408,7 @@ export const renderTaskProgress = (
     !detailedViewEnabled &&
       !state.showFullFunctionResults() &&
       (task.content.type === 'functioncall' || task.content.type === 'toolresult'),
+    state.getTaskById,
   )
   state.writeLine(`${prefix}${summary}`)
   state.writeLine('')

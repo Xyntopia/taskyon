@@ -39,6 +39,10 @@ const serializeRawChunkValue = (value: unknown) => {
   })
 }
 
+export const hasProviderWebSearchObservation = (rawOutput: string) =>
+  /response\.web_search_call\./i.test(rawOutput) ||
+  /web_search:\s*\n\s*num_requests:\s*[1-9]/i.test(rawOutput)
+
 export const classifyStreamingFailure = (error: unknown, aborted: boolean) => {
   const message = humanizeError(error).toLowerCase()
   if (

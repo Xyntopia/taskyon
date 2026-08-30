@@ -13,8 +13,18 @@ export const executeJavaScript = createTool({
       warn: (...args) => logMessages.push(args.map(String).join(' ')),
       error: (...args) => logMessages.push(args.map(String).join(' ')),
     });
-    const evaluate = new Function('console', 'code', '"use strict"; return eval(code);');
-    const result = await evaluate(sandboxConsole, code);
+    const evaluate = new Function('console', 'code', 'markStarted',
+      '"use strict"; return eval("arguments[2]();\\\\n" + code);');
+    let executionStarted = false;
+    let result;
+    try {
+      result = await evaluate(sandboxConsole, code, () => { executionStarted = true; });
+    } catch (error) {
+      // Only a parse failure selects function-body syntax. Never retry executed code.
+      if (executionStarted || !(error instanceof SyntaxError)) throw error;
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+      result = await new AsyncFunction('console', '"use strict";\\n' + code)(sandboxConsole);
+    }
     return { result, 'console.log': logMessages };
   }`,
   description: 'Runs JavaScript code in a reusable, isolated Taskyon sandbox.',
@@ -27,7 +37,8 @@ revision and destination origin. Browser DOM and direct host access are unavaila
     properties: {
       code: {
         type: 'string',
-        description: 'The JavaScript code to execute.',
+        description:
+          'JavaScript to execute. Top-level await is supported; use return or console.log to expose an asynchronous result.',
       },
     },
     required: ['code'],

@@ -32,38 +32,71 @@ const buildSearchFields = (tool: ToolBase): SearchField[] => {
   ]
 }
 
-const normalizeTerms = (query: string) =>
-  query
-    .toLocaleLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((term) => term.length > 0)
+const isSearchStopWord = (term: string) =>
+  /^(?:a|an|and|are|as|at|be|by|for|from|how|i|in|is|it|me|of|on|or|please|the|this|to|use|what|when|where|which|who|with|you)$/.test(
+    term,
+  )
 
-const scoreTool = (tool: ToolBase, terms: readonly string[]) => {
-  if (terms.length === 0) return 0
-  const fields = buildSearchFields(tool).map((field) => ({
-    ...field,
-    value: field.value.toLocaleLowerCase(),
-  }))
+const normalizeTerms = (query: string) => [
+  ...new Set(
+    query
+      .toLocaleLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((term) => term.length > 0 && !isSearchStopWord(term)),
+  ),
+]
+
+const normalizeSearchToken = (term: string) =>
+  term.length > 3 && term.endsWith('s') ? term.slice(0, -1) : term
+
+const hasExactSearchTerm = (value: string, term: string) => {
+  const normalizedTerm = normalizeSearchToken(term)
+  const tokens = value
+    .split(/[^\p{L}\p{N}]+|(?<=[\p{Ll}\p{N}])(?=\p{Lu})/u)
+    .filter(Boolean)
+    .map((token) => normalizeSearchToken(token.toLocaleLowerCase()))
+  return tokens.includes(normalizedTerm)
+}
+
+const scoreTool = (tool: ToolBase, terms: readonly string[], exactTermMatches: boolean) => {
+  if (terms.length === 0) return { score: 0, matchedTermCount: 0 }
+  const fields = buildSearchFields(tool)
+  let matchedTermCount = 0
   const score = terms.reduce((total, term) => {
-    const matchingFields = fields.filter((field) => field.value.includes(term))
+    const matchingFields = fields.filter((field) =>
+      exactTermMatches
+        ? hasExactSearchTerm(field.value, term)
+        : field.value.toLocaleLowerCase().includes(term),
+    )
     if (matchingFields.length === 0) return total
+    matchedTermCount += 1
     const strongestMatch = Math.max(...matchingFields.map((field) => field.weight))
     return total + strongestMatch + matchingFields.length
   }, 0)
-  return score
+  return { score, matchedTermCount }
 }
 
 export const rankToolDefinitions = (
   tools: readonly ToolBase[],
   query: string,
   limit: number,
+  options?: { minimumMatchedTerms?: number; exactTermMatches?: boolean },
 ): ToolBase[] => {
   const terms = normalizeTerms(query)
-  if (terms.length === 0) return tools.slice(0, Math.max(1, limit))
+  const minimumMatchedTerms = Math.max(1, options?.minimumMatchedTerms ?? 1)
+  if (terms.length === 0) {
+    return minimumMatchedTerms > 1 ? [] : tools.slice(0, Math.max(1, limit))
+  }
 
   return tools
-    .map((tool) => ({ tool, score: scoreTool(tool, terms) }))
-    .filter(({ score }) => score > 0)
+    .map((tool) => ({
+      tool,
+      ...scoreTool(tool, terms, options?.exactTermMatches ?? false),
+    }))
+    .filter(
+      ({ score, matchedTermCount }) =>
+        score > 0 && matchedTermCount >= Math.min(minimumMatchedTerms, terms.length),
+    )
     .sort(
       (left, right) => right.score - left.score || left.tool.name.localeCompare(right.tool.name),
     )

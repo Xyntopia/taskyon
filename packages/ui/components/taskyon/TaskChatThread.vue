@@ -1,6 +1,6 @@
 <template>
   <div class="task-chat-thread column" data-cy="taskyon-chat-thread">
-    <template v-for="{ task, index, nextTask } in visibleTasks" :key="task.id">
+    <template v-for="{ task, index, previousTask, nextTask } in visibleTasks" :key="task.id">
       <q-expansion-item v-if="reasoning?.get(task.id)" label="reasoning" dense class="text-caption">
         <TyMarkdown :src="reasoning.get(task.id) ?? ''" />
       </q-expansion-item>
@@ -11,7 +11,14 @@
         :selection-id="selectedTaskId"
         :load-results="loadResults"
       />
-      <slot v-else name="task" :task="task" :index="index" :next-task="nextTask">
+      <slot
+        v-else
+        name="task"
+        :task="task"
+        :index="index"
+        :previous-task="previousTask"
+        :next-task="nextTask"
+      >
         <TaskChatMessage :task="task" :presentation="presentation" />
       </slot>
     </template>
@@ -89,17 +96,26 @@ const loadResults = async (id: string, priority: boolean) => {
   }
 }
 
-const displayedTasks = computed(() => {
-  const tasks = props.tasks.filter((task) => !props.hiddenTaskIds.has(task.id))
-  return props.showAllTasks ? tasks : selectTasksVisibleInChat(tasks, props.tools, props.expertMode)
-})
+const availableTasks = computed(() =>
+  props.tasks.filter((task) => !props.hiddenTaskIds.has(task.id)),
+)
+
+const displayedTasks = computed(() =>
+  props.showAllTasks
+    ? availableTasks.value
+    : selectTasksVisibleInChat(availableTasks.value, props.tools, props.expertMode),
+)
 
 const visibleTasks = computed(() =>
-  displayedTasks.value.map((task, index) => ({
-    task,
-    index,
-    nextTask: displayedTasks.value[index + 1],
-  })),
+  displayedTasks.value.map((task, index) => {
+    const sourceIndex = availableTasks.value.indexOf(task)
+    return {
+      task,
+      index,
+      previousTask: availableTasks.value[sourceIndex - 1],
+      nextTask: availableTasks.value[sourceIndex + 1],
+    }
+  }),
 )
 </script>
 

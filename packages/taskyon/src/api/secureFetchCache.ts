@@ -4,7 +4,7 @@ import type { TaskyonStorageClient } from './storageProtocol'
 
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 const DEFAULT_MAX_ENTRY_BYTES = 16 * 1024 * 1024
-const namespace = 'secure-fetch-cache/v1'
+export const secureFetchCacheNamespace = 'secure-fetch-cache/v1'
 
 type StoredEntry = Omit<SecureFetchCacheEntry, 'body'> & {
   bodyBase64: string
@@ -44,10 +44,14 @@ export const createStorageClientSecureFetchCache = (
   const maxEntryBytes = options.maxEntryBytes ?? DEFAULT_MAX_ENTRY_BYTES
   return {
     get: async (url) => {
-      const { value } = await storage.get({ namespace, id: idFor(url) })
+      const { value } = await storage.get({ namespace: secureFetchCacheNamespace, id: idFor(url) })
       const stored = parseStoredEntry(value)
       if (!stored || stored.url !== url) return null
-      await storage.set({ namespace, id: idFor(url), value: { ...stored, accessedAt: Date.now() } })
+      await storage.set({
+        namespace: secureFetchCacheNamespace,
+        id: idFor(url),
+        value: { ...stored, accessedAt: Date.now() },
+      })
       const { bodyBase64, accessedAt, ...entry } = stored
       void accessedAt
       const body = decode(bodyBase64)
@@ -60,8 +64,8 @@ export const createStorageClientSecureFetchCache = (
         bodyBase64: encode(entry.body),
         accessedAt: Date.now(),
       }
-      await storage.set({ namespace, id: idFor(entry.url), value })
-      const { rows } = await storage.list({ namespace })
+      await storage.set({ namespace: secureFetchCacheNamespace, id: idFor(entry.url), value })
+      const { rows } = await storage.list({ namespace: secureFetchCacheNamespace })
       const entries = rows
         .flatMap(({ id, data }) => {
           const parsed = parseStoredEntry(data)
@@ -71,10 +75,11 @@ export const createStorageClientSecureFetchCache = (
       let total = entries.reduce((sum, item) => sum + item.bytes, 0)
       for (const item of entries) {
         if (total <= maxBytes) break
-        await storage.delete({ namespace, id: item.id })
+        await storage.delete({ namespace: secureFetchCacheNamespace, id: item.id })
         total -= item.bytes
       }
     },
-    delete: async (url) => await storage.delete({ namespace, id: idFor(url) }),
+    delete: async (url) =>
+      await storage.delete({ namespace: secureFetchCacheNamespace, id: idFor(url) }),
   }
 }

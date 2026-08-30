@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 import {
   closeAiSettings,
   dataCy,
+  dataCyMenu,
   expectTaskyonReady,
   expectSettingsToggle,
   selectLlmModel,
@@ -44,12 +45,22 @@ test.describe('Taskyon settings and tools', () => {
     await expectTaskyonReady(page)
   })
 
-  test('opens quick settings and persists expert tool controls after reload', async ({ page }) => {
+  test('opens quick settings and persists expert mode after reload', async ({ page }) => {
     await expect(page).toHaveTitle(/Taskyon/)
 
     await page.getByLabel('quick ai settings').click()
     await setSettingsToggle(page, 'Expert Mode', true)
-    await setSettingsToggle(page, 'Tool Chooser', true)
+    const settings = dataCyMenu(page, 'ai-settings')
+    for (const label of [
+      'pinnedTools',
+      'Tool Chooser',
+      'Recent Tool Count',
+      'Frequent Tool Count',
+      'Recent Search Tool Count',
+      'Multimodal Input',
+    ]) {
+      await expect(settings.locator(`[data-cy="${label}"]`)).toHaveCount(0)
+    }
     await closeAiSettings(page)
 
     await selectLlmModel(page, undefined, testModelId)
@@ -57,7 +68,7 @@ test.describe('Taskyon settings and tools', () => {
     await expect(dataCy(page, 'model-id')).toContainText(testModelId)
     await page.getByLabel('quick ai settings').click()
     await expectSettingsToggle(page, 'Expert Mode', true)
-    await expectSettingsToggle(page, 'Tool Chooser', true)
+    await expect(settings.locator('[data-cy="Tool Chooser"]')).toHaveCount(0)
   })
 
   test('opens every settings tab without render errors', async ({ page }) => {
@@ -117,5 +128,21 @@ test.describe('Taskyon settings and tools', () => {
     await page.getByLabel('New Tool Name').fill('playwrightExample')
     await expect(page.getByRole('button', { name: 'save tool' })).toBeEnabled()
     await page.getByRole('button', { name: 'save tool' }).click()
+  })
+
+  test('persists and resets the browser fetch transport', async ({ page }) => {
+    await page.goto('/browser-access')
+    const transport = dataCy(page, 'sandbox-fetch-transport')
+    await expect(transport).toContainText('Ask on first fetch')
+
+    await transport.click()
+    await page.getByRole('option', { name: 'Secure Taskyon WSS tunnel', exact: true }).click()
+    await expect(transport).toContainText('Secure Taskyon WSS tunnel')
+    await expect(dataCy(page, 'sandbox-wss-tunnel-url')).toBeVisible()
+
+    await page.reload()
+    await expect(transport).toContainText('Secure Taskyon WSS tunnel')
+    await dataCy(page, 'reset-fetch-transport').click()
+    await expect(transport).toContainText('Ask on first fetch')
   })
 })

@@ -321,7 +321,7 @@ export const testCliFocusedSearchFindsANonPinnedTool = async () => {
   const prompt = [
     'Use the current weather capability for latitude 32.7157 and longitude -117.1611.',
     'The weather capability is intentionally not pinned in the initial tool window.',
-    'Use focused tool search immediately if it is not already callable. Do not request a broad tool overview and do not use toolSearcher.',
+    'Call toolSearcher immediately if the weather capability is not already callable.',
     'After the weather tool succeeds, begin the final answer with WEATHER_NON_PINNED_COMPLETE.',
   ].join('\n\n')
   const result = await runCliE2eSession({

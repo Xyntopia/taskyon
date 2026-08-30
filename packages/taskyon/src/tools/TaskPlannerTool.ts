@@ -213,7 +213,7 @@ export const buildTaskPlannerTaskChains = (
     group.flatMap((item) => createPlannerTaskChain(normalizePlannedTaskInput(item), entryNodeName)),
   )
 
-const resolvePlannerEntryNodeName = (taskChain: readonly partialTaskDraft[]) => {
+export const resolvePlannerEntryNodeName = (taskChain: readonly partialTaskDraft[]) => {
   const functionCalls = taskChain.filter(
     (task) => task.content.type === 'functioncall' && task.content.data.name !== 'chatCompletion',
   )

@@ -10,14 +10,18 @@ export type FetchAuthorization = (capability: FetchCapability) => Promise<boolea
 
 export type SandboxFetchPolicy = 'default' | 'direct' | 'proxy'
 
-export const SANDBOX_FETCH_TRANSPORTS = ['wss', 'custom-proxy', 'direct'] as const
+export const SANDBOX_FETCH_TRANSPORTS = ['wss', 'custom-proxy', 'cors-proxy', 'direct'] as const
 export type SandboxFetchTransport = (typeof SANDBOX_FETCH_TRANSPORTS)[number]
+export const SANDBOX_FETCH_TRANSPORT_SELECTIONS = ['ask', ...SANDBOX_FETCH_TRANSPORTS] as const
+export type SandboxFetchTransportSelection = (typeof SANDBOX_FETCH_TRANSPORT_SELECTIONS)[number]
 export const DEFAULT_SANDBOX_FETCH_TRANSPORT: SandboxFetchTransport = 'wss'
 export const SANDBOX_FETCH_TRANSPORT_OPTIONS = [
+  { label: 'Ask on first tool fetch', value: 'ask' },
   { label: 'Secure WSS tunnel (recommended)', value: 'wss' },
   { label: 'Custom proxy', value: 'custom-proxy' },
+  { label: 'CORS proxy', value: 'cors-proxy' },
   { label: 'Direct host fetch', value: 'direct' },
-] as const satisfies ReadonlyArray<{ label: string; value: SandboxFetchTransport }>
+] as const satisfies ReadonlyArray<{ label: string; value: SandboxFetchTransportSelection }>
 
 export function resolveSandboxFetchTransport(
   configured: SandboxFetchTransport,
@@ -70,7 +74,7 @@ const PRIVATE_IPV4 = [
   /^0\./,
 ]
 
-function isBlockedHostname(hostname: string) {
+export function isBlockedSandboxFetchHostname(hostname: string) {
   const normalized = hostname
     .toLowerCase()
     .replace(/\.$/, '')
@@ -98,7 +102,7 @@ function isBlockedHostname(hostname: string) {
 
 export function isPrivateSandboxFetchUrl(input: RequestInfo | URL): boolean {
   const url = new URL(input instanceof Request ? input.url : input)
-  return isBlockedHostname(url.hostname)
+  return isBlockedSandboxFetchHostname(url.hostname)
 }
 
 export function validateSandboxFetchUrl(
@@ -112,7 +116,7 @@ export function validateSandboxFetchUrl(
   if (url.username || url.password) {
     throw new Error('Sandbox fetch does not permit credentials in URLs')
   }
-  if (isBlockedHostname(url.hostname) && !allowPrivateTargets) {
+  if (isBlockedSandboxFetchHostname(url.hostname) && !allowPrivateTargets) {
     throw new Error(`Sandbox fetch blocks private or local target: ${url.hostname}`)
   }
   return url

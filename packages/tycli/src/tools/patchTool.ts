@@ -6,7 +6,7 @@ import {
   normalizeFileUpdate,
   type FileUpdate,
 } from '@taskyon/taskyon/tools/filePatching'
-import { assertPathInsideArtifactRoot } from './workspacePaths'
+import { resolvePathInsideArtifactRoot } from './workspacePaths'
 import { createNodeWorkspaceOperations } from './nodeWorkspaceOperations'
 
 type UpdateFilesArgs = {
@@ -66,7 +66,7 @@ export const createUpdateFilesTool = (
               filePath: {
                 type: 'string',
                 description:
-                  'Workspace-relative path. When artifactRoot is provided, repeat that directory prefix in filePath; for example artifactRoot research/topic/ requires filePath research/topic/sources.md, not sources.md.',
+                  'Workspace-relative path. When artifactRoot is provided, a simple filename is placed inside that directory automatically; a prefixed path such as research/topic/sources.md is also accepted.',
               },
               newContent: {
                 type: 'string',
@@ -129,8 +129,10 @@ export const createUpdateFilesTool = (
       >()
       const results: Array<{ filePath: string; mode: string; changed: boolean }> = []
       for (const rawUpdate of updates) {
-        const update = normalizeFileUpdate(rawUpdate)
-        assertPathInsideArtifactRoot(update.filePath, artifactRoot)
+        const update = normalizeFileUpdate({
+          ...rawUpdate,
+          filePath: resolvePathInsideArtifactRoot(rawUpdate.filePath, artifactRoot),
+        })
         const mode = getFileUpdateMode(update)
         let file = files.get(update.filePath)
         if (!file) {

@@ -3,6 +3,7 @@ import { buildCreateNewTaskChain } from '../core/createNewTaskChain'
 import { firstWordsTaskName, generateTaskName, textRankTaskName } from '../core/taskNaming'
 import { extractCombinedKeywords, textRankTerms } from '../utils/nlp'
 import type { partialTaskDraft } from '../types/taskNode'
+import { FunctionCall } from '../types/tools'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -129,6 +130,35 @@ export const testCreateNewTaskChainUsesTextRankNameFromFirstHundredWords = () =>
   return { name }
 }
 
+export const testCreateNewTaskChainUsesAutomaticWebSearchForNormalMessages = () => {
+  const taskChain = buildCreateNewTaskChain({
+    currentTask: null,
+    draftTask: {
+      role: 'user',
+      content: { type: 'message', data: 'Find the current official document.' },
+    },
+    entryNode: {
+      role: 'function',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    },
+    mode: 'message',
+  })
+  const entryNodeTask = taskChain.at(-1)
+  if (!entryNodeTask || entryNodeTask.content.type !== 'functioncall') {
+    throw new Error('Expected an entry-node function call')
+  }
+  const websearch = FunctionCall.parse(entryNodeTask.content.data).arguments.websearch
+  assert(
+    websearch &&
+      typeof websearch === 'object' &&
+      !Array.isArray(websearch) &&
+      websearch.enabled === true &&
+      websearch.mode === 'auto',
+    `Expected normal messages to use automatic web search, got ${JSON.stringify(websearch)}`,
+  )
+  return { websearch }
+}
+
 export const testCreateNewTaskChainRetainsTheConversationLeaf = () => {
   const taskChain = buildCreateNewTaskChain({
     currentTask: null,
@@ -181,6 +211,8 @@ testTextRankTaskNamePreservesFirstOccurrenceOrder.description =
   'Returns selected TextRank terms in readable first-occurrence order.'
 testCreateNewTaskChainUsesTextRankNameFromFirstHundredWords.description =
   'Creates local TextRank task names from the first 100 draft words.'
+testCreateNewTaskChainUsesAutomaticWebSearchForNormalMessages.description =
+  'Exposes provider web search in automatic mode for normal send-message tasks.'
 testGenerateTaskNameUsesTextRank.description = 'Uses local TextRank mode without network access.'
 testCombinedKeywordExtractorFallsBackToTextRank.description =
   'Routes local keyword extraction through nlp.ts without requiring a vector model.'

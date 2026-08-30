@@ -114,6 +114,26 @@ export const testUpdateFilesRejectsPathsOutsideArtifactRoot = async () =>
     return { success: true }
   })
 
+export const testUpdateFilesPlacesBasenameInsideArtifactRoot = async () =>
+  await withTempCwd('tycli-update-files-artifact-root-basename', async (dir) => {
+    const updateFilesTool = createUpdateFilesTool()
+    const result = await updateFilesTool.function?.({
+      artifactRoot: 'research/home-battery-specs',
+      updates: [{ filePath: 'index.md', newContent: '# Research\n' }],
+    })
+
+    assert(
+      result && typeof result === 'object' && 'ok' in result && result.ok === true,
+      `Expected basename update to succeed, got ${JSON.stringify(result)}`,
+    )
+    assert(
+      (await readFile(join(dir, 'research/home-battery-specs/index.md'), 'utf8')) ===
+        '# Research\n',
+      'Expected basename update to be written below artifact root',
+    )
+    return { success: true }
+  })
+
 export const testUpdateFilesSchemaDeclaresExclusiveEditModes = () => {
   const updateFilesTool = createUpdateFilesTool()
   const updates = updateFilesTool.parameters.properties?.updates
@@ -132,8 +152,8 @@ export const testUpdateFilesSchemaDeclaresExclusiveEditModes = () => {
     itemSchema &&
       typeof itemSchema === 'object' &&
       'properties' in itemSchema &&
-      itemSchema.properties.filePath.description.includes('repeat that directory prefix'),
-    'Expected filePath schema guidance to explain artifactRoot-prefixed paths',
+      itemSchema.properties.filePath.description.includes('simple filename is placed inside'),
+    'Expected filePath schema guidance to explain artifactRoot-relative basenames',
   )
 
   return { success: true }
@@ -147,5 +167,7 @@ testUpdateFilesComposesSameFileUpdatesBeforeWriting.description =
   'updateFiles composes repeated updates to one file before performing its guarded write.'
 testUpdateFilesRejectsPathsOutsideArtifactRoot.description =
   'updateFiles rejects research artifacts that try to write outside the selected artifact root.'
+testUpdateFilesPlacesBasenameInsideArtifactRoot.description =
+  'updateFiles places a simple filename below the selected artifact root for model-friendly calls.'
 testUpdateFilesSchemaDeclaresExclusiveEditModes.description =
   'updateFiles exposes a mutually exclusive schema for newContent, patches, and regexReplacements.'

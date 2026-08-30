@@ -7,6 +7,7 @@ import type {
   ProviderRequestTrace,
 } from '../../types/chatCompletion'
 import { createChatCompletionRecordingFetch } from '../chatCompletionTrace'
+import { canUseTauriHttpPlugin, tauriHttpFetch } from '../../utils/tauriHttpPlugin'
 
 const collectSystemInstructions = (messages: ModelMessage[]) => {
   const instructions = messages
@@ -189,10 +190,11 @@ export const buildChatProviderRequest = async (input: {
   let model
   let requestMessages = input.messages
   const overrideOptions: Record<string, unknown> = {}
+  const runtimeFetch: typeof fetch = canUseTauriHttpPlugin() ? tauriHttpFetch : fetch
   const recordingFetch = input.providerRequest
-    ? createChatCompletionRecordingFetch(input.providerRequest, input.fetch ?? fetch)
+    ? createChatCompletionRecordingFetch(input.providerRequest, input.fetch ?? runtimeFetch)
     : undefined
-  const providerFetch = recordingFetch ?? input.fetch
+  const providerFetch = recordingFetch ?? input.fetch ?? runtimeFetch
   const requestHeaders = input.api.provider === 'taskyon' ? undefined : input.api.defaultHeaders
 
   switch (input.api.provider) {
@@ -268,11 +270,11 @@ export const buildChatProviderRequest = async (input: {
     case 'openrouter.ai': {
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
       const stripUserAgentFetch: typeof fetch = (requestInput, init) => {
-        if (!init?.headers) return (providerFetch ?? fetch)(requestInput, init)
+        if (!init?.headers) return providerFetch(requestInput, init)
         const headers = new Headers(init.headers)
         headers.delete('user-agent')
         headers.delete('User-Agent')
-        return (providerFetch ?? fetch)(requestInput, { ...init, headers })
+        return providerFetch(requestInput, { ...init, headers })
       }
       const openrouter = createOpenRouter({
         apiKey: input.apiKey,
@@ -285,6 +287,7 @@ export const buildChatProviderRequest = async (input: {
       const options: Parameters<typeof openrouter>[1] = {
         provider: { ignore: ['GMICloud'] },
         usage: { include: true },
+        parallelToolCalls: false,
       }
 
       if (input.reasoningEffort && input.reasoningEffort !== 'none') {

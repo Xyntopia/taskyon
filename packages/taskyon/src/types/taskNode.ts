@@ -19,6 +19,10 @@ export const Annotation = z.union([
   z
     .object({
       type: z.literal('document'),
+      id: z.string().optional(),
+      title: z.string().optional(),
+      filename: z.string().optional(),
+      mediaType: z.string().optional(),
       text: z.string().optional(),
       content: z.string().optional(),
     })

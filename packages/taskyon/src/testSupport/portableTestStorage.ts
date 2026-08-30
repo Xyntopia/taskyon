@@ -5,16 +5,18 @@ import {
   createStorageProtocolServer,
   taskyonStorageProtocol,
   type StorageRecordBackend,
+  type StorageBlobBackend,
 } from '../api/storageProtocol'
 import { connectTaskManagerStorageFromProtocol } from '../core/taskManager'
 
-export const createPortableTestStorage = () => {
+export const createPortableTestStorage = (blobs?: (namespace: string) => StorageBlobBackend) => {
   const namespacePrefix = 'taskyon-test'
   const { x: clientPort, y: servicePort } = createProtocolPort(taskyonStorageProtocol)
   const backends = new Map<string, StorageRecordBackend>()
   const destroy = createStorageProtocolServer(
     servicePort,
     {
+      ...(blobs ? { blobs } : {}),
       records: (namespace) => {
         const backend = backends.get(namespace) ?? createMemoryStorageRecordBackend()
         backends.set(namespace, backend)

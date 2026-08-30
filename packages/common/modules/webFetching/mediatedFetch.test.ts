@@ -7,6 +7,7 @@ void test('sandbox fetch uses the secure WSS transport by default', () => {
   assert.equal(resolveSandboxFetchTransport(DEFAULT_SANDBOX_FETCH_TRANSPORT, 'default'), 'wss')
   assert.equal(resolveSandboxFetchTransport(DEFAULT_SANDBOX_FETCH_TRANSPORT, 'proxy'), 'wss')
   assert.equal(resolveSandboxFetchTransport('custom-proxy', 'default'), 'custom-proxy')
+  assert.equal(resolveSandboxFetchTransport('cors-proxy', 'default'), 'cors-proxy')
   assert.equal(resolveSandboxFetchTransport('direct', 'proxy'), 'direct')
   assert.equal(resolveSandboxFetchTransport('wss', 'direct'), 'direct')
 })
