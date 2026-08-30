@@ -39,34 +39,6 @@
             <q-icon :name="mdiInformationVariant" />
           </q-item-section>
           <q-item-section> About </q-item-section>
-          <AboutDialog
-            v-model="showAboutDialog"
-            app-name="Taskyon"
-            description="Taskyon is a local-first AI platform for personalized task management and seamless web integration. It ensures data security with local processing while offering powerful tools like task trees, function execution, and sandboxing. Learn more at taskyon.space."
-          >
-            <template #actions>
-              <q-btn flat color="secondary" to="/diagnostics">
-                <div class="q-pr-md">Open Diagnostics</div>
-                <q-icon :name="mdiWrench"></q-icon>
-                <q-icon :name="mdiHospital" size="md"></q-icon>
-              </q-btn>
-              <q-btn flat label="Reset Settings" to="/settings/profile" />
-            </template>
-            <template #legal>
-              <p>
-                “This application uses <strong>Rumoca</strong>, a Modelica compiler written in Rust
-                compiled to WebAssembly. Rumoca is licensed under the Apache‑2.0 License.”
-              </p>
-              <p style="font-size: 0.8em; color: var(--q-color-info‑text)">
-                Rumoca — “A Modelica compiler written in Rust” (© 2024–2025 Condie, Woodbury,
-                Goppert, Andersson & contributors). See
-                <a href="https://github.com/condie‑etc/rumoca" target="_blank"
-                  >https://github.com/…/rumoca</a
-                >
-                and the included Apache‑2.0 license for details.
-              </p>
-            </template>
-          </AboutDialog>
         </q-item>
         <q-separator />
         <q-item v-ripple clickable to="/pricing" exact active-class="text-secondary">
@@ -88,6 +60,16 @@
       </q-list>
     </q-menu>
   </q-btn>
+  <TaskyonAboutDialog v-model="showAboutDialog" :commit-hash="commitHash" :build-time="buildTime">
+    <template #actions>
+      <q-btn flat color="secondary" to="/diagnostics">
+        <div class="q-pr-md">Open Diagnostics</div>
+        <q-icon :name="mdiWrench" />
+        <q-icon :name="mdiHospital" size="md" />
+      </q-btn>
+      <q-btn flat label="Reset Settings" to="/settings/profile" />
+    </template>
+  </TaskyonAboutDialog>
 </template>
 
 <script setup lang="ts">
@@ -95,8 +77,8 @@ import { matHelpOutline, matSettings } from '@quasar/extras/material-icons'
 import { mdiGithub, mdiHospital, mdiInformationVariant, mdiWrench } from '@quasar/extras/mdi-v6'
 import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
-import AboutDialog from '@taskyon/ui/components/AboutDialog.vue'
 import DarkModeButton from '@taskyon/ui/components/DarkModeButton.vue'
+import TaskyonAboutDialog from '@taskyon/ui/components/TaskyonAboutDialog.vue'
 
 defineProps<{
   btnSize: 'md' | 'sm' | 'xs' | 'lg' | 'xl'
@@ -104,6 +86,11 @@ defineProps<{
 
 const showAboutDialog = ref(false)
 const state = useAppStateStore()
+const commitHash = process.env.COMMIT_HASH
+const buildTime = process.env.PUBLISH_DATE
+if (!commitHash || !buildTime) {
+  throw new Error('Taskyon build metadata is missing.')
+}
 
 function onThemeChanged(newMode: boolean | 'auto') {
   state.appConfiguration.darkTheme = newMode

@@ -1,4 +1,5 @@
 import { canonicalHash, type Sha256Hash } from '@taskyon/common/modules/canonicalHash'
+import type { StreamSubscription } from '@taskyon/common/modules/frpBus'
 import { createTaskyonBrowserCoreRuntime } from '@taskyon/runtime-browser/core'
 import { initCryptoSessionFromBrowser } from '@taskyon/runtime-browser/crypto-session'
 import {
@@ -13,6 +14,7 @@ import {
   type TaskyonClient,
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
+import type { ChatCompletionStreamEvent, TyTaskStreamData } from '@taskyon/taskyon'
 import { createChatCompletionTool, resolveChatCompletionConnection } from '@taskyon/taskyon/chat'
 import type { TyCoreToolSetup } from '@taskyon/taskyon/runtime-core'
 import {
@@ -24,6 +26,8 @@ export { canonicalHash, createClientTool, toolCall }
 export { TASKYON_MODEL_CATALOG_URL } from '@taskyon/taskyon/taskyon-space'
 export type { InternalTool, Sha256Hash, TaskNode, TaskyonClient, partialTaskDraft }
 export type { EntryNodePromptTemplates }
+
+export type TaskyonIntegrationStream<T> = StreamSubscription<T>
 
 export type TaskyonIntegrationProvider = {
   provider: string
@@ -42,6 +46,8 @@ export type TaskyonIntegrationRuntime = {
   client: TaskyonClient
   entryNode: partialTaskDraft
   hasProviderCredential: (provider: string) => Promise<boolean>
+  chatCompletionStream: TaskyonIntegrationStream<ChatCompletionStreamEvent>
+  workerStream: TaskyonIntegrationStream<TyTaskStreamData>
   stop: (reason?: string) => Promise<void>
 }
 
@@ -117,7 +123,7 @@ export const createTaskyonIntegrationRuntime = async (options: {
   })
 
   try {
-    await runtime.taskyon
+    const taskyon = await runtime.taskyon
     if (options.apiKey) {
       await setTaskyonProviderCredential(runtime.host, options.provider.provider, options.apiKey)
     }
@@ -136,6 +142,8 @@ export const createTaskyonIntegrationRuntime = async (options: {
       client: runtime.client,
       entryNode,
       hasProviderCredential: (provider) => hasTaskyonProviderCredential(runtime.host, provider),
+      chatCompletionStream: taskyon.chatCompletionStream,
+      workerStream: taskyon.workerStream,
       stop: async (reason?: string) => {
         toolExecutor.destroy()
         await runtime.stop(reason)

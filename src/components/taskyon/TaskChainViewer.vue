@@ -95,38 +95,7 @@
     </q-expansion-item>
     <!--Render tasks which are in progress-->
     <div class="task-logs q-py-sm">
-      <pre v-if="currentToolProgress" class="text-caption tool-progress">{{
-        currentToolProgress
-      }}</pre>
-      <template v-if="currentMsgStream && currentMsgStream.reasoning.length > 0">
-        <div class="text-caption">THINKING:</div>
-        <div
-          ref="thinkingContainer"
-          style="font-size: 0.8rem; max-height: 300px; overflow-y: auto"
-          @scroll="handleUserScroll"
-        >
-          <tyMarkdown
-            no-line-numbers
-            no-mermaid
-            :src="currentMsgStream.reasoning /*?.split('\n').slice(-30).join('\n')*/"
-            class="text-caption"
-          />
-        </div>
-      </template>
-      <q-card v-if="isProcessing(currentTask.id)" class="row" flat>
-        <div class="col">
-          <tyMarkdown
-            v-if="currentMsgStream && currentMsgStream.text.length > 0"
-            no-line-numbers
-            no-mermaid
-            :src="currentMsgStream.text || ''"
-          />
-          <div v-if="currentMsgStream?.func">
-            {{ currentMsgStream.func }}
-          </div>
-          <q-spinner-dots size="2rem" color="secondary" />
-        </div>
-      </q-card>
+      <TaskExecutionProgress v-if="currentExecutionProgress" :progress="currentExecutionProgress" />
       <div v-if="lastWorkerEvent && tystate.workerStreamLogs.length > 0" class="row items-center">
         <q-btn flat dense no-caps :icon-right="matArrowDropDown" @click="showLogs = !showLogs">
           <span
@@ -155,7 +124,9 @@
 
 <script setup lang="ts">
 import { matArrowDropDown } from '@quasar/extras/material-icons'
-import tyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
+import TaskExecutionProgress from '@taskyon/ui/components/taskyon/TaskExecutionProgress.vue'
+import { selectTaskExecutionProgress } from '@taskyon/ui/modules/taskExecutionProgress'
+import { useTaskExecutionProgress } from '@taskyon/ui/modules/useTaskExecutionProgress'
 import {
   getTaskQueueLabel,
   selectSiblingTaskChain,
@@ -168,12 +139,16 @@ import { asyncComputed } from 'src/modules/vueUtils'
 import { isTaskVisibleInChat } from '@taskyon/ui/components/taskyon/taskChatVisibility'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import SimpleChatView from './SimpleChatView.vue'
 
 const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const showLogs = ref(false)
+const executionProgress = useTaskExecutionProgress(
+  tystate.chatCompletionStream,
+  tystate.workerStream,
+)
 
 const lastWorkerEvent = computed(() => {
   return tystate.workerStreamLogs.at(-1)
@@ -310,23 +285,15 @@ const isProcessing = (id: string) =>
   isTaskActive(id) ||
   [...tystate.activeTaskIds].some((activeId) => isSameTaskOrDescendant(id, activeId))
 
-const currentToolProgress = computed(() => {
-  const lines = tystate.workerStreamLogs
-    .filter(
-      (event) =>
-        event.stage === 'tool progress' &&
-        event.taskId &&
-        isSameTaskOrDescendant(props.currentTask.id, event.taskId),
-    )
-    .slice(-5)
-    .flatMap((event) =>
-      (event.progress?.message ?? event.info ?? '')
-        .replace(/\r\n?/g, '\n')
-        .split('\n')
-        .filter(Boolean),
-    )
-  return lines.slice(-5).join('\n')
-})
+const currentExecutionProgress = computed(() =>
+  selectTaskExecutionProgress(
+    executionProgress.state.value,
+    props.selectedThread.map(({ id }) => id),
+    props.currentTask.id,
+  ),
+)
+
+watch(currentExecutionProgress, () => emit('onSizeChange'))
 
 function formatTimeStamp(timestamp: string | number | Date): string {
   const date = new Date(timestamp)
@@ -353,78 +320,6 @@ function formatTimeStamp(timestamp: string | number | Date): string {
     })
   }
 }
-
-const streamingTracker = ref<
-  Map<
-    string,
-    {
-      text: string
-      reasoning: string
-      func: string
-    }
-  >
->(new Map())
-const currentMsgStream = computed(() => {
-  return streamingTracker.value.get(props.currentTask.id)
-})
-
-const streamerUnsubscriber = tystate.chatCompletionStream(({ taskId, chunk }) => {
-  if (!chunk) return
-  let currentStream = streamingTracker.value.get(taskId)
-  if (!currentStream) {
-    currentStream = {
-      text: '',
-      reasoning: '',
-      func: '',
-    }
-    streamingTracker.value.set(taskId, currentStream)
-  }
-
-  switch (chunk.type) {
-    case 'text-delta':
-      currentStream.text += chunk.text
-      break
-    case 'reasoning-delta':
-      currentStream.reasoning += chunk.text
-      break
-    case 'tool-input-delta':
-      currentStream.func += chunk.delta
-      break
-  }
-
-  emit('onSizeChange')
-})
-
-onBeforeUnmount(() => {
-  streamerUnsubscriber()
-})
-
-const thinkingContainer = ref<HTMLElement>()
-const shouldAutoScroll = ref(true)
-const handleUserScroll = () => {
-  if (!thinkingContainer.value) return
-
-  const { scrollTop, scrollHeight, clientHeight } = thinkingContainer.value
-  const isAtBottom = scrollTop + clientHeight >= scrollHeight - 20 // 20px tolerance
-
-  // If user scrolled away from bottom, disable auto-scroll
-  // If user scrolled back to bottom, re-enable auto-scroll
-  shouldAutoScroll.value = isAtBottom
-}
-
-watch(
-  () => streamingTracker.value.get(props.currentTask.id)?.reasoning,
-  async (reason) => {
-    // This will run whenever currentThinkingStream changes
-    if (reason && shouldAutoScroll.value) {
-      await nextTick()
-      if (thinkingContainer.value) {
-        //console.log('scrolling!!', thinkingContainer.value.scrollHeight)
-        thinkingContainer.value.scrollTop = thinkingContainer.value.scrollHeight
-      }
-    }
-  },
-)
 
 interface taskTreeNodeType {
   label: string
@@ -604,11 +499,4 @@ async function onLazyLoad({
   margin: 0
   padding-left: 1.25rem
   font-size: 0.75rem
-
-.tool-progress
-  max-height: 8rem
-  margin: 0 0 0.5rem
-  overflow: auto
-  white-space: pre-wrap
-  overflow-wrap: anywhere
 </style>

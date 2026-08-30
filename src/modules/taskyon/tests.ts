@@ -35,6 +35,14 @@ import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { buildPmtilesUrlCandidates } from '@taskyon/common/modules/pmtilesUtils'
 import { parseTaskyonMapWidgetState } from '@taskyon/ui/gis/taskyonMapWidget'
+import {
+  createTaskExecutionProgressState,
+  createTaskWorkerStatusState,
+  reduceChatCompletionProgress,
+  reduceTaskWorkerStatus,
+  reduceWorkerProgress,
+  selectTaskExecutionProgress,
+} from '@taskyon/ui/modules/taskExecutionProgress'
 import { until } from '@vueuse/core'
 import {
   buildTaskyonProfileSectionResetPatch,
@@ -99,6 +107,76 @@ export function testTaskChainNavigationUsesStoredIds() {
 }
 testTaskChainNavigationUsesStoredIds.description =
   'Uses the persisted create-chain response id for UI navigation instead of a locally predicted task id.'
+
+export function testTaskExecutionProgressReduction() {
+  const taskId = 'streamed-task'
+  let workerStatus = reduceTaskWorkerStatus(createTaskWorkerStatusState(), {
+    stage: 'processing',
+    taskId,
+  })
+  workerStatus = reduceTaskWorkerStatus(workerStatus, { stage: 'all processed' })
+  assert(workerStatus.settled, 'Expected all processed to settle app-level worker status')
+  assert(workerStatus.activeTaskIds.size === 0, 'Expected all processed to clear active tasks')
+  assert(
+    workerStatus.lastActiveTaskId === taskId,
+    'Expected app-level worker status to retain the last active task',
+  )
+
+  let state = createTaskExecutionProgressState()
+
+  state = reduceWorkerProgress(state, { stage: 'processing', taskId })
+  state = reduceChatCompletionProgress(state, {
+    taskId,
+    chunk: { type: 'reasoning-delta', id: 'reasoning', text: 'thinking ' },
+  })
+  state = reduceChatCompletionProgress(state, {
+    taskId,
+    chunk: { type: 'text-delta', id: 'answer', text: 'answer' },
+  })
+
+  const streaming = state.progressByTaskId.get(taskId)
+  assert(streaming?.reasoning === 'thinking ', 'Expected streamed reasoning to accumulate')
+  assert(streaming.text === 'answer', 'Expected streamed answer text to accumulate')
+  assert(state.activeTaskIds.has(taskId), 'Expected processing task to remain active')
+
+  state = reduceWorkerProgress(state, {
+    stage: 'tool progress',
+    taskId,
+    progress: { message: 'one\ntwo\nthree' },
+  })
+  state = reduceWorkerProgress(state, {
+    stage: 'tool progress',
+    taskId,
+    progress: { message: 'four\nfive\nsix' },
+  })
+  assert(
+    state.progressByTaskId.get(taskId)?.toolProgress === 'two\nthree\nfour\nfive\nsix',
+    'Expected tool progress to retain only its five latest lines',
+  )
+
+  state = reduceWorkerProgress(state, { stage: 'processing', taskId: 'selected-parent' })
+  assert(
+    selectTaskExecutionProgress(state, ['selected-parent', taskId], 'selected-parent')?.taskId ===
+      taskId,
+    'Expected model streaming to take precedence over generic parent progress',
+  )
+
+  state = reduceWorkerProgress(state, { stage: 'processed', taskId })
+  assert(
+    state.progressByTaskId.has(taskId),
+    'Expected processed progress to remain visible while child work may continue',
+  )
+  assert(!state.activeTaskIds.has(taskId), 'Expected processed task to leave the active set')
+
+  state = reduceWorkerProgress(state, { stage: 'finished', taskId })
+  assert(!state.progressByTaskId.has(taskId), 'Expected finished task progress to be removed')
+
+  state = reduceWorkerProgress(state, { stage: 'all processed' })
+  assert(state.progressByTaskId.size === 0, 'Expected settled worker to clear transient progress')
+  assert(state.activeTaskIds.size === 0, 'Expected settled worker to clear active tasks')
+}
+testTaskExecutionProgressReduction.description =
+  'Reduces completion and worker streams into shared transient task execution progress.'
 
 const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
   const snapshot = state.getProfileSnapshot().sections

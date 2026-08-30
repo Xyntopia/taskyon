@@ -14,12 +14,16 @@
     :show-web-search="showWebSearch"
     :show-assistant-identity="showAssistantIdentity"
     :presentation="presentation"
+    :chat-completion-stream="chatCompletionStream"
+    :worker-stream="workerStream"
     :data-cy="chatDataCy"
     :data-runtime-status="status"
   />
 </template>
 
 <script setup lang="ts">
+import type { StreamSubscription } from '@taskyon/common/modules/frpBus'
+import type { ChatCompletionStreamEvent, TyTaskStreamData } from '@taskyon/taskyon'
 import type { partialTaskDraft, TaskyonClient, ToolBase } from '@taskyon/taskyon/api'
 import type { TaskChatPresentation } from '../modules/taskChatPresentation'
 import TaskChatWindow from './taskyon/TaskChatWindow.vue'
@@ -37,6 +41,8 @@ const {
   showAssistantIdentity = true,
   chatDataCy = undefined,
   presentation = {},
+  chatCompletionStream = undefined,
+  workerStream = undefined,
 } = defineProps<{
   client: TaskyonClient | undefined
   status?: 'starting' | 'ready' | 'error' | undefined
@@ -50,6 +56,8 @@ const {
   showAssistantIdentity?: boolean | undefined
   chatDataCy?: string | undefined
   presentation?: Partial<TaskChatPresentation> | undefined
+  chatCompletionStream?: StreamSubscription<ChatCompletionStreamEvent> | undefined
+  workerStream?: StreamSubscription<TyTaskStreamData> | undefined
 }>()
 
 const selectedTaskId = defineModel<string | undefined>('selectedTaskId', {

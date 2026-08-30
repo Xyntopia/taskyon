@@ -11,8 +11,11 @@ import { awaitRequestResponse } from './requestLifecycle.ts'
 export type Observer<T> = (value: T) => void | Promise<void>
 export type Unsubscribe = () => void
 
-export interface Stream<T> {
+export interface StreamSubscription<T> {
   (observer: Observer<T>): Unsubscribe
+}
+
+export interface Stream<T> extends StreamSubscription<T> {
   unsubscribeAll(this: void): void
   filter(this: void, predicate: (value: T) => boolean): Stream<T>
   narrow<U extends T>(this: void, predicate: (value: T) => value is U): Stream<U>

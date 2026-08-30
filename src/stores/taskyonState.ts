@@ -79,6 +79,10 @@ import {
 } from '@taskyon/runtime-browser/storage'
 import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import { useConversationHistory } from '@taskyon/ui/modules/useConversationHistory'
+import {
+  createTaskWorkerStatusState,
+  reduceTaskWorkerStatus,
+} from '@taskyon/ui/modules/taskExecutionProgress'
 import { createTaskyonClient, taskyonGuiProtocol, taskyonProtocol } from '@taskyon/tyclient'
 import type { TaskyonGuiMessage } from '@taskyon/tyclient'
 import { createStandardEntryNodeTool } from '@taskyon/taskyon/tools/entryNode'
@@ -192,96 +196,58 @@ async function updateLlmModels(
   })
 }
 
-function connectWorkerStream(taskyon: Promise<Taskyon>) {
-  const taskWorkerWaiting = ref(true)
+function connectExecutionStreams(taskyon: Promise<Taskyon>) {
+  const chatCompletionEvents = createStream<ChatCompletionStreamEvent>()
+  const workerEvents = createStream<TyTaskStreamData>()
+  const workerState = ref(createTaskWorkerStatusState())
   const workerStreamLogs = ref<(TyTaskStreamData & { timestamp: Date })[]>([])
   const maxLogRows = 50
-  const lastActiveTaskId = ref<string | null>(null)
-  const lastTaskState = ref(new Map<string, TyTaskStreamData['stage']>())
-  const activeTaskIds = ref(new Set<string>())
-  const taskFinishedStages = new Set<TyTaskStreamData['stage']>([
-    'processed',
-    'finished',
-    'error',
-    'aborted',
-  ])
-  const taskActiveStages = new Set<TyTaskStreamData['stage']>([
-    'processing',
-    'in loop',
-    'subtasks',
-    'tool progress',
-  ])
-
-  void taskyon.then(({ workerStream }) => {
-    void workerStream((data) => {
-      if (data.stage === 'all processed') taskWorkerWaiting.value = true
-      else if (data.stage === 'processing') taskWorkerWaiting.value = false
-    })
-
-    void workerStream((data) => {
-      console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
-      if (
-        [
-          'all processed',
-          'processing',
-          'processed',
-          'finished',
-          'error',
-          'aborted',
-          'tool progress',
-        ].includes(data.stage)
-      ) {
-        workerStreamLogs.value.push({ ...data, timestamp: new Date() })
-        // Ensure the log doesn't exceed the maximum number of rows
-        if (workerStreamLogs.value.length > maxLogRows) {
-          workerStreamLogs.value.shift() // Remove the oldest entry
-        }
-      }
-    })
-
-    void workerStream((data) => {
-      const id = data.task?.id || data.taskId
-      if (data.stage === 'all processed' || (data.stage === 'aborted' && !id)) {
-        // "all processed" and global abort do not carry a task id, so clear stale in-progress states.
-        lastTaskState.value.clear()
-        activeTaskIds.value.clear()
-        return
-      }
-
-      if (!id) return
-
-      if (taskFinishedStages.has(data.stage)) {
-        // we don't need the task anymore once we're done processing with it :)
-        lastTaskState.value.delete(id)
-        activeTaskIds.value.delete(id)
-      } else if (taskActiveStages.has(data.stage)) {
-        activeTaskIds.value.add(id)
-        lastTaskState.value.set(id, data.stage)
-      } else {
-        lastTaskState.value.set(id, data.stage)
-      }
-    })
-
-    workerStream.filter(
-      (data) =>
-        data.stage === 'processing' ||
-        data.stage === 'tool progress' ||
-        data.stage === 'processed' ||
-        data.stage === 'finished' ||
-        data.stage === 'error' ||
-        (data.stage === 'aborted' && !!(data.taskId || data.task?.id)),
-    )((data) => {
-      // TODO: add last task to GUI by checking if our current selected task now has this child...
-      lastActiveTaskId.value = data.task?.id || data.taskId || null
-    })
+  const unsubscribeWorkerState = workerEvents.stream((data) => {
+    workerState.value = reduceTaskWorkerStatus(workerState.value, data)
+  })
+  const unsubscribeLog = workerEvents.stream((data) => {
+    console.log(`worker: ${data.stage}, ${data.taskId || data.task?.id}`)
+    if (
+      [
+        'all processed',
+        'processing',
+        'processed',
+        'finished',
+        'error',
+        'aborted',
+        'tool progress',
+      ].includes(data.stage)
+    ) {
+      workerStreamLogs.value = [
+        ...workerStreamLogs.value.slice(-(maxLogRows - 1)),
+        { ...data, timestamp: new Date() },
+      ]
+    }
+  })
+  let disposed = false
+  let unsubscribeRuntimeStreams: (() => void)[] = []
+  void taskyon.then((runtime) => {
+    if (disposed) return
+    unsubscribeRuntimeStreams = [
+      runtime.chatCompletionStream(chatCompletionEvents.emit),
+      runtime.workerStream(workerEvents.emit),
+    ]
+  })
+  onScopeDispose(() => {
+    disposed = true
+    unsubscribeWorkerState()
+    unsubscribeLog()
+    unsubscribeRuntimeStreams.forEach((unsubscribe) => unsubscribe())
   })
 
   return {
-    taskWorkerWaiting: readonly(taskWorkerWaiting),
-    lastActiveTaskId: readonly(lastActiveTaskId),
+    activeTaskIds: computed(() => workerState.value.activeTaskIds),
+    chatCompletionStream: chatCompletionEvents.stream,
+    lastActiveTaskId: computed(() => workerState.value.lastActiveTaskId),
+    lastTaskState: computed(() => workerState.value.taskStages),
+    taskWorkerWaiting: computed(() => workerState.value.settled),
+    workerStream: workerEvents.stream,
     workerStreamLogs: readonly(workerStreamLogs),
-    activeTaskIds: readonly(activeTaskIds),
-    lastTaskState: readonly(lastTaskState),
   }
 }
 
@@ -1780,19 +1746,21 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     return instance['taskManagerInstance']
   })*/
 
-  const { taskWorkerWaiting, lastActiveTaskId, lastTaskState, workerStreamLogs, activeTaskIds } =
-    connectWorkerStream(taskyon)
+  const {
+    activeTaskIds,
+    chatCompletionStream,
+    lastActiveTaskId,
+    lastTaskState,
+    taskWorkerWaiting,
+    workerStream,
+    workerStreamLogs,
+  } = connectExecutionStreams(taskyon)
 
   const stopWorker = async (reason: string) => {
     console.log('stopping worker with reason:', reason)
     const instance = await taskyon
     instance.cancelCurrentRun(reason)
   }
-
-  const { stream: chatCompletionStream, emit: chatCompletionConnector } =
-    createStream<ChatCompletionStreamEvent>()
-  // connect taskyon to this stream as soon as it is initialized...
-  void taskyon.then((ty) => ty.chatCompletionStream(chatCompletionConnector))
 
   function setNewContentDraft(content: TaskNode['content'] | undefined) {
     if (content?.type === 'message') {
@@ -1946,6 +1914,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     workerStreamLogs,
     activeTaskIds,
     chatCompletionStream,
+    workerStream,
     connectMessageIframe,
     entryNode,
     api: uiApiOutside,

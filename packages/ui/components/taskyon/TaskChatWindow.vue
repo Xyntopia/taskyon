@@ -46,7 +46,11 @@
         <q-tooltip>{{ resolvedPresentation.newChatLabel }}</q-tooltip>
       </q-btn>
     </header>
-    <div ref="threadContainer" class="task-chat-window__thread col scroll q-pa-sm">
+    <div
+      ref="threadContainer"
+      class="task-chat-window__thread col scroll q-pa-sm"
+      @scroll="updateAutoScroll"
+    >
       <TaskChatThread
         v-if="selectedThread.length > 0"
         :tasks="selectedThread"
@@ -58,13 +62,17 @@
           <slot name="task" v-bind="slotProps" />
         </template>
       </TaskChatThread>
+      <TaskExecutionProgress v-if="liveProgress" :progress="liveProgress" />
       <div
-        v-else-if="status === 'ready'"
+        v-if="selectedThread.length === 0 && status === 'ready'"
         class="task-chat-window__empty fit column items-center justify-center text-center q-pa-md"
       >
         <div class="text-h6">{{ welcomeMessage }}</div>
       </div>
-      <div v-else class="fit column items-center justify-center q-gutter-sm">
+      <div
+        v-else-if="selectedThread.length === 0"
+        class="fit column items-center justify-center q-gutter-sm"
+      >
         <q-spinner v-if="status === 'starting'" color="primary" size="2rem" />
         <div :class="{ 'text-negative': status === 'error' }">
           {{ status === 'error' ? errorMessage : resolvedPresentation.startingMessage }}
@@ -91,12 +99,16 @@
 
 <script setup lang="ts">
 import { mdiForumOutline, mdiForumPlus } from '@quasar/extras/mdi-v6'
+import type { StreamSubscription } from '@taskyon/common/modules/frpBus'
 import {
   type partialTaskDraft,
   type TaskNode,
   type TaskyonClient,
   type ToolBase,
 } from '@taskyon/taskyon/api'
+import type { ChatCompletionStreamEvent, TyTaskStreamData } from '@taskyon/taskyon'
+import { selectTaskExecutionProgress } from '@taskyon/ui/modules/taskExecutionProgress'
+import { useTaskExecutionProgress } from '@taskyon/ui/modules/useTaskExecutionProgress'
 import { useConversationHistory } from '@taskyon/ui/modules/useConversationHistory'
 import {
   resolveTaskChatPresentation,
@@ -106,6 +118,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import CopyTaskChatButton from './CopyTaskChatButton.vue'
 import TaskConversationBrowser from './TaskConversationBrowser.vue'
 import TaskChatThread from './TaskChatThread.vue'
+import TaskExecutionProgress from './TaskExecutionProgress.vue'
 import TaskComposer from './TaskComposer.vue'
 import { selectTasksForChatCopy } from './taskChatVisibility'
 
@@ -122,6 +135,8 @@ const props = withDefaults(
     showWebSearch?: boolean
     showAssistantIdentity?: boolean
     presentation?: Partial<TaskChatPresentation>
+    chatCompletionStream?: StreamSubscription<ChatCompletionStreamEvent> | undefined
+    workerStream?: StreamSubscription<TyTaskStreamData> | undefined
   }>(),
   {
     status: 'starting',
@@ -150,6 +165,7 @@ const copyableThread = computed(() =>
 let unsubscribeTaskCreated: (() => void) | undefined
 let refreshVersion = 0
 let locallySelectedTaskId: string | undefined
+const executionProgress = useTaskExecutionProgress()
 
 const resolvedPresentation = computed(() => resolveTaskChatPresentation(props.presentation))
 const conversationHistory = useConversationHistory({
@@ -160,8 +176,29 @@ const conversationHistory = useConversationHistory({
 
 const scrollToThreadEnd = async () => {
   await nextTick()
+  if (!shouldAutoScroll.value) return
   const container = threadContainer.value
   if (container) container.scrollTop = container.scrollHeight
+}
+
+const shouldAutoScroll = ref(true)
+const updateAutoScroll = () => {
+  const container = threadContainer.value
+  if (!container) return
+  shouldAutoScroll.value =
+    container.scrollTop + container.clientHeight >= container.scrollHeight - 24
+}
+
+const liveProgress = computed(() =>
+  selectTaskExecutionProgress(
+    executionProgress.state.value,
+    selectedThread.value.map(({ id }) => id),
+    currentTask.value?.id,
+  ),
+)
+
+const connectStreams = () => {
+  executionProgress.connect(props.chatCompletionStream, props.workerStream)
 }
 
 const refreshThread = async () => {
@@ -249,13 +286,24 @@ const selectConversation = (taskId: string) => {
 const startNewConversation = () => {
   refreshVersion += 1
   locallySelectedTaskId = undefined
+  shouldAutoScroll.value = true
+  executionProgress.reset()
   selectedThread.value = []
   selectedTaskId.value = undefined
 }
 
 watch(() => props.client, connectClient, { immediate: true })
+watch([() => props.chatCompletionStream, () => props.workerStream], connectStreams, {
+  immediate: true,
+})
+watch(
+  () => executionProgress.state.value,
+  () => void scrollToThreadEnd(),
+)
 watch(selectedTaskId, onSelectedTaskChanged)
-onBeforeUnmount(() => unsubscribeTaskCreated?.())
+onBeforeUnmount(() => {
+  unsubscribeTaskCreated?.()
+})
 </script>
 
 <style scoped lang="sass">
@@ -266,6 +314,9 @@ onBeforeUnmount(() => unsubscribeTaskCreated?.())
 
 .task-chat-window__thread
   min-height: 0
+
+.task-chat-window__thread > :deep(.task-execution-progress)
+  align-self: center
 
 .task-chat-window__header
   min-height: 2.5rem
