@@ -1,6 +1,5 @@
 import { createServer } from 'node:http'
 import { randomBytes, createHash } from 'node:crypto'
-import { createInterface } from 'node:readline/promises'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -10,7 +9,6 @@ import {
   type ProviderOauthConfig,
   getProviderOauthConfig,
   getProviderOauthCredentialsSecretName,
-  resolveProviderAccessToken,
 } from '../../taskyon/src/utils/providerAuth'
 import {
   OAuthCredentials,
@@ -22,9 +20,8 @@ export type CliOauthStorage = {
   authDir: string
   secretId: string
 }
-const CODEX_LOOPBACK_PORT = 1455
-const CODEX_LOOPBACK_REDIRECT_URI = `http://localhost:${CODEX_LOOPBACK_PORT}/auth/callback`
-const CODEX_DEFAULT_ORIGINATOR = 'codex_cli'
+const CLI_OAUTH_LOOPBACK_PORT = 1455
+const CLI_OAUTH_REDIRECT_URI = `http://localhost:${CLI_OAUTH_LOOPBACK_PORT}/auth/callback`
 
 const base64Url = (data: Buffer): string =>
   data.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
@@ -69,35 +66,16 @@ const parseJwtPayload = (jwt: string): Record<string, unknown> | null => {
   }
 }
 
-const getOpenAiAuthClaims = (idToken: string): Record<string, unknown> => {
-  const payload = parseJwtPayload(idToken)
-  if (!payload) return {}
-  const claims = payload['https://api.openai.com/auth']
-  if (!claims || typeof claims !== 'object') return {}
-  return claims as Record<string, unknown>
-}
-
-type WorkspaceCandidate = {
-  id: string
-  label: string
-  metadata: string[]
-}
-
 type PersistedAuthState = {
   credentials?: unknown
-  accountId?: string
-  preferredWorkspaceId?: string
+  [key: string]: unknown
 }
-
-const workspacePreferenceSecretName = (providerName: string) =>
-  `oauth:workspace:preference:${providerName}`
-const accountIdSecretName = (providerName: string) => `oauth:account-id:${providerName}`
 const providerAuthFilePath = (storage: CliOauthStorage, providerName: string): string => {
   const safeProviderName = providerName.replace(/[^a-zA-Z0-9._-]/g, '_')
   return join(storage.authDir, `${safeProviderName}.json`)
 }
 
-const readPersistedAuthState = async (
+export const readPersistedAuthState = async (
   storage: CliOauthStorage,
   providerName: string,
 ): Promise<PersistedAuthState> => {
@@ -110,10 +88,10 @@ const readPersistedAuthState = async (
   }
 }
 
-const writePersistedAuthState = async (
+export const writePersistedAuthState = async (
   storage: CliOauthStorage,
   providerName: string,
-  patch: Partial<PersistedAuthState>,
+  patch: Record<string, unknown>,
 ) => {
   const currentState = await readPersistedAuthState(storage, providerName)
   const nextState: PersistedAuthState = { ...currentState, ...patch }
@@ -133,15 +111,6 @@ const writePersistedAuthState = async (
   }
 }
 
-const isMissingOrganizationContextError = (error: unknown): boolean => {
-  if (!(error instanceof Error)) return false
-  const message = error.message.toLowerCase()
-  return (
-    (message.includes('invalid_subject_token') && message.includes('organization_id')) ||
-    message.includes('missing organization_id')
-  )
-}
-
 const getJwtExpiryMs = (jwt: string): number | undefined => {
   const payload = parseJwtPayload(jwt)
   const exp = payload?.exp
@@ -157,227 +126,6 @@ const isIdTokenExpired = (
   const expiryMs = getJwtExpiryMs(credentials.id_token)
   if (!expiryMs) return false
   return Date.now() + bufferMs >= expiryMs
-}
-
-const readPreferredWorkspaceId = async (
-  taskyon: Taskyon,
-  storage: CliOauthStorage,
-  providerName: string,
-): Promise<string | undefined> => {
-  const raw = await taskyon.getSecret(
-    storage.secretId,
-    workspacePreferenceSecretName(providerName),
-    false,
-    false,
-  )
-  const secretValue = raw?.trim()
-  if (secretValue) return secretValue
-
-  const persistedState = await readPersistedAuthState(storage, providerName)
-  const fileValue = persistedState.preferredWorkspaceId?.trim()
-  return fileValue || undefined
-}
-
-const writePreferredWorkspaceId = async (
-  taskyon: Taskyon,
-  storage: CliOauthStorage,
-  providerName: string,
-  workspaceId: string,
-) => {
-  await taskyon.setSecret(
-    storage.secretId,
-    workspacePreferenceSecretName(providerName),
-    workspaceId,
-  )
-  await writePersistedAuthState(storage, providerName, { preferredWorkspaceId: workspaceId })
-}
-
-const asNonEmptyString = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim() ? value.trim() : undefined
-
-const getOpenAiAccountIdFromClaims = (claims: Record<string, unknown>): string | undefined => {
-  const nested = claims['https://api.openai.com/auth']
-  const nestedClaims =
-    nested && typeof nested === 'object' ? (nested as Record<string, unknown>) : undefined
-  const organizations = claims.organizations
-
-  if (asNonEmptyString(claims.chatgpt_account_id))
-    return asNonEmptyString(claims.chatgpt_account_id)
-  if (nestedClaims && asNonEmptyString(nestedClaims.chatgpt_account_id)) {
-    return asNonEmptyString(nestedClaims.chatgpt_account_id)
-  }
-  if (Array.isArray(organizations)) {
-    for (const entry of organizations) {
-      if (typeof entry === 'string' && entry.trim()) return entry.trim()
-      if (!entry || typeof entry !== 'object') continue
-      const record = entry as Record<string, unknown>
-      const organizationId =
-        asNonEmptyString(record.id) ??
-        asNonEmptyString(record.organization_id) ??
-        asNonEmptyString(record.workspace_id) ??
-        asNonEmptyString(record.chatgpt_account_id)
-      if (organizationId) return organizationId
-    }
-  }
-  return undefined
-}
-
-const getOpenAiAccountIdFromCredentials = (
-  credentials: ReturnType<typeof OAuthCredentials.parse>,
-): string | undefined => {
-  if (credentials.id_token) {
-    const idTokenClaims = getOpenAiAuthClaims(credentials.id_token)
-    const accountId = getOpenAiAccountIdFromClaims(idTokenClaims)
-    if (accountId) return accountId
-  }
-  if (credentials.access_token) {
-    const accessTokenClaims = parseJwtPayload(credentials.access_token) ?? {}
-    const accountId = getOpenAiAccountIdFromClaims(accessTokenClaims)
-    if (accountId) return accountId
-  }
-  return undefined
-}
-
-export const readProviderOauthAccountId = async (
-  taskyon: Taskyon,
-  providerName: string,
-  storage: CliOauthStorage,
-): Promise<string | undefined> => {
-  const raw = await taskyon.getSecret(
-    storage.secretId,
-    accountIdSecretName(providerName),
-    false,
-    false,
-  )
-  const secretValue = raw?.trim()
-  if (secretValue) return secretValue
-
-  const persistedState = await readPersistedAuthState(storage, providerName)
-  const fileValue = persistedState.accountId?.trim()
-  return fileValue || undefined
-}
-
-const writeProviderOauthAccountId = async (
-  taskyon: Taskyon,
-  storage: CliOauthStorage,
-  providerName: string,
-  accountId: string,
-) => {
-  await taskyon.setSecret(storage.secretId, accountIdSecretName(providerName), accountId)
-  await writePersistedAuthState(storage, providerName, { accountId })
-}
-
-const getWorkspaceCandidatesFromClaims = (
-  claims: Record<string, unknown>,
-): WorkspaceCandidate[] => {
-  const out: WorkspaceCandidate[] = []
-  const add = (idRaw: unknown, record?: Record<string, unknown>) => {
-    const id = asNonEmptyString(idRaw)
-    if (!id) return
-
-    const name =
-      asNonEmptyString(record?.name) ??
-      asNonEmptyString(record?.display_name) ??
-      asNonEmptyString(record?.title)
-    const slug = asNonEmptyString(record?.slug)
-    const role = asNonEmptyString(record?.role)
-    const isOwner = record?.is_org_owner === true
-    const type =
-      asNonEmptyString(record?.type) ??
-      (id.startsWith('org-') ? 'organization' : id.includes('-') ? 'workspace' : undefined)
-
-    const metadata = [
-      type ? `type:${type}` : '',
-      slug ? `slug:${slug}` : '',
-      role ? `role:${role}` : '',
-      isOwner ? 'owner' : '',
-    ].filter(Boolean)
-
-    const labelBase = name ?? id
-    const label = labelBase === id ? `${id}` : `${labelBase} (${id})`
-
-    const existing = out.find((entry) => entry.id === id)
-    if (existing) {
-      const mergedMetadata = new Set([...existing.metadata, ...metadata])
-      existing.metadata = [...mergedMetadata]
-      if (existing.label === existing.id && label !== id) existing.label = label
-      return
-    }
-    out.push({ id, label, metadata })
-  }
-
-  add(claims.organization_id, claims)
-  const organizations = claims.organizations
-  if (Array.isArray(organizations)) {
-    for (const entry of organizations) {
-      if (typeof entry === 'string') {
-        add(entry, { type: 'organization' })
-        continue
-      }
-      if (!entry || typeof entry !== 'object') continue
-      const rec = entry as Record<string, unknown>
-      add(rec.organization_id ?? rec.id ?? rec.workspace_id ?? rec.chatgpt_account_id, rec)
-    }
-  }
-  add(claims.chatgpt_account_id, {
-    name: claims.chatgpt_account_name,
-    type: 'workspace',
-  })
-  const score = (candidate: WorkspaceCandidate): number => {
-    const typeTag = candidate.metadata.find((item) => item.startsWith('type:'))
-    if (typeTag === 'type:workspace') return 0
-    if (typeTag === 'type:organization') return 1
-    return 2
-  }
-  return [...out].sort((a, b) => score(a) - score(b) || a.label.localeCompare(b.label))
-}
-
-const chooseWorkspaceInteractive = async (
-  candidates: WorkspaceCandidate[],
-): Promise<string | undefined> => {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined
-  if (candidates.length === 0) return undefined
-  if (candidates.length === 1) return candidates[0]?.id
-
-  process.stdout.write('Select ChatGPT workspace for Codex login:\n')
-  for (let index = 0; index < candidates.length; index += 1) {
-    const candidate = candidates[index]
-    if (!candidate) continue
-    const metadata = candidate.metadata.length > 0 ? ` [${candidate.metadata.join(', ')}]` : ''
-    process.stdout.write(`  ${index + 1}. ${candidate.label}${metadata}\n`)
-  }
-  process.stdout.write('  0. cancel\n')
-
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
-  try {
-    const workspaceCandidateIds = candidates
-      .filter((candidate) => candidate.metadata.includes('type:workspace'))
-      .map((candidate) => candidate.id)
-    while (true) {
-      const answer = (await rl.question('Workspace number: ')).trim()
-      if (answer === '0') return undefined
-      const selected = Number.parseInt(answer, 10)
-      if (!Number.isInteger(selected) || selected < 1 || selected > candidates.length) {
-        process.stdout.write('Invalid selection. Please enter a listed number.\n')
-        continue
-      }
-      const selectedCandidate = candidates[selected - 1]
-      if (!selectedCandidate) continue
-      if (
-        selectedCandidate.metadata.includes('type:organization') &&
-        workspaceCandidateIds.length === 1 &&
-        workspaceCandidateIds[0]
-      ) {
-        process.stdout.write(
-          `Organization selected; using workspace ${workspaceCandidateIds[0]} for OAuth.\n`,
-        )
-        return workspaceCandidateIds[0]
-      }
-      return selectedCandidate.id
-    }
-  } finally {
-    rl.close()
-  }
 }
 
 const waitForAuthCode = async (
@@ -424,7 +172,7 @@ const waitForAuthCode = async (
       reject(new Error(`OAuth login timed out after ${timeoutMs}ms.`))
     }, timeoutMs)
 
-    server.listen(CODEX_LOOPBACK_PORT, 'localhost')
+    server.listen(CLI_OAUTH_LOOPBACK_PORT, 'localhost')
   })
 }
 
@@ -491,7 +239,7 @@ const exchangeCodeForCredentials = async ({
   }
 }
 
-const getCachedCredentials = async (
+export const getCachedProviderOauthCredentials = async (
   taskyon: Taskyon,
   storage: CliOauthStorage,
   providerName: string,
@@ -515,7 +263,7 @@ const getCachedCredentials = async (
   }
 }
 
-const setCachedCredentials = async (
+export const setCachedProviderOauthCredentials = async (
   taskyon: Taskyon,
   storage: CliOauthStorage,
   providerName: string,
@@ -526,7 +274,7 @@ const setCachedCredentials = async (
   await writePersistedAuthState(storage, providerName, { credentials })
 }
 
-export async function resolveCachedProviderOauthSession({
+export async function resolveCachedProviderOauthCredentials({
   providerName,
   api,
   taskyon,
@@ -536,11 +284,11 @@ export async function resolveCachedProviderOauthSession({
   api: ProviderEndpointConfig
   taskyon: Taskyon
   storage: CliOauthStorage
-}): Promise<null | { accessToken: string; accountId?: string }> {
+}): Promise<null | ReturnType<typeof OAuthCredentials.parse>> {
   const oauth = getProviderOauthConfig(api)
   if (!oauth?.tokenUrl) return null
 
-  const cached = await getCachedCredentials(taskyon, storage, providerName)
+  const cached = await getCachedProviderOauthCredentials(taskyon, storage, providerName)
   if (!cached) return null
 
   let validCredentials = cached
@@ -553,7 +301,7 @@ export async function resolveCachedProviderOauthSession({
         oauth.clientId,
       )
       validCredentials = refreshedForIdToken
-      await setCachedCredentials(taskyon, storage, providerName, refreshedForIdToken)
+      await setCachedProviderOauthCredentials(taskyon, storage, providerName, refreshedForIdToken)
     } catch {
       return null
     }
@@ -564,39 +312,25 @@ export async function resolveCachedProviderOauthSession({
     clientId: oauth.clientId,
   })
   validCredentials = refreshed ?? validCredentials
-  if (refreshed) await setCachedCredentials(taskyon, storage, providerName, refreshed)
-
-  if (providerName === 'chatgpt-codex') {
-    const accountId =
-      getOpenAiAccountIdFromCredentials(validCredentials) ??
-      (await readProviderOauthAccountId(taskyon, providerName, storage))
-    if (accountId) await writeProviderOauthAccountId(taskyon, storage, providerName, accountId)
-    return { accessToken: validCredentials.access_token, ...(accountId ? { accountId } : {}) }
-  }
-
-  try {
-    const accessToken = await resolveProviderAccessToken(validCredentials, api)
-    return { accessToken }
-  } catch {
-    return null
-  }
+  if (refreshed) await setCachedProviderOauthCredentials(taskyon, storage, providerName, refreshed)
+  return validCredentials
 }
 
-const hasOrganizationIdClaim = (claims: Record<string, unknown>): boolean =>
-  typeof claims.organization_id === 'string' && claims.organization_id.trim().length > 0
-
-const runAuthorizationCodeFlow = async ({
+export const runAuthorizationCodeFlow = async ({
   oauth,
   timeoutMs,
-  forcedWorkspaceId,
+  authorizeQuery,
 }: {
   oauth: ProviderOauthConfig
   timeoutMs: number
-  forcedWorkspaceId?: string
+  authorizeQuery?: Record<string, string>
 }) => {
+  if (!oauth.tokenUrl) {
+    throw new Error('OAuth authorization code flow requires a token URL.')
+  }
   const { verifier, challenge } = createPkce()
   const state = base64Url(randomBytes(24))
-  const redirectUri = CODEX_LOOPBACK_REDIRECT_URI
+  const redirectUri = CLI_OAUTH_REDIRECT_URI
   const serverWait = waitForAuthCode(state, timeoutMs, redirectUri)
 
   const query = new URLSearchParams({
@@ -608,12 +342,11 @@ const runAuthorizationCodeFlow = async ({
     code_challenge_method: 'S256',
     state,
   })
-  if (oauth.authorizeQuery) {
-    for (const [key, value] of Object.entries(oauth.authorizeQuery)) query.set(key, value)
-  }
-  if (!query.has('originator')) query.set('originator', CODEX_DEFAULT_ORIGINATOR)
-  if (forcedWorkspaceId && !query.has('allowed_workspace_id')) {
-    query.set('allowed_workspace_id', forcedWorkspaceId)
+  for (const [key, value] of Object.entries({
+    ...oauth.authorizeQuery,
+    ...authorizeQuery,
+  })) {
+    query.set(key, value)
   }
 
   const authorizeUrl = `${oauth.oauthURL}?${query.toString()}`
@@ -622,7 +355,7 @@ const runAuthorizationCodeFlow = async ({
       'Open this URL in your browser to continue login:',
       authorizeUrl,
       '',
-      `After sign-in, OpenAI should redirect back to ${redirectUri}.`,
+      `After sign-in, the provider should redirect back to ${redirectUri}.`,
       'Keep this terminal open while the callback completes.',
       '',
     ].join('\n'),
@@ -630,7 +363,7 @@ const runAuthorizationCodeFlow = async ({
 
   const { code } = await serverWait
   return await exchangeCodeForCredentials({
-    tokenUrl: oauth.tokenUrl!,
+    tokenUrl: oauth.tokenUrl,
     clientId: oauth.clientId,
     code,
     verifier,
@@ -645,6 +378,7 @@ export async function loginWithProviderOauthCli({
   storage,
   forceReauth = false,
   timeoutMs = 5 * 60 * 1000,
+  authorizeQuery,
 }: {
   providerName: string
   api: ProviderEndpointConfig
@@ -652,7 +386,8 @@ export async function loginWithProviderOauthCli({
   storage: CliOauthStorage
   forceReauth?: boolean
   timeoutMs?: number
-}): Promise<{ accessToken: string; accountId?: string }> {
+  authorizeQuery?: Record<string, string>
+}): Promise<ReturnType<typeof OAuthCredentials.parse>> {
   const oauth = getProviderOauthConfig(api)
   if (!oauth) {
     throw new Error(
@@ -662,77 +397,21 @@ export async function loginWithProviderOauthCli({
   if (!oauth.tokenUrl) {
     throw new Error(`Provider "${providerName}" is missing auth.oauth.tokenUrl.`)
   }
-  const isChatgptCodex = providerName === 'chatgpt-codex'
-  const envWorkspaceId = process.env.TASKYON_CHATGPT_WORKSPACE_ID
-  const preferredWorkspaceId = await readPreferredWorkspaceId(taskyon, storage, providerName)
-  const initialWorkspaceId = envWorkspaceId || preferredWorkspaceId
-
   if (!forceReauth) {
-    const cachedSession = await resolveCachedProviderOauthSession({
+    const cachedCredentials = await resolveCachedProviderOauthCredentials({
       providerName,
       api,
       taskyon,
       storage,
     })
-    if (cachedSession) return cachedSession
+    if (cachedCredentials) return cachedCredentials
   }
 
-  if (isChatgptCodex) {
-    const credentials = await runAuthorizationCodeFlow({
-      oauth,
-      timeoutMs,
-    })
-    await setCachedCredentials(taskyon, storage, providerName, credentials)
-    const accountId = getOpenAiAccountIdFromCredentials(credentials)
-    if (accountId) await writeProviderOauthAccountId(taskyon, storage, providerName, accountId)
-    return { accessToken: credentials.access_token, ...(accountId ? { accountId } : {}) }
-  }
-
-  if (initialWorkspaceId && !envWorkspaceId) {
-    process.stdout.write(`Using saved workspace preference: ${initialWorkspaceId}\n`)
-  }
-  const credentials = await runAuthorizationCodeFlow(
-    initialWorkspaceId
-      ? {
-          oauth,
-          timeoutMs,
-          forcedWorkspaceId: initialWorkspaceId,
-        }
-      : {
-          oauth,
-          timeoutMs,
-        },
-  )
-  // Persist intermediate credentials immediately so subsequent attempts can reuse
-  // the freshly acquired token even if workspace selection/retry is interrupted.
-  await setCachedCredentials(taskyon, storage, providerName, credentials)
-  const claims = getOpenAiAuthClaims(credentials.id_token ?? '')
-
-  if (typeof claims['chatgpt_account_id'] === 'string' && claims['chatgpt_account_id'].trim()) {
-    await writePreferredWorkspaceId(
-      taskyon,
-      storage,
-      providerName,
-      claims['chatgpt_account_id'].trim(),
-    )
-  }
-  if (!hasOrganizationIdClaim(claims) && !initialWorkspaceId) {
-    const workspaceCandidates = getWorkspaceCandidatesFromClaims(claims)
-    const selectedWorkspace = await chooseWorkspaceInteractive(workspaceCandidates)
-    if (selectedWorkspace) {
-      await writePreferredWorkspaceId(taskyon, storage, providerName, selectedWorkspace)
-      process.stdout.write(`Saved workspace preference: ${selectedWorkspace}\n`)
-    }
-  }
-  await setCachedCredentials(taskyon, storage, providerName, credentials)
-  try {
-    const accessToken = await resolveProviderAccessToken(credentials, api)
-    return { accessToken }
-  } catch (error) {
-    if (!isMissingOrganizationContextError(error)) throw error
-    process.stdout.write(
-      `Token exchange failed due to organization context; reusing OAuth access token from login.\n`,
-    )
-    return { accessToken: credentials.access_token }
-  }
+  const credentials = await runAuthorizationCodeFlow({
+    oauth,
+    timeoutMs,
+    ...(authorizeQuery ? { authorizeQuery } : {}),
+  })
+  await setCachedProviderOauthCredentials(taskyon, storage, providerName, credentials)
+  return credentials
 }

@@ -23,7 +23,6 @@ import {
   createCapabilityPolicy,
   createPersistentTaskTemplateCache,
   createTaskTemplateRenderer,
-  createPortClient,
   createPgLiteTaskManagerStorageService,
   createSubtasksResult,
   createPortServer,
@@ -46,8 +45,8 @@ import {
   randomString,
   registerToolRpcTools,
   TaskNode,
-  taskyonRuntimeProtocol,
 } from '@taskyon/taskyon'
+import { setTaskyonProviderCredential, type TaskyonHostClient } from '@taskyon/taskyon/api'
 import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
 import {
@@ -70,6 +69,8 @@ import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationMani
 import {
   clearBrowserDesignGraphGitRepositories,
   createTaskyonBrowserCoreRuntime,
+  initCryptoSessionFromBrowser,
+  persistBrowserCryptoSession,
 } from '@taskyon/runtime-browser'
 import {
   createOpfsBlobStorageBackend,
@@ -93,10 +94,6 @@ import { freeKey } from 'src/assets/taskyon_free_key'
 import { setColors } from 'src/boot/brand-colors'
 import { useGdrive } from 'src/modules/gdrive'
 import { setPrismTheme } from '@taskyon/common/modules/markdownUtils '
-import {
-  initCryptoSessionFromBrowser,
-  persistSession,
-} from 'src/modules/taskyon/browserCryptoSession'
 import { gDriveSyncPort } from 'src/modules/taskyon/sync'
 import {
   resolveShownTaskChainResponse,
@@ -740,6 +737,7 @@ export const AiProvideKeyStoreName = 'AiProviderKey'
 const useApiManagement = (
   stateRefs: ReturnType<typeof useAppStateStore>,
   taskyon: Thunk<Promise<Taskyon>>,
+  host: TaskyonHostClient,
 ) => {
   const llmModelsInternal = ref<Record<string, ModelCard>>({})
   // we need this in order to reactivly see if something changed..
@@ -872,7 +870,7 @@ const useApiManagement = (
         if (value) await ty.setSecret(AiProvideKeyStoreName, name, value)
         else await ty.deleteSecret(AiProvideKeyStoreName, name)
       }
-      await ty.updateChatCompletionApiKey(name, value)
+      await setTaskyonProviderCredential(host, name, value)
       // and keep track of it internally
       if (value) {
         availableKeys.value = { ...availableKeys.value, [name]: value }
@@ -1271,7 +1269,7 @@ const useSwitchCryptoSession = (
     const ty = await taskyon
     await ty.setNewSession(cs)
     await registerSessionTools()
-    if (persist) await persistSession(cs)
+    if (persist) await persistBrowserCryptoSession(cs)
   }
 
   return {
@@ -1380,13 +1378,10 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })
   const taskyon = runtime.taskyon
   const taskyonClient = runtime.client
-  const taskyonRuntimeClient = taskyon.then((ty) =>
-    createPortClient(ty.hostPort, taskyonRuntimeProtocol),
-  )
   watch(
     () => stateRefs.effectiveToolchainConfig,
     async (toolchainConfig) => {
-      const result = await (await taskyonRuntimeClient).runtime.configure({ toolchainConfig })
+      const result = await runtime.host.runtime.configure({ toolchainConfig })
       if (!result.ok) throw new Error(`Could not configure Taskyon runtime: ${result.error}`)
     },
     { deep: true },
@@ -1502,7 +1497,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     await (await uiToolRpcHost).register()
   }
 
-  const apiKeyManagement = useApiManagement(stateRefs, () => taskyon)
+  const apiKeyManagement = useApiManagement(stateRefs, () => taskyon, runtime.host)
   stateRefs.setTaskyonAuthLoading(true)
   void apiKeyManagement
     .initModelsAndStoredKeys()

@@ -46,6 +46,12 @@ const closeWindow = () => window.close()
 // and ehre for the implicit flow:
 
 onMounted(() => {
+  if (!window.opener) {
+    error.value = 'This page must be opened from an active authentication window.'
+    loading.value = false
+    return
+  }
+
   // ————————————————
   // else: mode === 'return' (your existing “exchange code for token”)
   window.opener.postMessage(

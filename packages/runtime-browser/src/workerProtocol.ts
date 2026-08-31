@@ -5,12 +5,14 @@ export type TaskyonBrowserWorkerInitMessage = {
   type: 'init'
   corePort: MessagePort
   storagePort: MessagePort
+  hostPort: MessagePort
   llmSettings: llmSettings
   entryNode?: partialTaskDraft
   toolchainConfig?: Record<string, FunctionArguments>
-  initialProviderKeys?: Record<string, string | undefined>
   storageNamespacePrefix: string
   storageSessionId?: string
+  persistCryptoSession?: boolean
+  cryptoNamespace?: string
 }
 
 export type TaskyonBrowserWorkerMessage =

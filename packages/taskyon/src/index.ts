@@ -18,6 +18,7 @@ export {
   observeSubTaskStreamDetailed,
   processTasksDetailed,
   createTaskyonClient,
+  createTaskyonHostClient,
   createProtocolStorageCrudWrapper,
   createProtocolStorageBlobBackend,
   createStorageClient,
@@ -29,8 +30,11 @@ export {
   runTasks,
   taskyonGuiProtocol,
   taskyonHostProtocol,
+  taskyonProviderCredentialsProtocol,
   taskyonProtocol,
   taskyonRuntimeProtocol,
+  hasTaskyonProviderCredential,
+  setTaskyonProviderCredential,
   taskyonStorageProtocol,
   taskyonLoggingProtocol,
   TaskyonMessage,
@@ -134,6 +138,7 @@ export * from '@taskyon/common/modules/webFetching/mediatedFetch'
 export * from './utils/objHelpers'
 export { createPgLiteDatabase, getDatabase, getInMemoryDatabase } from './utils/pglite.api'
 export * from './utils/providerAuth'
+export * from './utils/codexAuth'
 export * from './utils/schema'
 export { configureStaticEmbeddingAssetReader } from './utils/staticEmbedding'
 export * from './utils/tsHelpers'

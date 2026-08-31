@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createPortClient, createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBusWeb'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
+import { CODEX_PROVIDER_NAME, resolveProviderAccessToken } from '@taskyon/taskyon'
 import { taskyonRuntimeProtocol } from '@taskyon/taskyon/api'
 import { tyCore } from '../../../taskyon/src/core/init'
 import type { Taskyon } from '../../../taskyon/src/core/init'
@@ -38,7 +39,8 @@ import {
   type CliLlmState,
 } from './models'
 import { CLI_FLOW_TOOL_NAME, cliToolchainProfiles } from './toolchainSettings'
-import { readProviderOauthAccountId, resolveCachedProviderOauthSession } from '../oauthLogin'
+import { resolveCachedCodexOauthSession } from '../codexOauthLogin'
+import { resolveCachedProviderOauthCredentials } from '../oauthLogin'
 import type { CliOauthStorage } from '../oauthLogin'
 
 const runtimeDirectoryName = () => {
@@ -64,23 +66,31 @@ export async function resolveProviderCredential(
   oauthStorage: CliOauthStorage,
 ): Promise<string | null> {
   const api = getProviderSettings(llmState, providerId)
-  const oauthSession =
-    providerId === 'chatgpt-codex' && api
-      ? await resolveCachedProviderOauthSession({
+  const codexSession =
+    providerId === CODEX_PROVIDER_NAME && api
+      ? await resolveCachedCodexOauthSession({
+          api,
+          taskyon: ty,
+          storage: oauthStorage,
+        })
+      : null
+  const providerCredentials =
+    providerId !== CODEX_PROVIDER_NAME && api
+      ? await resolveCachedProviderOauthCredentials({
           providerName: providerId,
           api,
           taskyon: ty,
           storage: oauthStorage,
         })
       : null
-  const accountId =
-    oauthSession?.accountId ??
-    (providerId === 'chatgpt-codex'
-      ? await readProviderOauthAccountId(ty, providerId, oauthStorage)
-      : undefined)
-  if (providerId === 'chatgpt-codex') applyCodexAccountHeader(llmState, accountId)
+  const oauthAccessToken =
+    codexSession?.accessToken ??
+    (providerCredentials && api ? await resolveProviderAccessToken(providerCredentials, api) : null)
+  if (providerId === CODEX_PROVIDER_NAME) {
+    applyCodexAccountHeader(llmState, codexSession?.accountId)
+  }
   return (
-    oauthSession?.accessToken ??
+    oauthAccessToken ??
     (await ty.getSecret(API_KEY_STORE_NAME, providerId, false, false)) ??
     (providerId === 'local' ? 'local' : null)
   )

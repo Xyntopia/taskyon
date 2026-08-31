@@ -25,6 +25,7 @@ import {
   textRankTaskName,
   createStandardEntryNodeTool,
   createTaskDocument,
+  CODEX_PROVIDER_NAME,
   getTaskQueueLabel,
   getProviderOauthConfig,
   getProviderOauthCredentialsSecretName,
@@ -33,6 +34,7 @@ import {
   selectTaskQueueBranches,
   toolCall,
   tyCore,
+  resolveProviderAccessToken,
   type ClientTool,
   type InternalTool,
   TaskNode,
@@ -1765,16 +1767,29 @@ async function loginProvider(
     throw new Error(`Provider '${selectedApi}' does not define OAuth settings.`)
   }
 
-  const { loginWithProviderOauthCli } = await import('./oauthLogin')
-  const { accessToken, accountId } = await loginWithProviderOauthCli({
-    providerName: selectedApi,
-    api,
-    taskyon: ty,
-    storage: oauthStorage,
-    forceReauth: forceLogin,
-  })
+  let accessToken: string
+  if (selectedApi === CODEX_PROVIDER_NAME) {
+    const { loginWithCodexOauthCli } = await import('./codexOauthLogin')
+    const session = await loginWithCodexOauthCli({
+      api,
+      taskyon: ty,
+      storage: oauthStorage,
+      forceReauth: forceLogin,
+    })
+    accessToken = session.accessToken
+    applyCodexAccountHeader(llmState, session.accountId)
+  } else {
+    const { loginWithProviderOauthCli } = await import('./oauthLogin')
+    const credentials = await loginWithProviderOauthCli({
+      providerName: selectedApi,
+      api,
+      taskyon: ty,
+      storage: oauthStorage,
+      forceReauth: forceLogin,
+    })
+    accessToken = await resolveProviderAccessToken(credentials, api)
+  }
   await ty.updateChatCompletionApiKey(selectedApi, accessToken)
-  if (selectedApi === 'chatgpt-codex') applyCodexAccountHeader(llmState, accountId)
   await applyCliRuntimeConfig(ty, llmState)
 }
 

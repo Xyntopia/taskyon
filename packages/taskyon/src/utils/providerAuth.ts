@@ -51,24 +51,25 @@ export const getProviderOauthConfig = (
   const tokenUrl =
     api.auth?.oauth?.tokenUrl ||
     readConfigValue(api.defaultHeaders, ['oauthTokenUrl', 'oauth_token_url'])
-  const tokenExchangeUrl = api.auth?.oauth?.tokenExchange?.tokenUrl || tokenUrl
+  const tokenExchange = api.auth?.oauth?.tokenExchange
+  const tokenExchangeUrl =
+    tokenExchange?.tokenUrl ??
+    (tokenExchange?.requestedToken && tokenExchange.subjectTokenType ? tokenUrl : undefined)
+  const resolvedTokenExchange =
+    tokenExchangeUrl && tokenExchange?.requestedToken && tokenExchange.subjectTokenType
+      ? {
+          tokenUrl: tokenExchangeUrl,
+          requestedToken: tokenExchange.requestedToken,
+          subjectTokenType: tokenExchange.subjectTokenType,
+        }
+      : undefined
   return {
     oauthURL,
     clientId,
     scope,
     ...(api.auth?.oauth?.authorizeQuery ? { authorizeQuery: api.auth.oauth.authorizeQuery } : {}),
     ...(tokenUrl ? { tokenUrl } : {}),
-    ...(tokenExchangeUrl
-      ? {
-          tokenExchange: {
-            tokenUrl: tokenExchangeUrl,
-            requestedToken: api.auth?.oauth?.tokenExchange?.requestedToken || 'openai-api-key',
-            subjectTokenType:
-              api.auth?.oauth?.tokenExchange?.subjectTokenType ||
-              'urn:ietf:params:oauth:token-type:id_token',
-          },
-        }
-      : {}),
+    ...(resolvedTokenExchange ? { tokenExchange: resolvedTokenExchange } : {}),
   }
 }
 

@@ -1,6 +1,24 @@
 export * from '@taskyon/runtime-browser'
 
 export {
+  CODEX_PROVIDER_NAME,
+  getCodexAccountIdFromCredentials,
+  getCodexAuthClaims,
+  getProviderOauthConfig,
+  getProviderOauthCredentialsKey,
+  OAuthCredentials,
+  resolveCodexOauthSession,
+  resolveProviderAccessToken,
+} from '@taskyon/taskyon'
+
+export {
+  createEncryptedOauthSecretStore,
+  createPersistentOauthTokenGetter,
+  loginWithProviderOauth,
+} from '@taskyon/taskyon/browser'
+export type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
+
+export {
   createChatCompletionTask,
   createClientTool,
   createMarkdownTaskChain,
@@ -17,6 +35,7 @@ export {
   llmSettings,
   partialTaskDraft,
   resolveToolchainConfig,
+  setTaskyonProviderCredential,
   taskResult,
   taskyonLoggingProtocol,
   taskyonProtocol,

@@ -263,7 +263,43 @@ export const taskyonRuntimeProtocol = defineFrpServiceProtocol({
   },
 })
 
-export const taskyonHostProtocol = taskyonRuntimeProtocol
+export const taskyonProviderCredentialsProtocol = defineFrpServiceProtocol({
+  service: 'providerCredentials',
+  version: '1',
+  envelope: baseMessage,
+  commands: {
+    has: {
+      request: z
+        .object({ provider: z.string().min(1) })
+        .describe('Check whether a provider credential exists without exposing its value.'),
+      response: z.discriminatedUnion('ok', [
+        z.object({ ok: z.literal(true), configured: z.boolean() }),
+        z.object({ ok: z.literal(false), error: z.string() }),
+      ]),
+      defaultTimeoutMs: 30_000,
+    },
+    set: {
+      request: z
+        .object({
+          provider: z.string().min(1),
+          key: z.string().min(1).optional(),
+        })
+        .describe('Set or remove a provider credential in the runtime secret store.'),
+      response: z.discriminatedUnion('ok', [
+        z.object({ ok: z.literal(true) }),
+        z.object({ ok: z.literal(false), error: z.string() }),
+      ]),
+      defaultTimeoutMs: 30_000,
+    },
+  },
+})
+
+export const taskyonHostProtocol = mergeFrpProtocols({
+  id: 'taskyon.host',
+  version: '1',
+  base: taskyonRuntimeProtocol,
+  extension: taskyonProviderCredentialsProtocol,
+})
 
 export const taskyonToolsProtocol = defineFrpServiceProtocol({
   service: 'tools',
@@ -404,7 +440,9 @@ export const taskyonTaskProtocol = defineFrpServiceProtocol({
         .object({
           execute: z.boolean().default(false),
           show: z.boolean().default(false),
-          tasks: TaskNode.array().describe('Complete task nodes to import without rewriting links.'),
+          tasks: TaskNode.array().describe(
+            'Complete task nodes to import without rewriting links.',
+          ),
         })
         .describe('Import an existing task archive while preserving task ids and topology.'),
       response: z.object({ ids: z.array(z.string()) }),

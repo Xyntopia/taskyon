@@ -7,7 +7,7 @@ import {
   useRefreshTokenIfExpired,
 } from './oauth'
 
-const redirectUri = `${window.location.origin}/oauth/return`
+const getDefaultRedirectUri = () => `${window.location.origin}/oauth/return`
 
 // Configurable timeout for OAuth operations
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
@@ -42,7 +42,7 @@ export async function authenticateWithPopup(
     redirectUri: customRedirectUri,
   } = params
   const { forceReauth = false, forceAccountSelection = false } = options
-  const effectiveRedirectUri = customRedirectUri || redirectUri
+  const effectiveRedirectUri = customRedirectUri || getDefaultRedirectUri()
   const authorizationUrl = new URL(oauthURL)
   if (authorizationUrl.protocol !== 'https:') {
     throw new OAuthError('OAuth authorization URLs must use HTTPS', 'INVALID_RESPONSE')
@@ -375,10 +375,8 @@ export const usePersistentOauth = (secretStore: {
     try {
       const sec = await secretStore.getSecret(provider)
       if (sec) {
-        const cached = JSON.parse(sec) as OAuthCredentials
-        if (cached) {
-          return cached
-        }
+        const parsed = OAuthCredentials.safeParse(JSON.parse(sec))
+        if (parsed.success) return parsed.data
       }
     } catch (error) {
       console.warn(`Failed to load cached credentials for ${provider}:`, error)
@@ -417,7 +415,10 @@ export const usePersistentOauth = (secretStore: {
             clientId: params.clientId,
             tokenUrl: params.tokenUrl,
           })
-          if (refreshed) await saveCredentials(provider, refreshed)
+          if (refreshed) {
+            cached = refreshed
+            await saveCredentials(provider, refreshed)
+          }
         }
       }
 

@@ -18,12 +18,19 @@ import { createLruCache } from '@taskyon/common/modules/lruCache'
 import type { RpcMessagePort } from '@taskyon/common/modules/frpBus'
 import {
   taskyonHostProtocol,
+  taskyonProviderCredentialsProtocol,
   taskyonProtocol,
   taskyonRuntimeProtocol,
+  type TaskyonHostMessage,
   type TaskyonMessageType,
 } from './taskyonProtocol'
 
-export { TaskyonMessage, type TaskyonMessageType, type TyP2P } from './taskyonProtocol'
+export {
+  TaskyonMessage,
+  type TaskyonHostMessage,
+  type TaskyonMessageType,
+  type TyP2P,
+} from './taskyonProtocol'
 export {
   TaskyonGuiMessage,
   taskyonGuiProtocol,
@@ -82,12 +89,18 @@ export {
   toolCall,
 }
 export type { Port }
-export { taskyonHostProtocol, taskyonProtocol, taskyonRuntimeProtocol }
+export {
+  taskyonHostProtocol,
+  taskyonProviderCredentialsProtocol,
+  taskyonProtocol,
+  taskyonRuntimeProtocol,
+}
 export { createTaskyonApiDescription, type TaskyonApiDescription } from './taskyonOpenApi'
 export {
   createProtocolStorageCrudWrapper,
   createProtocolStorageBlobBackend,
   createStorageClient,
+  createMemoryStorageRecordBackend,
   getLogicalStorageNamespace,
   createStorageProtocolServer,
   createStorageRecordBackend,
@@ -508,6 +521,29 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
 }
 
 export type TaskyonClient = ReturnType<typeof createTaskyonClient>
+
+export const createTaskyonHostClient = (port: Port<TaskyonHostMessage, TaskyonHostMessage>) =>
+  createPortClient(port, taskyonHostProtocol)
+
+export type TaskyonHostClient = ReturnType<typeof createTaskyonHostClient>
+
+export const setTaskyonProviderCredential = async (
+  host: TaskyonHostClient,
+  provider: string,
+  key?: string,
+): Promise<void> => {
+  const result = await host.providerCredentials.set({ provider, ...(key ? { key } : {}) })
+  if (!result.ok) throw new Error(result.error)
+}
+
+export const hasTaskyonProviderCredential = async (
+  host: TaskyonHostClient,
+  provider: string,
+): Promise<boolean> => {
+  const result = await host.providerCredentials.has({ provider })
+  if (!result.ok) throw new Error(result.error)
+  return result.configured
+}
 
 /**
  * Parses a Taskyon Markdown or YAML document, stores the original task tree, and returns its leaf ID.

@@ -35,6 +35,10 @@ invariants and current behavior; do not add deployment-specific proposal paths o
 - Keep protocols focused on intentional remote capabilities and canonical data exchange. Do not
   add graph traversal, filtering, ranking, aggregation, or other convenience queries merely to
   simplify a local consumer.
+- Give each protocol operation one non-overlapping responsibility, and keep one canonical protocol
+  path for each cross-boundary behavior. Do not duplicate a protocol capability through bootstrap
+  fields, configuration options, alternate bridges, or overlapping commands when the live
+  protocol can perform the operation.
 - Before extending a protocol, prove that the behavior cannot be derived cleanly from locally
   available canonical records using a cache or rebuildable index.
 - When local data is incomplete, prefer synchronizing or fetching the smallest canonical records

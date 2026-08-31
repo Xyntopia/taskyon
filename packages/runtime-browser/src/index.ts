@@ -1,7 +1,9 @@
 import {
   createProtocolPort,
   createStorageClient,
+  createTaskyonHostClient,
   createTaskyonClient,
+  taskyonHostProtocol,
   taskyonProtocol,
   taskyonStorageProtocol,
   type FunctionArguments,
@@ -30,7 +32,8 @@ export type TaskyonBrowserRuntimeOptions = {
     services: TaskyonBrowserRuntimeServices,
   ) => InternalTool[] | Promise<InternalTool[]>
   createToolContext?: ToolRpcCreateContext
-  initialProviderKeys?: Readonly<Record<string, string | undefined>>
+  persistCryptoSession?: boolean
+  cryptoNamespace?: string
   readinessTimeoutMs?: number
   storage?: BrowserRuntimeStorageService
   storageNamespacePrefix?: string
@@ -46,6 +49,7 @@ export type TaskyonBrowserRuntimeServices = {
 
 export type TaskyonBrowserRuntime = {
   client: ReturnType<typeof createTaskyonClient>
+  host: ReturnType<typeof createTaskyonHostClient>
   storageClient: ReturnType<typeof createStorageClient>
   port: Port<TaskyonMessageType, TaskyonMessageType>
   stop: (reason?: string) => void
@@ -62,6 +66,8 @@ export const createTaskyonBrowserRuntime = async (
 ): Promise<TaskyonBrowserRuntime> => {
   const runtimePort = createProtocolPort(taskyonProtocol)
   const taskyonClient = createTaskyonClient(runtimePort.x)
+  const hostPort = createProtocolPort(taskyonHostProtocol)
+  const hostClient = createTaskyonHostClient(hostPort.x)
   const storagePort = createProtocolPort(taskyonStorageProtocol)
   const storageClient = createStorageClient(storagePort.x, {
     namespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
@@ -73,8 +79,10 @@ export const createTaskyonBrowserRuntime = async (
   )
   const coreChannel = new MessageChannel()
   const storageChannel = new MessageChannel()
+  const hostChannel = new MessageChannel()
   const coreBridge = MessageChannelBridge(runtimePort.y, coreChannel.port1)
   const storageBridge = MessageChannelBridge(storagePort.x, storageChannel.port1)
+  const hostBridge = MessageChannelBridge(hostPort.y, hostChannel.port1)
   const worker = options.createWorker ? options.createWorker() : createDefaultWorker()
   let resolveWorkerInitialization: () => void = () => {}
   let rejectWorkerInitialization: (reason: Error) => void = () => {}
@@ -104,14 +112,16 @@ export const createTaskyonBrowserRuntime = async (
     type: 'init',
     corePort: coreChannel.port2,
     storagePort: storageChannel.port2,
+    hostPort: hostChannel.port2,
     llmSettings: options.llmSettings,
     ...(options.entryNode ? { entryNode: options.entryNode } : {}),
     toolchainConfig: options.toolchainConfig ?? {},
-    initialProviderKeys: options.initialProviderKeys ?? {},
     storageNamespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     ...(options.storageSessionId ? { storageSessionId: options.storageSessionId } : {}),
+    ...(options.persistCryptoSession ? { persistCryptoSession: true } : {}),
+    ...(options.cryptoNamespace ? { cryptoNamespace: options.cryptoNamespace } : {}),
   }
-  worker.postMessage(initMessage, [coreChannel.port2, storageChannel.port2])
+  worker.postMessage(initMessage, [coreChannel.port2, storageChannel.port2, hostChannel.port2])
 
   let toolExecutor: Awaited<ReturnType<typeof registerToolRpcTools>> | undefined
   const readinessTimeoutMs = options.readinessTimeoutMs ?? 30_000
@@ -153,6 +163,7 @@ export const createTaskyonBrowserRuntime = async (
     worker.removeEventListener('error', onWorkerError)
     coreBridge.destroy()
     storageBridge.destroy()
+    hostBridge.destroy()
     if (typeof storageStop === 'function') storageStop()
     worker.terminate()
     throw new Error(`Taskyon browser worker failed during "${workerStage}".`, { cause: error })
@@ -162,12 +173,14 @@ export const createTaskyonBrowserRuntime = async (
 
   return {
     client: taskyonClient,
+    host: hostClient,
     storageClient,
     port: runtimePort.x,
     stop: (reason = 'stopping Taskyon browser runtime') => {
       toolExecutor.destroy()
       coreBridge.destroy()
       storageBridge.destroy()
+      hostBridge.destroy()
       if (typeof storageStop === 'function') storageStop()
       worker.terminate()
       void reason
@@ -188,6 +201,12 @@ export {
   type BrowserDagGitCredentials,
   type BrowserDesignGraphGitSettings,
 } from './dagGitRepository'
+export {
+  deleteBrowserCryptoSession,
+  initCryptoSessionFromBrowser,
+  persistBrowserCryptoSession,
+  type BrowserCryptoPersistence,
+} from './persistentCryptoSession'
 export {
   createIndexedDbBlobBackend,
   createIndexedDbRecordBackend,

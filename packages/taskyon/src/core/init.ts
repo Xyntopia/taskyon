@@ -353,6 +353,22 @@ const dynamicContext =
     await toolManager.addDefaultTools(sessionToolList)
     let unsubscribeChatCompletion =
       sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
+    const getChatCompletionCredentialOwnerId = async () => {
+      const { tool, identity } = await toolManager.resolveTool(toolSetup.chatCompletionToolName)
+      if (!tool) {
+        throw new Error(`Credential owner tool not found: ${toolSetup.chatCompletionToolName}`)
+      }
+      return await generateSecretId(identity?.revision, tool)
+    }
+    const hasChatCompletionApiKey = async (provider: string) => {
+      const toolId = await getChatCompletionCredentialOwnerId()
+      return (await secretStore.getSecret(toolId, provider, false, false)) !== null
+    }
+    const updateChatCompletionApiKey = async (provider: string, key?: string) => {
+      const toolId = await getChatCompletionCredentialOwnerId()
+      if (key) await secretStore.setSecret(toolId, provider, key)
+      else await secretStore.deleteSecret(toolId, provider)
+    }
     let configureRuntimePromise = Promise.resolve()
     const configureRuntime = (toolchainConfig: TyToolchainConfig) => {
       const nextConfiguration = TyToolchainConfig.parse(toolchainConfig)
@@ -382,6 +398,29 @@ const dynamicContext =
         configure: async ({ toolchainConfig }) => {
           try {
             await configureRuntime(toolchainConfig)
+            return { ok: true as const }
+          } catch (error) {
+            return {
+              ok: false as const,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          }
+        },
+      },
+      providerCredentials: {
+        has: async ({ provider }) => {
+          try {
+            return { ok: true as const, configured: await hasChatCompletionApiKey(provider) }
+          } catch (error) {
+            return {
+              ok: false as const,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          }
+        },
+        set: async ({ provider, key }) => {
+          try {
+            await updateChatCompletionApiKey(provider, key)
             return { ok: true as const }
           } catch (error) {
             return {

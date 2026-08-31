@@ -1,5 +1,6 @@
 import {
   createProtocolPort,
+  getDatabase,
   getInMemoryDatabase,
   taskyonStorageProtocol,
   toolCall,
@@ -8,6 +9,7 @@ import {
 } from '@taskyon/taskyon'
 import { MessageChannelBridge } from '@taskyon/common/modules/frpBusWeb'
 import { createTaskyonBrowserCoreRuntime } from './core'
+import { initCryptoSessionFromBrowser } from './persistentCryptoSession'
 import type { TaskyonBrowserWorkerInitMessage, TaskyonBrowserWorkerMessage } from './workerProtocol'
 
 let stopCurrentRuntime: ((reason: string) => Promise<void>) | undefined
@@ -23,26 +25,33 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
   const {
     corePort,
     storagePort,
+    hostPort,
     llmSettings,
     entryNode,
     toolchainConfig = {},
-    initialProviderKeys = {},
     storageNamespacePrefix,
     storageSessionId,
+    persistCryptoSession = false,
+    cryptoNamespace,
   } = event.data
 
   void (async () => {
     await stopCurrentRuntime?.('reinitializing Taskyon browser worker runtime')
     const storageBridge = createProtocolPort(taskyonStorageProtocol)
     const storageMessageBridge = MessageChannelBridge(storageBridge.y, storagePort)
+    const persistentCrypto = persistCryptoSession
+      ? initCryptoSessionFromBrowser(undefined, true, {
+          namespace: cryptoNamespace ?? storageNamespacePrefix,
+        })
+      : undefined
     const runtime = createTaskyonBrowserCoreRuntime({
       llmSettings: () => llmSettings,
       entryNode: () => entryNode ?? defaultEntryNode(llmSettings),
       toolchainConfig,
-      initialProviderKeys,
+      ...(persistentCrypto ? { cryptoSession: persistentCrypto } : {}),
       storageNamespacePrefix,
       ...(storageSessionId ? { storageSessionId } : {}),
-      databaseFactory: getInMemoryDatabase,
+      databaseFactory: persistCryptoSession ? getDatabase : getInMemoryDatabase,
       onStage: (stage) => {
         const response: TaskyonBrowserWorkerMessage = {
           type: 'runtimeStage',
@@ -55,13 +64,15 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
         port: storageBridge.x,
       },
     })
+    const core = await runtime.taskyon
     const coreMessageBridge = MessageChannelBridge(runtime.port, corePort)
+    const hostMessageBridge = MessageChannelBridge(core.hostPort, hostPort)
     stopCurrentRuntime = async (reason: string) => {
       await runtime.stop(reason)
       coreMessageBridge.destroy()
+      hostMessageBridge.destroy()
       storageMessageBridge.destroy()
     }
-    await runtime.taskyon
   })().catch((error: unknown) => {
     const response: TaskyonBrowserWorkerMessage = {
       type: 'runtimeError',

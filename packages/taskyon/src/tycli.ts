@@ -49,5 +49,15 @@ export {
   createPgLiteStorageRecordBackend,
 } from './api/pgliteStorageBackend'
 export { configureStaticEmbeddingAssetReader } from './utils/staticEmbedding'
-export { getProviderOauthConfig, getProviderOauthCredentialsSecretName } from './utils/providerAuth'
+export {
+  getProviderOauthConfig,
+  getProviderOauthCredentialsSecretName,
+  resolveProviderAccessToken,
+} from './utils/providerAuth'
+export {
+  CODEX_PROVIDER_NAME,
+  getCodexAccountIdFromCredentials,
+  getCodexAuthClaims,
+  resolveCodexOauthSession,
+} from './utils/codexAuth'
 export { createAiWorkstationExample } from './examples/aiWorkstationExample'

@@ -46,7 +46,7 @@ import { useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
 import { getCurrentActiveProfileName, getStoredStateString } from '../ui/initialState'
-import { initCryptoSessionFromBrowser } from './browserCryptoSession'
+import { initCryptoSessionFromBrowser } from '@taskyon/runtime-browser'
 import { extractBrowserAccessActivity } from './browserAccess'
 import { runLibp2pBrowserMessageExchangeTest } from './libp2pBrowserDiagnostics'
 import { gDriveSyncPort } from './sync'
@@ -336,7 +336,6 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
   const DB = 'test_crypto_key_roundtrip'
   const STORE = 'keys'
   const KEY_NAME = 'deviceKeyPair'
-  const JWK_KEY_NAME = 'deviceKeyPairJwk'
 
   const report: TestReport = {
     success: false,
@@ -432,7 +431,7 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
         if (typeof key === 'string') lsKeys.push(key)
       }
       details.localStorageInterestingKeys = lsKeys
-        .filter((k) => k.startsWith('sk_') || k.startsWith('x25519_jwk_') || k.includes('profile'))
+        .filter((k) => k.includes('profile'))
         .sort()
         .slice(0, 200)
     } catch (e) {
@@ -619,66 +618,14 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
   report.postStorage.publicKeyFound = !!publicLoaded
 
   if (!privateLoaded || !publicLoaded) {
-    log(
-      'Direct IndexedDB CryptoKeyPair roundtrip unsupported in this runtime. Verifying JWK fallback roundtrip.',
-    )
-
-    const fallbackKeyPair = (await crypto.subtle.generateKey({ name: 'X25519' }, true, [
-      'deriveKey',
-      'deriveBits',
-    ])) as CryptoKeyPair
-
-    const fallbackPayload = {
-      privateJwk: await crypto.subtle.exportKey('jwk', fallbackKeyPair.privateKey),
-      publicJwk: await crypto.subtle.exportKey('jwk', fallbackKeyPair.publicKey),
-    }
-    await putValue(fallbackPayload, JWK_KEY_NAME)
-    const fallbackLoaded = (await getValue(JWK_KEY_NAME)) as {
-      privateJwk?: JsonWebKey
-      publicJwk?: JsonWebKey
-    } | null
-    log(`jwk fallback payload diagnostics: ${JSON.stringify(describeLoadedValue(fallbackLoaded))}`)
-
-    assert(
-      !!fallbackLoaded?.privateJwk && !!fallbackLoaded?.publicJwk,
-      `CRITICAL: JWK fallback payload missing after IndexedDB retrieval | fallbackLoaded=${JSON.stringify(
-        fallbackLoaded,
-      )} | preflight=${JSON.stringify(preflightDiagnostics)}`,
-    )
-
-    const importedPrivate = await crypto.subtle.importKey(
-      'jwk',
-      fallbackLoaded.privateJwk,
-      { name: 'X25519' },
-      false,
-      ['deriveKey', 'deriveBits'],
-    )
-    const importedPublic = await crypto.subtle.importKey(
-      'jwk',
-      fallbackLoaded.publicJwk,
-      { name: 'X25519' },
-      false,
-      [],
-    )
-
-    assert(
-      importedPrivate instanceof CryptoKey && importedPublic instanceof CryptoKey,
-      'CRITICAL: Imported keys from JWK fallback are invalid',
-    )
-    assert(
-      importedPrivate.extractable === false,
-      'CRITICAL: Imported private key from JWK fallback must be non-extractable',
-    )
-
-    report.postStorage.privateKeyFound = true
-    report.postStorage.publicKeyFound = true
-    report.postStorage.privateExtractable = importedPrivate.extractable
-    report.postStorage.publicExtractable = importedPublic.extractable
-    report.securityValidation.privateKeySecurityMaintained = true
-    report.securityValidation.publicKeyAccessible = true
-    report.success = true
-    log('✅ JWK fallback roundtrip PASSED (runtime lacks direct CryptoKeyPair structured clone)')
-    return report
+    const diagnostics = await collectIndexedDbDiagnostics()
+    const errorMsg = `CRITICAL: IndexedDB did not preserve a CryptoKeyPair | loaded=${JSON.stringify(
+      describeLoadedValue(loaded),
+    )} | preflight=${JSON.stringify(preflightDiagnostics)} | diagnostics=${JSON.stringify(
+      diagnostics,
+    )}`
+    error(errorMsg)
+    throw new Error(errorMsg)
   }
 
   // Check extractable properties post-storage
@@ -875,7 +822,6 @@ export async function testCryptoSession() {
 
   // TODO: we can not do this right now, because it would alter the currently active session
   // id. So we are commenting this out for now...
-  //await deleteSession(device1)
 
   // Verify new session can be created after destruction
   const newSession = await createCryptoSession()

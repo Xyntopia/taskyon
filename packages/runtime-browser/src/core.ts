@@ -9,7 +9,9 @@ import {
   createProtocolPort,
   createProtocolStorageBlobBackend,
   createStorageClient,
+  createTaskyonHostClient,
   createTaskyonClient,
+  taskyonHostProtocol,
   taskyonProtocol,
   taskyonStorageProtocol,
   type Port,
@@ -37,7 +39,6 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   taskSearchVectorizer?: NonNullable<Parameters<typeof tyCore>[4]>['taskSearchVectorizer']
   authorizeSandboxFetch?: NonNullable<Parameters<typeof tyCore>[4]>['authorizeSandboxFetch']
   authorizePopup?: NonNullable<Parameters<typeof tyCore>[4]>['authorizePopup']
-  initialProviderKeys?: Readonly<Record<string, string | undefined>>
   onStage?: (stage: TaskyonCoreRuntimeStage) => void
   storageNamespacePrefix?: string
   storageSessionId?: string
@@ -51,7 +52,6 @@ export type TaskyonCoreRuntimeStage =
   | 'connecting-storage'
   | 'creating-crypto-session'
   | 'creating-core'
-  | 'configuring-providers'
   | 'connecting-core-protocol'
   | 'ready'
 
@@ -76,12 +76,15 @@ const createStorageConnection = (storage: TaskyonCoreStorage) => {
 export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRuntimeOptions) => {
   const { x: clientPort, y: corePort } = createProtocolPort(taskyonProtocol)
   const client = createTaskyonClient(clientPort, { taskCacheSize: 0 })
+  const { x: hostPort, y: coreHostPort } = createProtocolPort(taskyonHostProtocol)
+  const host = createTaskyonHostClient(hostPort)
   const storage = createStorageConnection(options.storage)
   const storageClient = createStorageClient(storage.port, {
     namespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     distribution: 'local-only',
   })
   let disconnectCore: (() => void) | undefined
+  let disconnectHost: (() => void) | undefined
   let stopStorage: (() => void) | undefined
   let stopReason: string | undefined
   let disposed = false
@@ -97,6 +100,8 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
     disposed = true
     disconnectCore?.()
     disconnectCore = undefined
+    disconnectHost?.()
+    disconnectHost = undefined
     try {
       await core.dispose(reason)
     } finally {
@@ -146,13 +151,9 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
             ),
         },
       )
-      options.onStage?.('configuring-providers')
-      for (const [provider, key] of Object.entries(options.initialProviderKeys ?? {})) {
-        if (!key) continue
-        await core.updateChatCompletionApiKey(provider, key)
-      }
       options.onStage?.('connecting-core-protocol')
       disconnectCore = corePort.connect(core.port)
+      disconnectHost = coreHostPort.connect(core.hostPort)
       corePort.send({ type: 'taskyonReady' })
       options.onStage?.('ready')
       if (stopReason) await disposeCore(core, stopReason)
@@ -166,6 +167,8 @@ export const createTaskyonBrowserCoreRuntime = (options: TaskyonBrowserCoreRunti
   return {
     taskyon,
     client,
+    host,
+    hostPort,
     storageClient,
     port: clientPort,
     stop: async (reason = 'stopping Taskyon browser core runtime') => {
