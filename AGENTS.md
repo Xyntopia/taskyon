@@ -104,6 +104,18 @@ invariants and current behavior; do not add deployment-specific proposal paths o
 - Search for existing equivalent logic before adding code.
 - Explain concrete risks and alternatives when pushing back.
 
+## Tool Authoring Guidance
+
+- When a Taskyon tool is difficult for an agent to use correctly, put the relevant guidance at the
+  tool boundary: use the tool's short or long description and its parameter and property
+  descriptions to state intent, sequencing, invariants, and important constraints.
+- Use supported JSON Schema features such as `examples`, `enum`, `const`, `default`, and numeric or
+  string bounds to make valid inputs concrete and machine-readable. Examples must be valid and
+  representative; they supplement deterministic validation rather than replacing it.
+- Keep behavior-shaping instructions close to the tool that needs them instead of relying only on
+  distant system prompts or documentation. Enforce requirements that must never be violated in
+  the tool implementation as well.
+
 ## General Programming Guidelines
 
 - Prefer pure or stateless functions and explicit dependency passing.
