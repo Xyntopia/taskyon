@@ -12,9 +12,11 @@ export {
 } from '@taskyon/taskyon'
 
 export {
+  canUseTauriHttpPlugin,
   createEncryptedOauthSecretStore,
   createPersistentOauthTokenGetter,
   loginWithProviderOauth,
+  tauriHttpFetch,
 } from '@taskyon/taskyon/browser'
 export type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 

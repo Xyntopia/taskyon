@@ -1,5 +1,5 @@
 import { isTauri } from '@tauri-apps/api/core'
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
+import { fetch as pluginHttpFetch } from '@tauri-apps/plugin-http'
 import { parseHttpUrl, type PoliteHttpPolicy, waitForPoliteHttpTurn } from './politeHttp'
 
 type TauriHttpHeader = [string, string]
@@ -29,6 +29,22 @@ export function canUseTauriHttpPlugin(): boolean {
   return isTauriIpcAvailable()
 }
 
+export async function tauriHttpFetch(
+  input: Parameters<typeof pluginHttpFetch>[0],
+  init?: Parameters<typeof pluginHttpFetch>[1],
+): Promise<Response> {
+  if (!canUseTauriHttpPlugin()) {
+    throw new Error('Tauri HTTP plugin is not available in this runtime')
+  }
+
+  try {
+    return await pluginHttpFetch(input, init)
+  } catch (error) {
+    const url = input instanceof Request ? input.url : String(input)
+    throw new Error(`Tauri HTTP fetch failed for ${url}: ${formatInvokeError(error)}`)
+  }
+}
+
 export async function tauriHttpRequestText(
   url: string,
   opts?: {
@@ -42,25 +58,20 @@ export async function tauriHttpRequestText(
     throw new Error('Tauri HTTP plugin is not available in this runtime')
   }
 
-  let response: Response
-  try {
-    const parsedUrl = parseHttpUrl(url)
-    await waitForPoliteHttpTurn(parsedUrl, opts?.httpPolicy)
-    response = await tauriFetch(url, {
-      method: opts?.method ?? 'GET',
-      ...(opts?.headers ? { headers: opts.headers } : {}),
-      ...(opts?.insecureTls
-        ? {
-            danger: {
-              acceptInvalidCerts: true,
-              acceptInvalidHostnames: false,
-            },
-          }
-        : {}),
-    })
-  } catch (error) {
-    throw new Error(`Tauri HTTP fetch failed for ${url}: ${formatInvokeError(error)}`)
-  }
+  const parsedUrl = parseHttpUrl(url)
+  await waitForPoliteHttpTurn(parsedUrl, opts?.httpPolicy)
+  const response = await tauriHttpFetch(url, {
+    method: opts?.method ?? 'GET',
+    ...(opts?.headers ? { headers: opts.headers } : {}),
+    ...(opts?.insecureTls
+      ? {
+          danger: {
+            acceptInvalidCerts: true,
+            acceptInvalidHostnames: false,
+          },
+        }
+      : {}),
+  })
 
   const body = await response.text()
   const headers = Array.from(response.headers.entries())
