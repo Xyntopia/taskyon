@@ -100,8 +100,13 @@ sharing, and persistence.
 - Keep encrypted segmentation and reconstruction metadata for large blobs private to the storage
   coordinator. A Space manifest references one logical blob; consumers and domain repositories do
   not acquire a second chunk-addressing model.
-- Keep invocation rows in one staged, streamable artifact with a separately named access index.
-  The index accelerates range reads and is not another content-addressing or chunk-manifest layer.
+- Expose invocation rows as a logical dataset with bounded reads. A dataset may reference
+  independently content-addressed semantic partitions; it need not be one consolidated blob.
+  Keep dataset membership and partitioning above StorageClient, and physical transfer chunks below
+  it. Reuse the existing computation cache for parameter-to-result lookup across datasets.
+- Retention of a saved dataset or deliverable must preserve its required artifact closure,
+  including partitions, source observations, and referenced results. A retained root hash alone
+  does not guarantee available bytes. Keep membership sufficient to rebuild disposable indexes.
 - Index immutable invocation-run manifests by their full invocation hash. Backends may prefix-shard
   that hash internally, but callers use the shared repository API rather than physical paths.
 - Keep small invocation-run manifests until explicit cleanup. Apply configurable artifact-retention

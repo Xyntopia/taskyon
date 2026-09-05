@@ -247,23 +247,97 @@ exists.
 - Store run manifests by full invocation hash; prefix sharding is a repository implementation
   detail. Derive project run lists from project invocation hashes rather than storing mutable
   project run histories.
-- Before reusing a run, verify every required artifact. Rebuild derived indexes and summaries from
-  rows when possible and rerun the invocation when an irreducible result artifact is missing.
+- Before reusing materialized results, verify every required artifact. Rebuild derived indexes and
+  summaries from retained results and membership when possible. Missing irreducible outputs require
+  evaluating only unavailable computations; preserve other valid cached results.
 - Do not reuse a completed invocation run across a source-node observation check unless exact source
   manifests are part of reuse identity and remain valid under the requested freshness policy.
   Until that identity is implemented, bypass invocation-run reuse for source-node closures and let
   the source-node/DAG cache enforce freshness.
-- Resolve `auto` and other result-affecting planner choices before cache selection. Key reusable
-  runs by invocation plus resolved result-affecting planner/engine identity, not by operational
-  settings that are guaranteed not to change results.
+- Resolve `auto` and other result-affecting planner choices into the immutable invocation definition
+  before semantic cache selection. Preserve current resolved-policy run checks until that target
+  is implemented; operational settings that cannot change results are excluded from semantic keys.
 - Make row results and indexes range-readable so plots, tables, downloads, and downstream consumers
   can stream bounded selections without loading a complete run.
 - Treat browser tables, plots, and result objects as disposable projections of invocation artifacts.
   Do not persist a second per-project result snapshot, per-row JSON archive, or run-history pointer
   in project state. A host may cache bounded decoded row ranges locally, but the immutable
-  `InvocationRun` and its named artifacts remain authoritative.
+  canonical invocation definitions, result membership/artifacts, and lifecycle records remain
+  authoritative. Runs are historical materializations, not semantic cache keys.
 
-## Diagnostics
+## Target Architecture Additions
+
+The following additional invariants apply to the target invocation and deliverable architecture.
+They are requirements for future implementation, not claims that the current cache satisfies them.
+
+## Reproducible Rows And Source Snapshots
+
+- The same root-node revision, canonical exact row parameters, and exact consumed source manifests
+  must produce the same canonical output artifact hash. Pin every result-affecting implementation
+  through node identity, including pure capabilities. Changed capability behavior requires an
+  immutable version change; externally varying observations belong in source nodes.
+- Keep strategy, seed, deterministic observation ordering, and stopping rules in the immutable
+  invocation definition. Worker completion order and wall-clock interruption must not change a
+  row's value. A time cutoff produces partial results, not proof of deterministic completion.
+- Put source selection directly in the invocation through an immutable `sourceSnapshotId`. Resolve
+  aliases before creating that definition; aliases, projects, attempts, and run IDs do not enter
+  row-computation identity. The snapshot contains the sources needed by that invocation.
+- Missing dynamically demanded sources suspend planning with persisted state. Accepting an
+  observation extends the snapshot and creates a replacement invocation. Reuse completed work when
+  all other invocation fields are identical and the snapshot extension changes no existing entry.
+  Update the working draft without implicitly saving a project revision.
+- Track the exact source acquisitions and manifests consumed by each cached computation,
+  including transitive dependencies and cache hits. Validate that dependency trace against the
+  selected snapshot before reuse. Do not eagerly evaluate unused inputs or put the entire snapshot
+  hash into every row key. An untraceable old cache entry cannot prove compatible reuse.
+- Replacing a consumed manifest invalidates dependent computations and may require rebuilding
+  adaptive planner state. Adding an unconsumed source does not invalidate verified earlier rows.
+  Artifact availability and compatible checkpoints determine whether recovery also needs storage
+  reads or planner replay; never promise zero I/O merely because computation is cached.
+
+## Invocation Lifecycle, Datasets, And Progress
+
+- Use `InvocationAttempt` as the target name for the current `ExecutionAttempt`. Preserve mutable
+  progress/checkpoints and immutable finalized `InvocationRun` records as separate lifecycle states.
+  Put small final facts, including completed-row count and stopping reason, directly on the run.
+  Do not add a parallel completion-record type or duplicate these facts in a summary artifact.
+- Keep semantic result selection independent of run IDs and operational provenance. Partial
+  collections must remain distinguishable from completed invocations, even when every row is valid.
+- Reuse existing node-result artifacts and computation-cache mappings. Table partitions index
+  those results for efficient scans; they are not a second row cache. A dataset root identifies
+  collection membership and storage layout, not parameter-to-result lookup across invocations.
+- Permit dataset-specific partition profiles. Neither one whole rows blob nor evaluation-index
+  partitioning is mandatory. Semantic collection identity must be independent of physical layout,
+  while preserving meaningful multiplicity and ordering. Ordinary row position is not computation
+  identity; planner-assigned evaluation order may be explicit planner data.
+- Count base parameter combinations before expansion separately from expanded rows. Report exact
+  counts when cheaply derivable, sampling budgets, estimated expanded totals, discovered work,
+  completed output rows, and newly calculated versus reused results. Define counters at the same
+  output-row boundary so lower-level cache hits are not misreported as whole reused rows.
+- Represent unavailable counts with reasons and estimates with their basis. Continuous domains are
+  distinct from finite sampling plans; machine precision does not silently define a grid. A budget
+  is a limit, not a guaranteed final count. Include zero-output groups in expansion estimates and
+  acknowledge adaptive sampling bias. Never prioritize expansion solely to determine a total.
+- Completion follows planner exhaustion or the declared stopping rule, with no required work
+  pending and results durably recorded. Upfront cardinality is unnecessary. Report 100% completion
+  only after finalization; budget consumption is a separate progress measure.
+
+## Derived Documents And Views
+
+- Ingest template files through the generic file source boundary and manifests. Source bytes must
+  have explicit Taskyon identity independent of Git commits or mutable filenames.
+- Compose invocation-backed views and document assembly as internal structurally hashed derived
+  operations at the planner layer. Reuse artifacts, cache, and query infrastructure; do not add
+  invocation inputs to editable computational nodes or a document-only persistence system.
+- Authored views reference invocation bindings and logical results, not runs or physical artifact
+  layouts. Resolved views consume bounded projections and identify the exact materialized data,
+  including partial collections. Project association and run provenance are outside view identity.
+- Share simple selection, filtering, aggregation, and presentation preparation between interactive
+  views and documents. Complex domain calculations require a computational node.
+- Cache views independently from document prose. Agent tools must support editing templates and
+  inspecting rendered output; refreshing bound data must not require an LLM to recreate studies.
+
+## Required Diagnostics
 
 - Every stored-node format or execution adapter change includes a focused diagnostic that runs the
   production path.
@@ -275,3 +349,7 @@ exists.
   replacement paths.
 - Diagnostics cover bounded-memory row execution, reducer cache reuse, run-artifact completeness,
   draft/ref separation, complete Git ancestry, and exclusion of run products from Git snapshots.
+- Cover add-only snapshot continuation, changed consumed sources, overlapping invocations,
+  cross-project reuse, absent cached artifacts, and checkpoint recovery without repeated retained
+  calculations. Test finite grids, zero-result/nested expansions, continuous sampling, estimates,
+  cancellation, and early stopping. Test view reuse across prose and storage-layout changes.

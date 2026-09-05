@@ -97,6 +97,51 @@ resolved execution identity, status, provenance, and named artifact hashes. Row 
 their access index remain streamable so consumers do not need to materialize an entire study in
 memory.
 
+## Project And Invocation Vocabulary
+
+```mermaid
+flowchart TD
+  PR[ProjectRef: mutable branch selection] --> P[ProjectRevision: immutable definition]
+  P --> Parents[Parent project revisions]
+  P --> I[Named InvocationDefinition hashes]
+  I --> N[Root node revision]
+  N --> U[Recursive upstream node closure]
+  P --> E[Namespaced ProjectExtension hashes]
+  I --> A[ExecutionAttempt: mutable progress and checkpoint reference]
+  A --> R[InvocationRun: immutable terminal status and provenance]
+  R --> B[Named result artifacts]
+  GR[GraphRef] --> G[GraphRevision: node-name mappings]
+  G --> N
+```
+
+Project extensions are typed, content-addressed definitions for deliberately saved dashboards,
+workspaces, and other application-specific configuration. They are not copies of graph nodes or
+result stores. Invocation roots select computational closures independently of graph catalog refs.
+An invocation may be presented as a single design, study, or optimization based on its domains and
+objectives; these are not separate invocation record types.
+
+### Current Behavior And Target Gaps
+
+The current `ExecutionAttempt` already has mutable progress, optional `totalRows`, and an optional
+`checkpointArtifactId`. `InvocationRun` stores status, timings, resolved policy, provenance, and
+named artifacts. The current writer stores NDJSON rows plus a row index; its summary contains row
+count/status. It does not implement durable planner resumption simply because a checkpoint field
+exists. The separate node cache already maps computation keys to node-output artifacts.
+
+The execution policy requires source-aware deterministic row reuse. Current node/parameter cache
+lookup still needs dependency traces and snapshot validation to meet that invariant. Source locks
+currently live outside `InvocationDefinition`; `sourceSnapshotId` and the proposed name
+`InvocationAttempt` are not current API fields/types. Proposed final row-count and stopping-reason
+fields would move small lifecycle facts onto the run itself. Dataset partitions, richer progress,
+generic template ingestion, and invocation-backed document rendering remain future work.
+
+The target excludes aliases, project IDs, run IDs, and worker completion order from computation
+identity. Exact parameters, pinned root implementation, and consumed source observations determine
+each result. A new source never consumed by prior rows may extend an invocation snapshot without
+invalidating those rows. Counts before and after expansion must remain distinct; unavailable or
+estimated totals must explain why. See the repository's design-graph execution policy for durable
+invariants; this section does not imply those target capabilities have shipped.
+
 ## Git projections
 
 Git is a synchronization projection above the authoritative StorageClient repository, not a
