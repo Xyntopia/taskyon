@@ -270,6 +270,36 @@ exists.
 The following additional invariants apply to the target invocation and deliverable architecture.
 They are requirements for future implementation, not claims that the current cache satisfies them.
 
+### Implemented Foundation And Remaining Boundaries
+
+`InvocationDefinition.sourceSnapshotId` is now supported by the canonical DAG invocation
+evaluators. The source repository stores immutable acquisition-to-manifest snapshots. Local
+evaluation replays pinned source artifacts without refreshing providers and records consumed
+source traces, including traces propagated through cached children. Cache lookup checks those
+traces against the selected snapshot; add-only extensions retain compatible computations.
+Inherited parameter bindings within the node closure also participate in cache identity.
+
+This is an additive foundation, not a completed reproducible invocation workflow:
+
+- Existing invocations without a snapshot retain live-source behavior. Their source-containing
+  closures bypass ordinary parent-cache reuse rather than hiding a source freshness check.
+- A missing acquisition throws `MissingSourceObservation` before contacting its provider.
+  Persisted awaiting-source state, acceptance, and replacement-invocation orchestration are not
+  implemented; the invocation runner currently records this as a failed attempt/run. Retrying with
+  an extended snapshot can reuse compatible node computations, but may replay planning and rewrite
+  the consolidated row artifacts.
+- Pinned evaluation currently uses the local orchestrator. A worker-only configuration that
+  forbids local fallback remains unsupported; it must not silently relax isolation requirements.
+- Snapshot transfer/export, cache repair after eviction, and durable planner checkpoints remain
+  follow-up work. Keep the source snapshot, referenced manifests, and artifacts available together;
+  an invocation hash alone does not transport that closure.
+- The consumed-source candidate index uses the existing cache/artifact backend. Concurrent index
+  updates can lose a candidate and reduce reuse; they must not change computation identity. This
+  does not replace row storage with partitions or claim a concurrent index transaction protocol.
+- Trusted code-defined nodes still rely on their declared implementation version when no content
+  hash is supplied. Snapshot support does not itself prove that every capability is pinned or that
+  arbitrary node implementations are deterministic.
+
 ## Reproducible Rows And Source Snapshots
 
 - The same root-node revision, canonical exact row parameters, and exact consumed source manifests

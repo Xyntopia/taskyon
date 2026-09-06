@@ -18,7 +18,11 @@ import {
   shouldRefreshSource,
   type SourceManifestRepository,
   type SourceUpdatePolicy,
+  type SourceSnapshot,
+  MissingSourceObservation,
 } from './sourceManifest.ts'
+import { describeDagEnvironment } from './dagEnvironment.ts'
+import { readSourceComputation, writeSourceComputation } from './sourceComputationCache.ts'
 import { assertDagNodeEffectSource } from './dagNodeEffectCheck.ts'
 import {
   combineObjectSchemas,
@@ -53,12 +57,14 @@ interface NodePolicy {
 }
 
 export interface EngineConfig {
+  onSourceManifest?: (acquisition: Hash, manifest: Hash) => void
   nodePolicies?: Record<string, NodePolicy>
   storageBackend?: DagStorageBackend
   execution?: DagExecutionConfig
   parameterBindings?: Record<string, Record<string, unknown>>
   sliceExecution?: DagSliceExecutionPolicy
   sourceExecution?: {
+    snapshot?: SourceSnapshot
     repository: SourceManifestRepository
     projectId?: string
     defaultPolicy: SourceUpdatePolicy
@@ -390,6 +396,17 @@ const dagExecutionLogData = (
 
 const makeNodeKey = (paramsHash: Hash, nodeCodeHash: Hash): Hash =>
   canonicalHash({ node: nodeCodeHash, params: paramsHash })
+
+const executionCacheKey = (node: DagNode, paramsHash: Hash, config: EngineConfig): Hash => {
+  const base = makeNodeKey(paramsHash, getNodeCodeHash(node))
+  const bindings = Object.fromEntries(
+    describeDagEnvironment(node).nodes.flatMap((dependency) => {
+      const value = config.parameterBindings?.[dependency.name]
+      return value === undefined ? [] : [[getNodeCodeHash(dependency), value]]
+    }),
+  )
+  return Object.keys(bindings).length === 0 ? base : canonicalHash({ base, bindings })
+}
 
 // -----------------------------
 // Node registry & createNode
@@ -1525,18 +1542,24 @@ export function createNode<
         const allowLocalFallback = actualEngineConfig.execution?.allowLocalFallback ?? true
         const runNodeInRunner = actualEngineConfig.execution?.runner?.runNode
 
-        if (executionMode === 'worker' && runNodeInRunner) {
+        if (
+          executionMode === 'worker' &&
+          runNodeInRunner &&
+          !actualEngineConfig.sourceExecution?.snapshot
+        ) {
           const backend = actualEngineConfig.storageBackend ?? getDefaultInMemoryBackend()
           const validatedParams = parseSchema<unknown>(
             node.paramsSchema,
             paramsValue as Record<string, unknown>,
           )
           const paramsHash = executionParamsHash(validatedParams as Record<string, unknown>)
-          const nodeCodeHash = getNodeCodeHash(node)
-          const key = makeNodeKey(paramsHash, nodeCodeHash)
+          const key = executionCacheKey(node, paramsHash, actualEngineConfig)
           const policy = actualEngineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
 
-          if (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite') {
+          if (
+            (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite') &&
+            describeDagEnvironment(node).sources.length === 0
+          ) {
             const cached = await backend.getCacheEntry(key)
             if (cached) {
               const value = await backend.readArtifact(cached.artifact)
@@ -1590,7 +1613,11 @@ export function createNode<
         const executionMode: DagExecutionMode = actualEngineConfig.execution?.mode ?? 'worker'
         const allowLocalFallback = actualEngineConfig.execution?.allowLocalFallback ?? true
         const runStudyInRunner = actualEngineConfig.execution?.runner?.runStudy
-        if (executionMode === 'worker' && runStudyInRunner) {
+        if (
+          executionMode === 'worker' &&
+          runStudyInRunner &&
+          !actualEngineConfig.sourceExecution?.snapshot
+        ) {
           const workerResult = await runStudyInRunner(
             opts === undefined
               ? {
@@ -2011,15 +2038,40 @@ export async function executeNode(
   const validatedParams = parseSchema<Record<string, unknown>>(node.paramsSchema, paramsValue)
   const paramsHash = executionParamsHash(validatedParams)
   const nodeCodeHash = getNodeCodeHash(node)
-  const key = makeNodeKey(paramsHash, nodeCodeHash)
+  const key = executionCacheKey(node, paramsHash, engineConfig)
 
   const policy = engineConfig.nodePolicies?.[node.name] ?? node.defaultPolicy
   const sourceExecution = node.effect === 'source' ? engineConfig.sourceExecution : undefined
+  const snapshot = engineConfig.sourceExecution?.snapshot
   const acquisitionKey = sourceExecution
     ? canonicalHash({ kind: 'taskyon.sourceAcquisition.v1', nodeHash: nodeCodeHash, paramsHash })
     : undefined
 
   if (sourceExecution && acquisitionKey) {
+    if (snapshot) {
+      const id = snapshot.manifests[acquisitionKey]
+      if (!id) throw new MissingSourceObservation(acquisitionKey, nodeCodeHash, validatedParams)
+      const manifest = await sourceExecution.repository.getManifest(id)
+      if (
+        !manifest ||
+        manifest.acquisitionKey !== acquisitionKey ||
+        manifest.nodeHash !== nodeCodeHash ||
+        manifest.paramsHash !== paramsHash ||
+        manifest.id !== id
+      ) {
+        throw new Error(
+          'Pinned source manifest is missing or incompatible with the requested acquisition.',
+        )
+      }
+      const value = parseSchema(
+        node.outputSchema,
+        await backend.readArtifact(manifest.artifactHash),
+      )
+      if (canonicalHash(value) !== manifest.artifactHash)
+        throw new Error('Pinned source artifact integrity mismatch.')
+      engineConfig.onSourceManifest?.(acquisitionKey, id)
+      return { value, artifactHash: manifest.artifactHash }
+    }
     const pinnedId = sourceExecution.projectId
       ? await sourceExecution.repository.getProjectPin(
           sourceExecution.projectId,
@@ -2045,7 +2097,24 @@ export async function executeNode(
     }
   }
 
-  if (!sourceExecution && (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite')) {
+  if (snapshot && (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite')) {
+    const cached = await readSourceComputation(backend, key, snapshot)
+    if (cached) {
+      const value = parseSchema(node.outputSchema, await backend.readArtifact(cached.artifact))
+      if (canonicalHash(value) !== cached.artifact)
+        throw new Error('Cached computation artifact integrity mismatch.')
+      for (const [acquisition, id] of Object.entries(cached.sources.manifests)) {
+        engineConfig.onSourceManifest?.(acquisition as Hash, id)
+      }
+      return { value, artifactHash: cached.artifact }
+    }
+  }
+  if (
+    !snapshot &&
+    !sourceExecution &&
+    describeDagEnvironment(node).sources.length === 0 &&
+    (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite')
+  ) {
     const cached = await backend.getCacheEntry(key)
     if (cached) {
       const value = await backend.readArtifact(cached.artifact)
@@ -2054,7 +2123,17 @@ export async function executeNode(
     }
   }
 
-  const childEngineConfig = bindExposedInputParams(node, validatedParams, engineConfig)
+  const consumed: Record<Hash, Hash> = {}
+  const childEngineConfig = bindExposedInputParams(node, validatedParams, {
+    ...engineConfig,
+    onSourceManifest: (acquisition, id) => {
+      if (consumed[acquisition] && consumed[acquisition] !== id) {
+        throw new Error('A computation consumed conflicting source observations.')
+      }
+      consumed[acquisition] = id
+      engineConfig.onSourceManifest?.(acquisition, id)
+    },
+  })
   const addInputs = (
     inputs: Record<string, DagNode> | Record<string, ExposedInputDef> | undefined,
     expose: boolean,
@@ -2094,7 +2173,8 @@ export async function executeNode(
   }
 
   if (policy.cache === 'WriteOnly' || policy.cache === 'ReadWrite') {
-    await backend.setCacheEntry(key, { artifact: artifactHash })
+    if (snapshot) await writeSourceComputation(backend, key, consumed, artifactHash)
+    else await backend.setCacheEntry(key, { artifact: artifactHash })
   }
 
   if (sourceExecution && acquisitionKey) {

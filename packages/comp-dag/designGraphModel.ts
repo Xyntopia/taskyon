@@ -39,6 +39,7 @@ export type InvocationDefinition = {
   schemaVersion: 2
   id: Hash
   rootNodeId: Hash
+  sourceSnapshotId?: Hash
   variables: Record<string, VariableSpec>
   inputs: Record<string, OptimizationInputSpec>
   objectives: Objective[]
@@ -295,6 +296,11 @@ export const createInvocationDefinition = (
   const value = {
     schemaVersion: 2 as const,
     rootNodeId: input.rootNodeId,
+    ...(input.sourceSnapshotId === undefined
+      ? {}
+      : {
+          sourceSnapshotId: hashAtBoundary(input.sourceSnapshotId, 'Invocation source snapshot id'),
+        }),
     variables: input.variables,
     inputs: input.inputs ?? {},
     objectives: [...input.objectives],
@@ -331,6 +337,11 @@ export const parseInvocationDefinition = (value: unknown): InvocationDefinition 
     : []
   const record = createInvocationDefinition({
     rootNodeId: hashAtBoundary(input.rootNodeId, 'Invocation root node id'),
+    ...(input.sourceSnapshotId === undefined
+      ? {}
+      : {
+          sourceSnapshotId: hashAtBoundary(input.sourceSnapshotId, 'Invocation source snapshot id'),
+        }),
     variables,
     inputs,
     objectives: input.objectives.map((objective) => objectiveSchema.parse(objective)),

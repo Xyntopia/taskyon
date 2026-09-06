@@ -13,6 +13,23 @@ import { evaluateDerivedOperations, type DerivedOperation } from './derivedExpre
 import { getPathValue, setPathValue, type VariableSpec } from './optimization.ts'
 import { toDagExploreInputs } from './runtime/runPlanner.ts'
 
+const invocationEngineConfig = async (
+  invocation: InvocationDefinition,
+  config: EngineConfig | undefined,
+): Promise<EngineConfig | undefined> => {
+  if (!invocation.sourceSnapshotId) {
+    if (config?.sourceExecution?.snapshot) {
+      throw new Error('Invocation must declare the source snapshot used by its evaluator.')
+    }
+    return config
+  }
+  const sourceExecution = config?.sourceExecution
+  if (!sourceExecution) throw new Error('Pinned invocation requires a source manifest repository.')
+  const snapshot = await sourceExecution.repository.getSnapshot(invocation.sourceSnapshotId)
+  if (!snapshot) throw new Error('Invocation source snapshot is unavailable.')
+  return { ...config, sourceExecution: { ...sourceExecution, snapshot } }
+}
+
 export type InvocationRow = {
   rowId: number
   params: Record<string, unknown>
@@ -70,7 +87,9 @@ export const createDagInvocationEvaluators = (args: {
 }): Pick<InvocationExecutionDependencies, 'evaluate' | 'evaluateRows'> => ({
   evaluate: async ({ params, signal }) => {
     if (signal?.aborted) throw new Error('Invocation cancelled.')
-    const result = await args.root.call(params).run(args.nodeContext, args.engineConfig)
+    const result = await args.root
+      .call(params)
+      .run(args.nodeContext, await invocationEngineConfig(args.invocation, args.engineConfig))
     return { outputs: result.value }
   },
   evaluateRows: async ({ params, maxRows, signal, onRow }) => {
@@ -111,7 +130,7 @@ export const createDagInvocationEvaluators = (args: {
           }),
       },
       args.nodeContext,
-      args.engineConfig,
+      await invocationEngineConfig(args.invocation, args.engineConfig),
     )
   },
 })

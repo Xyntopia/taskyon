@@ -27,9 +27,12 @@ import {
 import { createDerivedExpression, evaluateDerivedExpression } from './derivedExpression.ts'
 import {
   executeInvocation,
+  createDagInvocationEvaluators,
   iterateInvocationCandidates,
   type StagedArtifactWriter,
 } from './invocationExecution.ts'
+import { createNode } from './dagCore.ts'
+import { createSourceManifestRepository, createSourceSnapshot } from './sourceManifest.ts'
 import {
   createStorageInvocationArtifactStore,
   type InvocationArtifactStorageClient,
@@ -42,6 +45,59 @@ import {
   loadProjectRepositoryPresentation,
   loadProjectRevisionSnapshot,
 } from './designRepositorySnapshot.ts'
+
+export const testInvocationPinsSourceSnapshotIdentity = async () => {
+  const values = new Map<string, unknown>()
+  const sourceRepository = createSourceManifestRepository({
+    get: (namespace, id) => Promise.resolve(values.get(`${namespace}/${id}`)),
+    set: (namespace, id, value) => {
+      values.set(`${namespace}/${id}`, value)
+      return Promise.resolve()
+    },
+  })
+  const snapshot = createSourceSnapshot({})
+  await sourceRepository.putSnapshot(snapshot)
+  const root = createNode({
+    name: 'InvocationSnapshotIdentity',
+    version: 1,
+    contentHash: canonicalHash('InvocationSnapshotIdentity'),
+    outputSchema: { type: 'number' },
+    run: () => 42,
+  })
+  const base = createInvocationDefinition({
+    rootNodeId: root.contentHash!,
+    variables: {},
+    inputs: {},
+    objectives: [],
+    constraints: [],
+    capture: [],
+    policy: { accuracy: 'exact' },
+    reducerOverrides: {},
+  })
+  const pinned = createInvocationDefinition({ ...base, sourceSnapshotId: snapshot.id })
+  assert(base.id !== pinned.id, 'Snapshot selection must be part of invocation identity.')
+  assert(
+    parseInvocationDefinition(pinned).sourceSnapshotId === snapshot.id,
+    'Pinned snapshot must round-trip.',
+  )
+  const evaluators = createDagInvocationEvaluators({
+    root,
+    invocation: pinned,
+    engineConfig: {
+      execution: { mode: 'local' },
+      sourceExecution: {
+        repository: sourceRepository,
+        defaultPolicy: { mode: 'manual' },
+        refreshedAcquisitionKeys: new Set(),
+      },
+    },
+  })
+  const result = await evaluators.evaluate({ rootNodeId: pinned.rootNodeId, params: {} })
+  assert(result.outputs === 42, 'Evaluator must load the invocation snapshot from its repository.')
+  return { snapshotId: snapshot.id, invocationId: pinned.id }
+}
+testInvocationPinsSourceSnapshotIdentity.description =
+  'Hashes and loads explicit source snapshots through the canonical invocation evaluator.'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(message)
