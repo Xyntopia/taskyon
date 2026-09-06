@@ -222,7 +222,7 @@
     <template v-if="node.type === 'container' && node.children && node.children.length">
       <template v-for="(child, index) in node.children" :key="child.id">
         <DockView
-          v-model:node="node.children![index]!"
+          :node="child"
           :parent-direction="node.direction"
           :hide-tab-add="hideTabAdd"
           :hide-tab-close="hideTabClose"
@@ -241,6 +241,7 @@
           :add-view-options="addViewOptions"
           :dock-root-controller="dockRoot"
           @add-view="onChildAddView"
+          @update:node="onChildNodeUpdate(index, $event)"
           @view-activated="onChildViewActivated"
         >
           <!-- Forward all slots -->
@@ -1450,6 +1451,14 @@ const onAddTabClick = () => {
 /** Forward add-view events from children up the tree. */
 const onChildAddView = (ctx: AddViewContext, done: AddViewDone) => {
   emit('add-view', ctx, done)
+}
+
+const onChildNodeUpdate = (index: number, nextNode: DockNode) => {
+  const current = node.value
+  if (current.type !== 'container' || !current.children?.[index]) return
+  const children = [...current.children]
+  children[index] = nextNode
+  node.value = { ...current, children }
 }
 
 const onChildViewActivated = (ctx: ViewActivatedContext) => {
