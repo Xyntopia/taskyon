@@ -25,6 +25,10 @@ invariants and current behavior; do not add deployment-specific proposal paths o
 
 ## Protocol Discipline
 
+- Default to preserving the wire contract. Before implementing any protocol addition or semantic
+  change, follow the justification and maintainer-approval gate in
+  `policies/protocols-and-runtime-boundaries.md`. A feature request does not by itself authorize
+  widening a protocol; additive commands, fields, and events require the same review.
 - Treat every protocol command as a capability that could be exposed across a future P2P boundary.
 - Use typed protocols at real runtime, service, storage, and ownership boundaries even when the
   current provider is local or in-process. Consumers must not depend on whether the implementation

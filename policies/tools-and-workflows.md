@@ -90,6 +90,12 @@ or tool-visible capabilities.
 - Keep top-level routing and entry-node flow visible in the tool body even when detail helpers are
   extracted.
 - Use plain results for plain data and explicit task chains when workflow structure matters.
+- Use assistant `message` tasks for text intended for the conversation, including user-facing
+  summaries and instructions. Use `structured` or `toolresult` for intermediate data that should
+  be inspected as a result rather than displayed as a conversational message.
+- A following `return` marks execution termination; it is not required to display an assistant
+  message. Keep these content semantics independent of concrete tool names and model-context
+  selection. Do not add presentation-placement metadata to duplicate this distinction.
 
 ## Scoped Tools And Bindings
 

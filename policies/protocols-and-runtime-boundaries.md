@@ -27,6 +27,9 @@ client APIs, P2P services, and remote tool execution.
 
 ## Keep The Wire Surface Small
 
+- Default to no protocol change. A protocol is a long-lived peer contract, not a convenient mirror
+  of the current implementation. Local-only use and backward-compatible additions do not exempt a
+  change from the justification gate below.
 - Treat every protocol command as potentially reachable through a future peer transport, even when
   its first consumer uses an in-process or local MessagePort.
 - Protocol scarcity applies to the command surface, not to the number of local or remote adapters
@@ -55,6 +58,44 @@ client APIs, P2P services, and remote tool execution.
 - Keep editable host profiles separate from immutable execution snapshots. Browser and CLI hosts
   own and resolve `ToolchainProfiles`; core persists only the effective per-tool snapshot required
   to replay a pinned invocation.
+
+## Required Gate For Protocol Changes
+
+Before implementing a new command, event, request/response field, or change to existing wire
+semantics, document the following in the change proposal or review discussion and obtain explicit
+maintainer approval for the wire change:
+
+1. **Required capability.** State the behavior the caller needs, its owning service, and why that
+   behavior must cross this boundary. Name the proposed wire change precisely.
+2. **Existing paths and alternatives.** Inspect the existing protocol clients and providers,
+   including StorageClient. Explain why their capabilities, adapter wiring, and client-local
+   caches or indexes cannot meet the requirement. A consumer lacking a connection to an existing
+   service is first a composition or capability-grant problem, not evidence that another service
+   needs a duplicate command.
+3. **Strong reason.** Identify the concrete correctness, security, interoperability, or measured
+   performance constraint that requires the change. UI convenience, fewer local function calls,
+   an available TaskManager method, or the fact that data is canonical are not sufficient reasons.
+   For performance claims, identify the blocking work and explain why improving the existing
+   provider or local derivation is insufficient.
+4. **Peer contract and limits.** Define authorized principals and data scope, information exposed,
+   request/response and provider-work bounds, and failure behavior when peers are slow, missing,
+   disconnected, or disagree. Address cancellation, retries and idempotency where applicable;
+   pagination must not conceal unbounded provider work.
+5. **Evolution and verification.** Explain compatibility with peers that lack the capability or
+   use an older contract, versioning or negotiation requirements, and focused contract tests.
+   Identify overlapping paths to remove rather than establishing two permanent APIs for one job.
+
+Do not silently add a wire operation as an implementation detail of an approved feature. If the
+justification or approval is missing, pause that protocol change and present the existing-capability
+alternative. This gate applies across the protocol family, including storage; moving a new command
+to another service does not bypass it.
+
+Ordinary record/blob reads belong to the storage capability. Use scoped StorageClient access and
+typed domain readers rather than re-exposing storage operations through TaskManager or the public
+task service. Keep namespace selection, codecs, and capability wiring at the owning composition
+boundary, not in views. Reusing storage must not grant broader namespaces or write permissions than
+the caller needs. A task-service read facade is an exception only when a distinct, justified domain
+or authorization contract passes the gate above.
 
 ## Service Ownership
 

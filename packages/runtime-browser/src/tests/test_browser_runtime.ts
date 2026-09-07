@@ -79,6 +79,12 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
     createdRuntimes.pop()
 
     const secondRuntime = createRuntime()
+    await secondRuntime.taskyon
+    await secondRuntime.client.taskModel.loadLineage(createdTask.id)
+    assert(
+      secondRuntime.client.taskModel.get(createdTask.id)?.content.data === createdTask.content.data,
+      'Expected the restarted chat model to read through its storage capability',
+    )
     const restoredTask = await secondRuntime.client.task.get({ id: createdTask.id })
     assert(
       restoredTask?.id === createdTask.id,

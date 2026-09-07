@@ -3,6 +3,7 @@ import {
   createStorageClient,
   createTaskyonHostClient,
   createTaskyonClient,
+  createTaskRecordReader,
   taskyonHostProtocol,
   taskyonProtocol,
   taskyonStorageProtocol,
@@ -73,6 +74,9 @@ export const createTaskyonBrowserRuntime = async (
     namespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     distribution: 'local-only',
   })
+  if (options.storageSessionId) {
+    taskyonClient.setTaskSource(createTaskRecordReader(storageClient, options.storageSessionId))
+  }
   const storageStop = await startBrowserStorageService(
     storagePort.y,
     options.storage ?? { kind: 'browser' },
@@ -158,6 +162,7 @@ export const createTaskyonBrowserRuntime = async (
           })),
     })
   } catch (error) {
+    taskyonClient.dispose()
     clearTimeout(workerInitializationTimeout)
     worker.removeEventListener('message', onWorkerMessage)
     worker.removeEventListener('error', onWorkerError)
@@ -177,6 +182,7 @@ export const createTaskyonBrowserRuntime = async (
     storageClient,
     port: runtimePort.x,
     stop: (reason = 'stopping Taskyon browser runtime') => {
+      taskyonClient.dispose()
       toolExecutor.destroy()
       coreBridge.destroy()
       hostBridge.destroy()

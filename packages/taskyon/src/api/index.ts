@@ -15,6 +15,17 @@ import {
 } from '../types/toolApi'
 import { createPortClient, createStream, type Port } from '@taskyon/common/modules/frpBus'
 import { createLruCache } from '@taskyon/common/modules/lruCache'
+import {
+  createClientTaskModel,
+  type ClientTaskModel,
+  type ClientTaskSource,
+} from './clientTaskModel'
+export {
+  createClientTaskModel,
+  type ClientTaskModel,
+  type ClientTaskSource,
+} from './clientTaskModel'
+export { createTaskRecordReader } from './taskRecordReader'
 import type { RpcMessagePort } from '@taskyon/common/modules/frpBus'
 import {
   taskyonHostProtocol,
@@ -234,6 +245,7 @@ type TaskyonClientReadyOptions = {
   readinessTimeoutMs?: number
 }
 type TaskyonClientOptions = {
+  taskSource?: ClientTaskSource
   taskCacheSize?: number
   deferUntilReady?: boolean | TaskyonClientReadyOptions
 }
@@ -481,11 +493,7 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
       ? createLruCache<string, TaskNode>(options.taskCacheSize)
       : undefined
 
-  if (taskCache) {
-    tyPort.receive((msg) => {
-      if (isTaskCreatedMessage(msg)) taskCache.set(msg.task.id, msg.task)
-    })
-  }
+  let cacheGeneration = 0
   const taskClient = {
     ...protocolClient.task,
     onCreated: (handler: (task: TaskNode) => void) =>
@@ -493,16 +501,48 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
         if (isTaskCreatedMessage(message)) handler(message.task)
       }),
     get: async (args: Parameters<typeof protocolClient.task.get>[0]) => {
-      const cachedTask = taskCache?.get(args.id)
+      const cachedTask = taskModel.get(args.id) ?? taskCache?.get(args.id)
       if (cachedTask) return cachedTask
+      const generation = cacheGeneration
       const task = await protocolClient.task.get(args)
-      if (task) taskCache?.set(task.id, task)
+      if (task && generation === cacheGeneration) {
+        taskCache?.set(task.id, task)
+        taskModel.ingest(task)
+      }
       return task
     },
   }
 
+  const taskModel: ClientTaskModel = createClientTaskModel({
+    get: protocolClient.task.get,
+    ...options.taskSource,
+  })
+  const unsubscribeTaskModel = tyPort.receive((message) => {
+    if (isTaskCreatedMessage(message)) {
+      taskCache?.set(message.task.id, message.task)
+      taskModel.ingest(message.task)
+    }
+  })
+
   return {
     ...protocolClient,
+    taskModel,
+    setTaskSource: (source: ClientTaskSource) => {
+      cacheGeneration++
+      taskCache?.clear()
+      taskModel.setSource(source)
+    },
+    resetTaskModel: () => {
+      cacheGeneration++
+      taskCache?.clear()
+      taskModel.clear()
+    },
+    dispose: () => {
+      cacheGeneration++
+      unsubscribeTaskModel()
+      taskCache?.clear()
+      taskModel.clear()
+    },
     task: taskClient,
     waitUntilReady: (opts?: { readinessTimeoutMs?: number; signal?: AbortSignal }) =>
       readinessGate.waitUntilReady(opts),

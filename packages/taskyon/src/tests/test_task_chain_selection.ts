@@ -5,6 +5,36 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
+export const testLineageSelectionUsesRecordsWithoutContent = async () => {
+  const records = [{ id: 'root' }, { id: 'leaf', priorID: 'root' }]
+  const selection = await selectTaskChainIdSelection(
+    'leaf',
+    100,
+    {
+      method: 'lineage',
+      includeSubtaskResults: 'none',
+    },
+    {
+      getLinks: async (id) => records.find((record) => record.id === id) ?? null,
+      getTask: async () => {
+        throw new Error('Lineage must not hydrate contents.')
+      },
+      getFlattenedChain: async () => {
+        throw new Error('Lineage must not flatten subtasks.')
+      },
+      searchAllDirectChildren: async () => {
+        throw new Error('Lineage must not load children.')
+      },
+      findSiblingLeafTasks: async () => {
+        throw new Error('Lineage must not load result leaves.')
+      },
+    },
+  )
+  assert(selection.taskIds.join(',') === 'root,leaf', 'Expected record-only lineage.')
+}
+testLineageSelectionUsesRecordsWithoutContent.description =
+  'Uses occurrence records for lineage without fetching contents or traversing results.'
+
 export const testContinuationLeafTraversalUsesLocalTaskIndex = async () => {
   const tasks: TaskNode[] = [
     { id: 'selected', role: 'user', content: { type: 'message', data: 'Selected result' } },

@@ -1,4 +1,7 @@
 import type { PartialDeep } from 'type-fest'
+import { taskStorageTables, taskManagerStorageNamespace } from '../api/taskRecordReader'
+import { createTaskRecordHydrator } from '../utils/taskRecords'
+import { addTaskRelation, removeTaskRelation } from '../utils/taskTree'
 import z from 'zod'
 import { TaskNodeMeta } from '../types/chatCompletion'
 import type { TaskTreeNode } from '../types/taskNode'
@@ -52,20 +55,10 @@ export type TaskManagerStorage = {
   toolSettings: StorageRecordCrud<ToolSettingsRecord>
 }
 
-const taskStorageTables = [
-  'taskyonNodes',
-  'taskyonContents',
-  'metaDb',
-  'toolRegistry',
-  'toolSettings',
-] as const
 type TaskStorageTable = (typeof taskStorageTables)[number]
 
 const isTaskStorageTable = (value: string): value is TaskStorageTable =>
   taskStorageTables.some((table) => table === value)
-
-const taskManagerStorageNamespace = (sessionId: string, table: TaskStorageTable) =>
-  `${sessionId}/${table}`
 
 const parseTaskManagerStorageNamespace = (namespace: string) => {
   const separator = namespace.lastIndexOf('/')
@@ -392,50 +385,18 @@ export async function useTyTaskManager(
   const immediateChildrenMap = new Map<string, Set<string>>()
 
   function deleteFromChildAndSiblings(task: TaskNode) {
-    if (task.priorID) {
-      const siblings = nextSiblingMap.get(task.priorID)
-      if (siblings) {
-        siblings.delete(task.id)
-        if (siblings.size === 0) {
-          nextSiblingMap.delete(task.priorID)
-        }
-      }
-    }
-    if (task.parentID) {
-      const children = parentToChildMap.get(task.parentID)
-      if (children) {
-        children.delete(task.id)
-        if (children.size === 0) {
-          parentToChildMap.delete(task.parentID)
-        }
-      }
-    }
+    removeTaskRelation(nextSiblingMap, task.priorID, task.id)
+    removeTaskRelation(parentToChildMap, task.parentID, task.id)
     if (!task.priorID && task.parentID) {
-      const immediateChildren = immediateChildrenMap.get(task.parentID)
-      if (immediateChildren) {
-        immediateChildren.delete(task.id)
-        if (immediateChildren.size === 0) {
-          immediateChildrenMap.delete(task.parentID)
-        }
-      }
+      removeTaskRelation(immediateChildrenMap, task.parentID, task.id)
     }
   }
 
   function updateChildAndSiblingMap(task: TaskNode) {
-    if (task.priorID) {
-      const currentSiblings = nextSiblingMap.get(task.priorID) ?? new Set<string>()
-      currentSiblings.add(task.id)
-      nextSiblingMap.set(task.priorID, currentSiblings)
-    }
-    if (task.parentID) {
-      const currentChildren = parentToChildMap.get(task.parentID) ?? new Set<string>()
-      currentChildren.add(task.id)
-      parentToChildMap.set(task.parentID, currentChildren)
-    }
+    addTaskRelation(nextSiblingMap, task.priorID, task.id)
+    addTaskRelation(parentToChildMap, task.parentID, task.id)
     if (task.parentID && !task.priorID) {
-      const currentImmediateChildren = immediateChildrenMap.get(task.parentID) ?? new Set<string>()
-      currentImmediateChildren.add(task.id)
-      immediateChildrenMap.set(task.parentID, currentImmediateChildren)
+      addTaskRelation(immediateChildrenMap, task.parentID, task.id)
     }
   }
 
@@ -451,17 +412,10 @@ export async function useTyTaskManager(
     },
   })
 
-  const hydrateTaskRecord = async (record: TaskNodeRecord): Promise<TaskNode> => {
-    const stored = await storage.contents.get(record.contentRef)
-    if (!stored) throw new Error(`Task content not found: ${record.contentRef}`)
-    if (stored.id !== record.contentRef) {
-      throw new Error(`Task content id mismatch: ${record.contentRef}`)
-    }
-    if (taskContentHash(stored.content) !== record.contentRef) {
-      throw new Error(`Task content hash mismatch: ${record.contentRef}`)
-    }
-    return TaskNode.parse({ ...record, contentRef: undefined, content: stored.content })
-  }
+  const { hydrate: hydrateTaskRecord, clear: clearContentCache } = createTaskRecordHydrator(
+    storage.contents.get,
+    2000,
+  )
   const hydratedTaskEvents = createStream<{ id: string | number; data: TaskNode | null }>()
   tyCrud.liveStream(async ({ id, data }) => {
     hydratedTaskEvents.emit({ id, data: data ? await hydrateTaskRecord(data) : null })
@@ -548,6 +502,7 @@ export async function useTyTaskManager(
       clearLocks()
       await tyCrud.clear()
       await storage.contents.clear()
+      clearContentCache()
       nextSiblingMap.clear()
       parentToChildMap.clear()
       immediateChildrenMap.clear()
@@ -820,6 +775,7 @@ export async function useTyTaskManager(
 
   const taskChainSelectionAccess = {
     getTask: taskDb.get,
+    getLinks: (id: string) => tyCrud.get(id),
     getFlattenedChain: (
       rootTaskId: string,
       limit: number,

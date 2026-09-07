@@ -24,7 +24,11 @@ export const recordConversationHistory = async (
   if (history[0] === task.id) return [...history]
   if (await containsChildOf(client, history, task.id)) return [...history]
 
-  const chainIds = await client.getIdChain({ id: task.id, maxFollow: MAX_CONVERSATION_HISTORY })
+  const chainIds = await client.getIdChain({
+    id: task.id,
+    maxFollow: MAX_CONVERSATION_HISTORY,
+    selection: { method: 'lineage', includeSubtaskResults: 'none' },
+  })
   const obsoleteIds = new Set([
     ...chainIds.slice(0, -1),
     ...(task.priorID ? [task.priorID] : []),
@@ -44,7 +48,10 @@ export const resolveConversationTitle = async (
   const task = await client.get({ id: taskId })
   if (!task) return undefined
 
-  const taskChain = await client.getChain({ id: taskId })
+  const taskChain = await client.getChain({
+    id: taskId,
+    selection: { method: 'lineage', includeSubtaskResults: 'none' },
+  })
   const existingName = taskChain.findLast(({ name }) => !!name?.trim())?.name?.trim()
   if (existingName) return existingName
 

@@ -13,7 +13,9 @@ descending order of importance. When principles conflict, the earlier principle 
   protocols even when both sides are local; clients remain independent of where a service runs.
 - **Protocols are scarce.** Every protocol capability may cross a future peer boundary. Keep wire
   contracts focused on intentional remote capabilities and canonical data; derive navigation,
-  search, aggregation, and acceleration locally from cached or indexed state.
+  search, aggregation, and acceleration locally from cached or indexed state. Default to no wire
+  change: require a documented, maintainer-approved reason that existing capabilities and local
+  composition cannot satisfy. Canonical data alone does not justify a second API for reading it.
 - **P2P, not lock-in.** Peers provide Taskyon services through shared contracts that are independent
   of transport.
 - **Secure by default.** Use Taskyon's owned encryption, identity, secret, and permission

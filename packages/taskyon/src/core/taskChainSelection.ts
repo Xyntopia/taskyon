@@ -1,4 +1,5 @@
 import type { TaskGetter, TaskNode } from '../types/taskNode'
+import { walkTaskLineage } from '../utils/taskTree'
 
 export type TaskChainSelection =
   | {
@@ -13,6 +14,9 @@ export type TaskChainSelection =
 
 export type TaskChainSelectionAccess = {
   getTask: TaskGetter
+  getLinks?:
+    | ((id: string) => Promise<Pick<TaskNode, 'id' | 'priorID' | 'parentID'> | null>)
+    | undefined
   getFlattenedChain: (
     taskId: string,
     maxFollow: number,
@@ -125,16 +129,18 @@ const getRequiredTask = async (taskId: string, getTask: TaskGetter) => {
   return task
 }
 
-const collectLineageIds = async (taskId: string, getTask: TaskGetter) => {
+const collectLineageIds = async (
+  taskId: string,
+  getTask: (id: string) => Promise<Pick<TaskNode, 'id' | 'priorID' | 'parentID'> | null>,
+) => {
   const newestFirst: string[] = []
-  const visited = new Set<string>()
-  let currentId: string | undefined = taskId
-
-  while (currentId && !visited.has(currentId)) {
-    visited.add(currentId)
-    const task = await getRequiredTask(currentId, getTask)
+  const walk = walkTaskLineage(taskId)
+  let step = walk.next()
+  while (!step.done) {
+    const task = await getTask(step.value)
+    if (!task) throw new Error('A task is unavailable while building lineage.')
     newestFirst.push(task.id)
-    currentId = task.priorID ?? task.parentID
+    step = walk.next(task)
   }
 
   return newestFirst.reverse()
@@ -222,7 +228,7 @@ const selectLineageIds = async (
   const seen = new Set<string>()
   const includedSubtaskSeen = new Set<string>()
 
-  const lineageIds = await collectLineageIds(taskId, access.getTask)
+  const lineageIds = await collectLineageIds(taskId, access.getLinks ?? access.getTask)
   for (const [index, lineageId] of lineageIds.entries()) {
     addIdOnce(selectedIds, seen, lineageId)
     if (includeSubtaskResults === 'none') continue

@@ -118,3 +118,45 @@ The built-in codec is trusted-local plaintext. It cannot create a `remote-allowe
 codecs encode and decode records on the trusted client side and may also support client-side
 indexes over decoded data. A codec that supports protected remote storage must be injected by the
 trusted host; encrypted Space storage and key lifecycle are not part of the current implementation.
+
+# Client task projections
+
+`client.taskModel` is a session-scoped, in-memory read model populated by task-creation events and
+an injected read-only task source over the existing storage protocol.
+`lineage(id)` and `selection(id)` return currently cached tasks synchronously; `loadLineage(id)`
+and `discover(id)` progressively acquire missing data. `loadResults(callId, selectedId)` hydrates
+raw result data on demand. `exportSelection(id)` requires the complete selected conversation
+version and its subtask branches and fails if required contents are unavailable.
+
+The client model and TaskManager reuse the same lineage walker, relationship-index helpers,
+and verified content hydrator. Each owns its own cache and loading lifecycle. The walker works
+with both synchronous cached reads and asynchronous storage reads; it does not choose which
+results belong in a conversation. Client display selection and core execution-result resolution
+remain separate responsibilities. The storage reader deliberately does not cache hydrated
+content, so a complete export can verify current storage rather than a previous cached value.
+
+At the runtime composition boundary, supply
+`createTaskRecordReader(storageClient, storageSessionId)` as the `taskSource` option to
+`createTaskyonClient`, or call `client.setTaskSource(reader)` when the active storage scope becomes
+known. Replacing the source clears the client caches and invalidates pending imports. The reader
+uses existing storage `get`, `getMany`, and `find` operations, validates task records and content
+hashes, and exposes no writes. It adds no task-protocol command or event. Grant the underlying
+storage capability only the operations and namespaces needed; this adapter is not an authorization
+boundary or a cross-peer synchronization implementation.
+
+The browser core runtime wires the reader when creating each session's storage. The worker-host
+runtime wires it when `storageSessionId` is explicitly supplied. A plain task-only client can load
+lineage with existing `task.get`, but reports unavailable record storage when asked to discover
+subtasks or export a complete conversation; it must not silently fall back to remote traversal.
+
+Keep a client model scoped to its owning session; clear it on session changes and dispose the
+client when its port is retired. Known active selections are retained while subscribed views use
+them; inactive records are evicted above the cache target. Completion describes the current
+provider's enumerated records, not global knowledge across a distributed network.
+Full exports re-enumerate child records and re-read selected task contents; cached tasks alone
+cannot prove that storage still contains a complete selection. Live cross-client deletion
+invalidation is not provided by a new task event.
+
+The existing storage `find` returns all matching records, without cursor pagination. This change
+does not introduce a paginated wire contract or claim bounded provider work. Efficient bounded
+storage enumeration and cross-peer change synchronization remain separate work.

@@ -11,6 +11,7 @@ import {
   createStorageClient,
   createTaskyonHostClient,
   createTaskyonClient,
+  createTaskRecordReader,
   taskyonHostProtocol,
   taskyonProtocol,
   taskyonStorageProtocol,
@@ -113,6 +114,7 @@ export const createTaskyonBrowserCoreRuntime = (
   const disposeCore = async (core: Awaited<ReturnType<typeof tyCore>>, reason: string) => {
     if (disposed) return
     disposed = true
+    client.dispose()
     disconnectCore?.()
     disconnectCore = undefined
     disconnectHost?.()
@@ -152,11 +154,11 @@ export const createTaskyonBrowserCoreRuntime = (
             ? { authorizeSandboxFetch: options.authorizeSandboxFetch }
             : {}),
           ...(options.authorizePopup ? { authorizePopup: options.authorizePopup } : {}),
-          taskManagerStorageFactory: ({ sessionId }) =>
-            connectTaskManagerStorageFromProtocol(
-              storageClient,
-              options.storageSessionId ?? sessionId,
-            ),
+          taskManagerStorageFactory: ({ sessionId }) => {
+            const scope = options.storageSessionId ?? sessionId
+            client.setTaskSource(createTaskRecordReader(storageClient, scope))
+            return connectTaskManagerStorageFromProtocol(storageClient, scope)
+          },
           artifactStoreFactory: ({ sessionId }) =>
             createArtifactStore(
               createProtocolStorageBlobBackend(
@@ -174,6 +176,7 @@ export const createTaskyonBrowserCoreRuntime = (
       if (stopReason) await disposeCore(core, stopReason)
       return core
     } catch (error) {
+      client.dispose()
       stopStorageService()
       throw error
     }
