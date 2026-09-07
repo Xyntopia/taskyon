@@ -24,11 +24,12 @@
 <script setup lang="ts">
 import { matDelete, matDownloadForOffline, matMoreHoriz } from '@quasar/extras/material-icons'
 import { chatToYaml } from '@taskyon/taskyon'
-import { exportFile } from 'quasar'
+import { exportFile, useQuasar } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'stores/taskyonState'
 
 const tystate = useTaskyonStore()
+const $q = useQuasar()
 const { navigateToTask } = useTaskNavigation()
 
 defineProps<{
@@ -44,18 +45,25 @@ async function onDeleteThread(conversationId: string) {
 }
 
 async function onDownloadChat(conversationId: string) {
-  console.log('download thread!!', conversationId)
-  const task = await tystate.taskyonClient.task.get({ id: conversationId })
-  if (task) {
-    const taskList = await tystate.taskyonClient.task.getChain({ id: conversationId })
-    const taskThreadYaml = chatToYaml(taskList)
-    if (taskThreadYaml) {
-      const fileName = `tyn-${task.name || ''}.yaml`
-      const mimeType = 'text/yaml'
+  try {
+    const task = await tystate.taskyonClient.task.get({ id: conversationId })
+    if (!task) throw new Error('Task unavailable')
+    if (task) {
+      const taskList = await tystate.taskyonClient.taskModel.exportSelection(conversationId)
+      const taskThreadYaml = chatToYaml(taskList, { leafID: conversationId })
+      if (taskThreadYaml) {
+        const fileName = `tyn-${task.name || ''}.yaml`
+        const mimeType = 'text/yaml'
 
-      // Use Quasar's exportFile function for download
-      exportFile(fileName, taskThreadYaml, mimeType)
+        // Use Quasar's exportFile function for download
+        exportFile(fileName, taskThreadYaml, mimeType)
+      }
     }
+  } catch {
+    $q.notify({
+      type: 'negative',
+      message: 'Could not load the complete conversation for download. Please retry.',
+    })
   }
 }
 </script>

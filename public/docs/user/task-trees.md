@@ -23,6 +23,23 @@ Within one chain, `priorID` establishes order. A tool can return several child c
 sequential. A final `return` marks completion explicitly, but result data should normally live in
 the preceding `message`, `structured`, or `toolresult` task.
 
+An assistant `message` contains text intended for the conversation. This includes messages from
+custom tools, such as a summary or instructions asking you to connect a service. A following
+`return` is not needed to make that message visible; `return` controls execution and is hidden
+from ordinary chat. Tools should use `structured` or `toolresult` for intermediate data.
+
+Chat renders cached tasks first and loads additional history and result branches in the
+background. Visible tool calls have a collapsed, one-line result preview; expand a row to inspect
+its arguments and results. Hidden internal tool calls do not gain a visible raw-result row,
+although their assistant messages still appear normally. Missing data leaves the available
+conversation visible with a Retry action.
+
+**Copy conversation** copies user-facing messages. **Copy everything** and sharing preserve the
+selected conversation version and its included tool branches, even when their rows are hidden or
+collapsed. Alternative edited questions or regenerated conversation versions are excluded. Files
+and other external objects remain references; their bytes are not bundled. Complete-copy and
+sharing actions load the required tasks before exporting and report missing data.
+
 ```mermaid
 flowchart TD
   User[User message] --> Entry[Entry node]

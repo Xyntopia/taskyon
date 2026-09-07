@@ -12,6 +12,9 @@
         round
         dense
         :tasks="copyableThread"
+        :client="client"
+        :selected-task-id="selectedTaskId"
+        :tools="allTools"
       />
       <q-btn
         flat
@@ -57,11 +60,17 @@
         :tools="allTools"
         :expert-mode="expertMode"
         :presentation="presentation"
+        :client="client"
+        :selected-task-id="selectedTaskId"
       >
         <template v-if="$slots.task" #task="slotProps">
           <slot name="task" v-bind="slotProps" />
         </template>
       </TaskChatThread>
+      <div v-if="conversation.error.value" role="status" class="text-caption">
+        {{ conversation.error.value }}
+        <q-btn flat dense no-caps label="Retry" @click="conversation.refresh" />
+      </div>
       <TaskExecutionProgress v-if="liveProgress" :progress="liveProgress" />
       <div
         v-if="selectedThread.length === 0 && status === 'ready'"
@@ -119,6 +128,7 @@ import CopyTaskChatButton from './CopyTaskChatButton.vue'
 import TaskConversationBrowser from './TaskConversationBrowser.vue'
 import TaskChatThread from './TaskChatThread.vue'
 import TaskExecutionProgress from './TaskExecutionProgress.vue'
+import { useClientConversation } from '@taskyon/ui/modules/useClientConversation'
 import TaskComposer from './TaskComposer.vue'
 import { selectTasksForChatCopy } from './taskChatVisibility'
 
@@ -156,15 +166,19 @@ const selectedTaskId = defineModel<string | undefined>('selectedTaskId', {
 })
 const recentTaskIds = defineModel<string[]>('recentTaskIds', { default: () => [] })
 const messageDraft = defineModel<string | undefined>('messageDraft')
-const selectedThread = ref<TaskNode[]>([])
+const conversation = useClientConversation(
+  () => props.client,
+  () => selectedTaskId.value,
+)
+const selectedThread = conversation.tasks
 const threadContainer = ref<HTMLElement>()
-const currentTask = computed(() => selectedThread.value.at(-1) ?? null)
+const currentTask = computed(
+  () => selectedThread.value.find((task) => task.id === selectedTaskId.value) ?? null,
+)
 const copyableThread = computed(() =>
   selectTasksForChatCopy(selectedThread.value, props.allTools, props.expertMode),
 )
 let unsubscribeTaskCreated: (() => void) | undefined
-let refreshVersion = 0
-let locallySelectedTaskId: string | undefined
 const executionProgress = useTaskExecutionProgress()
 
 const resolvedPresentation = computed(() => resolveTaskChatPresentation(props.presentation))
@@ -201,74 +215,22 @@ const connectStreams = () => {
   executionProgress.connect(props.chatCompletionStream, props.workerStream)
 }
 
-const refreshThread = async () => {
-  const client = props.client
-  const taskId = selectedTaskId.value
-  const version = ++refreshVersion
-  if (!client || !taskId) {
-    selectedThread.value = []
-    return
-  }
-
-  const accessibleTask = await client.task.get({ id: taskId })
-  if (version !== refreshVersion) return
-  if (!accessibleTask) {
-    selectedThread.value = []
-    recentTaskIds.value = recentTaskIds.value.filter((id) => id !== taskId)
-    if (selectedTaskId.value === taskId) selectedTaskId.value = undefined
-    return
-  }
-
-  const tasks = await client.task.getChain({ id: taskId })
-  if (version !== refreshVersion) return
-  selectedThread.value = tasks
-  const selectedTask = tasks.find(({ id }) => id === taskId) ?? tasks.at(-1)
-  if (selectedTask) void conversationHistory.record(selectedTask)
-  await scrollToThreadEnd()
-}
-
 const trackCreatedTask = (task: TaskNode) => {
   const selectedId = selectedTaskId.value
   if (!selectedId) return
 
-  const existingIndex = selectedThread.value.findIndex(({ id }) => id === task.id)
-  const threadIds = new Set(selectedThread.value.map(({ id }) => id))
-  const extendsThread =
-    task.parentID === selectedId ||
-    task.priorID === selectedId ||
-    (task.parentID !== undefined && threadIds.has(task.parentID)) ||
-    (task.priorID !== undefined && threadIds.has(task.priorID))
-  if (existingIndex < 0 && task.id !== selectedId && !extendsThread) return
+  const extendsThread = task.parentID === selectedId || task.priorID === selectedId
+  if (!extendsThread) return
 
-  if (existingIndex >= 0) {
-    selectedThread.value = selectedThread.value.map((currentTask, index) =>
-      index === existingIndex ? task : currentTask,
-    )
-  } else {
-    selectedThread.value = [...selectedThread.value, task]
-    if (selectedTaskId.value !== task.id) {
-      locallySelectedTaskId = task.id
-      selectedTaskId.value = task.id
-    }
-    void conversationHistory.record(task)
-  }
+  selectedTaskId.value = task.id
+  void conversationHistory.record(task)
 
   void scrollToThreadEnd()
-}
-
-const onSelectedTaskChanged = (taskId: string | undefined) => {
-  if (taskId === locallySelectedTaskId) {
-    locallySelectedTaskId = undefined
-    return
-  }
-  locallySelectedTaskId = undefined
-  void refreshThread()
 }
 
 const connectClient = (client: TaskyonClient | undefined) => {
   unsubscribeTaskCreated?.()
   unsubscribeTaskCreated = client?.task.onCreated(trackCreatedTask)
-  void refreshThread()
 }
 
 const onTasksCreated = (taskId: string | undefined) => {
@@ -284,15 +246,13 @@ const selectConversation = (taskId: string) => {
 }
 
 const startNewConversation = () => {
-  refreshVersion += 1
-  locallySelectedTaskId = undefined
   shouldAutoScroll.value = true
   executionProgress.reset()
-  selectedThread.value = []
   selectedTaskId.value = undefined
 }
 
 watch(() => props.client, connectClient, { immediate: true })
+watch(selectedThread, () => void scrollToThreadEnd())
 watch([() => props.chatCompletionStream, () => props.workerStream], connectStreams, {
   immediate: true,
 })
@@ -300,7 +260,6 @@ watch(
   () => executionProgress.state.value,
   () => void scrollToThreadEnd(),
 )
-watch(selectedTaskId, onSelectedTaskChanged)
 onBeforeUnmount(() => {
   unsubscribeTaskCreated?.()
 })

@@ -11,6 +11,10 @@
         @scroll="scm.onScroll"
       />
       <!-- "Task" Display (.tasks-container & .task-container) -->
+      <div v-if="tystate.chatLoadError" role="status" class="text-caption q-pa-sm">
+        {{ tystate.chatLoadError }}
+        <q-btn flat dense no-caps label="Retry" @click="tystate.retryChatLoad" />
+      </div>
       <TaskChainViewer
         v-if="currentTaskForView && tystate.selectedThread.length > 0"
         :selected-thread="tystate.selectedThread"

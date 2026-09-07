@@ -48,7 +48,6 @@ import { matBuild } from '@quasar/extras/material-icons'
 import { mdiToolbox } from '@quasar/extras/mdi-v6'
 import TaskComposer from '@taskyon/ui/components/taskyon/TaskComposer.vue'
 import { partialTaskDraft } from '@taskyon/taskyon'
-import { createTaskyonClient } from '@taskyon/tyclient'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
@@ -79,7 +78,7 @@ const props = withDefaults(
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: () => [] })
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
-const taskyonClient = createTaskyonClient(tystate.api)
+const taskyonClient = tystate.taskyonClient
 const { navigateToTask } = useTaskNavigation()
 const selectedTaskType = computed(() =>
   state.createTaskType.type === 'functioncall' ? state.createTaskType.name : undefined,

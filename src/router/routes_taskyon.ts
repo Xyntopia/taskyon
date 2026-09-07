@@ -58,6 +58,11 @@ export const universalTyRoutes: RouteRecordRaw[] = [
 
 export const taskyonRoutes: RouteRecordRaw[] = [
   {
+    path: '/task-chat-responsiveness-test',
+    component: () => import('layouts/EmptyLayout2.vue'),
+    children: [{ path: '', component: () => import('pages/TaskChatResponsivenessTest.vue') }],
+  },
+  {
     path: '/task-chat-presentation-test',
     component: () => import('layouts/EmptyLayout2.vue'),
     children: [

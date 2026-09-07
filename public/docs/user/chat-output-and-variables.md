@@ -30,6 +30,11 @@ A `structured` task stores data as an object rather than presentation text. The 
 compact object view, while later tools can consume the original value. Prefer structured results
 when downstream work needs stable fields instead of parsing prose.
 
+Visible tool calls load a short result preview as they approach the screen. Clicking the row
+expands the existing object/text renderer. Multiple results share one row with an additional
+result count. Assistant messages are still displayed as conversational text rather than folded
+into those raw data previews.
+
 ## Reusing prior task data
 
 Taskyon assigns presentation names such as `message1`, `python1`, or `result1` to task values in the

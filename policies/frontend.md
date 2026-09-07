@@ -56,6 +56,25 @@ Apply this policy to Vue components, stores, routes, styling, and user interacti
 ## Runtime Boundaries
 
 - UI code communicates with Taskyon core and external hosts through typed protocol clients.
+- Keep a disposable, session-scoped task model in the shared client layer. Render cached lineage
+  immediately and obtain missing canonical records in the background. Core owns execution
+  traversal; clients own conversational projections. Share neutral primitives without importing
+  privileged core services into views.
+- Display assistant messages in the selected conversation and its included subtask branches
+  normally. Do not require a following `return`, check tool names, or merge alternative edited
+  conversation versions into that selection.
+- Present `structured` and `toolresult` data as collapsed previews with on-demand expansion.
+  `hideChat` hides a tool-call row and its raw result previews, but not its assistant messages.
+  Keep `return` hidden. Expert inspection may expose internal records.
+- Missing local records are incomplete knowledge, not proof that results do not exist. Preserve
+  visible content on read failures and provide explicit retry. Scope caches and asynchronous
+  updates to the client/session and prevent late responses from changing another conversation.
+- Show submissions as transient pending text before persistence, without inventing canonical
+  task IDs. A timed-out creation is unconfirmed and must not be automatically resubmitted.
+- Copying and sharing use explicit complete selections, independent of loaded or expanded rows.
+  Offer user-facing conversation copy separately from full task-data copy. Full exports preserve
+  the selected version, included subtask branches, links, and selected task ID; external objects
+  remain references. Report unavailable data rather than exporting a silently incomplete tree.
 - Do not import privileged core internals directly into reusable UI components.
 - Browser-only behavior belongs in the browser host boundary, not shared core.
 - Verify user-facing workflows at representative desktop and mobile sizes when layout changes.

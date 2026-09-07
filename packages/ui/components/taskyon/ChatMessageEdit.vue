@@ -21,11 +21,18 @@
         </template>
         <template v-if="smallMode" #after>
           <div v-show="smallMode">
-            <q-btn class="msg-edit__send-button" flat :icon="matSend" @click="emit('executeTask')">
+            <q-btn
+              class="msg-edit__send-button"
+              :disable="sendDisabled"
+              flat
+              :icon="matSend"
+              @click="emit('executeTask')"
+            >
               <q-tooltip>{{ sendToolTip }}</q-tooltip>
             </q-btn>
             <q-btn
               v-if="showWebSearch"
+              :disable="sendDisabled"
               class="msg-edit__secondary-button"
               flat
               :icon="mdiSearchWeb"
@@ -47,6 +54,7 @@
     <div v-if="!smallMode" class="bar bottom border-radius-inherit">
       <q-btn
         class="msg-edit__send-button"
+        :disable="sendDisabled"
         flat
         size="sm"
         :icon="matSend"
@@ -56,6 +64,7 @@
       </q-btn>
       <q-btn
         v-if="showWebSearch"
+        :disable="sendDisabled"
         class="msg-edit__secondary-button"
         flat
         size="sm"
@@ -81,6 +90,7 @@ const props = withDefaults(
     useEnterToSend?: UseEnterToSendMode
     showWebSearch?: boolean
     placeholder?: string
+    sendDisabled?: boolean
   }>(),
   {
     useEnterToSend: 'auto',
@@ -110,6 +120,7 @@ const sendToolTip = computed(
 const resolvedPlaceholder = computed(() => props.placeholder)
 
 const checkKeyboardEvents = (event: KeyboardEvent) => {
+  if (props.sendDisabled) return
   if (event.key !== 'Enter' || enterMode.value === 'off') return
   const shouldSend = { on: false, shift: true }[enterMode.value] === event.shiftKey
   if (!shouldSend) return

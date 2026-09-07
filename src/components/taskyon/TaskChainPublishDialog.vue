@@ -1,6 +1,13 @@
 <template>
   <template v-if="buttons">
-    <CopyTaskChatButton class="gt-xs" v-bind="$attrs" :tasks="copyableTaskList">
+    <CopyTaskChatButton
+      class="gt-xs"
+      v-bind="$attrs"
+      :tasks="copyableTaskList"
+      :client="single ? undefined : tystate.taskyonClient"
+      :selected-task-id="taskId"
+      :tools="tystate.allTools"
+    >
       <slot name="tt-cp-btn">
         <q-tooltip>Copy entire chat as markdown</q-tooltip>
       </slot>
@@ -127,6 +134,9 @@ No one else can access or remove your files without your permission.`"
             outline
             label="Copy to clipboard"
             :tasks="copyableTaskList"
+            :client="single ? undefined : tystate.taskyonClient"
+            :selected-task-id="taskId"
+            :tools="tystate.allTools"
           />
           <template v-if="download">
             <q-btn
@@ -236,7 +246,7 @@ const selectedTaskList = asyncComputed(
       }
       return [taskOrId]
     }
-    const taskList = await tystate.taskyonClient.task.getChain({ id: taskId.value })
+    const taskList = tystate.taskyonClient.taskModel.selection(taskId.value)
     return taskList
   },
   [],
@@ -274,9 +284,12 @@ const taskyonShareLink = computed(() => {
 
 async function onExportPublicGdrive(taskList: TaskNode[]) {
   try {
+    loadingGdrive.value = true
+    const selectedId = taskId.value
+    if (!single) taskList = await tystate.taskyonClient.taskModel.exportSelection(selectedId)
     if (taskList.length > 0) {
       loadingGdrive.value = true
-      const taskThreadMd = chat2Md(taskList)
+      const taskThreadMd = chat2Md(taskList, true, { leafID: selectedId })
       const task = taskList.at(-1)!
       if (taskThreadMd) {
         const { publishMarkdown } = useGdrive(tystate.getGdriveToken)
@@ -290,7 +303,7 @@ async function onExportPublicGdrive(taskList: TaskNode[]) {
 
         if (gdriveFile.webViewLink) {
           gdriveLink.value = gdriveFile.webViewLink
-          lastGeneratedTaskId.value = taskId.value
+          lastGeneratedTaskId.value = selectedId
           linkGeneratedAt.value = new Date()
           hasTaskChangeWarningDismissed.value = false
         }
@@ -314,30 +327,48 @@ function onExportIpfs(taskId: string) {
   console.log('export to ipfs', taskId)
 }
 
-function onExportChatMD(taskList: TaskNode[]) {
-  if (taskList.length > 0) {
-    const taskThreadMd = chat2Md(taskList)
-    const task = taskList.at(-1)!
-    if (taskThreadMd) {
-      const fileName = `tyn-${task.name || ''}.md`
-      const mimeType = 'text/markdown; charset=UTF-8'
+async function onExportChatMD(taskList: TaskNode[]) {
+  const selectedId = taskId.value
+  try {
+    if (!single) taskList = await tystate.taskyonClient.taskModel.exportSelection(selectedId)
+    if (taskList.length > 0) {
+      const taskThreadMd = chat2Md(taskList, true, { leafID: selectedId })
+      const task = taskList.at(-1)!
+      if (taskThreadMd) {
+        const fileName = `tyn-${task.name || ''}.md`
+        const mimeType = 'text/markdown; charset=UTF-8'
 
-      exportFile(fileName, taskThreadMd, mimeType)
+        exportFile(fileName, taskThreadMd, mimeType)
+      }
     }
+  } catch {
+    $q.notify({
+      type: 'negative',
+      message: 'The complete conversation could not be loaded. Please retry.',
+    })
   }
 }
 
-function onExportChatYaml(taskList: TaskNode[]) {
-  if (taskList.length > 0) {
-    const taskThreadYaml = chatToYaml(taskList)
-    const task = taskList.at(-1)!
-    if (taskThreadYaml) {
-      const fileName = `tyn-${task.name || ''}.yaml`
-      const mimeType = 'text/yaml'
+async function onExportChatYaml(taskList: TaskNode[]) {
+  const selectedId = taskId.value
+  try {
+    if (!single) taskList = await tystate.taskyonClient.taskModel.exportSelection(selectedId)
+    if (taskList.length > 0) {
+      const taskThreadYaml = chatToYaml(taskList, { leafID: selectedId })
+      const task = taskList.at(-1)!
+      if (taskThreadYaml) {
+        const fileName = `tyn-${task.name || ''}.yaml`
+        const mimeType = 'text/yaml'
 
-      // Use Quasar's exportFile function for download
-      exportFile(fileName, taskThreadYaml, mimeType)
+        // Use Quasar's exportFile function for download
+        exportFile(fileName, taskThreadYaml, mimeType)
+      }
     }
+  } catch {
+    $q.notify({
+      type: 'negative',
+      message: 'The complete conversation could not be loaded. Please retry.',
+    })
   }
 }
 

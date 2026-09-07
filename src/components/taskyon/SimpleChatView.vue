@@ -1,5 +1,7 @@
 <template>
   <TaskChatThread
+    :client="tystate.taskyonClient"
+    :selected-task-id="state.selectedTaskId"
     :tasks="selectedThread"
     :tools="tystate.allTools"
     :reasoning="reasoning"

@@ -107,6 +107,7 @@ import { type TyProfile } from 'src/modules/taskyon/types'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, onWatcherCleanup, readonly, ref, watch, watchEffect } from 'vue'
+import { useClientConversation } from '@taskyon/ui/modules/useClientConversation'
 import { guiTools } from '../modules/taskyon/GuiTools'
 import {
   taskyonProfileSections,
@@ -1000,6 +1001,12 @@ function taskUiUpdates(
   const taskTreeRevision = ref(0)
   const followedTaskId = ref<string>()
   const pendingFollowTaskIds = new Set<string>()
+  let unsubscribeTasks: (() => void) | undefined
+  let disposed = false
+  onScopeDispose(() => {
+    disposed = true
+    unsubscribeTasks?.()
+  })
   const currentTaskResolutionStatus = ref<'idle' | 'loading' | 'resolved' | 'missing'>('idle')
   const conversationHistory = useConversationHistory({
     history: computed({
@@ -1012,13 +1019,11 @@ function taskUiUpdates(
     onError: (error) => console.warn('Could not update conversation history.', error),
   })
 
-  void taskyon.then((ty) => {
-    ty.taskStream(({ id, data: task }) => {
+  void taskyon.then(() => {
+    if (disposed) return
+    unsubscribeTasks = taskyonClient.task.onCreated((task) => {
+      const id = task.id
       taskTreeRevision.value += 1
-      if (!task) {
-        void conversationHistory.remove(id.toString())
-        return
-      }
       const selectedTaskId = stateRefs.selectedTaskId
       const selectedOrPendingTaskId = followedTaskId.value ?? selectedTaskId
       if (
@@ -1064,7 +1069,9 @@ function taskUiUpdates(
           currentTaskResolutionStatus.value = 'loading'
           let task: TaskNode | null
           try {
-            task = await taskyonClient.task.get({ id: newSelectedTask })
+            task =
+              taskyonClient.taskModel.get(newSelectedTask) ??
+              (await taskyonClient.task.get({ id: newSelectedTask }))
           } catch (error) {
             if (cancelled) return
             console.error(`Failed to resolve selected task ${newSelectedTask}`, error)
@@ -1113,30 +1120,23 @@ function taskUiUpdates(
     )
   })
 
-  const selectedThread = asyncComputed<TaskNode[]>(
-    async () => {
-      const newSelectedTask = stateRefs.selectedTaskId
-      if (stateRefs.taskyonSessionStatus !== 'ready') {
-        return []
-      } else if (newSelectedTask) {
-        const ty = await taskyon
-        const selectedThreadIDs = await taskyonClient.task.getIdChain({ id: newSelectedTask })
-        return await ty.convertTaskIDs(selectedThreadIDs)
-      } else {
-        return []
-      }
+  const conversation = useClientConversation(
+    () => (stateRefs.taskyonSessionStatus === 'ready' ? taskyonClient : undefined),
+    () => stateRefs.selectedTaskId,
+  )
+  const selectedThread = conversation.tasks
+  watch(
+    () => stateRefs.sessionId,
+    () => {
+      taskyonClient.resetTaskModel()
+      void conversation.refresh()
     },
-    [],
-    () =>
-      [
-        stateRefs.selectedTaskId,
-        stateRefs.sessionId,
-        stateRefs.taskyonSessionStatus,
-        taskSelectionRevision.value,
-      ] as const,
+    { flush: 'sync' },
   )
 
   return {
+    chatLoadError: conversation.error,
+    retryChatLoad: conversation.refresh,
     selectedThread,
     taskTreeRevision: readonly(taskTreeRevision),
     currentTask: computed(() => currentTask),
@@ -1501,6 +1501,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
 
   const {
     conversationHistory,
+    chatLoadError,
+    retryChatLoad,
     currentTask,
     currentTaskResolutionStatus,
     selectedThread,
@@ -1900,6 +1902,8 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     allTools: computed(() => allTools.value),
     switchTaskType,
     taskContentDraft,
+    chatLoadError,
+    retryChatLoad,
     selectedThread,
     taskTreeRevision,
     currentTask,

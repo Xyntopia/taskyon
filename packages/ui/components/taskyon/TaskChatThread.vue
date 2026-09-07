@@ -4,7 +4,14 @@
       <q-expansion-item v-if="reasoning?.get(task.id)" label="reasoning" dense class="text-caption">
         <TyMarkdown :src="reasoning.get(task.id) ?? ''" />
       </q-expansion-item>
-      <slot name="task" :task="task" :index="index" :next-task="nextTask">
+      <TaskToolResultRow
+        v-if="client && selectedTaskId && task.content.type === 'functioncall'"
+        :task="task"
+        :revision="revision"
+        :selection-id="selectedTaskId"
+        :load-results="loadResults"
+      />
+      <slot v-else name="task" :task="task" :index="index" :next-task="nextTask">
         <TaskChatMessage :task="task" :presentation="presentation" />
       </slot>
     </template>
@@ -12,9 +19,10 @@
 </template>
 
 <script setup lang="ts">
-import type { TaskNode, ToolBase } from '@taskyon/taskyon/api'
+import type { TaskNode, ToolBase, TaskyonClient } from '@taskyon/taskyon/api'
 import type { TaskChatPresentation } from '@taskyon/ui/modules/taskChatPresentation'
-import { computed } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import TaskToolResultRow from './TaskToolResultRow.vue'
 import TyMarkdown from '../tyMarkdown.vue'
 import TaskChatMessage from './TaskChatMessage.vue'
 import { selectTasksVisibleInChat } from './taskChatVisibility'
@@ -22,6 +30,8 @@ import { selectTasksVisibleInChat } from './taskChatVisibility'
 const props = withDefaults(
   defineProps<{
     tasks: readonly TaskNode[]
+    client?: TaskyonClient | undefined
+    selectedTaskId?: string | undefined
     tools?: Readonly<Record<string, ToolBase>>
     reasoning?: ReadonlyMap<string, string> | undefined
     hiddenTaskIds?: ReadonlySet<string>
@@ -38,6 +48,38 @@ const props = withDefaults(
     presentation: () => ({}),
   },
 )
+
+const revision = ref(0)
+let unsubscribe: (() => void) | undefined
+watch(
+  () => props.client,
+  (client) => {
+    unsubscribe?.()
+    unsubscribe = client?.taskModel.subscribe(() => revision.value++)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => unsubscribe?.())
+let active = 0
+const waiting: Array<() => void> = []
+const loadResults = async (id: string, priority: boolean) => {
+  const client = props.client
+  const selectedId = props.selectedTaskId
+  if (!client || !selectedId) return []
+  if (active >= 2)
+    await new Promise<void>((resolve) => {
+      if (priority) waiting.unshift(resolve)
+      else waiting.push(resolve)
+    })
+  else active++
+  try {
+    return await client.taskModel.loadResults(id, selectedId)
+  } finally {
+    const next = waiting.shift()
+    if (next) next()
+    else active--
+  }
+}
 
 const displayedTasks = computed(() => {
   const tasks = props.tasks.filter((task) => !props.hiddenTaskIds.has(task.id))

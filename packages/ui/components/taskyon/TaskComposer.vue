@@ -1,5 +1,9 @@
 <template>
   <div :class="['create-tasks', { 'create-tasks--hero': heroMode }]">
+    <div v-if="pendingSubmission" class="q-pa-sm" role="status" data-cy="pending-chat-message">
+      <div class="text-body1" style="white-space: pre-wrap">{{ pendingSubmission.text }}</div>
+      <span class="text-caption text-grey">{{ pendingSubmission.status }}</span>
+    </div>
     <div v-if="selectedTaskType" class="create-tasks__mode text-caption text-center">
       <InfoDialog
         size="sm"
@@ -21,6 +25,7 @@
         v-if="!selectedTaskType"
         v-model="messageDraft"
         :debounce="0"
+        :send-disabled="submitting"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="useEnterToSend"
         :show-web-search="showWebSearch"
@@ -190,6 +195,7 @@
       >
         <q-btn
           class="create-tasks__execute-button"
+          :disable="submitting"
           flat
           :icon-right="matSend"
           @click="addNewTask('message')"
@@ -334,11 +340,19 @@ const currentNewTask = computed(() => {
   return partialTaskDraft.parse(task)
 })
 
+const submitting = ref(false)
+const pendingSubmission = ref<{ text: string; status: string }>()
 const addNewTask = async (mode: MessageExecutionMode) => {
+  if (submitting.value) return
+  submitting.value = true
   const submittedTask = currentNewTask.value
   const submittedMessageDraft = messageDraft.value
   const submittedAttachments = [...fileAttachments.value]
   const clearDraft = submittedTask.role === 'user'
+  pendingSubmission.value = {
+    text: submittedTask.content.type === 'message' ? submittedTask.content.data : 'Tool call',
+    status: 'Sending…',
+  }
   if (clearDraft) {
     messageDraft.value = ''
     fileAttachments.value = []
@@ -346,6 +360,7 @@ const addNewTask = async (mode: MessageExecutionMode) => {
 
   try {
     await submitTask(submittedTask, submittedAttachments, mode)
+    pendingSubmission.value = undefined
   } catch (error) {
     if (clearDraft) {
       if (messageDraft.value === '') messageDraft.value = submittedMessageDraft
@@ -354,7 +369,12 @@ const addNewTask = async (mode: MessageExecutionMode) => {
         ...fileAttachments.value.filter((file) => !submittedAttachments.includes(file)),
       ]
     }
-    throw error
+    pendingSubmission.value = {
+      text: pendingSubmission.value?.text ?? submittedMessageDraft ?? '',
+      status: 'Send not confirmed. Check the conversation before resending.',
+    }
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -363,14 +383,16 @@ const submitTask = async (
   submittedAttachments: File[],
   mode: MessageExecutionMode,
 ) => {
-  const storedAttachments = await props.client.sendFiles(submittedAttachments)
   const previousTaskId = props.selectedTaskId
+  const currentTask = props.currentTask
+  const entryNode = props.entryNode
+    ? partialTaskDraft.parse(structuredClone(toRaw(props.entryNode)))
+    : undefined
+  const storedAttachments = await props.client.sendFiles(submittedAttachments)
   const taskChain = buildCreateNewTaskChain({
-    currentTask: props.currentTask,
+    currentTask,
     draftTask: submittedTask,
-    entryNode: props.entryNode
-      ? partialTaskDraft.parse(structuredClone(toRaw(props.entryNode)))
-      : undefined,
+    entryNode,
     fileAttachments: storedAttachments,
     mode,
     priorTaskId: previousTaskId,
@@ -378,12 +400,14 @@ const submitTask = async (
   const { ids: storedTaskIds } = await props.client.task.createChain({
     tasks: taskChain,
     execute: true,
-    show: true,
+    show: props.selectedTaskId === previousTaskId,
   })
   const newTaskId = storedTaskIds.at(-1)
 
-  if (!previousTaskId) props.navigateToTask?.(newTaskId)
-  emit('created', newTaskId, storedTaskIds)
+  if (props.selectedTaskId === previousTaskId) {
+    if (!previousTaskId) props.navigateToTask?.(newTaskId)
+    emit('created', newTaskId, storedTaskIds)
+  }
 }
 
 const attachFileToDraft = (newFiles: File[]) => {
