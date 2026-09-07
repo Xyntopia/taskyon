@@ -837,65 +837,140 @@ const validateProjectedClosure = async (
   }
 }
 
+export type DesignGraphSnapshotImportProgress = {
+  step: string
+  durationMs: number
+  details?: Record<string, unknown>
+}
+
 export const importDesignGraphSnapshot = async (args: {
   store: DesignGraphObjectStore
   files: readonly DagProjectedFile[]
   expectedRefs?: Readonly<Record<string, string | null>>
   preloadedNodes?: Readonly<Record<Hash, SavedStoredGraphNode>>
+  onProgress?: (event: DesignGraphSnapshotImportProgress) => void
 }) => {
+  const timeImportStep = async <T>(
+    step: string,
+    run: () => T | Promise<T>,
+    details?: (result: T) => Record<string, unknown>,
+  ): Promise<T> => {
+    const startedAtMs = performance.now()
+    const result = await run()
+    args.onProgress?.({
+      step,
+      durationMs: performance.now() - startedAtMs,
+      ...(details ? { details: details(result) } : {}),
+    })
+    return result
+  }
   const loadNodeFile = createProjectedNodeFileLoader(Object.values(args.preloadedNodes ?? {}))
-  const reconciledFiles = await updateNamedNodeReferences({
-    store: args.store,
-    files: args.files,
-    loadNodeFile,
-  })
-  const normalized = await Promise.all(
-    reconciledFiles.map(async (file) => await normalizeProjectedFile(file, loadNodeFile)),
+  const reconciledFiles = await timeImportStep(
+    'update-named-node-references',
+    async () =>
+      await updateNamedNodeReferences({
+        store: args.store,
+        files: args.files,
+        loadNodeFile,
+      }),
+    (files) => ({ fileCount: files.length }),
   )
-  const canonical = await Promise.all(
-    normalized.map(async (file) => ({
-      ...file,
-      path: await resolveCanonicalProjectedPath(file, loadNodeFile),
-    })),
+  const normalized = await timeImportStep(
+    'normalize-projected-files',
+    async () =>
+      await Promise.all(
+        reconciledFiles.map(async (file) => await normalizeProjectedFile(file, loadNodeFile)),
+      ),
+    (files) => ({ fileCount: files.length }),
   )
-  const projected = new Map<string, string>()
-  for (const file of canonical) {
-    const existing = projected.get(file.path)
-    if (existing !== undefined && existing !== file.content) {
-      throw new Error(`Conflicting design graph objects resolve to ${file.path}`)
-    }
-    projected.set(file.path, file.content)
-  }
-  await validateProjectedClosure(args.store, projected, loadNodeFile)
-
-  const immutable = canonical.filter((file) => !file.path.startsWith('refs/'))
-  const refs = canonical.filter((file) => file.path.startsWith('refs/'))
-  const missing: DagProjectedFile[] = []
-  const existingImmutable = args.store.readManyText
-    ? await args.store.readManyText(immutable.map((file) => file.path))
-    : null
-  for (const file of immutable) {
-    const existing = existingImmutable
-      ? (existingImmutable.get(file.path) ?? null)
-      : await readOptionalText(args.store, file.path)
-    if (existing === null) missing.push(file)
-    else {
-      const normalizedExisting = await normalizeProjectedFile({
-        path: file.path,
-        content: existing,
-      })
-      if (immutableComparisonContent(normalizedExisting) !== immutableComparisonContent(file)) {
-        throw new Error(`Immutable design graph object collision: ${file.path}`)
+  const canonical = await timeImportStep(
+    'resolve-canonical-paths',
+    async () =>
+      await Promise.all(
+        normalized.map(async (file) => ({
+          ...file,
+          path: await resolveCanonicalProjectedPath(file, loadNodeFile),
+        })),
+      ),
+    (files) => ({ fileCount: files.length }),
+  )
+  const projected = await timeImportStep(
+    'deduplicate-projected-files',
+    () => {
+      const filesByPath = new Map<string, string>()
+      for (const file of canonical) {
+        const existing = filesByPath.get(file.path)
+        if (existing !== undefined && existing !== file.content) {
+          throw new Error(`Conflicting design graph objects resolve to ${file.path}`)
+        }
+        filesByPath.set(file.path, file.content)
       }
-    }
-  }
-  for (const file of refs) {
-    const current = await readOptionalText(args.store, file.path)
-    const expected = args.expectedRefs?.[file.path] ?? null
-    if (current !== expected) {
-      throw new Error(`Design graph ref conflict: ${file.path}`)
-    }
-  }
+      return filesByPath
+    },
+    (files) => ({ fileCount: canonical.length, objectCount: files.size }),
+  )
+  await timeImportStep(
+    'validate-projected-closure',
+    async () => {
+      await validateProjectedClosure(args.store, projected, loadNodeFile)
+    },
+    () => ({ objectCount: projected.size }),
+  )
+
+  const { immutable, refs } = await timeImportStep(
+    'partition-projected-files',
+    () => ({
+      immutable: canonical.filter((file) => !file.path.startsWith('refs/')),
+      refs: canonical.filter((file) => file.path.startsWith('refs/')),
+    }),
+    ({ immutable: immutableFiles, refs: refFiles }) => ({
+      immutableFileCount: immutableFiles.length,
+      refFileCount: refFiles.length,
+    }),
+  )
+  const missing: DagProjectedFile[] = []
+  const existingImmutable = await timeImportStep(
+    'read-existing-immutable-objects',
+    async () =>
+      args.store.readManyText
+        ? await args.store.readManyText(immutable.map((file) => file.path))
+        : null,
+    (existing) => ({ fileCount: immutable.length, bulkRead: existing !== null }),
+  )
+  await timeImportStep(
+    'compare-existing-immutable-objects',
+    async () => {
+      for (const file of immutable) {
+        const existing = existingImmutable
+          ? (existingImmutable.get(file.path) ?? null)
+          : await readOptionalText(args.store, file.path)
+        if (existing === null) missing.push(file)
+        else {
+          const normalizedExisting = await normalizeProjectedFile({
+            path: file.path,
+            content: existing,
+          })
+          if (immutableComparisonContent(normalizedExisting) !== immutableComparisonContent(file)) {
+            throw new Error(`Immutable design graph object collision: ${file.path}`)
+          }
+        }
+      }
+    },
+    () => ({ checkedFileCount: immutable.length, missingFileCount: missing.length }),
+  )
+  await timeImportStep(
+    'validate-refs',
+    async () => {
+      for (const file of refs) {
+        const current = await readOptionalText(args.store, file.path)
+        const expected = args.expectedRefs?.[file.path] ?? null
+        if (current !== expected) {
+          throw new Error(`Design graph ref conflict: ${file.path}`)
+        }
+      }
+    },
+    () => ({ refFileCount: refs.length }),
+  )
   const batchableDirectories = [
     'nodes/',
     'modules/',
@@ -908,33 +983,50 @@ export const importDesignGraphSnapshot = async (args: {
   const batched = args.store.writeManyText
     ? missing.filter((file) => batchableDirectories.some((prefix) => file.path.startsWith(prefix)))
     : []
-  if (batched.length > 0) await args.store.writeManyText!(batched)
+  await timeImportStep(
+    'write-missing-batched-objects',
+    async () => {
+      if (batched.length > 0) await args.store.writeManyText!(batched)
+    },
+    () => ({ fileCount: batched.length }),
+  )
   const conditional = missing.filter((file) => !batched.includes(file))
-  for (const file of conditional) {
-    const result = await args.store.writeTextIfUnchanged(file.path, null, file.content)
-    if (!result.written) {
-      const current = await readOptionalText(args.store, file.path)
-      if (
-        current === null ||
-        immutableComparisonContent({ path: file.path, content: current }) !==
-          immutableComparisonContent(file)
-      ) {
-        throw new Error(`Immutable design graph object collision: ${file.path}`)
+  await timeImportStep(
+    'write-missing-conditional-objects',
+    async () => {
+      for (const file of conditional) {
+        const result = await args.store.writeTextIfUnchanged(file.path, null, file.content)
+        if (!result.written) {
+          const current = await readOptionalText(args.store, file.path)
+          if (
+            current === null ||
+            immutableComparisonContent({ path: file.path, content: current }) !==
+              immutableComparisonContent(file)
+          ) {
+            throw new Error(`Immutable design graph object collision: ${file.path}`)
+          }
+        }
       }
-    }
-  }
-  for (const file of refs) {
-    const expected = args.expectedRefs?.[file.path] ?? null
-    const result = await args.store.writeTextIfUnchanged(
-      file.path,
-      expected === null ? null : canonicalHash(expected),
-      file.content,
-    )
-    if (!result.written) throw new Error(`Design graph ref conflict: ${file.path}`)
-  }
+    },
+    () => ({ fileCount: conditional.length }),
+  )
+  await timeImportStep(
+    'write-refs',
+    async () => {
+      for (const file of refs) {
+        const expected = args.expectedRefs?.[file.path] ?? null
+        const result = await args.store.writeTextIfUnchanged(
+          file.path,
+          expected === null ? null : canonicalHash(expected),
+          file.content,
+        )
+        if (!result.written) throw new Error(`Design graph ref conflict: ${file.path}`)
+      }
+    },
+    () => ({ refFileCount: refs.length }),
+  )
   return { imported: normalized.length }
 }
-
 export const synchronizeDesignGraphRepository = async (args: {
   store: DesignGraphObjectStore
   selector: DesignGraphSnapshotSelector
