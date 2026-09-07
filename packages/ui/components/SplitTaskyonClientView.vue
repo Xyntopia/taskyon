@@ -12,6 +12,7 @@
         v-bind="clientPaneAttrs"
         v-model:selected-task-id="selectedTaskId"
         v-model:recent-task-ids="recentTaskIds"
+        v-model:message-draft="messageDraft"
       />
     </template>
   </SplitTaskyonLayout>
@@ -29,8 +30,10 @@ type TaskyonClientPaneProps = Omit<
   | keyof AllowedComponentProps
   | 'selectedTaskId'
   | 'recentTaskIds'
+  | 'messageDraft'
   | 'onUpdate:selectedTaskId'
   | 'onUpdate:recentTaskIds'
+  | 'onUpdate:messageDraft'
 >
 
 const props = withDefaults(
@@ -54,4 +57,5 @@ const selectedTaskId = defineModel<string | undefined>('selectedTaskId', {
   default: undefined,
 })
 const recentTaskIds = defineModel<string[]>('recentTaskIds', { default: () => [] })
+const messageDraft = defineModel<string | undefined>('messageDraft')
 </script>

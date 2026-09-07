@@ -73,6 +73,7 @@
     </div>
     <TaskComposer
       v-if="client && status === 'ready'"
+      v-model:message-draft="messageDraft"
       :client="client"
       :current-task="currentTask"
       :selected-task-id="selectedTaskId"
@@ -139,6 +140,7 @@ const selectedTaskId = defineModel<string | undefined>('selectedTaskId', {
   default: undefined,
 })
 const recentTaskIds = defineModel<string[]>('recentTaskIds', { default: () => [] })
+const messageDraft = defineModel<string | undefined>('messageDraft')
 const selectedThread = ref<TaskNode[]>([])
 const threadContainer = ref<HTMLElement>()
 const currentTask = computed(() => selectedThread.value.at(-1) ?? null)

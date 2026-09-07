@@ -2,6 +2,7 @@
   <TaskChatWindow
     v-model:selected-task-id="selectedTaskId"
     v-model:recent-task-ids="recentTaskIds"
+    v-model:message-draft="messageDraft"
     :client="client"
     :status="status"
     :error-message="errorMessage"
@@ -55,4 +56,5 @@ const selectedTaskId = defineModel<string | undefined>('selectedTaskId', {
   default: undefined,
 })
 const recentTaskIds = defineModel<string[]>('recentTaskIds', { default: () => [] })
+const messageDraft = defineModel<string | undefined>('messageDraft')
 </script>
