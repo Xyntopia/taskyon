@@ -27,4 +27,24 @@ test.describe('task chat presentation', () => {
     expect(copied).not.toContain('hidden system message')
     expect(copied).not.toContain('collapsed arguments')
   })
+
+  for (const [viewport, size] of [
+    ['desktop', { width: 1280, height: 720 }],
+    ['mobile', { width: 390, height: 844 }],
+  ] as const) {
+    test(`uses the original inline live-response presentation on ${viewport}`, async ({ page }) => {
+      await page.setViewportSize(size)
+      await page.goto('/task-chat-presentation-test')
+
+      const progress = page.locator('[data-cy="taskyon-live-progress"]')
+      await expect(progress.getByText('THINKING:')).toBeVisible()
+      await expect(progress.getByText('Checking the available lights.')).toBeVisible()
+      await expect(progress.getByText('I found the kitchen light.')).toBeVisible()
+      await expect(progress.getByText('Reading entity state')).toBeVisible()
+      await expect(progress.getByText('{"query":"light"}')).toBeVisible()
+      await expect(progress.getByText('Calling the model')).toHaveCount(0)
+      await expect(progress.getByText('Answer', { exact: true })).toHaveCount(0)
+      await expect(progress).toHaveCSS('width', `${size.width - 32}px`)
+    })
+  }
 })
