@@ -65,6 +65,9 @@ export type ProjectExtension = {
   id: Hash
   namespace: string
   value: unknown
+  dependencies?: {
+    invocations?: Record<string, Hash>
+  }
 }
 
 export type DesignGraphRef = {
@@ -396,16 +399,37 @@ export const parseProjectRevision = (value: unknown): ProjectRevision => {
 export const createProjectExtension = (
   input: Omit<ProjectExtension, 'schemaVersion' | 'id'>,
 ): ProjectExtension => {
-  const value = { schemaVersion: 2 as const, namespace: input.namespace, value: input.value }
+  const value = {
+    schemaVersion: 2 as const,
+    namespace: input.namespace,
+    value: input.value,
+    ...(input.dependencies === undefined
+      ? {}
+      : { dependencies: { invocations: input.dependencies.invocations ?? {} } }),
+  }
   return { ...value, id: hashIdentity('taskyon.projectExtension.v2', value) }
 }
 
 export const parseProjectExtension = (value: unknown): ProjectExtension => {
   const input = objectAtBoundary(value, 'Project extension')
   if (input.schemaVersion !== 2) throw new Error('Unsupported project extension.')
+  const dependencies =
+    input.dependencies === undefined
+      ? undefined
+      : objectAtBoundary(input.dependencies, 'Project extension dependencies')
   const record = createProjectExtension({
     namespace: stringAtBoundary(input.namespace, 'Project extension namespace'),
     value: input.value,
+    ...(dependencies === undefined
+      ? {}
+      : {
+          dependencies: {
+            invocations: hashMapAtBoundary(
+              dependencies.invocations ?? {},
+              'Project extension dependency invocations',
+            ),
+          },
+        }),
   })
   assertIdentity(input.id, record.id, 'Project extension')
   return record

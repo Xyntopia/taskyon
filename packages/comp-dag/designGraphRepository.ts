@@ -222,7 +222,7 @@ const putImmutable = async (
   }
 }
 
-const normalizeRefName = (name: string, prefix: 'graph/' | 'projects/') => {
+export const normalizeRefName = (name: string, prefix: 'graph/' | 'projects/') => {
   const normalized = safePath(name, 'Ref name')
   if (!normalized.startsWith(prefix)) {
     throw new Error(`Ref ${normalized} must start with ${prefix}.`)
@@ -297,8 +297,8 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
     parseInvocationRun(
       await readJson(store, `runs/${hashFilePart(invocationId)}/${hashFilePart(runId)}.json`),
     )
-  const listRuns = async (invocationId: Hash) => {
-    const directory = `runs/${hashFilePart(invocationId)}`
+  const listRuns = async (invocationId?: Hash) => {
+    const directory = invocationId ? `runs/${hashFilePart(invocationId)}` : 'runs'
     const names = await store.list(directory)
     return await Promise.all(
       names

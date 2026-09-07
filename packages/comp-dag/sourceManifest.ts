@@ -112,7 +112,7 @@ export const createSourceLockManifest = (
   return { ...manifest, id: canonicalHash(manifestIdentity(manifest)) }
 }
 
-const parseSourceLockManifest = (value: unknown): SourceLockManifest => {
+export const parseSourceLockManifest = (value: unknown): SourceLockManifest => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error('Source lock manifest must be an object.')
   }

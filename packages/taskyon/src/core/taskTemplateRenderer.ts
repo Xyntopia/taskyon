@@ -1,30 +1,16 @@
-import { executeInWorkerSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
-import { jinjaArtifact } from '../sandbox/jinjaArtifact'
-import { loadSandboxAsset } from '../sandbox/sandboxAssets'
+import {
+  createJinjaTemplateRenderer,
+  jinjaSandboxSource,
+} from '@taskyon/common/modules/sandbox/jinjaTemplate'
+import { jinjaArtifact } from '@taskyon/common/modules/sandbox/jinjaArtifact'
 import { TASK_REF_PREFIX, taskRefToTaskId } from './taskVariables'
 import type { TaskGetter } from '../types/taskNode'
 import type { CrudWrapper } from '../utils/crudWrapper'
 
 export const TASK_TEMPLATE_CACHE_MAX_BYTES = 10 * 1024 * 1024
 
-const TASK_TEMPLATE_RENDERER_VERSION = 'jinja-0.5.6-v1'
-const TASK_TEMPLATE_INPUT_MAX_BYTES = 2 * 1024 * 1024
-const TASK_TEMPLATE_OUTPUT_MAX_BYTES = 1024 * 1024
-const TASK_TEMPLATE_TIMEOUT_MS = 2_000
+const TASK_TEMPLATE_RENDERER_VERSION = 'jinja-task-v2'
 const STABLE_TASK_REF_REGEX = /tasks\s*\[\s*["'](_t:[A-Za-z0-9_-]+)["']\s*\]/g
-
-const sandboxCode = `
-  (function () {
-    return function (librarySource, templateSource, values) {
-      const module = { exports: {} };
-      const loadLibrary = new Function('module', 'exports', librarySource);
-      loadLibrary(module, module.exports);
-      const Template = module.exports.Template;
-      if (typeof Template !== 'function') throw new Error('Jinja Template export is unavailable');
-      return new Template(templateSource).render(values);
-    };
-  })()
-`
 
 const sha256 = async (value: string) => {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -42,11 +28,6 @@ const extractTemplateTaskIds = (template: string) => {
 
 const serializedByteLength = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value)).byteLength
-
-const decodeBase64Text = (value: string) => {
-  const binary = atob(value)
-  return new TextDecoder().decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)))
-}
 
 type TemplateCacheEntry = {
   accessedAt: number
@@ -113,21 +94,16 @@ export const createTaskTemplateRenderer = (options: {
     set(id: string, value: string): Promise<void>
   }
 }) => {
-  let librarySource: Promise<string> | undefined
-  const loadLibrary = () =>
-    (librarySource ??= loadSandboxAsset(`taskyon-artifact://${jinjaArtifact.id}/index.cjs`).then(
-      (source) => {
-        if (!source) throw new Error('Jinja sandbox artifact is unavailable')
-        return decodeBase64Text(source)
-      },
-    ))
+  const renderJinja = createJinjaTemplateRenderer()
 
   return {
     render: async (template: string, stopSignal = new AbortController().signal) => {
       const taskIds = extractTemplateTaskIds(template)
       if (taskIds.length === 0) return template
 
-      const cacheKey = await sha256(`${TASK_TEMPLATE_RENDERER_VERSION}\u0000${template}`)
+      const cacheKey = await sha256(
+        `${TASK_TEMPLATE_RENDERER_VERSION}\u0000${jinjaArtifact.id}\u0000${jinjaSandboxSource}\u0000${template}`,
+      )
       const cached = await options.cache?.get(cacheKey).catch(() => undefined)
       if (cached !== undefined) return cached
 
@@ -140,23 +116,10 @@ export const createTaskTemplateRenderer = (options: {
           }),
         ),
       )
-      if (serializedByteLength({ template, tasks }) > TASK_TEMPLATE_INPUT_MAX_BYTES) {
-        throw new Error('Task template input exceeds the configured limit')
-      }
-
-      const rendered = await executeInWorkerSandbox<string>(
-        {
-          id: `task-template-${cacheKey}`,
-          code: sandboxCode,
-          sourceURL: 'task-template-renderer.js',
-          stopSignal,
-          maxExecutionMs: TASK_TEMPLATE_TIMEOUT_MS,
-          maxOldSpaceSizeMb: 64,
-          maxOutputBytes: TASK_TEMPLATE_OUTPUT_MAX_BYTES,
-        },
-        await loadLibrary(),
+      const rendered = await renderJinja(
         template,
         { tasks },
+        { profile: 'task', signal: stopSignal },
       )
       if (typeof rendered !== 'string') throw new Error('Task template returned a non-string value')
       await options.cache?.set(cacheKey, rendered).catch(() => undefined)

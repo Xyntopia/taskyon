@@ -15,6 +15,7 @@ import {
 import {
   createDesignGraphRepository,
   createStorageDesignGraphObjectStore,
+  normalizeRefName,
   type DesignGraphStorageClient,
 } from '@taskyon/comp-dag/designGraphRepository'
 import {
@@ -51,6 +52,7 @@ type DagGraphProjectToolArgs = {
   invocationName?: string
   nodeSource?: string
   rootNodeId?: Hash
+  invocationId?: Hash
   variables?: Record<string, VariableSpec>
   inputs?: Record<string, OptimizationInputSpec>
   objectives?: Objective[]
@@ -59,16 +61,6 @@ type DagGraphProjectToolArgs = {
   policy?: InvocationRequestedPolicy
   expectedProjectRevisionId?: Hash
 }
-
-const normalizeProjectId = (projectId: string): string => {
-  const normalized = projectId.trim().replace(/[^a-zA-Z0-9._-]/g, '-')
-  if (!normalized || normalized === '.' || normalized === '..') {
-    throw new Error('projectId must contain at least one safe filename character.')
-  }
-  return normalized
-}
-
-const projectRefName = (projectId: string) => `projects/${projectId}`
 
 const requireInvocationFields = (args: DagGraphProjectToolArgs) => {
   if (!args.rootNodeId) throw new Error(`${args.action} requires rootNodeId.`)
@@ -124,7 +116,7 @@ export const createDagGraphProjectTool = (
         projectId: {
           type: 'string',
           description:
-            'Stable project identifier used to derive the mutable projects/<projectId> ref.',
+            'Stable project identifier or full projects/ ref. Nested refs such as projects/templates/example are preserved; unsafe path segments are rejected.',
         },
         displayName: {
           type: 'string',
@@ -147,6 +139,11 @@ export const createDagGraphProjectTool = (
           type: 'string',
           description:
             'Content hash of the exact computational root for createProject or saveInvocation.',
+        },
+        invocationId: {
+          type: 'string',
+          description:
+            'For createProject or saveInvocation, reuse this exact existing invocation instead of reconstructing its parameters. Do not combine with definition fields such as rootNodeId or variables.',
         },
         variables: {
           type: 'object',
@@ -188,8 +185,26 @@ export const createDagGraphProjectTool = (
     } as const,
     function: async (rawArgs: DagGraphProjectToolArgs) => {
       await prepareRepository?.()
-      const projectId = normalizeProjectId(rawArgs.projectId)
+      const requested = rawArgs.projectId.trim()
+      const projectRef = normalizeRefName(
+        requested.startsWith('projects/') ? requested : `projects/${requested}`,
+        'projects/',
+      )
+      const projectId = projectRef.slice('projects/'.length)
       const invocationName = rawArgs.invocationName?.trim() || 'main'
+      if (
+        rawArgs.invocationId &&
+        [
+          rawArgs.rootNodeId,
+          rawArgs.variables,
+          rawArgs.inputs,
+          rawArgs.objectives,
+          rawArgs.constraints,
+          rawArgs.capture,
+          rawArgs.policy,
+        ].some((value) => value !== undefined)
+      )
+        throw new Error('Choose an existing invocationId or a new definition, not both.')
 
       if (rawArgs.action === 'createNode') {
         if (!rawArgs.nodeSource) throw new Error('createNode requires nodeSource.')
@@ -219,7 +234,9 @@ export const createDagGraphProjectTool = (
       }
 
       if (rawArgs.action === 'createProject') {
-        const invocation = requireInvocationFields(rawArgs)
+        const invocation = rawArgs.invocationId
+          ? await repository.getInvocation(rawArgs.invocationId)
+          : requireInvocationFields(rawArgs)
         await repository.putInvocation(invocation)
         const revision = createProjectRevision({
           parents: [],
@@ -229,19 +246,21 @@ export const createDagGraphProjectTool = (
         })
         await repository.putProjectRevision(revision)
         await repository.advanceProjectRef({
-          name: projectRefName(projectId),
+          name: projectRef,
           revisionId: revision.id,
           expected: null,
         })
         return { type: 'designProjectCreated' as const, projectId, revision, invocation }
       }
 
-      const ref = await repository.getProjectRef(projectRefName(projectId))
+      const ref = await repository.getProjectRef(projectRef)
       if (!ref) throw new Error(`Design graph project not found: ${projectId}`)
       const project = await repository.getProjectRevision(ref.revisionId)
 
       if (rawArgs.action === 'saveInvocation') {
-        const invocation = requireInvocationFields(rawArgs)
+        const invocation = rawArgs.invocationId
+          ? await repository.getInvocation(rawArgs.invocationId)
+          : requireInvocationFields(rawArgs)
         await repository.putInvocation(invocation)
         const revision = createProjectRevision({
           parents: [project.id],
@@ -251,7 +270,7 @@ export const createDagGraphProjectTool = (
         })
         await repository.putProjectRevision(revision)
         await repository.advanceProjectRef({
-          name: projectRefName(projectId),
+          name: projectRef,
           revisionId: revision.id,
           expected: rawArgs.expectedProjectRevisionId ?? project.id,
         })

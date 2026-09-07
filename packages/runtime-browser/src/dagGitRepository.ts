@@ -329,6 +329,12 @@ export const synchronizeBrowserDesignGraph = async (args: {
   })
   return await synchronizeDesignGraphRepository({
     store: createStorageDesignGraphObjectStore(args.storageClient),
+    sourceRecords: {
+      get: async (namespace, id) => (await args.storageClient.get({ namespace, id })).value,
+      set: async (namespace, id, value) => {
+        await args.storageClient.set({ namespace, id, value })
+      },
+    },
     selector: args.selector,
     synchronizer,
     branch: args.settings.branch,

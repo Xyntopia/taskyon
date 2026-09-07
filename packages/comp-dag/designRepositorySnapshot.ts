@@ -608,15 +608,54 @@ const loadProjectDefinitionSnapshot = async (
   readManyText?: DesignRepositoryBulkTextReader,
   loadNodeFiles?: DesignRepositoryNodeFileLoader,
 ): Promise<LoadedProjectRepositorySnapshot> => {
+  const projectInvocationIds = new Set(Object.keys(definition.invocations))
+  const extensionInvocationIds = Object.values(definition.extensions).flatMap((extension) =>
+    Object.values(extension.dependencies?.invocations ?? {}),
+  )
+  const extensionInvocations = Object.fromEntries(
+    await Promise.all(
+      extensionInvocationIds
+        .filter((id) => !projectInvocationIds.has(id))
+        .map(async (id) => [
+          id,
+          parseInvocationDefinition(
+            await readJson(readText, `invocations/${hashFilePart(id)}.json`),
+          ),
+        ]),
+    ),
+  ) as Record<Hash, InvocationDefinition>
+  const invocations = { ...definition.invocations, ...extensionInvocations }
+  const extensionRootHashes = await Promise.all(
+    Object.values(extensionInvocations).map(async (invocation) => {
+      const path = `nodes/${hashFilePart(invocation.rootNodeId)}.ts`
+      try {
+        await readText(path)
+        return invocation.rootNodeId
+      } catch (error) {
+        if (
+          invocation.sourceSnapshotId &&
+          error instanceof Error &&
+          error.message.startsWith('Design graph object not found:')
+        ) {
+          return null
+        }
+        throw error
+      }
+    }),
+  )
   const nodesByHash = await loadNodeClosure(
     readText,
-    Object.values(definition.invocations).map((invocation) => invocation.rootNodeId),
+    [
+      ...Object.values(definition.invocations).map((invocation) => invocation.rootNodeId),
+      ...extensionRootHashes.filter((id): id is Hash => id !== null),
+    ],
     readManyText,
     loadNodeFiles,
   )
   const modules = await loadModuleClosure(readText, nodesByHash, readManyText)
   return {
     ...definition,
+    invocations,
     nodesByHash,
     ...modules,
     files: Object.values(nodesByHash)

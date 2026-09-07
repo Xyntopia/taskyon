@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+/** Node adapter for immutable package assets shared by sandbox consumers. */
 export async function loadNodeSandboxAsset(
   packageName: string,
   fileName: string,

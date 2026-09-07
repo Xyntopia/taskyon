@@ -210,5 +210,58 @@ export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async
   }
 }
 
+export const testProjectToolPreservesNestedProjectReferences = async () => {
+  const storage = createMemoryStorage()
+  const tool = createDagGraphProjectTool(storage.client)
+  const created = await tool.function({
+    action: 'createProject',
+    projectId: 'templates/example',
+    displayName: 'Synthetic example',
+    rootNodeId: canonicalHash('synthetic-root'),
+  })
+  assert(created.type === 'designProjectCreated', 'Expected project creation.')
+  const repository = createDesignGraphRepository(
+    createStorageDesignGraphObjectStore(storage.client),
+  )
+  assert(
+    await repository.getProjectRef('projects/templates/example'),
+    'Nested project refs must not be rewritten into hyphenated names.',
+  )
+  const inspected = await tool.function({
+    action: 'inspectProject',
+    projectId: 'projects/templates/example',
+  })
+  assert(
+    inspected.type === 'designProjectInspected',
+    'Full project refs must be accepted without adding the prefix twice.',
+  )
+  return { success: true }
+}
+
+export const testProjectToolReusesExactInvocationDefinition = async () => {
+  const storage = createMemoryStorage()
+  const tool = createDagGraphProjectTool(storage.client)
+  const source = await tool.function({
+    action: 'createProject',
+    projectId: 'source',
+    rootNodeId: canonicalHash('synthetic-root'),
+    variables: {
+      nested: { kind: 'constant', value: { settings: { retained: true } } },
+    },
+  })
+  assert(source.type === 'designProjectCreated', 'Expected source project.')
+  const cloned = await tool.function({
+    action: 'createProject',
+    projectId: 'copy',
+    invocationId: source.invocation.id,
+  })
+  assert(cloned.type === 'designProjectCreated', 'Expected copied project.')
+  assert(
+    cloned.invocation.id === source.invocation.id,
+    'Reusing an invocation must preserve its exact identity, including nested parameters and source pins.',
+  )
+  return { success: true }
+}
+
 testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel.description =
   'Creates and inspects an immutable project revision with one named invocation.'

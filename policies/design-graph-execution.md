@@ -150,7 +150,10 @@ exists.
   invocation runs, and named artifacts. A report directory may be an export of those records, but it
   must not become a CLI-only authoritative project or run store.
 - Store deliberately saved workspaces, dashboards, and sandboxed views as typed, namespaced,
-  content-addressed project extensions. Do not use an inline arbitrary `customSettings` object.
+  content-addressed project extensions. Project extensions that depend on invocations outside the
+  project revision's friendly invocation map must declare those invocation hashes in the extension
+  dependency metadata so generic loaders and Git projection can preserve the reachable closure. Do
+  not use an inline arbitrary `customSettings` object.
 
 ## Structural Variation
 
@@ -290,9 +293,11 @@ This is an additive foundation, not a completed reproducible invocation workflow
   the consolidated row artifacts.
 - Pinned evaluation currently uses the local orchestrator. A worker-only configuration that
   forbids local fallback remains unsupported; it must not silently relax isolation requirements.
-- Snapshot transfer/export, cache repair after eviction, and durable planner checkpoints remain
-  follow-up work. Keep the source snapshot, referenced manifests, and artifacts available together;
-  an invocation hash alone does not transport that closure.
+- Project Git projection can transfer reachable pinned file-source snapshots, referenced manifests
+  and source artifact bytes when the source invocation is selected by a project invocation or an
+  extension dependency. Broader source-retrieval recipes, cache repair after eviction, and durable
+  planner checkpoints remain follow-up work. Keep the source snapshot, referenced manifests, and
+  artifacts available together; an invocation hash alone does not transport that closure.
 - The consumed-source candidate index uses the existing cache/artifact backend. Concurrent index
   updates can lose a candidate and reduce reuse; they must not change computation identity. This
   does not replace row storage with partitions or claim a concurrent index transaction protocol.
@@ -366,6 +371,29 @@ This is an additive foundation, not a completed reproducible invocation workflow
   views and documents. Complex domain calculations require a computational node.
 - Cache views independently from document prose. Agent tools must support editing templates and
   inspecting rendered output; refreshing bound data must not require an LLM to recreate studies.
+- Pass the selected graphics capability through document assembly. Pin its exact implementation
+  and assets in both view-cache identity and the rendered document's renderer identity; explicit
+  build invocations use that captured identity rather than recomputing it from the current runtime.
+  Unused graphics capabilities must not invalidate text-only documents. Renderer adapters must
+  control font measurement, locale, external resources and other environment-dependent behavior
+  before their output can be treated as reproducible across runtimes.
+- Treat document views as declarative output cells, not executable notebook cells. Use the same
+  source/projection/presentation contract for inline scalar values and block tables. Ordinary
+  code examples remain literal. Resolve each view independently and expose absent fields, missing
+  artifacts and partial collections without silently calculating other views' invocations.
+- Assemble Jinja documents using only rendered views and their availability, never complete study
+  results or invocation capabilities. Pin the verified engine asset and the rendering profile in
+  document identity. Keep declaration discovery static, protect Markdown code examples, and never
+  evaluate inserted values as template source. Run assembly in a disposable sandbox with execution,
+  input/output and iteration limits; undefined values and nondeterministic functions fail explicitly.
+- Explicit document builds use ordinary immutable invocation runs. Keep project/document association
+  in provenance, and retain template, rendered content, coverage, blockers and view artifacts through
+  named artifacts. Rendering completion is not evidence of complete study data or professional
+  approval. Historical comparison verifies retained content and never substitutes fresh results for
+  missing old artifacts. Compare actual template bytes, not source acquisition timestamps.
+- Derive build history from canonical runs and project ancestry, including runs made with earlier
+  renderer implementations. Do not recreate old invocation IDs using today's renderer code or put
+  a mutable result-history list in project extensions. Bounded ancestry queries report truncation.
 
 ## Required Diagnostics
 

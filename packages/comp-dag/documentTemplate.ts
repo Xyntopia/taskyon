@@ -2,6 +2,13 @@ import z from 'zod'
 import { canonicalHash, type DagStorageBackend, type Hash } from './caching'
 import { createNode } from './dagCore'
 import { evaluateQueryAxisValue } from './queryPipeline'
+import type { DesignGraphRepository } from './designGraphRepository'
+import { iterateInvocationRowRange, type InvocationRowStorageClient } from './storageInvocationRows'
+import {
+  createJinjaTemplateRenderer,
+  jinjaSandboxSource,
+} from '@taskyon/common/modules/sandbox/jinjaTemplate'
+import { jinjaArtifact } from '@taskyon/common/modules/sandbox/jinjaArtifact'
 
 const documentColumnSchema = z
   .object({
@@ -57,21 +64,88 @@ export type DocumentProjection = {
 
 /** Views are literal fenced JSON, not dynamically computed Jinja expressions. */
 export const parseDocumentTemplate = (template: string) => {
+  if (template.includes('\0')) throw new Error('Document templates cannot contain null characters.')
   if (new TextEncoder().encode(template).byteLength > 512_000)
     throw new Error('Document templates are limited to 512 KB.')
   const views: DocumentView[] = []
-  const body = template.replace(
-    /^```document-view[ \t]*\r?\n([\s\S]*?)^```[ \t]*$/gm,
-    (_, json: string) => {
-      const view = documentViewSchema.parse(JSON.parse(json))
-      if (views.some(({ id }) => id === view.id)) throw new Error(`Duplicate view: ${view.id}`)
-      if (views.length >= 50) throw new Error('Documents are limited to 50 views.')
-      views.push(view)
-      return `{{ views.${view.id} }}`
-    },
-  )
-  if (/^```document-view/m.test(body)) throw new Error('Unterminated document view declaration.')
-  return { template: body, views }
+  const literals: string[] = []
+  const literal = (text: string) => {
+    literals.push(text)
+    return `\0!${literals.length - 1}\0`
+  }
+  const placements: Record<string, 'inline' | 'block'> = {}
+  const declare = (json: string, placement: 'inline' | 'block') => {
+    const view = documentViewSchema.parse(JSON.parse(json))
+    if (views.some(({ id }) => id === view.id)) throw new Error(`Duplicate view: ${view.id}`)
+    if (views.length >= 50) throw new Error('Documents are limited to 50 views.')
+    if (placement === 'inline' && view.presentation.renderer !== 'scalar')
+      throw new Error('Inline document views require scalar presentation.')
+    views.push(view)
+    placements[view.id] = placement
+    return `\0${view.id}\0`
+  }
+  const lines = template.split('\n')
+  const output: string[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!
+    const fence = /^ {0,3}(`{3,}|~{3,})([^\r]*)\r?$/.exec(line)
+    if (fence) {
+      const marker = fence[1]!
+      const closing = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*\\r?$`)
+      let end = index + 1
+      while (end < lines.length && !closing.test(lines[end]!)) end += 1
+      if (fence[2]!.trim() === 'document-view') {
+        if (end === lines.length) throw new Error('Unterminated document view declaration.')
+        output.push(declare(lines.slice(index + 1, end).join('\n'), 'block'))
+      } else output.push(literal(lines.slice(index, Math.min(end + 1, lines.length)).join('\n')))
+      index = end
+    } else {
+      // Indented code and ordinary code spans are literal, including longer backtick delimiters.
+      output.push(
+        /^( {4}|\t)/.test(line)
+          ? literal(line)
+          : line.replace(/(`+)([^`]*?)\1(?!`)/g, (span, _ticks: string, content: string) =>
+              content.startsWith('document-view ')
+                ? declare(content.slice('document-view '.length), 'inline')
+                : literal(span),
+            ),
+      )
+    }
+  }
+  const segments = output
+    .join('\n')
+    .split(/\0([a-zA-Z][a-zA-Z0-9_]*|![0-9]+)\0/)
+    .map((text, index) =>
+      index % 2 === 0
+        ? { text }
+        : text.startsWith('!')
+          ? { literalIndex: Number(text.slice(1)) }
+          : { viewId: text },
+    )
+  return {
+    template: segments
+      .map((segment) =>
+        'viewId' in segment
+          ? `{{ views.${segment.viewId} }}`
+          : 'literalIndex' in segment
+            ? literals[segment.literalIndex!]
+            : segment.text,
+      )
+      .join(''),
+    jinjaTemplate: segments
+      .map((segment) =>
+        'viewId' in segment
+          ? `{{ views.${segment.viewId} }}`
+          : 'literalIndex' in segment
+            ? `{{ literals[${segment.literalIndex}] }}`
+            : segment.text,
+      )
+      .join(''),
+    literals,
+    views,
+    placements,
+    segments,
+  }
 }
 
 const markdownCell = (value: string | number | boolean | null) =>
@@ -80,6 +154,7 @@ const markdownCell = (value: string | number | boolean | null) =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('|', '&#124;')
+    .replace(/[\\`*_\[\]{}!]/g, (character) => `&#${character.charCodeAt(0)};`)
     .replace(/\r?\n/g, '<br>')
 
 const renderTabularView = (
@@ -178,8 +253,7 @@ export const projectDocumentRow = (row: unknown, columns: DocumentView['source']
       let value: unknown = row
       for (const part of spec.path.split('.')) {
         if (value === null || typeof value !== 'object' || !Object.hasOwn(value, part)) {
-          value = null
-          break
+          throw new Error(`Column ${name} references unavailable field ${spec.path}.`)
         }
         value = Reflect.get(value, part)
       }
@@ -202,3 +276,149 @@ export const projectDocumentRow = (row: unknown, columns: DocumentView['source']
       return [name, value]
     }),
   )
+
+export const renderedDocumentSchema = z
+  .object({
+    rendererId: z.custom<Hash>(
+      (value) => typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value),
+    ),
+    template: z.string(),
+    markdown: z.string(),
+    views: z.array(
+      z
+        .object({
+          id: z.string(),
+          invocation: z.string(),
+          placement: z.enum(['inline', 'block']),
+          status: z.enum(['available', 'partial', 'missing', 'error']),
+          markdown: z.string(),
+          reason: z.string().optional(),
+          artifactHash: z
+            .custom<Hash>(
+              (value) => typeof value === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/.test(value),
+            )
+            .optional(),
+          cached: z.boolean().optional(),
+        })
+        .strict(),
+    ),
+  })
+  .strict()
+export type RenderedDocumentView = z.infer<typeof renderedDocumentSchema>['views'][number]
+
+/** Pins the internal assembly implementation without adding an editable graph node. */
+export const documentRendererIdentity = (graphicsId?: Hash) =>
+  canonicalHash({
+    operation: 'documentTemplate.v1',
+    schema: z.toJSONSchema(documentViewSchema),
+    parse: parseDocumentTemplate.toString(),
+    assemble: renderDocumentTemplate.toString(),
+    view: renderDocumentView.toString(),
+    table: renderTabularView.toString(),
+    cell: markdownCell.toString(),
+    graphics: graphicsId ?? null,
+    jinja: { artifact: jinjaArtifact.id, source: jinjaSandboxSource },
+  })
+
+/** Physical row storage stays behind Taskyon's bounded reader, never in authored templates. */
+export const resolveInvocationDocumentView = async (
+  repository: DesignGraphRepository,
+  storage: InvocationRowStorageClient,
+  invocationId: Hash,
+  view: DocumentView,
+): Promise<DocumentProjection | { reason: string }> => {
+  const runs = (await repository.listRuns(invocationId)).sort(
+    (a, b) =>
+      Number(b.status === 'completed') - Number(a.status === 'completed') ||
+      b.completedAtMs - a.completedAtMs,
+  )
+  let unavailable = 'Study has not produced row artifacts.'
+  for (const run of runs) {
+    if (!run.artifacts.rows || !run.artifacts.rowIndex) continue
+    const rows: DocumentProjection['rows'] = []
+    try {
+      for await (const row of iterateInvocationRowRange({
+        storage,
+        rows: run.artifacts.rows,
+        rowIndex: run.artifacts.rowIndex,
+        startRow: view.source.offset,
+        limit: view.source.maxRows,
+      })) {
+        rows.push(projectDocumentRow(row, view.source.columns))
+      }
+      return { rows, complete: run.status === 'completed' }
+    } catch (error) {
+      unavailable = error instanceof Error ? error.message : String(error)
+    }
+  }
+  return { reason: unavailable }
+}
+
+/** Resolution is read-only. Missing data never implicitly starts an invocation. */
+export const renderDocumentTemplate = async (
+  template: string,
+  resolve: (view: DocumentView) => Promise<DocumentProjection | { reason: string }>,
+  backend: DagStorageBackend,
+  graphics?: DocumentGraphicsRenderer,
+) => {
+  const plan = parseDocumentTemplate(template)
+  const usesGraphics = plan.views.some(
+    ({ presentation }) =>
+      presentation.renderer === 'vega-lite' || presentation.renderer === 'maplibre',
+  )
+  const rendererId = documentRendererIdentity(usesGraphics ? graphics?.id : undefined)
+  const views: RenderedDocumentView[] = []
+  for (const view of plan.views) {
+    const base = {
+      id: view.id,
+      invocation: view.source.invocation,
+      placement: plan.placements[view.id]!,
+    }
+    try {
+      const projection = await resolve(view)
+      if ('reason' in projection) {
+        views.push({
+          ...base,
+          status: 'missing',
+          reason: projection.reason,
+          markdown: `[Missing: ${view.id}](#document-view-${view.id})`,
+        })
+      } else {
+        const rendered = await renderDocumentView(view, projection, backend, graphics)
+        views.push({
+          ...base,
+          ...rendered,
+          markdown: projection.complete
+            ? rendered.markdown
+            : `${rendered.markdown}${base.placement === 'inline' ? ' ' : '\n\n'}[Partial: ${view.id}](#document-view-${view.id})`,
+          status: projection.complete ? 'available' : 'partial',
+          ...(!projection.complete ? { reason: 'The source invocation has partial results.' } : {}),
+        })
+      }
+    } catch (error) {
+      views.push({
+        ...base,
+        status: 'error',
+        reason: error instanceof Error ? error.message : String(error),
+        markdown: `[Unavailable: ${view.id}](#document-view-${view.id})`,
+      })
+    }
+  }
+  const markdown = await createJinjaTemplateRenderer()(
+    plan.jinjaTemplate,
+    {
+      views: Object.fromEntries(views.map((view) => [view.id, view.markdown])),
+      view_status: Object.fromEntries(views.map((view) => [view.id, view.status])),
+      literals: plan.literals,
+    },
+    { profile: 'document' },
+  )
+  // Artifacts contain semantic output, not whether this particular lookup hit the cache.
+  const artifactHash = await backend.writeArtifact({
+    rendererId,
+    template,
+    markdown,
+    views: views.map(({ cached: _cached, ...view }) => view),
+  })
+  return { rendererId, template, markdown, views, artifactHash }
+}

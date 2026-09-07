@@ -32,7 +32,12 @@ import {
   type StagedArtifactWriter,
 } from './invocationExecution.ts'
 import { createNode } from './dagCore.ts'
-import { createSourceManifestRepository, createSourceSnapshot } from './sourceManifest.ts'
+import {
+  createSourceManifestRepository,
+  createSourceSnapshot,
+  type SourceManifestStorage,
+} from './sourceManifest.ts'
+import { ingestTextFile, readPinnedTextFile } from './builtIn/textFileSource.ts'
 import {
   createStorageInvocationArtifactStore,
   type InvocationArtifactStorageClient,
@@ -149,6 +154,17 @@ const createMemoryStore = () => {
             .sort(),
         )
       },
+    },
+  }
+}
+
+const createMemoryRecords = (): SourceManifestStorage => {
+  const values = new Map<string, unknown>()
+  return {
+    get: (namespace, id) => Promise.resolve(values.get(`${namespace}/${id}`) ?? null),
+    set: (namespace, id, value) => {
+      values.set(`${namespace}/${id}`, value)
+      return Promise.resolve()
     },
   }
 }
@@ -480,6 +496,88 @@ export const testUnifiedProjectRepositoryKeepsRefsAndRunsSeparate = async () => 
 
 testUnifiedProjectRepositoryKeepsRefsAndRunsSeparate.description =
   'Stores graph, project, invocation, extension, and run records in one repository with typed refs.'
+
+export const testProjectProjectionCarriesExtensionInvocationSourceFiles = async () => {
+  const memory = createMemoryStore()
+  const sourceRecords = createMemoryRecords()
+  const repository = createDesignGraphRepository(memory.store)
+  const studyRoot = await saveStoredGraphNodeSource(`export default {
+  formatVersion: 2, id: '${SELF_HASH_PLACEHOLDER}', localName: 'StudyRoot',
+  label: 'Study root', version: 1, localParamsSchema: {}, outputSchema: {},
+  inputs: {}, run: () => ({ value: 1 }),
+}`)
+  await memory.store.writeText(`nodes/${hashFilePart(studyRoot.hash)}.ts`, studyRoot.file.source)
+  const study = createInvocationDefinition({
+    rootNodeId: studyRoot.hash,
+    variables: {},
+    objectives: [],
+    constraints: [],
+    policy: { accuracy: 'auto' },
+    reducerOverrides: {},
+  })
+  const template = await ingestTextFile(
+    'deliverables/preliminary.md',
+    '# Preliminary\n',
+    sourceRecords,
+    1,
+  )
+  const extension = createProjectExtension({
+    namespace: 'test.deliverables',
+    value: { document: { templateInvocationId: template.id } },
+    dependencies: { invocations: { template: template.id } },
+  })
+  const project = createProjectRevision({
+    parents: [],
+    displayName: 'Source project',
+    invocations: { study: study.id },
+    extensions: { deliverables: extension.id },
+  })
+  await repository.putInvocation(study)
+  await repository.putInvocation(template)
+  await repository.putExtension(extension)
+  await repository.putProjectRevision(project)
+  await repository.advanceProjectRef({
+    name: 'projects/source-project',
+    revisionId: project.id,
+    expected: null,
+  })
+
+  const projected = await projectDesignGraphSnapshot({
+    store: memory.store,
+    sourceRecords,
+    selector: { kind: 'project', projectRef: 'projects/source-project' },
+  })
+  const paths = projected.map(({ path }) => path).sort()
+  assert(
+    paths.some((path) => path.startsWith('source-snapshots/')),
+    'Expected projected source snapshot.',
+  )
+  assert(
+    paths.some((path) => path.startsWith('source-manifests/')),
+    'Expected projected source manifest.',
+  )
+  assert(
+    paths.some((path) => path.startsWith('source-artifacts/')),
+    'Expected projected source artifact bytes.',
+  )
+
+  const imported = createMemoryStore()
+  const importedSources = createMemoryRecords()
+  await importDesignGraphSnapshot({
+    store: imported.store,
+    sourceRecords: importedSources,
+    files: projected,
+  })
+  const importedRepository = createDesignGraphRepository(imported.store)
+  const importedTemplate = await importedRepository.getInvocation(template.id)
+  assert(
+    (await readPinnedTextFile(importedTemplate, importedSources)) === '# Preliminary\n',
+    'Expected imported source closure to replay the pinned template bytes.',
+  )
+}
+
+testProjectProjectionCarriesExtensionInvocationSourceFiles.description =
+  'Exports project-extension invocation dependencies with their pinned file-source observations.'
 
 export const testNodeGitProjectionIncludesLockedModuleClosure = async () => {
   const memory = createMemoryStore()
