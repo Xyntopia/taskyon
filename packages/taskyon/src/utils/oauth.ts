@@ -1,5 +1,91 @@
 import z from 'zod'
 
+export const createOauthAuthorizationUrl = (params: {
+  oauthURL: string
+  clientId: string
+  scope: string
+  redirectUri: string
+  state: string
+  challenge?: string
+  authorizeQuery?: Record<string, string>
+}) => {
+  const url = new URL(params.oauthURL)
+  if (url.protocol !== 'https:')
+    throw new OAuthError('OAuth authorization requires HTTPS', 'INVALID_RESPONSE')
+  const query = new URLSearchParams({
+    client_id: params.clientId,
+    redirect_uri: params.redirectUri,
+    scope: params.scope,
+    state: params.state,
+    ...(params.challenge
+      ? { response_type: 'code', code_challenge: params.challenge, code_challenge_method: 'S256' }
+      : { response_type: 'token' }),
+  })
+  for (const [key, value] of Object.entries(params.authorizeQuery ?? {})) {
+    if (
+      [
+        'client_id',
+        'redirect_uri',
+        'scope',
+        'state',
+        'response_type',
+        'code_challenge',
+        'code_challenge_method',
+      ].includes(key)
+    )
+      throw new OAuthError(`Provider options cannot override OAuth ${key}`, 'INVALID_RESPONSE')
+    query.set(key, value)
+  }
+  url.search = query.toString()
+  return url.href
+}
+
+export const exchangeOauthCode = async (params: {
+  tokenUrl: string
+  clientId: string
+  code: string
+  verifier: string
+  redirectUri: string
+  fetch?: typeof fetch
+}): Promise<OAuthCredentials> => {
+  if (new URL(params.tokenUrl).protocol !== 'https:')
+    throw new OAuthError('OAuth token exchange requires HTTPS', 'INVALID_RESPONSE')
+  const body = new URLSearchParams({
+    client_id: params.clientId,
+    grant_type: 'authorization_code',
+    code: params.code,
+    redirect_uri: params.redirectUri,
+    code_verifier: params.verifier,
+  })
+  let response: Response
+  try {
+    response = await (params.fetch ?? fetch)(params.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    })
+  } catch {
+    throw new OAuthError('OAuth token exchange could not reach the provider', 'NETWORK_ERROR')
+  }
+  // Provider error bodies can contain credentials or authorization codes. Never log or forward them.
+  if (!response.ok)
+    throw new OAuthError(`OAuth token exchange failed (HTTP ${response.status})`, 'NETWORK_ERROR')
+  const responseSchema = OAuthCredentials.omit({
+    type: true,
+    service: true,
+    created_at: true,
+  }).extend({ access_token: z.string().min(1) })
+  const data = responseSchema.safeParse(await response.json().catch(() => null))
+  if (!data.success)
+    throw new OAuthError('OAuth token exchange returned invalid credentials', 'INVALID_RESPONSE')
+  return {
+    ...data.data,
+    type: 'oauth-credentials',
+    service: params.tokenUrl,
+    created_at: Date.now(),
+  }
+}
+
 //oauth.ts
 export const OAuthCredentials = z.object({
   type: z.enum(['oauth-credentials']),

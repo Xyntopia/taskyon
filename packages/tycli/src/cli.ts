@@ -1759,8 +1759,9 @@ async function loginProvider(
   llmState: CliLlmState,
   selectedApi: string,
   forceLogin: boolean,
-  oauthStorage: CliOauthStorage,
+  persistence: CliPersistence,
 ) {
+  const { oauthStorage, environmentPrefix } = persistence
   const api = getProviderSettings(llmState, selectedApi)
   if (!api) throw new Error(`Unknown provider: ${selectedApi}`)
   if (!getProviderOauthConfig(api)) {
@@ -1775,6 +1776,7 @@ async function loginProvider(
       taskyon: ty,
       storage: oauthStorage,
       forceReauth: forceLogin,
+      workspaceId: process.env[`${environmentPrefix}_CHATGPT_WORKSPACE_ID`]?.trim(),
     })
     accessToken = session.accessToken
     applyCodexAccountHeader(llmState, session.accountId)
@@ -2352,7 +2354,7 @@ async function handleProviderCommand(
   }
   if (hasOauth && action === 1) {
     try {
-      await loginProvider(ty, llmState, nextApi, oauthLoggedIn, persistence.oauthStorage)
+      await loginProvider(ty, llmState, nextApi, oauthLoggedIn, persistence)
       writeNotice('success', `OAuth login complete for provider '${nextApi}'.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

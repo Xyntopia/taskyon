@@ -122,6 +122,20 @@ client APIs, P2P services, and remote tool execution.
 
 ## Runtime Portability
 
+- Share provider authentication semantics across browser, desktop webview, and CLI hosts: PKCE,
+  protected authorization parameters, token exchange, credential validation, refresh handling,
+  and account-claim interpretation. Keep popup, native callback, and loopback handling in explicit
+  platform adapters. A shared token helper does not establish that a provider accepts a host's
+  redirect URI.
+- Keep credentials scoped to their authorized host/store. Sharing authentication code does not
+  authorize reading another application's credential files or duplicating rotating refresh tokens.
+- Codex workspace identity comes from the returned credentials, preferring the active access
+  token's explicit account claim. Do not infer selection from organization membership, attach an
+  independently cached account ID, or ask for another workspace after browser authorization.
+  Only an explicit host configuration may constrain a new login; remembered selections must not.
+- Failed refresh must not reuse an expired access token. Authentication diagnostics use synthetic
+  credentials, and callback payloads and token response bodies must not enter logs.
+
 - Shared core code must remain usable in browser and Node runtimes.
 - Runtime-specific capabilities belong in host adapters and are optional when unavailable.
 - Do not fix one runtime by importing its filesystem, process, browser, or UI APIs into a shared

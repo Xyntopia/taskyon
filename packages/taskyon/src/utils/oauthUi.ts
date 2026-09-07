@@ -5,6 +5,8 @@ import {
   OAuthCredentials,
   OAuthError,
   useRefreshTokenIfExpired,
+  exchangeOauthCode,
+  createOauthAuthorizationUrl,
 } from './oauth'
 
 const getDefaultRedirectUri = () => `${window.location.origin}/oauth/return`
@@ -70,15 +72,7 @@ export async function authenticateWithPopup(
     const { challenge, verifier } = await generatePKCE()
     const state = crypto.randomUUID()
 
-    const urlParams = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: effectiveRedirectUri,
-      scope: scope,
-      state,
-      ...(tokenUrl
-        ? { code_challenge: challenge, code_challenge_method: 'S256', response_type: 'code' }
-        : { response_type: 'token' }),
-    })
+    const providerQuery = { ...authorizeQuery }
 
     // Add Google-specific parameters for forcing reconnection
     if (oauthURL.includes('accounts.google.com')) {
@@ -96,26 +90,26 @@ export async function authenticateWithPopup(
 
       if (promptValues.length > 0) {
         // Combine multiple prompt values with space separation as per OAuth2 spec
-        urlParams.set('prompt', promptValues.join(' '))
+        providerQuery.prompt = promptValues.join(' ')
       }
 
       // Request offline access to get refresh token
       if (tokenUrl) {
-        urlParams.set('access_type', 'offline')
+        providerQuery.access_type = 'offline'
       }
     }
 
-    // Add provider-specific query params (Codex-style or any custom provider flags).
-    if (authorizeQuery) {
-      for (const [key, value] of Object.entries(authorizeQuery)) {
-        urlParams.set(key, value)
-      }
-    }
-
-    popup.location.href = `${authorizationUrl.href}?${urlParams.toString()}`
+    popup.location.href = createOauthAuthorizationUrl({
+      oauthURL,
+      clientId,
+      scope,
+      redirectUri: effectiveRedirectUri,
+      state,
+      ...(tokenUrl ? { challenge } : {}),
+      authorizeQuery: providerQuery,
+    })
 
     const msg = await waitForPopupReturn(popup, signal, timeoutMs)
-    console.log('oauth: received return query', msg)
 
     // Handle error responses first
     if (msg.error) {
@@ -161,7 +155,7 @@ export async function authenticateWithPopup(
       throw new OAuthError('No authorization code received from OAuth provider', 'INVALID_RESPONSE')
     }
 
-    const creds = await getAccessTokenFromCode({
+    const creds = await exchangeOauthCode({
       verifier,
       clientId,
       code: qparams.code,
@@ -222,15 +216,11 @@ async function waitForPopupReturn(
     }
 
     const messageListener = (event: MessageEvent) => {
-      console.log('received event', event)
-
       // Basic security check - ensure message is from our popup
       if (event.source !== popup) return
 
       // Handle different message formats
       if (event.data && (event.data.status === 'return' || event.data.error)) {
-        console.log('received event from oauth popup...', event)
-
         try {
           // prevent duplicate handling
           event.stopImmediatePropagation()
@@ -284,75 +274,6 @@ async function waitForPopupReturn(
   })
 }
 
-async function getAccessTokenFromCode({
-  verifier,
-  clientId,
-  code,
-  tokenUrl,
-  redirectUri,
-}: {
-  verifier: string
-  clientId: string
-  code: string
-  tokenUrl: string
-  redirectUri: string
-}): Promise<OAuthCredentials> {
-  const body = new URLSearchParams({
-    client_id: clientId,
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri,
-    code_verifier: verifier,
-  })
-
-  try {
-    const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    })
-
-    if (!res.ok) {
-      let errorDetail = `${res.status} ${res.statusText}`
-      try {
-        const errorBody = await res.text()
-        if (errorBody) {
-          errorDetail += ` - ${errorBody}`
-        }
-      } catch {
-        // Ignore error parsing response body
-      }
-      throw new OAuthError(`Token request failed: ${errorDetail}`, 'NETWORK_ERROR')
-    }
-
-    const data = await res.json()
-
-    // Check for OAuth error in response
-    if (data.error) {
-      throw new OAuthError(
-        `Token exchange error: ${data.error}${data.error_description ? ` - ${data.error_description}` : ''}`,
-        'INVALID_RESPONSE',
-      )
-    }
-
-    const creds = OAuthCredentials.parse({
-      ...data,
-      service: tokenUrl,
-      type: 'oauth-credentials',
-      created_at: Date.now(),
-    })
-    return creds
-  } catch (error) {
-    if (error instanceof OAuthError) {
-      throw error
-    }
-    throw new OAuthError(
-      `Failed to exchange authorization code for token: ${error instanceof Error ? error.message : String(error)}`,
-      'NETWORK_ERROR',
-    )
-  }
-}
-
 export type TokenGetter = (
   provider: string,
   params: {
@@ -367,10 +288,13 @@ export type TokenGetter = (
   options?: AuthenticationOptions,
 ) => Promise<OAuthCredentials>
 
-export const usePersistentOauth = (secretStore: {
-  getSecret(secretName: string): Promise<string | null>
-  setSecret(secretName: string, secretData: string): Promise<void>
-}): TokenGetter => {
+export const usePersistentOauth = (
+  secretStore: {
+    getSecret(secretName: string): Promise<string | null>
+    setSecret(secretName: string, secretData: string): Promise<void>
+  },
+  authenticate: typeof authenticateWithPopup = authenticateWithPopup,
+): TokenGetter => {
   async function loadCredentials(provider: string): Promise<OAuthCredentials | null> {
     try {
       const sec = await secretStore.getSecret(provider)
@@ -415,8 +339,8 @@ export const usePersistentOauth = (secretStore: {
             clientId: params.clientId,
             tokenUrl: params.tokenUrl,
           })
+          cached = refreshed
           if (refreshed) {
-            cached = refreshed
             await saveCredentials(provider, refreshed)
           }
         }
@@ -426,7 +350,7 @@ export const usePersistentOauth = (secretStore: {
       if (cached) return cached
 
       // Need to authenticate
-      const creds = await authenticateWithPopup(params, signal, OAUTH_TIMEOUT_MS, options)
+      const creds = await authenticate(params, signal, OAUTH_TIMEOUT_MS, options)
       await saveCredentials(provider, creds)
       return creds
     } catch (error) {

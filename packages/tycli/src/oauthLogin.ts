@@ -1,5 +1,4 @@
 import { createServer } from 'node:http'
-import { randomBytes, createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -14,6 +13,9 @@ import {
   OAuthCredentials,
   refreshAccessToken,
   useRefreshTokenIfExpired,
+  generatePKCE,
+  exchangeOauthCode,
+  createOauthAuthorizationUrl,
 } from '../../taskyon/src/utils/oauth'
 
 export type CliOauthStorage = {
@@ -23,15 +25,6 @@ export type CliOauthStorage = {
 const CLI_OAUTH_LOOPBACK_PORT = 1455
 const CLI_OAUTH_REDIRECT_URI = `http://localhost:${CLI_OAUTH_LOOPBACK_PORT}/auth/callback`
 
-const base64Url = (data: Buffer): string =>
-  data.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-
-const createPkce = () => {
-  const verifier = base64Url(randomBytes(64))
-  const challenge = base64Url(createHash('sha256').update(verifier).digest())
-  return { verifier, challenge }
-}
-
 const parseCallbackUrl = (rawUrl: string) => {
   const url = new URL(rawUrl, 'http://127.0.0.1')
   const error = url.searchParams.get('error')
@@ -39,16 +32,6 @@ const parseCallbackUrl = (rawUrl: string) => {
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
   return { error, errorDescription, code, state }
-}
-
-const formatUnknownError = (error: unknown): string => {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return String(error)
-  }
 }
 
 const parseJwtPayload = (jwt: string): Record<string, unknown> | null => {
@@ -176,71 +159,8 @@ const waitForAuthCode = async (
   })
 }
 
-const exchangeCodeForCredentials = async ({
-  tokenUrl,
-  clientId,
-  code,
-  verifier,
-  redirectUri,
-}: {
-  tokenUrl: string
-  clientId: string
-  code: string
-  verifier: string
-  redirectUri: string
-}) => {
-  const body = new URLSearchParams({
-    client_id: clientId,
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri,
-    code_verifier: verifier,
-  })
-
-  let response: Response
-  try {
-    response = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    })
-  } catch (error) {
-    const details =
-      error instanceof Error
-        ? `${error.message}${error.cause ? ` (cause: ${formatUnknownError(error.cause)})` : ''}`
-        : formatUnknownError(error)
-    throw new Error(`OAuth token request failed before receiving a response: ${details}`)
-  }
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(
-      `OAuth token exchange failed (${response.status} ${response.statusText})${text ? `: ${text}` : ''}`,
-    )
-  }
-
-  const data = await response.json()
-  if (data?.error) {
-    throw new Error(
-      `OAuth token exchange error: ${String(data.error)}${data.error_description ? ` - ${String(data.error_description)}` : ''}`,
-    )
-  }
-
-  try {
-    return OAuthCredentials.parse({
-      ...data,
-      type: 'oauth-credentials',
-      service: tokenUrl,
-      created_at: Date.now(),
-    })
-  } catch (error) {
-    throw new Error(
-      `OAuth credentials parsing failed: ${error instanceof Error ? error.message : String(error)}`,
-    )
-  }
-}
-
 export const getCachedProviderOauthCredentials = async (
-  taskyon: Taskyon,
+  taskyon: Pick<Taskyon, 'getSecret' | 'setSecret'>,
   storage: CliOauthStorage,
   providerName: string,
 ): Promise<null | ReturnType<typeof OAuthCredentials.parse>> => {
@@ -264,7 +184,7 @@ export const getCachedProviderOauthCredentials = async (
 }
 
 export const setCachedProviderOauthCredentials = async (
-  taskyon: Taskyon,
+  taskyon: Pick<Taskyon, 'getSecret' | 'setSecret'>,
   storage: CliOauthStorage,
   providerName: string,
   credentials: ReturnType<typeof OAuthCredentials.parse>,
@@ -282,7 +202,7 @@ export async function resolveCachedProviderOauthCredentials({
 }: {
   providerName: string
   api: ProviderEndpointConfig
-  taskyon: Taskyon
+  taskyon: Pick<Taskyon, 'getSecret' | 'setSecret'>
   storage: CliOauthStorage
 }): Promise<null | ReturnType<typeof OAuthCredentials.parse>> {
   const oauth = getProviderOauthConfig(api)
@@ -311,7 +231,8 @@ export async function resolveCachedProviderOauthCredentials({
     tokenUrl: oauth.tokenUrl,
     clientId: oauth.clientId,
   })
-  validCredentials = refreshed ?? validCredentials
+  if (!refreshed) return null
+  validCredentials = refreshed
   if (refreshed) await setCachedProviderOauthCredentials(taskyon, storage, providerName, refreshed)
   return validCredentials
 }
@@ -328,28 +249,17 @@ export const runAuthorizationCodeFlow = async ({
   if (!oauth.tokenUrl) {
     throw new Error('OAuth authorization code flow requires a token URL.')
   }
-  const { verifier, challenge } = createPkce()
-  const state = base64Url(randomBytes(24))
+  const { verifier, challenge } = await generatePKCE()
+  const state = crypto.randomUUID()
   const redirectUri = CLI_OAUTH_REDIRECT_URI
-  const serverWait = waitForAuthCode(state, timeoutMs, redirectUri)
-
-  const query = new URLSearchParams({
-    client_id: oauth.clientId,
-    redirect_uri: redirectUri,
-    scope: oauth.scope,
-    response_type: 'code',
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
+  const authorizeUrl = createOauthAuthorizationUrl({
+    ...oauth,
+    redirectUri,
     state,
+    challenge,
+    authorizeQuery: { ...oauth.authorizeQuery, ...authorizeQuery },
   })
-  for (const [key, value] of Object.entries({
-    ...oauth.authorizeQuery,
-    ...authorizeQuery,
-  })) {
-    query.set(key, value)
-  }
-
-  const authorizeUrl = `${oauth.oauthURL}?${query.toString()}`
+  const serverWait = waitForAuthCode(state, timeoutMs, redirectUri)
   process.stdout.write(
     [
       'Open this URL in your browser to continue login:',
@@ -362,7 +272,7 @@ export const runAuthorizationCodeFlow = async ({
   )
 
   const { code } = await serverWait
-  return await exchangeCodeForCredentials({
+  return await exchangeOauthCode({
     tokenUrl: oauth.tokenUrl,
     clientId: oauth.clientId,
     code,
@@ -382,7 +292,7 @@ export async function loginWithProviderOauthCli({
 }: {
   providerName: string
   api: ProviderEndpointConfig
-  taskyon: Taskyon
+  taskyon: Pick<Taskyon, 'getSecret' | 'setSecret'>
   storage: CliOauthStorage
   forceReauth?: boolean
   timeoutMs?: number

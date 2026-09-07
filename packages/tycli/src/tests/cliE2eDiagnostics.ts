@@ -20,6 +20,8 @@ type SessionStep = {
   failOn?: string[]
   input: string
   waitFor?: string
+  /** Optional tighter deadline for this output milestone (for example prompt readiness). */
+  timeoutMs?: number
   signal?: NodeJS.Signals
 }
 
@@ -429,7 +431,7 @@ async function runSpawnedSession(args: {
           outputOffset = await waitForText(
             () => output,
             step.waitFor,
-            timeoutMs,
+            Math.min(step.timeoutMs ?? timeoutMs, timeoutMs),
             step.failOn,
             () => closedCode !== null,
             outputOffset,

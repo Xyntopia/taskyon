@@ -38,25 +38,15 @@ const getCodexAccountIdFromClaims = (claims: Record<string, unknown>): string | 
     if (nestedAccountId) return nestedAccountId
   }
 
-  if (!Array.isArray(claims.organizations)) return undefined
-  for (const organization of claims.organizations) {
-    if (typeof organization === 'string' && organization.trim()) return organization.trim()
-    const record = jwtPayloadSchema.safeParse(organization)
-    if (!record.success) continue
-    const organizationId =
-      asNonEmptyString(record.data.id) ??
-      asNonEmptyString(record.data.organization_id) ??
-      asNonEmptyString(record.data.workspace_id) ??
-      asNonEmptyString(record.data.chatgpt_account_id)
-    if (organizationId) return organizationId
-  }
+  // Organization membership is not the workspace selected during browser login.
   return undefined
 }
 
 export const getCodexAccountIdFromCredentials = (
   credentials: OAuthCredentials,
 ): string | undefined => {
-  for (const token of [credentials.id_token, credentials.access_token]) {
+  // Refresh may retain an older ID token; prefer claims accompanying the active access token.
+  for (const token of [credentials.access_token, credentials.id_token]) {
     if (!token) continue
     const payload = parseJwtPayload(token)
     if (!payload) continue

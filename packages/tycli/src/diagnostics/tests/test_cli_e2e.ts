@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { testCodexOauthCliUsesBrowserWorkspaceWithoutSecondPrompt as codexWorkspaceTest } from '../../tests/codexOauthDiagnostics'
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import {
   runCliE2eSession,
@@ -23,6 +24,8 @@ import {
   testCliClarificationToolAcceptsTypedAnswers as runCliClarificationToolAcceptsTypedAnswers,
   testBracketedPastePreservesMultilinePrompt as runBracketedPastePreservesMultilinePrompt,
 } from '../../tests/cliE2eDiagnostics'
+
+export const testCodexOauthCliUsesBrowserWorkspaceWithoutSecondPrompt = codexWorkspaceTest
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)

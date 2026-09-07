@@ -7,6 +7,7 @@ import {
 } from '@taskyon/common/modules/diagnosticsRunner'
 import * as cliE2eDiagnostics from './cliE2eDiagnostics'
 import * as cliModelDiagnostics from './cliModelDiagnostics'
+import * as codexOauthDiagnostics from './codexOauthDiagnostics'
 
 function safeTimestamp(date: Date) {
   return date.toISOString().replace(/[:.]/g, '-')
@@ -70,6 +71,13 @@ async function main() {
   cliE2eDiagnostics.clearCliE2eSessionLogs()
   const registry = buildDiagnosticsRegistry({
     modules: [
+      {
+        sourcePath: 'packages/tycli/src/tests/codexOauthDiagnostics.ts',
+        mod: {
+          testCodexOauthCliUsesBrowserWorkspaceWithoutSecondPrompt:
+            codexOauthDiagnostics.testCodexOauthCliUsesBrowserWorkspaceWithoutSecondPrompt,
+        },
+      },
       { sourcePath: 'packages/tycli/src/tests/cliE2eDiagnostics.ts', mod: cliE2eDiagnostics },
       { sourcePath: 'packages/tycli/src/tests/cliModelDiagnostics.ts', mod: cliModelDiagnostics },
     ],
