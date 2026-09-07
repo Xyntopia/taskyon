@@ -653,6 +653,13 @@ const updateNamedNodeReferences = async (args: {
   files: readonly DagProjectedFile[]
   loadNodeFile: ProjectedNodeFileLoader
 }): Promise<DagProjectedFile[]> => {
+  if (
+    !args.files.some(
+      ({ path }) => path.startsWith('refs/graph/') || path.startsWith('refs/projects/'),
+    )
+  ) {
+    return [...args.files]
+  }
   const incomingNodes = await readIncomingNodes(args.files, args.loadNodeFile)
   const output = new Map(args.files.map((file) => [file.path, file]))
   const rootReplacements = new Map<Hash, Hash>()
@@ -945,11 +952,16 @@ export const importDesignGraphSnapshot = async (args: {
           ? (existingImmutable.get(file.path) ?? null)
           : await readOptionalText(args.store, file.path)
         if (existing === null) missing.push(file)
-        else {
-          const normalizedExisting = await normalizeProjectedFile({
-            path: file.path,
-            content: existing,
-          })
+        else if (existing !== file.content) {
+          // Incoming content is already normalized and validated above. Reuse that work
+          // for identical bytes; semantically equivalent formatting still uses the loader.
+          const normalizedExisting = await normalizeProjectedFile(
+            {
+              path: file.path,
+              content: existing,
+            },
+            loadNodeFile,
+          )
           if (immutableComparisonContent(normalizedExisting) !== immutableComparisonContent(file)) {
             throw new Error(`Immutable design graph object collision: ${file.path}`)
           }

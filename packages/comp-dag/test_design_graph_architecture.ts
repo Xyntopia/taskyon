@@ -193,6 +193,42 @@ export const testDesignGraphImportBatchesImmutableObjects = async () => {
 testDesignGraphImportBatchesImmutableObjects.description =
   'Imports a stored graph closure with one bulk immutable-object read and write before advancing refs.'
 
+export const testDesignGraphImmutableReimportPreservesValidation = async () => {
+  const memory = createMemoryStore()
+  const node = await saveStoredGraphNodeSource(`export default {
+    formatVersion: 2, id: '${SELF_HASH_PLACEHOLDER}', localName: 'Reimport',
+    label: 'Reimport', version: 1, localParamsSchema: {}, outputSchema: {},
+    inputs: {}, run: () => 1,
+  }`)
+  const path = `nodes/${hashFilePart(node.hash)}.ts`
+  const files = [{ path, content: node.file.source }]
+  await importDesignGraphSnapshot({ store: memory.store, files })
+  const before = [...memory.values.entries()]
+  const writes = memory.counts().bulkWrites
+  await importDesignGraphSnapshot({ store: memory.store, files })
+  assert(memory.counts().bulkWrites === writes, 'Identical imports must not rewrite objects')
+  assert(
+    JSON.stringify([...memory.values.entries()]) === JSON.stringify(before),
+    'Reimport must preserve stored bytes',
+  )
+  // Equality with a stored object must never bypass incoming identity validation.
+  const corrupt = node.file.source.replace('run: () => 1', 'run: () => 2')
+  assert(corrupt !== node.file.source, 'Fixture must change the implementation')
+  memory.values.set(path, corrupt)
+  for (const content of [node.file.source, 'export default { invalid syntax']) {
+    if (content !== node.file.source) memory.values.set(path, content)
+    const stored = memory.values.get(path)
+    let rejected = false
+    try {
+      await importDesignGraphSnapshot({ store: memory.store, files: [{ path, content }] })
+    } catch {
+      rejected = true
+    }
+    assert(rejected, 'Conflicting or invalid immutable content must be rejected')
+    assert(memory.values.get(path) === stored, 'Failed validation must not mutate storage')
+  }
+}
+
 export const testDesignGraphSnapshotBulkLoadsRevisionNodes = async () => {
   const memory = createMemoryStore()
   const first = await saveStoredGraphNodeSource(`export default {

@@ -60,7 +60,7 @@ const runtimeDirectoryName = () => {
 }
 
 export async function resolveProviderCredential(
-  ty: Taskyon,
+  ty: Pick<Taskyon, 'getSecret' | 'setSecret'>,
   llmState: CliLlmState,
   providerId: string,
   oauthStorage: CliOauthStorage,

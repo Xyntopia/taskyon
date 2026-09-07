@@ -86,6 +86,7 @@ const requireInvocationFields = (args: DagGraphProjectToolArgs) => {
 
 export const createDagGraphProjectTool = (
   storageClient: DesignGraphStorageClient & InvocationArtifactStorageClient,
+  prepareRepository?: () => Promise<void>,
 ) => {
   const store = createStorageDesignGraphObjectStore(storageClient)
   const repository = createDesignGraphRepository(store)
@@ -186,6 +187,7 @@ export const createDagGraphProjectTool = (
       },
     } as const,
     function: async (rawArgs: DagGraphProjectToolArgs) => {
+      await prepareRepository?.()
       const projectId = normalizeProjectId(rawArgs.projectId)
       const invocationName = rawArgs.invocationName?.trim() || 'main'
 

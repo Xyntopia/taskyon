@@ -39,6 +39,7 @@ export * from './lambdaTool'
 export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>
   storageClient?: TaskyonStorageClient
+  prepareGraphRepository?: () => Promise<void>
   pythonTool?: InternalTool | null
   workspaceOperations?: WorkspaceOperations
 }): TyCoreToolSetup => ({
@@ -53,7 +54,10 @@ export const createDefaultTaskyonToolSetup = (options?: {
     ...devTools,
     ...testingTools,
     ...(options?.storageClient
-      ? [createStorageTool(options.storageClient), createDagGraphProjectTool(options.storageClient)]
+      ? [
+          createStorageTool(options.storageClient),
+          createDagGraphProjectTool(options.storageClient, options.prepareGraphRepository),
+        ]
       : []),
     ...taskOrganizationTools,
     ...webResearchTools,

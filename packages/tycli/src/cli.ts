@@ -1,4 +1,6 @@
 import './node-shims'
+import type { SecretStore } from '../../taskyon/src/utils/crudWrapper'
+import { createStepTimer, type StepTimingEvent } from '@taskyon/common/modules/stepTiming'
 
 import { createInterface } from 'node:readline/promises'
 import { emitKeypressEvents } from 'node:readline'
@@ -231,6 +233,9 @@ export type InteractiveCliHost = {
   productName: string
   environmentPrefix: string
   entryNodeName: string
+  defaultProvider?: string
+  /** Monotonic entrypoint time, including dynamic command/module loading. */
+  startupStartedAt?: number
   oauthSecretId: string
   toolchainProfiles: ToolchainProfiles
   storagePaths: CliStoragePaths
@@ -240,9 +245,21 @@ export type InteractiveCliHost = {
   defaultAllowedTools?: string[]
   unavailableToolNames?: ReadonlySet<string>
   additionalTools?: readonly InternalTool[]
-  initializeStorage?: (storageClient: ReturnType<typeof createStorageClient>) => Promise<void>
+  initializeStorage?: (
+    storageClient: ReturnType<typeof createStorageClient>,
+    onProgress?: (event: StepTimingEvent) => void,
+  ) => Promise<void>
+  prepareGraphRepository?: (
+    storageClient: ReturnType<typeof createStorageClient>,
+    onProgress?: (event: StepTimingEvent) => void,
+  ) => Promise<void>
   documentation?: InteractiveCliDocumentation
 }
+
+type CliProviderSecrets = Pick<
+  SecretStore,
+  'getSecret' | 'setSecret' | 'listSecrets' | 'deleteSecret'
+>
 
 type CliPersistence = {
   configStore: CliConfigStore
@@ -853,9 +870,7 @@ const resolveConversationFormat = (argv: readonly string[]): ConversationFormat 
     (arg) => arg === '--conversation-format' || arg.startsWith('--conversation-format='),
   )
   if (index < 0) return 'markdown'
-  const value = argv[index]?.includes('=')
-    ? argv[index]?.split('=', 2)[1]
-    : argv[index + 1]
+  const value = argv[index]?.includes('=') ? argv[index]?.split('=', 2)[1] : argv[index + 1]
   if (value === 'markdown' || value === 'yaml') return value
   throw new Error(`Invalid --conversation-format '${String(value)}'; use markdown or yaml.`)
 }
@@ -1741,25 +1756,27 @@ async function selectModelInteractive(
 }
 
 async function setSelectedApi(
-  ty: Taskyon,
+  ty: CliProviderSecrets,
   llmState: CliLlmState,
   nextApi: string,
   persistence: CliPersistence,
+  runtime?: Taskyon,
 ) {
   await persistence.configStore.persistConfigPatch({ selectedApi: nextApi })
   const stored = await persistence.configStore.loadStoredConfig()
   const configuredModel = resolveStoredModel(stored, nextApi)
   setSelectedProvider(llmState, nextApi)
   if (configuredModel) setProviderModel(llmState, nextApi, configuredModel)
-  await syncProviderRuntimeConfig(ty, llmState, nextApi, persistence.oauthStorage)
+  if (runtime) await syncProviderRuntimeConfig(runtime, llmState, nextApi, persistence.oauthStorage)
 }
 
 async function loginProvider(
-  ty: Taskyon,
+  ty: CliProviderSecrets,
   llmState: CliLlmState,
   selectedApi: string,
   forceLogin: boolean,
   persistence: CliPersistence,
+  runtime?: Taskyon,
 ) {
   const { oauthStorage, environmentPrefix } = persistence
   const api = getProviderSettings(llmState, selectedApi)
@@ -1791,12 +1808,12 @@ async function loginProvider(
     })
     accessToken = await resolveProviderAccessToken(credentials, api)
   }
-  await ty.updateChatCompletionApiKey(selectedApi, accessToken)
-  await applyCliRuntimeConfig(ty, llmState)
+  await runtime?.updateChatCompletionApiKey(selectedApi, accessToken)
+  if (runtime) await applyCliRuntimeConfig(runtime, llmState)
 }
 
 async function hasStoredOauthLogin(
-  ty: Taskyon,
+  ty: CliProviderSecrets,
   providerId: string,
   oauthSecretId: string,
 ): Promise<boolean> {
@@ -1806,7 +1823,7 @@ async function hasStoredOauthLogin(
 }
 
 async function getProviderStatusTags(
-  ty: Taskyon,
+  ty: CliProviderSecrets,
   llmState: CliLlmState,
   providerId: string,
   oauthSecretId: string,
@@ -1990,10 +2007,11 @@ async function promptForMainInput(
   onCtrlDRequested?: () => void,
   onReady?: () => void,
   environmentPrefix = 'TYCLI',
+  signal?: AbortSignal,
 ): Promise<string | null> {
   const stdin = process.stdin
   if (!stdin.isTTY) {
-    const answer = askQuestion(rl, promptText)
+    const answer = askQuestion(rl, promptText, { signal, interruptNotice: false })
     onReady?.()
     return await answer
   }
@@ -2022,6 +2040,7 @@ async function promptForMainInput(
       stdin.off('keypress', onKeypress)
       rl.off('line', onLine)
       rl.off('close', onClose)
+      signal?.removeEventListener('abort', onAbort)
       process.stdout.write(DISABLE_BRACKETED_PASTE)
       restoreTerminalInput()
       resolve(value)
@@ -2032,6 +2051,7 @@ async function promptForMainInput(
       finish(line)
     }
     const onClose = () => finish(null)
+    const onAbort = () => finish(null)
     const onKeypress = (
       str: string | undefined,
       key: { ctrl?: boolean; name?: string; sequence?: string },
@@ -2128,6 +2148,8 @@ async function promptForMainInput(
     stdin.on('keypress', onKeypress)
     rl.on('line', onLine)
     rl.on('close', onClose)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) return finish(null)
     rl.setPrompt(promptText)
     rl.prompt()
     try {
@@ -2142,9 +2164,10 @@ async function promptForMainInput(
 
 async function handleKeysCommand(
   rl: ReturnType<typeof createInterface>,
-  ty: Taskyon,
+  ty: CliProviderSecrets,
   llmState: CliLlmState,
   persistence: CliPersistence,
+  runtime?: Taskyon,
 ) {
   const providers = [...SUPPORTED_PROVIDERS]
   while (true) {
@@ -2169,15 +2192,15 @@ async function handleKeysCommand(
         continue
       }
       await ty.setSecret(API_KEY_STORE_NAME, provider, key)
-      await ty.updateChatCompletionApiKey(provider, key)
-      await setSelectedApi(ty, llmState, provider, persistence)
+      await runtime?.updateChatCompletionApiKey(provider, key)
+      await setSelectedApi(ty, llmState, provider, persistence, runtime)
       writeNotice('success', `Saved key for ${provider}.`)
       writeNotice('info', `Selected provider: ${provider}`)
     }
 
     if (action === 1) {
       await ty.deleteSecret(API_KEY_STORE_NAME, provider)
-      await ty.updateChatCompletionApiKey(provider, undefined)
+      await runtime?.updateChatCompletionApiKey(provider, undefined)
       writeNotice('success', `Removed key for ${provider}.`)
     }
   }
@@ -2185,9 +2208,10 @@ async function handleKeysCommand(
 
 async function handleModelCommand(
   rl: ReturnType<typeof createInterface>,
-  ty: Taskyon,
+  ty: CliProviderSecrets,
   llmState: CliLlmState,
   persistence: CliPersistence,
+  runtime?: Taskyon,
 ) {
   const selectedApi = llmState.selectedToolchainProfile
   const selectedSettings = getSelectedProviderSettings(llmState)
@@ -2258,7 +2282,7 @@ async function handleModelCommand(
     }
     setProviderModel(llmState, selectedApi, model)
     await persistence.configStore.persistProviderModel(selectedApi, model)
-    await applyCliRuntimeConfig(ty, llmState)
+    if (runtime) await applyCliRuntimeConfig(runtime, llmState)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
     return
   }
@@ -2273,7 +2297,7 @@ async function handleModelCommand(
     }
     setProviderModel(llmState, selectedApi, model)
     await persistence.configStore.persistProviderModel(selectedApi, model)
-    await applyCliRuntimeConfig(ty, llmState)
+    if (runtime) await applyCliRuntimeConfig(runtime, llmState)
     writeNotice('success', `Selected model for ${selectedApi}: ${model}`)
   }
 
@@ -2293,16 +2317,17 @@ async function handleModelCommand(
     if (!effort) return
     setReasoningEffort(llmState, effort)
     await persistence.configStore.persistReasoningEffort(effort)
-    await applyCliRuntimeConfig(ty, llmState)
+    if (runtime) await applyCliRuntimeConfig(runtime, llmState)
     writeNotice('success', `Selected thinking effort: ${effort}`)
   }
 }
 
 async function handleProviderCommand(
   rl: ReturnType<typeof createInterface>,
-  ty: Taskyon,
+  ty: CliProviderSecrets,
   llmState: CliLlmState,
   persistence: CliPersistence,
+  runtime?: Taskyon,
 ) {
   const providerIds = [...SUPPORTED_PROVIDERS].filter((providerId) =>
     getProviderSettings(llmState, providerId),
@@ -2348,13 +2373,13 @@ async function handleProviderCommand(
   const action = await selectFromList(rl, `\nProvider: ${nextApi}`, actionOptions)
   if (action === null) return
   if (action === 0) {
-    await setSelectedApi(ty, llmState, nextApi, persistence)
+    await setSelectedApi(ty, llmState, nextApi, persistence, runtime)
     writeNotice('success', `Selected provider: ${nextApi}`)
     return
   }
   if (hasOauth && action === 1) {
     try {
-      await loginProvider(ty, llmState, nextApi, oauthLoggedIn, persistence)
+      await loginProvider(ty, llmState, nextApi, oauthLoggedIn, persistence, runtime)
       writeNotice('success', `OAuth login complete for provider '${nextApi}'.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -2681,7 +2706,9 @@ async function resolveConversationToResume(
           id: metadata.id,
         })
         const markdown = transcript ? new TextDecoder().decode(transcript.data) : ''
-        const document = transcript ? await createTaskDocument(markdown).catch(() => undefined) : undefined
+        const document = transcript
+          ? await createTaskDocument(markdown).catch(() => undefined)
+          : undefined
         const firstMessage = document?.tasks.find(
           (task) => task.role === 'user' && task.content.type === 'message',
         )
@@ -2781,17 +2808,17 @@ async function handleSlashCommand(
   unavailableToolNames: ReadonlySet<string>,
 ): Promise<boolean> {
   if (parsed.name === 'keys') {
-    await handleKeysCommand(rl, ty, llmState, persistence)
+    await handleKeysCommand(rl, ty, llmState, persistence, ty)
     return true
   }
 
   if (parsed.name === 'model') {
-    await handleModelCommand(rl, ty, llmState, persistence)
+    await handleModelCommand(rl, ty, llmState, persistence, ty)
     return true
   }
 
   if (parsed.name === 'provider') {
-    await handleProviderCommand(rl, ty, llmState, persistence)
+    await handleProviderCommand(rl, ty, llmState, persistence, ty)
     return true
   }
 
@@ -2946,6 +2973,33 @@ async function main(host: InteractiveCliHost) {
 
   let restoreConsoleLogging: (() => void) | undefined
   const sessionStartedAt = new Date()
+  const startupStartedAt = host.startupStartedAt ?? performance.now()
+  const commandLoadMs = performance.now() - startupStartedAt
+  let timingStartedAt = startupStartedAt
+  let timingScope = 'startup'
+  const activeSteps = new Map<string, number>()
+  let pendingStepTimer: ReturnType<typeof setInterval> | undefined
+  const reportStartup = (event: StepTimingEvent) => {
+    if (event.phase === 'started') activeSteps.set(event.step, performance.now())
+    else activeSteps.delete(event.step)
+    if (activeSteps.size && !pendingStepTimer) {
+      pendingStepTimer = setInterval(() => {
+        const active = [...activeSteps.entries()].at(-1)
+        if (active)
+          writeLine(
+            `[${timingScope}] Still waiting for ${active[0]} (${((performance.now() - active[1]) / 1000).toFixed(1)}s)...`,
+          )
+      }, 2000)
+      pendingStepTimer.unref()
+    } else if (!activeSteps.size && pendingStepTimer) {
+      clearInterval(pendingStepTimer)
+      pendingStepTimer = undefined
+    }
+    const elapsed = ((performance.now() - timingStartedAt) / 1000).toFixed(2)
+    const duration = event.phase === 'started' ? '' : ` (${Math.round(event.durationMs)} ms)`
+    writeLine(`[${timingScope} +${elapsed}s] ${event.step}: ${event.phase}${duration}`)
+  }
+  const timeStartup = createStepTimer(reportStartup)
   writeLine(`Starting ${host.commandName}...`)
   try {
     writeLine('Initializing runtime log...')
@@ -2955,9 +3009,16 @@ async function main(host: InteractiveCliHost) {
     writeError(`Runtime log unavailable: ${error instanceof Error ? error.message : String(error)}`)
   }
   writeLine('Loading CLI configuration...')
-  const startupMeta = await loadStartupMeta(host)
+  reportStartup({
+    step: 'cli.command-and-shell-loading',
+    phase: 'completed',
+    durationMs: commandLoadMs,
+  })
+  const startupMeta = await timeStartup('cli.version-metadata', () => loadStartupMeta(host))
   const configStore = createCliConfigStore(host.storagePaths)
-  const { cryptoSession, stored } = await configStore.initPersistentCryptoSession()
+  const { cryptoSession, stored } = await timeStartup('cli.config-and-crypto', () =>
+    configStore.initPersistentCryptoSession(),
+  )
   const configDir = await configStore.resolveConfigDirectoryPath()
   const dataDir = await configStore.resolveDataDirectoryPath()
   const persistence: CliPersistence = {
@@ -2976,7 +3037,10 @@ async function main(host: InteractiveCliHost) {
   const pgliteNodeDir = join(configDir, 'runtime', `${errorTimestamp()}-${process.pid}`, 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
   const cliSecretStore = configStore.createCliSecretStore(cryptoSession)
-  const selectedApi = resolveProviderSelection(stored, host.environmentPrefix)
+  const selectedApi = resolveProviderSelection(
+    { ...stored, selectedApi: stored.selectedApi ?? host.defaultProvider },
+    host.environmentPrefix,
+  )
 
   if (!SUPPORTED_PROVIDERS.includes(selectedApi as (typeof SUPPORTED_PROVIDERS)[number])) {
     throw new Error(
@@ -3020,6 +3084,125 @@ async function main(host: InteractiveCliHost) {
       }
     : host.toolchainProfiles
   const llmState = createCliLlmState(config, toolchainProfiles, host.entryNodeName)
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: process.stdin.isTTY === true,
+    history: normalizeInputHistory(stored.inputHistory),
+    historySize: 500,
+    removeHistoryDuplicates: false,
+  })
+  rl.on('history', (history) => {
+    const normalized = normalizeInputHistory(history)
+    history.splice(0, history.length, ...normalized)
+    configStore.persistConfigPatch({ inputHistory: normalized }).catch((error: unknown) => {
+      writeDebug(
+        `Failed to persist input history: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    })
+  })
+  let pendingInput: string | undefined
+  if (taskyonClientCommand === null) {
+    writeIntro(`${host.commandName} ${startupMeta.version}`)
+    writeStartupNote('Session', [
+      `Build: ${startupMeta.commit}, ${startupMeta.buildDate}`,
+      `${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`,
+      'Conversation storage: deferred until the task engine is needed.',
+    ])
+    writeNotice(
+      'info',
+      `${host.commandName} prompt ready. provider=${llmState.selectedToolchainProfile} model=${getSelectedProviderSettings(llmState).model}`,
+    )
+    writeLine(
+      'Slash commands: /provider, /model, /keys, /help, /exit, /quit. Other commands and messages start the task engine on first use.',
+    )
+    reportStartup({
+      step: 'cli.prompt-ready',
+      phase: 'completed',
+      durationMs: performance.now() - startupStartedAt,
+    })
+    let promptAbort = new AbortController()
+    let interrupted = false
+    const interruptPrompt = () => {
+      if (activeCliMenuDepth > 0 || interrupted) return
+      interrupted = true
+      writeLine('Ctrl-C received.')
+      promptAbort.abort()
+    }
+    process.on('SIGINT', interruptPrompt)
+    rl.on('SIGINT', interruptPrompt)
+    try {
+      while (!isReadlineClosed(rl)) {
+        promptAbort = new AbortController()
+        interrupted = false
+        const input = await promptForMainInput(
+          rl,
+          '> ',
+          () => selectSlashCommand(rl, ''),
+          async () => {
+            const file = await selectFileReference(rl, '')
+            return file ? `@${file}` : null
+          },
+          interruptPrompt,
+          () => writeLine('Ctrl-D received.'),
+          undefined,
+          host.environmentPrefix,
+          promptAbort.signal,
+        )
+        if (interrupted) {
+          promptAbort = new AbortController()
+          interrupted = false
+          const answer = await askQuestion(rl, `Quit ${host.commandName}? (y/N) `, {
+            signal: promptAbort.signal,
+            interruptNotice: false,
+          })
+          if (isReadlineClosed(rl) || answer?.trim().toLowerCase() === 'y') break
+          writeLine('Quit cancelled.')
+          continue
+        }
+        if (input === null || ['/exit', '/quit'].includes(input.trim())) break
+        if (!input.trim()) continue
+        try {
+          switch (input.trim()) {
+            case '/provider':
+              await handleProviderCommand(rl, cliSecretStore, llmState, persistence)
+              continue
+            case '/model':
+              await handleModelCommand(rl, cliSecretStore, llmState, persistence)
+              continue
+            case '/keys':
+              await handleKeysCommand(rl, cliSecretStore, llmState, persistence)
+              continue
+            case '/help':
+              printCliHelp(host)
+              continue
+          }
+        } catch (error) {
+          writeError(error instanceof Error ? error.message : String(error))
+          continue
+        }
+        pendingInput = input
+        break
+      }
+    } finally {
+      process.off('SIGINT', interruptPrompt)
+      rl.off('SIGINT', interruptPrompt)
+    }
+    if (pendingInput === undefined) {
+      rl.close()
+      restoreTerminalInput()
+      await configStore.flushConfigWrites()
+      writeOutro('No conversation saved: no messages.')
+      writeOutro(`${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`)
+      setChatCompletionTraceWriter(undefined)
+      restoreConsoleLogging?.()
+      await runtimeLog?.flush()
+      return
+    }
+  }
+  timingScope = 'runtime'
+  timingStartedAt = performance.now()
+  rl.pause()
   const uiSettings = {
     showRoleTag: stored.cliUi?.showRoleTag ?? true,
     showFullFunctionResults: false,
@@ -3027,10 +3210,17 @@ async function main(host: InteractiveCliHost) {
     vectorizer: stored.cliUi?.vectorizer ?? 'static-multilingual',
   }
   const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
-  const projectInstructions = await loadProjectInstructions(process.cwd(), host.environmentPrefix)
+  const projectInstructions = await timeStartup('cli.project-instructions', () =>
+    loadProjectInstructions(process.cwd(), host.environmentPrefix),
+  )
   const taskyonRef: { current?: Taskyon } = {}
-  writeLine(`Initializing ${host.productName} runtime for provider '${selectedApi}'...`)
-  const nativePythonExecutable = await findNativePythonExecutable()
+  writeLine(
+    `Initializing ${host.productName} runtime for provider '${llmState.selectedToolchainProfile}'...`,
+  )
+  const nativePythonExecutable = await timeStartup(
+    'cli.python-detection',
+    findNativePythonExecutable,
+  )
   const unavailableToolNames = new Set(
     host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES,
   )
@@ -3085,17 +3275,23 @@ async function main(host: InteractiveCliHost) {
     createProtocolPort(taskyonStorageProtocol)
   const storageRoot = join(dataDir, 'storage')
   const storageSelection = resolveCliStorageSelection(stored)
-  const stopTaskStorageService = await createCliSelectedStorageService({
-    port: taskStorageServicePort,
-    dataDirectory: dataDir,
-    selection: storageSelection,
-  })
+  const stopTaskStorageService = await timeStartup('cli.storage-service', () =>
+    createCliSelectedStorageService({
+      port: taskStorageServicePort,
+      dataDirectory: dataDir,
+      selection: storageSelection,
+    }),
+  )
   const storageNamespace = host.storageNamespace ?? 'taskyon'
   const storageClient = createStorageClient(taskStorageClientPort, {
     namespacePrefix: storageNamespace,
     distribution: 'local-only',
   })
-  await host.initializeStorage?.(storageClient)
+  let graphPreparation: Promise<void> | undefined
+  if (host.initializeStorage)
+    await timeStartup('cli.host-storage-initialization', () =>
+      host.initializeStorage!(storageClient, reportStartup),
+    )
   const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
   const directRuntimeLog = runtimeLog
   const stopLoggingService = directRuntimeLog
@@ -3150,60 +3346,96 @@ async function main(host: InteractiveCliHost) {
       }
     },
   })
-  const taskyon = await tyCore(
-    () => llmState.settings,
-    () => cliEntryTask,
-    getSelectedToolchainConfig(llmState),
-    cryptoSession,
-    {
-      toolSetup: createDefaultTaskyonToolSetup({
-        unavailableToolNames,
-        pythonTool: null,
-        storageClient,
-        workspaceOperations,
-      }),
-      createIframeMultiPlexer: () =>
-        createUnavailableIframeMux('Iframe message bridging is not available in this CLI.'),
-      indexTaskVectors: false,
-      nodePgLiteDataDir: pgliteNodeDir,
-      secretStore: cliSecretStore,
-      taskManagerStorageFactory: ({ sessionId }) =>
-        connectTaskManagerStorageFromProtocol(storageClient, sessionId),
-      artifactStoreFactory: ({ sessionId }) =>
-        createArtifactStore(
-          createProtocolStorageBlobBackend(storageClient, `${sessionId}/artifacts`),
-        ),
-      authorizeSandboxFetch: sandboxCapabilityPolicy.authorize,
-    },
+  const taskyon = await timeStartup('cli.taskyon-core', () =>
+    tyCore(
+      () => llmState.settings,
+      () => cliEntryTask,
+      getSelectedToolchainConfig(llmState),
+      cryptoSession,
+      {
+        onInitializationProgress: reportStartup,
+        toolSetup: createDefaultTaskyonToolSetup({
+          unavailableToolNames,
+          pythonTool: null,
+          storageClient,
+          workspaceOperations,
+          prepareGraphRepository: host.prepareGraphRepository
+            ? () => {
+                graphPreparation ??= host.prepareGraphRepository!(
+                  storageClient,
+                  reportStartup,
+                ).catch((error: unknown) => {
+                  graphPreparation = undefined
+                  throw error
+                })
+                return graphPreparation
+              }
+            : undefined,
+        }),
+        createIframeMultiPlexer: () =>
+          createUnavailableIframeMux('Iframe message bridging is not available in this CLI.'),
+        indexTaskVectors: false,
+        nodePgLiteDataDir: pgliteNodeDir,
+        secretStore: cliSecretStore,
+        taskManagerStorageFactory: ({ sessionId }) =>
+          connectTaskManagerStorageFromProtocol(storageClient, sessionId),
+        artifactStoreFactory: ({ sessionId }) =>
+          createArtifactStore(
+            createProtocolStorageBlobBackend(storageClient, `${sessionId}/artifacts`),
+          ),
+        authorizeSandboxFetch: sandboxCapabilityPolicy.authorize,
+      },
+    ),
   )
   taskyonRef.current = taskyon
   const taskSearchIndex = 'tasks'
-  const taskSearchBackend = createPgLiteSearchIndexBackend(
-    await getInMemoryDatabase(`tycli-task-search-${process.pid}`),
-    'tycliTaskSearch',
-  )
-  const { x: taskSearchClientPort, y: taskSearchServicePort } =
-    createProtocolPort(taskyonSearchProtocol)
-  const stopTaskSearchService = createSearchProtocolServer(taskSearchServicePort, (index) => {
-    if (index !== taskSearchIndex) throw new Error(`Unknown CLI search index: ${index}`)
-    return taskSearchBackend
-  })
-  const taskSearchClient = createSearchClient(taskSearchClientPort)
+  let stopTaskSearchService: (() => void) | undefined
+  let closeTaskSearchDatabase: (() => Promise<void>) | undefined
+  let taskSearchClient: Promise<ReturnType<typeof createSearchClient>> | undefined
+  const getTaskSearchClient = () => {
+    taskSearchClient ??= timeStartup('cli.search-initialization', async () => {
+      const database = await timeStartup('cli.search-database', () =>
+        getInMemoryDatabase(`tycli-task-search-${process.pid}`),
+      )
+      closeTaskSearchDatabase = () => database.close()
+      const backend = createPgLiteSearchIndexBackend(database, 'tycliTaskSearch')
+      const { x, y } = createProtocolPort(taskyonSearchProtocol)
+      stopTaskSearchService = createSearchProtocolServer(y, (index) => {
+        if (index !== taskSearchIndex) throw new Error(`Unknown CLI search index: ${index}`)
+        return backend
+      })
+      return createSearchClient(x)
+    }).catch((error: unknown) => {
+      stopTaskSearchService?.()
+      taskSearchClient = undefined
+      throw error
+    })
+    return taskSearchClient
+  }
   const taskSearchState: {
     loadedVectorizer?: 'static-multilingual' | 'transformer-minilm'
     ids: Set<string>
   } = { ids: new Set() }
   const taskStorageNamespace = `${await cryptoSession.getSessionId()}/taskyonNodes`
   writeLine('Synchronizing provider credentials...')
-  await syncProviderRuntimeConfig(taskyon, llmState, selectedApi, persistence.oauthStorage)
+  await timeStartup('cli.provider-credentials', () =>
+    syncProviderRuntimeConfig(
+      taskyon,
+      llmState,
+      llmState.selectedToolchainProfile,
+      persistence.oauthStorage,
+    ),
+  )
   writeLine('Preparing conversation storage...')
-  const conversationPersistence = await createConversationPersistence({
-    ...(storageSelection.blobs === 'files' ? { storageRoot } : {}),
-    storageNamespace,
-    storageClient,
-    startedAt: sessionStartedAt,
-    format: conversationFormat,
-  })
+  const conversationPersistence = await timeStartup('cli.conversation-storage', () =>
+    createConversationPersistence({
+      ...(storageSelection.blobs === 'files' ? { storageRoot } : {}),
+      storageNamespace,
+      storageClient,
+      startedAt: sessionStartedAt,
+      format: conversationFormat,
+    }),
+  )
   const currentSession: TycliSessionRecord = {
     conversationPath: conversationPersistence.filePath,
     logPath: runtimeLog?.filePath ?? 'unavailable',
@@ -3264,7 +3496,9 @@ async function main(host: InteractiveCliHost) {
       )
     : undefined
   if (documentationBases && documentation) {
-    await documentationBases.register(documentation.manifest, documentation.baseId)
+    await timeStartup('cli.documentation-registration', () =>
+      documentationBases.register(documentation.manifest, documentation.baseId),
+    )
   }
   const cliTools: InternalTool[] = [
     cliEntryNodeTool,
@@ -3297,22 +3531,26 @@ async function main(host: InteractiveCliHost) {
     ...(documentation ? [documentation.tool] : []),
     ...(host.additionalTools ?? []),
   ].map((tool) => InternalToolSchema.parse(tool))
-  const cliToolRpcHost = await registerToolRpcTools({
-    port: clientPort,
-    tools: () => cliTools,
-    createContext: (call, stopSignal) =>
-      createExternalToolContext(stopSignal, {
-        getExecutionTaskChain: () => {
-          if (!call.taskId) {
-            throw new Error(
-              'getExecutionTaskChain is not available for this tool call because no task id was provided.',
-            )
-          }
-          return taskyonApi.task.getChain({ id: call.taskId })
-        },
-      }),
-  })
-  await refreshToolRenderOptions(taskyon, toolRenderOptions)
+  const cliToolRpcHost = await timeStartup('cli.tool-registration', () =>
+    registerToolRpcTools({
+      port: clientPort,
+      tools: () => cliTools,
+      createContext: (call, stopSignal) =>
+        createExternalToolContext(stopSignal, {
+          getExecutionTaskChain: () => {
+            if (!call.taskId) {
+              throw new Error(
+                'getExecutionTaskChain is not available for this tool call because no task id was provided.',
+              )
+            }
+            return taskyonApi.task.getChain({ id: call.taskId })
+          },
+        }),
+    }),
+  )
+  await timeStartup('cli.tool-display-metadata', () =>
+    refreshToolRenderOptions(taskyon, toolRenderOptions),
+  )
   const isFunctionHiddenInChat = (name: string) =>
     name === host.entryNodeName ||
     name === 'chatCompletion' ||
@@ -3343,24 +3581,9 @@ async function main(host: InteractiveCliHost) {
     process.exit(0)
   }
 
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: true,
-    history: normalizeInputHistory(stored.inputHistory),
-    historySize: 500,
-    removeHistoryDuplicates: false,
-  })
   interactiveReadlineRef.current = rl
-  rl.on('history', (history) => {
-    const normalized = normalizeInputHistory(history)
-    history.splice(0, history.length, ...normalized)
-    configStore.persistConfigPatch({ inputHistory: normalized }).catch((error: unknown) => {
-      writeDebug(
-        `Failed to persist input history: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    })
-  })
+  rl.resume()
+
   let currentLeafId: string | undefined
   let waitingForTask = false
   const chatView = { detailed: false }
@@ -4207,7 +4430,7 @@ async function main(host: InteractiveCliHost) {
   const activeApi = getSelectedProviderSettings(llmState)
   writeNotice(
     'info',
-    `${host.commandName} ready. provider=${llmState.selectedToolchainProfile} model=${activeApi.model}`,
+    `${host.commandName} engine ready. provider=${llmState.selectedToolchainProfile} model=${activeApi.model}`,
   )
   writeNotice(
     'info',
@@ -4259,29 +4482,32 @@ async function main(host: InteractiveCliHost) {
       updateFooter()
       footer.beforePrompt()
       writePromptPrefix()
-      const inputRaw = await promptForMainInput(
-        rl,
-        mainPrompt(),
-        async () => {
-          inMenuInteraction = true
-          const selected = await selectSlashCommand(rl, '')
-          inMenuInteraction = false
-          return selected
-        },
-        async () => {
-          inMenuInteraction = true
-          const selected = await selectFileReference(rl, '')
-          inMenuInteraction = false
-          return selected ? `@${selected}` : null
-        },
-        onSigint,
-        onCtrld,
-        () => {
-          if (!interruptedCurrentTask || interruptNoticePrinted) return
-          setImmediate(writeTaskInterruptedNotice)
-        },
-        host.environmentPrefix,
-      )
+      const inputRaw =
+        pendingInput ??
+        (await promptForMainInput(
+          rl,
+          mainPrompt(),
+          async () => {
+            inMenuInteraction = true
+            const selected = await selectSlashCommand(rl, '')
+            inMenuInteraction = false
+            return selected
+          },
+          async () => {
+            inMenuInteraction = true
+            const selected = await selectFileReference(rl, '')
+            inMenuInteraction = false
+            return selected ? `@${selected}` : null
+          },
+          onSigint,
+          onCtrld,
+          () => {
+            if (!interruptedCurrentTask || interruptNoticePrinted) return
+            setImmediate(writeTaskInterruptedNotice)
+          },
+          host.environmentPrefix,
+        ))
+      pendingInput = undefined
       if (inputRaw === null) {
         if (eofRequested || isReadlineClosed(rl)) {
           if (!eofRequested) noteInterruptPhase('Ctrl-D/EOF received.')
@@ -4360,7 +4586,7 @@ async function main(host: InteractiveCliHost) {
               storageClient,
               taskStorageNamespace,
               query: parsed.args,
-              searchClient: taskSearchClient,
+              searchClient: await getTaskSearchClient(),
               searchIndex: taskSearchIndex,
               searchDataDirectory: join(dataDir, 'search', 'tasks'),
               configStore,
@@ -4515,7 +4741,8 @@ async function main(host: InteractiveCliHost) {
     unsubscribeWorkerProgress()
     if (!isReadlineClosed(rl)) rl.close()
     cliToolRpcHost.destroy()
-    stopTaskSearchService()
+    stopTaskSearchService?.()
+    await closeTaskSearchDatabase?.()
     unsubscribeBridgeToTaskyon()
     unsubscribeTaskyonToBridge()
     activeTaskWaitController = undefined
@@ -4568,6 +4795,11 @@ export async function runInteractiveCli(host: InteractiveCliHost): Promise<void>
     await main(host)
   } catch (error) {
     await reportFatalError(error, host)
-    process.exitCode = 1
+    // Initialization may fail before the session's cleanup handlers exist. End the
+    // process after flushing diagnostics instead of leaving a live, unusable readline.
+    exitAfterFatalError(1)
+  } finally {
+    process.off('uncaughtException', onUncaughtException)
+    process.off('unhandledRejection', onUnhandledRejection)
   }
 }

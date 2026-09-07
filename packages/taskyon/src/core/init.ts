@@ -1,4 +1,5 @@
 import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
+import { createStepTimer, type StepTimingEvent } from '@taskyon/common/modules/stepTiming'
 import { TyToolchainConfig, type llmSettings } from '../types/profiles'
 import type { InternalTool } from '../types/toolApi'
 import type { FunctionArguments } from '../types/tools'
@@ -270,6 +271,7 @@ const dynamicContext =
     insideHostPort: Port<TaskyonHostMessage, TaskyonHostMessage>,
     iframeMultiPlexer: IframeMultiPlexer,
     options: {
+      onInitializationProgress?: (event: StepTimingEvent) => void
       indexTaskVectors: boolean
       taskSearchVectorizer: 'static-multilingual' | 'transformer-minilm'
       databaseFactory: TaskyonDatabaseFactory
@@ -289,14 +291,17 @@ const dynamicContext =
     },
   ) =>
   async (cs: CryptoSession, initialToolchainConfig: TyToolchainConfig) => {
+    const timeStep = createStepTimer(options.onInitializationProgress)
     // if our cryptoSession changes, we need to re-calculate everything below!
     //#####################  INIT CTX ####################
-    const sessionKeyId = await cs.getSessionId()
-    const db = await options.databaseFactory(sessionKeyId)
+    const sessionKeyId = await timeStep('core.session-identity', () => cs.getSessionId())
+    const db = await timeStep('core.database', () => options.databaseFactory(sessionKeyId))
     console.log('tycore starting new session with id:', sessionKeyId)
-    const storage = options.taskManagerStorageFactory
-      ? await options.taskManagerStorageFactory({ sessionId: sessionKeyId, db })
-      : await createPgLiteTaskManagerStorage(db)
+    const storage = await timeStep('core.task-storage', async () =>
+      options.taskManagerStorageFactory
+        ? await options.taskManagerStorageFactory({ sessionId: sessionKeyId, db })
+        : await createPgLiteTaskManagerStorage(db),
+    )
     const toolManager = createToolManager(storage.tools)
     const runtimeConfiguration = {
       toolchainConfig: initialToolchainConfig,
@@ -307,15 +312,19 @@ const dynamicContext =
       getToolSettings: (name) => runtimeConfiguration.toolchainConfig[name],
       settingsManager: toolSettingsManager,
     })
-    const artifactStore = options.artifactStoreFactory
-      ? await options.artifactStoreFactory({ sessionId: sessionKeyId })
-      : undefined
-    const taskManagerInstance = await useTyTaskManager(db, {
-      indexTaskVectors: options.indexTaskVectors,
-      taskSearchVectorizer: options.taskSearchVectorizer,
-      storage,
-      resolveTool: toolManager.resolveTool,
-    })
+    const artifactStore = await timeStep('core.artifact-store', async () =>
+      options.artifactStoreFactory
+        ? await options.artifactStoreFactory({ sessionId: sessionKeyId })
+        : undefined,
+    )
+    const taskManagerInstance = await timeStep('core.task-manager', () =>
+      useTyTaskManager(db, {
+        indexTaskVectors: options.indexTaskVectors,
+        taskSearchVectorizer: options.taskSearchVectorizer,
+        storage,
+        resolveTool: toolManager.resolveTool,
+      }),
+    )
     const taskCompiler = createTaskCompiler({
       getTaskLineage: (id) =>
         taskManagerInstance.getTaskChain(id, 1e9, {
@@ -342,15 +351,17 @@ const dynamicContext =
         },
       )
 
-    const sessionTools = toolSetup.createSessionTools({
-      db,
-      taskManager: taskManagerInstance,
-      toolManager,
-      ...(artifactStore ? { artifactStore } : {}),
-      toolchainConfig: runtimeConfiguration.toolchainConfig,
-    })
+    const sessionTools = await timeStep('core.session-tools', () =>
+      toolSetup.createSessionTools({
+        db,
+        taskManager: taskManagerInstance,
+        toolManager,
+        ...(artifactStore ? { artifactStore } : {}),
+        toolchainConfig: runtimeConfiguration.toolchainConfig,
+      }),
+    )
     const sessionToolList = [...toolSetup.baseTools, ...sessionTools.tools]
-    await toolManager.addDefaultTools(sessionToolList)
+    await timeStep('core.install-default-tools', () => toolManager.addDefaultTools(sessionToolList))
     let unsubscribeChatCompletion =
       sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
     const getChatCompletionCredentialOwnerId = async () => {
@@ -705,6 +716,7 @@ export async function tyCore(
   initialToolchainConfig: TyToolchainConfig,
   initialCryptoSession?: CryptoSession,
   options?: {
+    onInitializationProgress?: (event: StepTimingEvent) => void
     toolSetup?: TyCoreToolSetup
     createIframeMultiPlexer?: CreateIframeMultiPlexer
     indexTaskVectors?: boolean
@@ -762,6 +774,9 @@ export async function tyCore(
       indexTaskVectors: options?.indexTaskVectors !== false,
       taskSearchVectorizer: options?.taskSearchVectorizer ?? 'static-multilingual',
       databaseFactory: options?.databaseFactory ?? getDatabase,
+      ...(options?.onInitializationProgress
+        ? { onInitializationProgress: options.onInitializationProgress }
+        : {}),
       ...(options?.secretStore ? { secretStore: options.secretStore } : {}),
       streamObservers: {
         worker: workerStream.emit,

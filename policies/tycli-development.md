@@ -17,6 +17,13 @@ Apply this policy when implementing, debugging, or evaluating `tycli`.
 
 ## Session And Provider Discipline
 
+- Prompt and provider/login settings must be usable without initializing the task engine or search
+  database. Use the same encrypted secret store before and after engine startup; apply current
+  provider settings when the engine becomes available. Do not fabricate a partial runtime or
+  maintain a second authentication path. Initialize optional host repositories at their actual
+  tool/command boundary, not merely because chat opened. Distinguish prompt readiness from engine,
+  repository, and search readiness in logs, and exclude user idle time from deferred-stage timings.
+
 - Start interactive work with the normal `yarn tycli` entrypoint and reuse its persisted OAuth
   login, provider, and model selection. Do not configure keys, change providers or models, import
   credentials, or silently substitute a model unless the user requests it.
