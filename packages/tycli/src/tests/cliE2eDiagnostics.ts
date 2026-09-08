@@ -475,6 +475,13 @@ function assertContains(output: string, pattern: string) {
   }
 }
 
+function assertMatches(output: string, pattern: RegExp) {
+  if (!pattern.test(output)) {
+    const excerpt = output.slice(-3000)
+    throw new Error(`Expected output to match ${pattern}. Output excerpt:\n${excerpt}`)
+  }
+}
+
 function assertNotContains(output: string, pattern: string) {
   if (output.includes(pattern)) {
     const excerpt = output.slice(-3000)
@@ -490,7 +497,7 @@ export async function testCliStartupShowsVersionCommitAndBuildDate() {
   })
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
   assertContains(result.output, 'tycli 0.1.0')
-  assertContains(result.output, 'tycli log: /tmp/tycli/tycli_')
+  assertMatches(result.output, /tycli log: \S*\/tycli_\d{8}-\d{6}_\d+\.log/)
   assertContains(result.output, 'Conversation storage:')
   assertContains(result.output, 'tycli ready.')
   assertContains(result.output, '| idle]')

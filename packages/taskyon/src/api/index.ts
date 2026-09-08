@@ -236,6 +236,11 @@ type SendTasksFunction = (
   taskList: partialTaskDraft[][],
   opts: processTasksOpts,
 ) => Promise<SendTasksResult>
+type TaskChainCreator = (args: {
+  tasks: partialTaskDraft[]
+  execute: boolean
+  show: boolean
+}) => Promise<{ ids: string[] }>
 type RunTasksFunction = (
   taskList: partialTaskDraft[][],
   quitCondition: ((t: TaskNode) => boolean) | TaskContentType | TaskContentType[],
@@ -295,34 +300,113 @@ const appendPendingTask = (
   pendingByParentId.set(task.parentID, pendingTasks)
 }
 
+type SubTaskStreamController = {
+  subTaskStream: TaskSubStream
+  setInitialIds: (initialIds: string[]) => void
+  unsubscribe: () => void
+}
+
 const createSubTaskStream = <T extends { type: string }>(
   receive: Port<unknown, T | TaskyonMessageType>['receive'],
-  initialIds: string[],
-): TaskSubStream => {
-  const trackedIds = new Set(initialIds)
+): SubTaskStreamController => {
+  // Execution starts as part of createChain, so child events can arrive before its RPC response.
+  const trackedIds = new Set<string>()
   const pendingByParentId = new Map<string, TaskNodeWithParent[]>()
   const subTaskBus = createStream<TaskNode>()
+  const pendingEmissions: TaskNode[] = []
+  let initialIdsSet = false
+  let subscribed = false
+  let disposed = false
+  let unsubscribeReceive = () => {}
 
   const emitTaskAndFlush = (task: TaskNodeWithParent) => {
     if (trackedIds.has(task.id)) return
     trackedIds.add(task.id)
-    subTaskBus.emit(task)
+    if (subscribed) subTaskBus.emit(task)
+    else pendingEmissions.push(task)
     const pendingChildren = pendingByParentId.get(task.id) ?? []
     pendingByParentId.delete(task.id)
     pendingChildren.forEach(emitTaskAndFlush)
   }
 
-  receive((message) => {
-    if (!isChildTaskCreatedMessage(message)) return
-    if (trackedIds.has(message.task.parentID)) {
-      emitTaskAndFlush(message.task)
+  const handleTask = (task: TaskNodeWithParent) => {
+    if (!initialIdsSet) {
+      appendPendingTask(pendingByParentId, task)
       return
     }
-    appendPendingTask(pendingByParentId, message.task)
+    if (trackedIds.has(task.parentID)) {
+      emitTaskAndFlush(task)
+      return
+    }
+    appendPendingTask(pendingByParentId, task)
+  }
+
+  unsubscribeReceive = receive((message) => {
+    if (!isChildTaskCreatedMessage(message)) return
+    handleTask(message.task)
   })
 
-  return subTaskBus.stream
+  const unsubscribe = () => {
+    if (disposed) return
+    disposed = true
+    unsubscribeReceive()
+    subTaskBus.stream.unsubscribeAll()
+    pendingByParentId.clear()
+    pendingEmissions.length = 0
+  }
+
+  const subTaskStream: TaskSubStream = (observer) => {
+    if (disposed) return () => {}
+    const unsubscribeObserver = subTaskBus.stream(observer)
+    if (!subscribed) {
+      subscribed = true
+      const queuedTasks = pendingEmissions.splice(0)
+      queueMicrotask(() => {
+        // Let observeSubTaskStreamDetailed finish assigning its cleanup callback first.
+        if (disposed) return
+        queuedTasks.forEach((task) => subTaskBus.emit(task))
+      })
+    }
+    return () => {
+      unsubscribeObserver()
+      unsubscribe()
+    }
+  }
+
+  return {
+    subTaskStream,
+    setInitialIds: (initialIds) => {
+      if (initialIdsSet) throw new Error('Initial task ids were already set.')
+      initialIdsSet = true
+      initialIds.forEach((id) => trackedIds.add(id))
+      initialIds.forEach((id) => {
+        const pendingChildren = pendingByParentId.get(id) ?? []
+        pendingByParentId.delete(id)
+        pendingChildren.forEach(emitTaskAndFlush)
+      })
+    },
+    unsubscribe,
+  }
 }
+
+const createTaskSender =
+  <T extends { type: string }>(
+    createChain: TaskChainCreator,
+    receive: Port<unknown, T | TaskyonMessageType>['receive'],
+  ): SendTasksFunction =>
+  async (taskList, opts) => {
+    const tasks = taskList.flat()
+    const show = opts.show ?? opts.display !== 'background'
+    const streamController = createSubTaskStream(receive)
+    try {
+      const created = await createChain({ tasks, execute: true, show })
+      streamController.setInitialIds(created.ids)
+      return { initialIds: created.ids, subTaskStream: streamController.subTaskStream }
+    } catch (error) {
+      streamController.unsubscribe()
+      throw error
+    }
+  }
 
 export const createChatCompletionTask = (args: ChatCompletionArgs) =>
   toolCall<ChatCompletionArgs>({ name: 'chatCompletion', arguments: args })
@@ -473,21 +557,7 @@ export const createTaskyonClient = <Tx extends { type: string }, Rx extends { ty
     skipBeforeRequestFor: ['peer.ping'],
   })
   const toolExecutionClient = createToolExecutionClient(tyPort)
-  const send: SendTasksFunction = async (taskList, opts) => {
-    const tasks = taskList.flat()
-    const show = opts.show ?? opts.display !== 'background'
-
-    const created = await protocolClient.task.createChain({
-      tasks,
-      execute: true,
-      show,
-    })
-
-    const initialIds = created.ids
-    const subTaskStream = createSubTaskStream(tyPort.receive, initialIds)
-
-    return { initialIds, subTaskStream }
-  }
+  const send = createTaskSender((args) => protocolClient.task.createChain(args), tyPort.receive)
   const taskCache =
     options.taskCacheSize && options.taskCacheSize > 0
       ? createLruCache<string, TaskNode>(options.taskCacheSize)
@@ -608,21 +678,7 @@ const createRunTasksSender = <T extends { type: string }>(
   tyPort: Port<T | TaskyonMessageType>,
 ): SendTasksFunction => {
   const protocolClient = createPortClient(tyPort, taskyonProtocol)
-  return async (taskList, opts) => {
-    const tasks = taskList.flat()
-    const show = opts.show ?? opts.display !== 'background'
-
-    const created = await protocolClient.task.createChain({
-      tasks,
-      execute: true,
-      show,
-    })
-
-    const initialIds = created.ids
-    const subTaskStream = createSubTaskStream(tyPort.receive, initialIds)
-
-    return { initialIds, subTaskStream }
-  }
+  return createTaskSender((args) => protocolClient.task.createChain(args), tyPort.receive)
 }
 
 export const observeSubTaskStreamDetailed = async (
