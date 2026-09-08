@@ -125,7 +125,7 @@ export const testDocumentTemplateFileSourcePinsBytes = async () => {
   return { success: true }
 }
 
-export const testDocumentTemplateInlineViews = async () => {
+export const testDocumentTemplateInlineViews = () => {
   const view = {
     id: 'capacity',
     source: { invocation: 'bess', maxRows: 1, columns: { value: { path: 'params.batteryMw' } } },
@@ -194,10 +194,13 @@ export const testDocumentTemplateMixedAvailability = async () => {
   const template = declarations.join(' and ')
   const result = await renderDocumentTemplate(
     template,
-    async (view) =>
+    (view) =>
       view.id === 'missing'
-        ? { reason: 'Study has not been calculated.' }
-        : { rows: [{ text: '[unsafe](https://example.invalid)' }], complete: true },
+        ? Promise.resolve({ reason: 'Study has not been calculated.' })
+        : Promise.resolve({
+            rows: [{ text: '[unsafe](https://example.invalid)' }],
+            complete: true,
+          }),
     backend,
   )
   if (result.views[0]?.status !== 'available' || result.views[1]?.status !== 'missing')
@@ -208,7 +211,7 @@ export const testDocumentTemplateMixedAvailability = async () => {
     )
   const replay = await renderDocumentTemplate(
     template,
-    async () => ({ rows: [{ text: 'updated' }], complete: true }),
+    () => Promise.resolve({ rows: [{ text: 'updated' }], complete: true }),
     backend,
   )
   if (
@@ -219,7 +222,7 @@ export const testDocumentTemplateMixedAvailability = async () => {
   const jinja = await renderDocumentTemplate(
     '{% if view_status.available == "available" %}Ready: {{ views.available }}{% endif %}\n' +
       template,
-    async () => ({ rows: [{ text: 'literal {{ 7 * 7 }}' }], complete: true }),
+    () => Promise.resolve({ rows: [{ text: 'literal {{ 7 * 7 }}' }], complete: true }),
     backend,
   )
   if (!jinja.markdown.startsWith('Ready: literal') || jinja.markdown.includes('{% if'))
@@ -237,7 +240,7 @@ export const testDocumentTemplateMixedAvailability = async () => {
     try {
       await renderDocumentTemplate(
         expression + '\n' + template,
-        async () => ({ reason: 'Not calculated' }),
+        () => Promise.resolve({ reason: 'Not calculated' }),
         backend,
       )
     } catch {
@@ -249,7 +252,7 @@ export const testDocumentTemplateMixedAvailability = async () => {
   const literalExample = '```jinja\n{{ views.not_a_dependency }}\n```'
   const examples = await renderDocumentTemplate(
     literalExample + '\n`{{ not_a_variable }}`',
-    async () => ({ reason: 'No studies' }),
+    () => Promise.resolve({ reason: 'No studies' }),
     backend,
   )
   if (
@@ -259,7 +262,7 @@ export const testDocumentTemplateMixedAvailability = async () => {
     throw new Error('Code examples must remain literal during Jinja assembly.')
   const loop = await renderDocumentTemplate(
     '{% for n in range(3) %}{{ n }}{% endfor %}',
-    async () => ({ reason: 'No studies' }),
+    () => Promise.resolve({ reason: 'No studies' }),
     backend,
   )
   if (loop.markdown !== '012') throw new Error('Bounded Jinja loops must render.')
@@ -275,7 +278,9 @@ export const testDocumentTemplateBoundedViewsAndIndependentCache = async () => {
   const template = '# Project\n\n```document-view\n' + JSON.stringify(declaration) + '\n```\n'
   const plan = parseDocumentTemplate(template)
   const edited = parseDocumentTemplate(template.replace('# Project', '# Project revision'))
-  if (plan.views.length !== 1 || edited.views[0]?.id !== 'power')
+  const planView = plan.views[0]
+  const editedView = edited.views[0]
+  if (plan.views.length !== 1 || !planView || !editedView || editedView.id !== 'power')
     throw new Error('Inline views must be discoverable independently of prose.')
   const records = new Map<string, unknown>()
   const backend = createStorageDagBackend({
@@ -286,8 +291,8 @@ export const testDocumentTemplateBoundedViewsAndIndependentCache = async () => {
     },
   })
   const projection = { rows: [{ MW: 10 }, { MW: 20 }], complete: false }
-  const first = await renderDocumentView(plan.views[0]!, projection, backend)
-  const second = await renderDocumentView(edited.views[0]!, projection, backend)
+  const first = await renderDocumentView(planView, projection, backend)
+  const second = await renderDocumentView(editedView, projection, backend)
   if (
     !second.cached ||
     first.artifactHash !== second.artifactHash ||
@@ -301,14 +306,15 @@ export const testDocumentTemplateBoundedViewsAndIndependentCache = async () => {
   }
   const renamedView = parseDocumentTemplate(
     '```document-view\n' + JSON.stringify(renamed) + '\n```',
-  ).views[0]!
+  ).views[0]
+  if (!renamedView) throw new Error('The renamed view declaration must be parsed.')
   const third = await renderDocumentView(renamedView, projection, backend)
   if (!third.cached || third.artifactHash !== first.artifactHash)
     throw new Error('Invocation aliases and view IDs must not invalidate identical presentation.')
   let rejected = false
   try {
     await renderDocumentView(
-      plan.views[0]!,
+      planView,
       { rows: [...projection.rows, { MW: 30 }], complete: true },
       backend,
     )

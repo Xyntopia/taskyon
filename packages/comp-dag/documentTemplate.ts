@@ -128,7 +128,7 @@ export const parseDocumentTemplate = (template: string) => {
         'viewId' in segment
           ? `{{ views.${segment.viewId} }}`
           : 'literalIndex' in segment
-            ? literals[segment.literalIndex!]
+            ? literals[segment.literalIndex]
             : segment.text,
       )
       .join(''),
@@ -154,7 +154,7 @@ const markdownCell = (value: string | number | boolean | null) =>
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('|', '&#124;')
-    .replace(/[\\`*_\[\]{}!]/g, (character) => `&#${character.charCodeAt(0)};`)
+    .replace(/[\\`*_[\]{}!]/g, (character) => `&#${character.charCodeAt(0)};`)
     .replace(/\r?\n/g, '<br>')
 
 const renderTabularView = (
@@ -418,7 +418,9 @@ export const renderDocumentTemplate = async (
     rendererId,
     template,
     markdown,
-    views: views.map(({ cached: _cached, ...view }) => view),
+    views: views.map((view) =>
+      Object.fromEntries(Object.entries(view).filter(([key]) => key !== 'cached')),
+    ),
   })
   return { rendererId, template, markdown, views, artifactHash }
 }
