@@ -62,6 +62,7 @@
     "@taskyon/common": "workspace:*",
     "@taskyon/comp-dag": "workspace:*",
     "@taskyon/p2p-core": "workspace:*",
+    "@taskyon/static-embeddings": "workspace:*",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-http": "^2.5.7",
     "@types/json-schema": "^7.0.15",

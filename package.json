@@ -6,6 +6,7 @@
   "author": "thomas meschede / yeus <thomas.meschede@web.de>",
   "type": "module",
   "workspaces": [
+    "packages/static-embeddings",
     "packages/https_tunnel_wasm",
     "packages/common",
     "packages/comp-dag",

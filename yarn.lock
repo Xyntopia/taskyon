@@ -4882,6 +4882,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/static-embeddings@workspace:*, @taskyon/static-embeddings@workspace:packages/static-embeddings":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/static-embeddings@workspace:packages/static-embeddings"
+  dependencies:
+    zod: "npm:^4.0.0"
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/surrogate@workspace:*, @taskyon/surrogate@workspace:packages/surrogate":
   version: 0.0.0-use.local
   resolution: "@taskyon/surrogate@workspace:packages/surrogate"
@@ -4915,6 +4923,7 @@ __metadata:
     "@taskyon/comp-dag": "workspace:*"
     "@taskyon/p2p-core": "workspace:*"
     "@taskyon/secure-tunnel": "workspace:*"
+    "@taskyon/static-embeddings": "workspace:*"
     "@tauri-apps/api": "npm:^2.10.1"
     "@tauri-apps/plugin-http": "npm:^2.5.7"
     "@types/json-schema": "npm:^7.0.15"
