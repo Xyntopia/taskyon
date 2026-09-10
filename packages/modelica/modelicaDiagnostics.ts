@@ -3490,6 +3490,774 @@ end MslResistorManualFlattened;
   }
 }
 
+type ModelicaResistorSimResult = {
+  meta?: {
+    nSteps?: number
+    stopReason?: string
+    stopError?: string
+    stopStack?: string
+    stopDetails?: unknown
+    model?: {
+      stateNames?: string[]
+      algebraicNames?: string[]
+      inputNames?: string[]
+      conditionNames?: string[]
+      stateVariables?: Array<{ name?: string; unit?: string }>
+      algebraicVariables?: Array<{ name?: string; unit?: string }>
+      inputVariables?: Array<{ name?: string; unit?: string }>
+      conditionVariables?: Array<{ name?: string; unit?: string }>
+    }
+  }
+  data?: {
+    t?: unknown[]
+    x?: unknown[] | Record<string, unknown>
+    y?: unknown[] | Record<string, unknown>
+  }
+}
+
+type ResistorRunPayload = {
+  nSteps: number
+  tLen: number
+  xLen: number
+  yLen: number
+  stateCount: number
+  algebraicCount: number
+}
+
+type ResistorModelNames = {
+  stateNames: string[]
+  algebraicNames: string[]
+  inputNames: string[]
+  conditionNames: string[]
+}
+
+type ResistorUnitInfo = {
+  unitByName: Record<string, string>
+  withUnitCount: number
+  totalCount: number
+}
+
+type ResistorUnitState = {
+  stateUnitInfo: ResistorUnitInfo
+  algebraicUnitInfo: ResistorUnitInfo
+  inputUnitInfo: ResistorUnitInfo
+  conditionUnitInfo: ResistorUnitInfo
+  totalPhysicalUnitCount: number
+}
+
+type ResistorSeriesState = {
+  xSeriesByName: Record<string, number[]>
+  xAmp: number
+  yAmp: number
+  xTemporal: number
+  yTemporal: number
+  xActive: number
+  yActive: number
+}
+
+type ResistorSeriesSummaryEntry = {
+  len: number
+  min: number | null
+  max: number | null
+  first: number[]
+  last: number[]
+  maxDelta: number
+}
+
+function toFiniteNumberArray(values: unknown[]): number[] {
+  return values.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
+}
+
+function getSeriesSampleLength(seriesData: unknown): number {
+  if (Array.isArray(seriesData)) {
+    if (seriesData.length === 0) return 0
+    if (Array.isArray(seriesData[0])) return (seriesData[0] as unknown[]).length
+    return seriesData.length
+  }
+  if (seriesData && typeof seriesData === 'object') {
+    const first = Object.values(seriesData as Record<string, unknown>)[0]
+    if (Array.isArray(first)) return first.length
+  }
+  return 0
+}
+
+function getSeriesArrays(seriesData: unknown): number[][] {
+  if (Array.isArray(seriesData)) {
+    if (seriesData.length > 0 && Array.isArray(seriesData[0])) {
+      return (seriesData as unknown[][]).map((row) => toFiniteNumberArray(row))
+    }
+    return [toFiniteNumberArray(seriesData)]
+  }
+  if (seriesData && typeof seriesData === 'object') {
+    return Object.values(seriesData as Record<string, unknown>).flatMap((v) =>
+      Array.isArray(v) ? [toFiniteNumberArray(v)] : [],
+    )
+  }
+  return []
+}
+
+function mapSeriesByNames(
+  seriesData: unknown,
+  names: string[],
+  fallbackPrefix: string,
+): Record<string, number[]> {
+  const out: Record<string, number[]> = {}
+  if (Array.isArray(seriesData)) {
+    if (seriesData.length > 0 && Array.isArray(seriesData[0])) {
+      const rows = seriesData as unknown[][]
+      for (let i = 0; i < rows.length; i++) {
+        const key = names[i] ?? `${fallbackPrefix}[${i}]`
+        out[key] = toFiniteNumberArray(rows[i] ?? [])
+      }
+    } else {
+      const key = names[0] ?? `${fallbackPrefix}[0]`
+      out[key] = toFiniteNumberArray(seriesData)
+    }
+    return out
+  }
+  if (seriesData && typeof seriesData === 'object') {
+    const obj = seriesData as Record<string, unknown>
+    const availableKeys = Object.keys(obj)
+    for (const name of names) {
+      const alt = name.replaceAll('.', '__')
+      const value = obj[name] ?? obj[alt]
+      if (Array.isArray(value)) {
+        out[name] = toFiniteNumberArray(value)
+      }
+    }
+    for (const key of availableKeys) {
+      const value = obj[key]
+      if (Array.isArray(value) && !(key in out)) {
+        out[key] = toFiniteNumberArray(value)
+      }
+    }
+  }
+  return out
+}
+
+function getSeriesAmplitude(seriesData: unknown, skipLeadingSamples = 0): number {
+  const collect = (arr: unknown[]): number[] =>
+    arr.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  let flat: number[] = []
+  if (Array.isArray(seriesData)) {
+    if (seriesData.length > 0 && Array.isArray(seriesData[0])) {
+      flat = (seriesData as unknown[][]).flatMap((row) => collect(row.slice(skipLeadingSamples)))
+    } else {
+      flat = collect(seriesData.slice(skipLeadingSamples))
+    }
+  } else if (seriesData && typeof seriesData === 'object') {
+    flat = Object.values(seriesData as Record<string, unknown>).flatMap((v) =>
+      Array.isArray(v) ? collect(v.slice(skipLeadingSamples)) : [],
+    )
+  }
+  if (flat.length < 2) return 0
+  return Math.max(...flat) - Math.min(...flat)
+}
+
+function getMaxTemporalDelta(seriesData: unknown, startIndex = 1): number {
+  const arrays = getSeriesArrays(seriesData)
+  let maxDelta = 0
+  for (const arr of arrays) {
+    for (let i = Math.max(1, startIndex); i < arr.length; i++) {
+      const prev = arr[i - 1]
+      const cur = arr[i]
+      if (typeof prev !== 'number' || !Number.isFinite(prev)) continue
+      if (typeof cur !== 'number' || !Number.isFinite(cur)) continue
+      maxDelta = Math.max(maxDelta, Math.abs(cur - prev))
+    }
+  }
+  return maxDelta
+}
+
+function countActiveSeries(seriesData: unknown, deltaThreshold = 1e-8): number {
+  const arrays = getSeriesArrays(seriesData)
+  let activeCount = 0
+  for (const arr of arrays) {
+    let active = false
+    for (let i = 2; i < arr.length; i++) {
+      const prev = arr[i - 1]
+      const cur = arr[i]
+      if (typeof prev !== 'number' || !Number.isFinite(prev)) continue
+      if (typeof cur !== 'number' || !Number.isFinite(cur)) continue
+      if (Math.abs(cur - prev) > deltaThreshold) {
+        active = true
+        break
+      }
+    }
+    if (active) activeCount++
+  }
+  return activeCount
+}
+
+function summarizeSeries(
+  seriesMap: Record<string, number[]>,
+  maxSeries = 12,
+): Record<string, ResistorSeriesSummaryEntry> {
+  const summary: Record<string, ResistorSeriesSummaryEntry> = {}
+  for (const [idx, [name, arr]] of Object.entries(seriesMap).entries()) {
+    if (idx >= maxSeries) break
+    const finite = arr.filter((v) => typeof v === 'number' && Number.isFinite(v))
+    summary[name] = {
+      len: arr.length,
+      min: finite.length > 0 ? Math.min(...finite) : null,
+      max: finite.length > 0 ? Math.max(...finite) : null,
+      first: arr.slice(0, 8),
+      last: arr.slice(-8),
+      maxDelta: getMaxTemporalDelta(arr, 2),
+    }
+  }
+  return summary
+}
+
+function rankTemporalSeries(seriesMap: Record<string, number[]>, maxSeries = 12) {
+  return Object.entries(seriesMap)
+    .map(([name, arr]) => ({
+      name,
+      amplitude: getSeriesAmplitude(arr, 1),
+      maxDelta: getMaxTemporalDelta(arr, 2),
+      first: arr.length > 0 ? arr[0] : null,
+      last: arr.length > 0 ? arr[arr.length - 1] : null,
+      len: arr.length,
+    }))
+    .sort((a, b) => b.maxDelta - a.maxDelta)
+    .slice(0, maxSeries)
+}
+
+function mapResistorUnits(vars: unknown, expectedNames: string[]): ResistorUnitInfo {
+  const unitByName: Record<string, string> = {}
+  const list = Array.isArray(vars) ? vars : []
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const item = entry as Record<string, unknown>
+    const name = typeof item.name === 'string' ? item.name.trim() : ''
+    const unit = typeof item.unit === 'string' ? item.unit.trim() : ''
+    const normalized = unit.toLowerCase()
+    if (!name || !unit || normalized === 'none' || normalized === 'null') continue
+    unitByName[name] = unit
+  }
+  const withUnitCount = expectedNames.filter((name) => typeof unitByName[name] === 'string').length
+  return {
+    unitByName,
+    withUnitCount,
+    totalCount: expectedNames.length,
+  }
+}
+
+function buildPlotPathUnitsPreview(units: ResistorUnitState) {
+  const prefixedUnits = (unitByName: Record<string, string>, prefix: string) =>
+    Object.fromEntries(
+      Object.entries(unitByName)
+        .slice(0, 20)
+        .map(([name, unit]) => [`${prefix}.${name}`, unit]),
+    )
+  return {
+    t: 's',
+    ...prefixedUnits(units.stateUnitInfo.unitByName, 'x'),
+    ...prefixedUnits(units.algebraicUnitInfo.unitByName, 'y'),
+    ...prefixedUnits(units.inputUnitInfo.unitByName, 'u'),
+    ...prefixedUnits(units.conditionUnitInfo.unitByName, 'z'),
+  }
+}
+
+async function loadResistorWasm(debug: Record<string, unknown>): Promise<DiagnosticsWasm> {
+  const wasm = await getDiagnosticsWasm()
+  debug.phase = 'wasm-loaded'
+  if (
+    typeof wasm.compile_with_source_roots !== 'function' &&
+    typeof wasm.compile_with_libraries !== 'function'
+  ) {
+    throw new Error(
+      'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
+    )
+  }
+  assertTemplateRendererAvailable(wasm)
+  return wasm
+}
+
+async function compileResistorExample(wasm: DiagnosticsWasm, debug: Record<string, unknown>) {
+  const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
+  debug.mslLibraryFiles = libraryFileCount
+  debug.mslParsedCount = Number(loadParsed.parsed_count ?? 0)
+
+  // Flattened transcription of:
+  // Modelica.Electrical.Analog.Examples.Resistor
+  const source = `
+model MslResistorExample
+  extends Modelica.Electrical.Analog.Examples.Resistor;
+end MslResistorExample;
+`.trim()
+
+  debug.phase = 'compile-with-libraries'
+  const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslResistorExample')
+  debug.phase = 'compiled'
+  const compiled = JSON.parse(String(compiledRaw)) as {
+    dae?: unknown
+    dae_native?: unknown
+    dae_prepared?: unknown
+    pretty?: string
+  }
+  const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
+  if (!dae) {
+    throw new Error('compile_to_json returned no DAE payload for MSL resistor example')
+  }
+  return {
+    compiled,
+    dae,
+    daeJson: JSON.stringify(dae),
+    prettyText: String(compiled.pretty ?? ''),
+  }
+}
+
+function renderResistorBaseDae(
+  wasm: DiagnosticsWasm,
+  dae: Record<string, unknown>,
+  daeJson: string,
+): { rendered: string; derivativeRefs: string[] } {
+  const rendered = renderRumocaTemplate({
+    wasm,
+    daeJson,
+    templateSource: baseDaeTemplate,
+    modelName: getTemplateModelName(dae),
+    templatePath: 'base_dae.jinja',
+    outputPath: 'base_dae.txt',
+    targetName: 'template',
+  })
+  return {
+    rendered,
+    derivativeRefs: Array.from(new Set(String(rendered).match(/der\([^)]+\)/g) ?? [])),
+  }
+}
+
+function collectResistorDerivativeRefs(
+  wasm: DiagnosticsWasm,
+  dae: Record<string, unknown>,
+  daeJson: string,
+  prettyText: string,
+  debug: Record<string, unknown>,
+): string[] {
+  debug.compiledPrettyLength = prettyText.length
+  debug.compiledPrettyPreview = prettyText.slice(0, 1200)
+
+  const derivativeRefsFromPretty = Array.from(new Set(prettyText.match(/der\([^)]+\)/g) ?? []))
+  try {
+    const baseDae = renderResistorBaseDae(wasm, dae, daeJson)
+    debug.baseDaeDiagnostics = {
+      renderedLength: baseDae.rendered.length,
+      derivativeRefCount: baseDae.derivativeRefs.length,
+      derivativeRefsPreview: baseDae.derivativeRefs.slice(0, 40),
+      preview: baseDae.rendered.slice(0, 1200),
+    }
+    return baseDae.derivativeRefs.length > 0 ? baseDae.derivativeRefs : derivativeRefsFromPretty
+  } catch (baseDaeErr) {
+    debug.baseDaeDiagnostics = {
+      rendered: false,
+      renderError: baseDaeErr instanceof Error ? baseDaeErr.message : String(baseDaeErr),
+      derivativeRefCountFromPretty: derivativeRefsFromPretty.length,
+      derivativeRefsPreviewFromPretty: derivativeRefsFromPretty.slice(0, 40),
+    }
+    return derivativeRefsFromPretty
+  }
+}
+
+function renderResistorJavaScript(
+  wasm: DiagnosticsWasm,
+  dae: Record<string, unknown>,
+  daeJson: string,
+  debug: Record<string, unknown>,
+): string {
+  debug.phase = 'render-javascript-template'
+  const rendered = renderRumocaTemplate({
+    wasm,
+    daeJson,
+    templateSource: javascriptTemplate,
+    modelName: getTemplateModelName(dae),
+    templatePath: 'javascript.jinja',
+    outputPath: 'model.js',
+    targetName: 'template',
+  })
+  if (!rendered || typeof rendered !== 'string') {
+    throw new Error('Rendering javascript.jinja failed for MSL resistor example')
+  }
+  debug.renderedPreview = rendered.slice(0, 220)
+  debug.generatedCodeLength = rendered.length
+  return rendered
+}
+
+function collectResistorUnitDiagnostics(
+  prettyText: string,
+  rendered: string,
+  debug: Record<string, unknown>,
+): void {
+  const unitAttrMatchesInPretty = Array.from(
+    new Set(String(prettyText).match(/\bunit\s*=\s*"[^"]*"/g) ?? []),
+  )
+  const displayUnitMatchesInPretty = Array.from(
+    new Set(String(prettyText).match(/\bdisplayUnit\s*=\s*"[^"]*"/g) ?? []),
+  )
+  const generatedUnitPropertyMatches = Array.from(
+    new Set(String(rendered).match(/\bunit:\s*"[^"]*"/g) ?? []),
+  )
+  const generatedUnitAccessMarkers = [
+    "meta.states.map((v) => ({ name: v.name, kind: 'state', start: v.start, unit: v.unit }))",
+    "meta.algebraics.map((v) => ({ name: v.name, kind: 'algebraic', start: v.start, unit: v.unit }))",
+    "meta.inputs.map((v) => ({ name: v.name, kind: 'input', unit: v.unit }))",
+  ]
+  debug.unitDiagnostics = {
+    compile: {
+      prettyUnitAttrCount: unitAttrMatchesInPretty.length,
+      prettyDisplayUnitAttrCount: displayUnitMatchesInPretty.length,
+      prettyUnitAttrPreview: unitAttrMatchesInPretty.slice(0, 30),
+      prettyDisplayUnitAttrPreview: displayUnitMatchesInPretty.slice(0, 30),
+    },
+    template: {
+      generatedUnitPropertyCount: generatedUnitPropertyMatches.length,
+      generatedUnitPropertyPreview: generatedUnitPropertyMatches.slice(0, 40),
+      hasGeneratedUnitAccessMarkers: generatedUnitAccessMarkers.every((marker) =>
+        rendered.includes(marker),
+      ),
+    },
+  }
+}
+
+async function runResistorSimulation(rendered: string, debug: Record<string, unknown>) {
+  debug.phase = 'build-worker-sandbox-code'
+  const runId = 'modelica-msl-resistor-example-run'
+  const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
+  const runAbort = new AbortController()
+  try {
+    debug.phase = 'execute-generated-js'
+    const runResult = await executeModelicaDiagnosticInSandbox<ModelicaResistorSimResult>(
+      {
+        id: runId,
+        code: runCode,
+        sourceURL: 'modelica-msl-resistor-example-run.js',
+        stopSignal: runAbort.signal,
+      },
+      {
+        sim: {
+          t0: 0,
+          tf: 0.25,
+          dt: 0.001,
+        },
+      },
+      {
+        source: 'ModelicaDiagnostics',
+        __rumocaRunId: runId,
+      },
+    )
+    debug.runResultPreview = {
+      meta: runResult?.meta,
+      tLen: Array.isArray(runResult?.data?.t) ? runResult.data.t.length : 0,
+      xLen: getSeriesSampleLength(runResult?.data?.x),
+      yLen: getSeriesSampleLength(runResult?.data?.y),
+    }
+    return {
+      runResult,
+      serializedRunResult: serializeObject(runResult, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+    }
+  } finally {
+    runAbort.abort()
+  }
+}
+
+function validateResistorRunPayload(
+  runResult: ModelicaResistorSimResult,
+  debug: Record<string, unknown>,
+): ResistorRunPayload {
+  debug.phase = 'validate-simulation-payload'
+  const nSteps = Number(runResult?.meta?.nSteps ?? 0)
+  const tLen = Array.isArray(runResult?.data?.t) ? runResult.data.t.length : 0
+  const xLen = getSeriesSampleLength(runResult?.data?.x)
+  const yLen = getSeriesSampleLength(runResult?.data?.y)
+  if (nSteps <= 0 || tLen <= 1 || (xLen <= 1 && yLen <= 1)) {
+    const stopReason = String(runResult?.meta?.stopReason ?? '')
+    const stopError = String(runResult?.meta?.stopError ?? '')
+    const stopDetails = runResult?.meta?.stopDetails
+    throw new Error(
+      [
+        `MSL resistor example run returned invalid simulation payload (nSteps=${nSteps}, tLen=${tLen}, xLen=${xLen}, yLen=${yLen})`,
+        stopReason ? `simulation.stopReason=${stopReason}` : '',
+        stopError ? `simulation.stopError=${stopError}` : '',
+        stopDetails
+          ? `simulation.stopDetails=${serializeObject(stopDetails, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    )
+  }
+  const names = readResistorModelNames(runResult)
+  return {
+    nSteps,
+    tLen,
+    xLen,
+    yLen,
+    stateCount: names.stateNames.length,
+    algebraicCount: names.algebraicNames.length,
+  }
+}
+
+function readResistorModelNames(runResult: ModelicaResistorSimResult): ResistorModelNames {
+  const model = runResult?.meta?.model
+  return {
+    stateNames: Array.isArray(model?.stateNames) ? model.stateNames : [],
+    algebraicNames: Array.isArray(model?.algebraicNames) ? model.algebraicNames : [],
+    inputNames: Array.isArray(model?.inputNames) ? model.inputNames : [],
+    conditionNames: Array.isArray(model?.conditionNames) ? model.conditionNames : [],
+  }
+}
+
+function collectResistorUnitState(
+  runResult: ModelicaResistorSimResult,
+  names: ResistorModelNames,
+  debug: Record<string, unknown>,
+): ResistorUnitState {
+  const model = runResult?.meta?.model
+  const units: ResistorUnitState = {
+    stateUnitInfo: mapResistorUnits(model?.stateVariables, names.stateNames),
+    algebraicUnitInfo: mapResistorUnits(model?.algebraicVariables, names.algebraicNames),
+    inputUnitInfo: mapResistorUnits(model?.inputVariables, names.inputNames),
+    conditionUnitInfo: mapResistorUnits(model?.conditionVariables, names.conditionNames),
+    totalPhysicalUnitCount: 0,
+  }
+  units.totalPhysicalUnitCount =
+    units.stateUnitInfo.withUnitCount +
+    units.algebraicUnitInfo.withUnitCount +
+    units.inputUnitInfo.withUnitCount +
+    units.conditionUnitInfo.withUnitCount
+
+  const existingUnitDiagnostics =
+    debug.unitDiagnostics && typeof debug.unitDiagnostics === 'object'
+      ? (debug.unitDiagnostics as Record<string, unknown>)
+      : {}
+  const runtimeSummary = (info: ResistorUnitInfo) => ({
+    withUnitCount: info.withUnitCount,
+    totalCount: info.totalCount,
+    preview: Object.fromEntries(Object.entries(info.unitByName).slice(0, 25)),
+  })
+  debug.unitDiagnostics = {
+    ...existingUnitDiagnostics,
+    runtime: {
+      stateUnits: runtimeSummary(units.stateUnitInfo),
+      algebraicUnits: runtimeSummary(units.algebraicUnitInfo),
+      inputUnits: runtimeSummary(units.inputUnitInfo),
+      conditionUnits: runtimeSummary(units.conditionUnitInfo),
+      plotPathUnitsPreview: buildPlotPathUnitsPreview(units),
+      totalPhysicalUnitCount: units.totalPhysicalUnitCount,
+    },
+  }
+  return units
+}
+
+function assertResistorUnitsPresent(
+  totalPhysicalUnitCount: number,
+  debug: Record<string, unknown>,
+): void {
+  const compileUnitAttrCount =
+    ((debug.unitDiagnostics as { compile?: { prettyUnitAttrCount?: number } })?.compile
+      ?.prettyUnitAttrCount ??
+      0) ||
+    0
+  const templateUnitPropCount =
+    ((debug.unitDiagnostics as { template?: { generatedUnitPropertyCount?: number } })?.template
+      ?.generatedUnitPropertyCount ??
+      0) ||
+    0
+  if (totalPhysicalUnitCount <= 0) {
+    throw new Error(
+      [
+        'MSL resistor example has no physical units in runtime metadata',
+        `totalPhysicalUnitCount=${totalPhysicalUnitCount}`,
+        `compile.prettyUnitAttrCount=${compileUnitAttrCount}`,
+        `template.generatedUnitPropertyCount=${templateUnitPropCount}`,
+      ].join('\n'),
+    )
+  }
+}
+
+function collectResistorSeriesState(
+  runResult: ModelicaResistorSimResult,
+  names: ResistorModelNames,
+  debug: Record<string, unknown>,
+): ResistorSeriesState {
+  const xSeriesByName = mapSeriesByNames(runResult?.data?.x, names.stateNames, 'x')
+  const ySeriesByName = mapSeriesByNames(runResult?.data?.y, names.algebraicNames, 'y')
+  debug.seriesDiagnostics = {
+    stateCount: names.stateNames.length,
+    algebraicCount: names.algebraicNames.length,
+    stateNames: names.stateNames,
+    algebraicNamesPreview: names.algebraicNames.slice(0, 40),
+    stateSeriesSummary: summarizeSeries(xSeriesByName, 20),
+    algebraicSeriesSummary: summarizeSeries(ySeriesByName, 20),
+    topTemporalStates: rankTemporalSeries(xSeriesByName, 12),
+    topTemporalAlgebraics: rankTemporalSeries(ySeriesByName, 12),
+    stateSeriesValues: xSeriesByName,
+  }
+
+  const state: ResistorSeriesState = {
+    xSeriesByName,
+    xAmp: getSeriesAmplitude(runResult?.data?.x, 1),
+    yAmp: getSeriesAmplitude(runResult?.data?.y, 1),
+    xTemporal: getMaxTemporalDelta(runResult?.data?.x, 2),
+    yTemporal: getMaxTemporalDelta(runResult?.data?.y, 2),
+    xActive: countActiveSeries(runResult?.data?.x),
+    yActive: countActiveSeries(runResult?.data?.y),
+  }
+  debug.runSignalStats = {
+    xAmp: state.xAmp,
+    yAmp: state.yAmp,
+    xTemporal: state.xTemporal,
+    yTemporal: state.yTemporal,
+    xActive: state.xActive,
+    yActive: state.yActive,
+  }
+  return state
+}
+
+function assertResistorAlgebraicDynamics(
+  payload: ResistorRunPayload,
+  series: ResistorSeriesState,
+  derivativeRefs: string[],
+): void {
+  if (payload.stateCount !== 0) return
+  const algebraicDynamicsDetected =
+    payload.yLen > 1 && series.yActive > 0 && Math.max(series.yAmp, series.yTemporal) > 1.0e-6
+  if (algebraicDynamicsDetected) return
+  throw new Error(
+    [
+      'MSL resistor example produced zero states and no convincing algebraic dynamics',
+      `stateCount=${payload.stateCount}`,
+      `algebraicCount=${payload.algebraicCount}`,
+      `xLen=${payload.xLen}`,
+      `yLen=${payload.yLen}`,
+      `xAmp=${series.xAmp}`,
+      `yAmp=${series.yAmp}`,
+      `xTemporal=${series.xTemporal}`,
+      `yTemporal=${series.yTemporal}`,
+      `xActive=${series.xActive}`,
+      `yActive=${series.yActive}`,
+      `baseDae.derivativeRefCount=${derivativeRefs.length}`,
+      `baseDae.derivativeRefsPreview=${serializeObject(derivativeRefs.slice(0, 20), MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
+    ].join('\n'),
+  )
+}
+
+function assertResistorSignalAmplitude(series: ResistorSeriesState): void {
+  if (Math.max(series.xAmp, series.yAmp) > 1.0e-6) return
+  throw new Error(
+    [
+      'MSL resistor example run has near-zero signal amplitude',
+      `xAmp=${series.xAmp}`,
+      `yAmp=${series.yAmp}`,
+      `xTemporal=${series.xTemporal}`,
+      `yTemporal=${series.yTemporal}`,
+      `xActive=${series.xActive}`,
+      `yActive=${series.yActive}`,
+    ].join(', '),
+  )
+}
+
+function assertResistorTemporalEvolution(
+  payload: ResistorRunPayload,
+  series: ResistorSeriesState,
+): void {
+  if (payload.stateCount === 0 || Math.max(series.xTemporal, series.yTemporal) > 1.0e-10) return
+  throw new Error(
+    [
+      'MSL resistor example appears static after initialization; expected dynamic evolution for stateful model',
+      `stateCount=${payload.stateCount}`,
+      `algebraicCount=${payload.algebraicCount}`,
+      `xAmp=${series.xAmp}`,
+      `yAmp=${series.yAmp}`,
+      `xTemporal=${series.xTemporal}`,
+      `yTemporal=${series.yTemporal}`,
+      `xActive=${series.xActive}`,
+      `yActive=${series.yActive}`,
+    ].join(', '),
+  )
+}
+
+function assertResistorSignalDynamics(
+  payload: ResistorRunPayload,
+  series: ResistorSeriesState,
+  derivativeRefs: string[],
+): void {
+  assertResistorAlgebraicDynamics(payload, series, derivativeRefs)
+  assertResistorSignalAmplitude(series)
+  assertResistorTemporalEvolution(payload, series)
+}
+
+function assembleResistorDiagnosticResult(
+  compiled: { pretty?: string },
+  rendered: string,
+  run: { serializedRunResult: string },
+  payload: ResistorRunPayload,
+  names: ResistorModelNames,
+  units: ResistorUnitState,
+  series: ResistorSeriesState,
+  debug: Record<string, unknown>,
+) {
+  return {
+    ok: true,
+    simulation: {
+      nSteps: payload.nSteps,
+      tLen: payload.tLen,
+      xLen: payload.xLen,
+      yLen: payload.yLen,
+      stateCount: payload.stateCount,
+      algebraicCount: payload.algebraicCount,
+      stateNames: names.stateNames,
+      algebraicNames: names.algebraicNames,
+      stateSeriesValuesSerialized: serializeObject(
+        series.xSeriesByName,
+        MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+      ),
+      xAmplitude: series.xAmp,
+      yAmplitude: series.yAmp,
+      unitsAvailable: units.totalPhysicalUnitCount > 0,
+      unitDiagnosticsSerialized: serializeObject(
+        debug.unitDiagnostics,
+        MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
+      ),
+      serializedResult: run.serializedRunResult,
+    },
+    generatedCode: rendered,
+    generatedCodeSerialized: serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+    prettyPreview: String(compiled.pretty ?? '').slice(0, 120),
+  }
+}
+
+function buildResistorDiagnosticFailure(
+  err: unknown,
+  debug: Record<string, unknown>,
+  fullGeneratedCode: string,
+): Error {
+  const baseMessage = err instanceof Error ? err.message : String(err)
+  const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+  const phaseValue = debug.phase
+  const phaseLabel =
+    typeof phaseValue === 'string' ||
+    typeof phaseValue === 'number' ||
+    typeof phaseValue === 'boolean'
+      ? String(phaseValue)
+      : phaseValue == null
+        ? 'unknown'
+        : JSON.stringify(phaseValue)
+  return new Error(
+    [
+      `Modelica diagnostic failed at phase="${phaseLabel}"`,
+      baseMessage,
+      `MSL resistor example debug (compact):\n${debugDump}`,
+    ].join('\n'),
+    {
+      cause: {
+        generatedCode: fullGeneratedCode || '[generated code unavailable]',
+        debugSerialized: serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
+      },
+    },
+  )
+}
+
 export async function testModelicaMslResistorExampleSimulation() {
   const debug: Record<string, unknown> = {
     phase: 'init',
@@ -3498,642 +4266,38 @@ export async function testModelicaMslResistorExampleSimulation() {
   let fullGeneratedCode = ''
 
   try {
-    const wasm = await getDiagnosticsWasm()
-    debug.phase = 'wasm-loaded'
-
-    if (
-      typeof wasm.compile_with_source_roots !== 'function' &&
-      typeof wasm.compile_with_libraries !== 'function'
-    ) {
-      throw new Error(
-        'Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries',
-      )
-    }
-    assertTemplateRendererAvailable(wasm)
-
-    const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
-    debug.mslLibraryFiles = libraryFileCount
-    debug.mslParsedCount = Number(loadParsed.parsed_count ?? 0)
-
-    // Flattened transcription of:
-    // Modelica.Electrical.Analog.Examples.Resistor
-    const source = `
-model MslResistorExample
-  extends Modelica.Electrical.Analog.Examples.Resistor;
-end MslResistorExample;
-`.trim()
-
-    debug.phase = 'compile-with-libraries'
-    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslResistorExample')
-    debug.phase = 'compiled'
-    const compiled = JSON.parse(String(compiledRaw)) as {
-      dae?: unknown
-      dae_native?: unknown
-      dae_prepared?: unknown
-      pretty?: string
-    }
-    const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
-    if (!dae) {
-      throw new Error('compile_to_json returned no DAE payload for MSL resistor example')
-    }
-    const daeJson = JSON.stringify(dae)
-
-    const prettyText = String(compiled.pretty ?? '')
-    debug.compiledPrettyLength = prettyText.length
-    debug.compiledPrettyPreview = prettyText.slice(0, 1200)
-
-    const derivativeRefsFromPretty = Array.from(new Set(prettyText.match(/der\([^)]+\)/g) ?? []))
-    let derivativeRefs = derivativeRefsFromPretty
-    try {
-      const baseDaeRendered = renderRumocaTemplate({
-        wasm,
-        daeJson,
-        templateSource: baseDaeTemplate,
-        modelName: getTemplateModelName(dae),
-        templatePath: 'base_dae.jinja',
-        outputPath: 'base_dae.txt',
-        targetName: 'template',
-      })
-      const derivativeRefsFromTemplate: string[] = Array.from(
-        new Set(String(baseDaeRendered).match(/der\([^)]+\)/g) ?? []),
-      )
-      if (derivativeRefsFromTemplate.length > 0) {
-        derivativeRefs = derivativeRefsFromTemplate
-      }
-      debug.baseDaeDiagnostics = {
-        renderedLength: baseDaeRendered.length,
-        derivativeRefCount: derivativeRefsFromTemplate.length,
-        derivativeRefsPreview: derivativeRefsFromTemplate.slice(0, 40),
-        preview: baseDaeRendered.slice(0, 1200),
-      }
-    } catch (baseDaeErr) {
-      debug.baseDaeDiagnostics = {
-        rendered: false,
-        renderError: baseDaeErr instanceof Error ? baseDaeErr.message : String(baseDaeErr),
-        derivativeRefCountFromPretty: derivativeRefsFromPretty.length,
-        derivativeRefsPreviewFromPretty: derivativeRefsFromPretty.slice(0, 40),
-      }
-    }
-
-    debug.phase = 'render-javascript-template'
-    const rendered = renderRumocaTemplate({
+    const wasm = await loadResistorWasm(debug)
+    const compiled = await compileResistorExample(wasm, debug)
+    const derivativeRefs = collectResistorDerivativeRefs(
       wasm,
-      daeJson,
-      templateSource: javascriptTemplate,
-      modelName: getTemplateModelName(dae),
-      templatePath: 'javascript.jinja',
-      outputPath: 'model.js',
-      targetName: 'template',
-    })
-    if (!rendered || typeof rendered !== 'string') {
-      throw new Error('Rendering javascript.jinja failed for MSL resistor example')
-    }
+      compiled.dae,
+      compiled.daeJson,
+      compiled.prettyText,
+      debug,
+    )
+    const rendered = renderResistorJavaScript(wasm, compiled.dae, compiled.daeJson, debug)
     fullGeneratedCode = rendered
-    debug.renderedPreview = rendered.slice(0, 220)
-    debug.generatedCodeLength = rendered.length
-    const unitAttrMatchesInPretty = Array.from(
-      new Set(String(prettyText).match(/\bunit\s*=\s*"[^"]*"/g) ?? []),
+    collectResistorUnitDiagnostics(compiled.prettyText, rendered, debug)
+
+    const run = await runResistorSimulation(rendered, debug)
+    const payload = validateResistorRunPayload(run.runResult, debug)
+    const names = readResistorModelNames(run.runResult)
+    const units = collectResistorUnitState(run.runResult, names, debug)
+    assertResistorUnitsPresent(units.totalPhysicalUnitCount, debug)
+    const series = collectResistorSeriesState(run.runResult, names, debug)
+    assertResistorSignalDynamics(payload, series, derivativeRefs)
+    return assembleResistorDiagnosticResult(
+      compiled.compiled,
+      rendered,
+      run,
+      payload,
+      names,
+      units,
+      series,
+      debug,
     )
-    const displayUnitMatchesInPretty = Array.from(
-      new Set(String(prettyText).match(/\bdisplayUnit\s*=\s*"[^"]*"/g) ?? []),
-    )
-    const generatedUnitPropertyMatches = Array.from(
-      new Set(String(rendered).match(/\bunit:\s*"[^"]*"/g) ?? []),
-    )
-    const generatedUnitAccessMarkers = [
-      "meta.states.map((v) => ({ name: v.name, kind: 'state', start: v.start, unit: v.unit }))",
-      "meta.algebraics.map((v) => ({ name: v.name, kind: 'algebraic', start: v.start, unit: v.unit }))",
-      "meta.inputs.map((v) => ({ name: v.name, kind: 'input', unit: v.unit }))",
-    ]
-    debug.unitDiagnostics = {
-      compile: {
-        prettyUnitAttrCount: unitAttrMatchesInPretty.length,
-        prettyDisplayUnitAttrCount: displayUnitMatchesInPretty.length,
-        prettyUnitAttrPreview: unitAttrMatchesInPretty.slice(0, 30),
-        prettyDisplayUnitAttrPreview: displayUnitMatchesInPretty.slice(0, 30),
-      },
-      template: {
-        generatedUnitPropertyCount: generatedUnitPropertyMatches.length,
-        generatedUnitPropertyPreview: generatedUnitPropertyMatches.slice(0, 40),
-        hasGeneratedUnitAccessMarkers: generatedUnitAccessMarkers.every((marker) =>
-          rendered.includes(marker),
-        ),
-      },
-    }
-
-    debug.phase = 'build-worker-sandbox-code'
-    const runId = 'modelica-msl-resistor-example-run'
-    const runCode = await buildWorkerSandboxCodeChecked(rendered, runId)
-    const runAbort = new AbortController()
-    type SimResult = {
-      meta?: {
-        nSteps?: number
-        stopReason?: string
-        stopError?: string
-        stopStack?: string
-        stopDetails?: unknown
-        model?: {
-          stateNames?: string[]
-          algebraicNames?: string[]
-          inputNames?: string[]
-          conditionNames?: string[]
-          stateVariables?: Array<{ name?: string; unit?: string }>
-          algebraicVariables?: Array<{ name?: string; unit?: string }>
-          inputVariables?: Array<{ name?: string; unit?: string }>
-          conditionVariables?: Array<{ name?: string; unit?: string }>
-        }
-      }
-      data?: {
-        t?: unknown[]
-        x?: unknown[] | Record<string, unknown>
-        y?: unknown[] | Record<string, unknown>
-      }
-    }
-    const getSeriesSampleLength = (seriesData: unknown): number => {
-      if (Array.isArray(seriesData)) {
-        if (seriesData.length === 0) return 0
-        if (Array.isArray(seriesData[0])) return (seriesData[0] as unknown[]).length
-        return seriesData.length
-      }
-      if (seriesData && typeof seriesData === 'object') {
-        const first = Object.values(seriesData as Record<string, unknown>)[0]
-        if (Array.isArray(first)) return first.length
-      }
-      return 0
-    }
-    const getSeriesArrays = (seriesData: unknown): number[][] => {
-      const finiteArray = (arr: unknown[]): number[] =>
-        arr.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-      if (Array.isArray(seriesData)) {
-        if (seriesData.length > 0 && Array.isArray(seriesData[0])) {
-          return (seriesData as unknown[][]).map((row) => finiteArray(row))
-        }
-        return [finiteArray(seriesData)]
-      }
-      if (seriesData && typeof seriesData === 'object') {
-        return Object.values(seriesData as Record<string, unknown>).flatMap((v) =>
-          Array.isArray(v) ? [finiteArray(v)] : [],
-        )
-      }
-      return []
-    }
-    const mapSeriesByNames = (
-      seriesData: unknown,
-      names: string[],
-      fallbackPrefix: string,
-    ): Record<string, number[]> => {
-      const out: Record<string, number[]> = {}
-      const finiteArray = (arr: unknown[]): number[] =>
-        arr.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-
-      if (Array.isArray(seriesData)) {
-        if (seriesData.length > 0 && Array.isArray(seriesData[0])) {
-          const rows = seriesData as unknown[][]
-          for (let i = 0; i < rows.length; i++) {
-            const key = names[i] ?? `${fallbackPrefix}[${i}]`
-            out[key] = finiteArray(rows[i] ?? [])
-          }
-        } else {
-          const key = names[0] ?? `${fallbackPrefix}[0]`
-          out[key] = finiteArray(seriesData)
-        }
-        return out
-      }
-
-      if (seriesData && typeof seriesData === 'object') {
-        const obj = seriesData as Record<string, unknown>
-        const availableKeys = Object.keys(obj)
-        for (const name of names) {
-          const alt = name.replaceAll('.', '__')
-          const value = obj[name] ?? obj[alt]
-          if (Array.isArray(value)) {
-            out[name] = finiteArray(value)
-          }
-        }
-        for (const key of availableKeys) {
-          const value = obj[key]
-          if (Array.isArray(value) && !(key in out)) {
-            out[key] = finiteArray(value)
-          }
-        }
-      }
-      return out
-    }
-    const getSeriesAmplitude = (seriesData: unknown, skipLeadingSamples = 0): number => {
-      const collect = (arr: unknown[]): number[] =>
-        arr.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-      let flat: number[] = []
-      if (Array.isArray(seriesData)) {
-        if (seriesData.length > 0 && Array.isArray(seriesData[0])) {
-          flat = (seriesData as unknown[][]).flatMap((row) =>
-            collect(row.slice(skipLeadingSamples)),
-          )
-        } else {
-          flat = collect(seriesData.slice(skipLeadingSamples))
-        }
-      } else if (seriesData && typeof seriesData === 'object') {
-        flat = Object.values(seriesData as Record<string, unknown>).flatMap((v) =>
-          Array.isArray(v) ? collect(v.slice(skipLeadingSamples)) : [],
-        )
-      }
-      if (flat.length < 2) return 0
-      return Math.max(...flat) - Math.min(...flat)
-    }
-    const getMaxTemporalDelta = (seriesData: unknown, startIndex = 1): number => {
-      const arrays = getSeriesArrays(seriesData)
-      let maxDelta = 0
-      for (const arr of arrays) {
-        for (let i = Math.max(1, startIndex); i < arr.length; i++) {
-          const prev = arr[i - 1]
-          const cur = arr[i]
-          if (typeof prev !== 'number' || !Number.isFinite(prev)) continue
-          if (typeof cur !== 'number' || !Number.isFinite(cur)) continue
-          maxDelta = Math.max(maxDelta, Math.abs(cur - prev))
-        }
-      }
-      return maxDelta
-    }
-    const countActiveSeries = (seriesData: unknown, deltaThreshold = 1e-8): number => {
-      const arrays = getSeriesArrays(seriesData)
-      let activeCount = 0
-      for (const arr of arrays) {
-        let active = false
-        for (let i = 2; i < arr.length; i++) {
-          const prev = arr[i - 1]
-          const cur = arr[i]
-          if (typeof prev !== 'number' || !Number.isFinite(prev)) continue
-          if (typeof cur !== 'number' || !Number.isFinite(cur)) continue
-          if (Math.abs(cur - prev) > deltaThreshold) {
-            active = true
-            break
-          }
-        }
-        if (active) activeCount++
-      }
-      return activeCount
-    }
-    const summarizeSeries = (
-      seriesMap: Record<string, number[]>,
-      maxSeries = 12,
-    ): Record<
-      string,
-      {
-        len: number
-        min: number | null
-        max: number | null
-        first: number[]
-        last: number[]
-        maxDelta: number
-      }
-    > => {
-      const summary: Record<
-        string,
-        {
-          len: number
-          min: number | null
-          max: number | null
-          first: number[]
-          last: number[]
-          maxDelta: number
-        }
-      > = {}
-      for (const [idx, [name, arr]] of Object.entries(seriesMap).entries()) {
-        if (idx >= maxSeries) break
-        const finite = arr.filter((v) => typeof v === 'number' && Number.isFinite(v))
-        summary[name] = {
-          len: arr.length,
-          min: finite.length > 0 ? Math.min(...finite) : null,
-          max: finite.length > 0 ? Math.max(...finite) : null,
-          first: arr.slice(0, 8),
-          last: arr.slice(-8),
-          maxDelta: getMaxTemporalDelta(arr, 2),
-        }
-      }
-      return summary
-    }
-    const rankTemporalSeries = (seriesMap: Record<string, number[]>, maxSeries = 12) =>
-      Object.entries(seriesMap)
-        .map(([name, arr]) => ({
-          name,
-          amplitude: getSeriesAmplitude(arr, 1),
-          maxDelta: getMaxTemporalDelta(arr, 2),
-          first: arr.length > 0 ? arr[0] : null,
-          last: arr.length > 0 ? arr[arr.length - 1] : null,
-          len: arr.length,
-        }))
-        .sort((a, b) => b.maxDelta - a.maxDelta)
-        .slice(0, maxSeries)
-
-    let runResult: SimResult
-    let serializedRunResult = ''
-    try {
-      debug.phase = 'execute-generated-js'
-      runResult = await executeModelicaDiagnosticInSandbox(
-        {
-          id: runId,
-          code: runCode,
-          sourceURL: 'modelica-msl-resistor-example-run.js',
-          stopSignal: runAbort.signal,
-        },
-        {
-          sim: {
-            t0: 0,
-            tf: 0.25,
-            dt: 0.001,
-          },
-        },
-        {
-          source: 'ModelicaDiagnostics',
-          __rumocaRunId: runId,
-        },
-      )
-      debug.runResultPreview = {
-        meta: runResult?.meta,
-        tLen: Array.isArray(runResult?.data?.t) ? runResult.data.t.length : 0,
-        xLen: getSeriesSampleLength(runResult?.data?.x),
-        yLen: getSeriesSampleLength(runResult?.data?.y),
-      }
-      serializedRunResult = serializeObject(runResult, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
-    } finally {
-      runAbort.abort()
-    }
-
-    debug.phase = 'validate-simulation-payload'
-    const nSteps = Number(runResult?.meta?.nSteps ?? 0)
-    const tLen = Array.isArray(runResult?.data?.t) ? runResult.data.t.length : 0
-    const xLen = getSeriesSampleLength(runResult?.data?.x)
-    const yLen = getSeriesSampleLength(runResult?.data?.y)
-    if (nSteps <= 0 || tLen <= 1 || (xLen <= 1 && yLen <= 1)) {
-      const stopReason = String(runResult?.meta?.stopReason ?? '')
-      const stopError = String(runResult?.meta?.stopError ?? '')
-      const stopDetails = runResult?.meta?.stopDetails
-      throw new Error(
-        [
-          `MSL resistor example run returned invalid simulation payload (nSteps=${nSteps}, tLen=${tLen}, xLen=${xLen}, yLen=${yLen})`,
-          stopReason ? `simulation.stopReason=${stopReason}` : '',
-          stopError ? `simulation.stopError=${stopError}` : '',
-          stopDetails
-            ? `simulation.stopDetails=${serializeObject(stopDetails, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      )
-    }
-
-    const stateNames = Array.isArray(runResult?.meta?.model?.stateNames)
-      ? runResult.meta.model.stateNames
-      : []
-    const algebraicNames = Array.isArray(runResult?.meta?.model?.algebraicNames)
-      ? runResult.meta.model.algebraicNames
-      : []
-    const inputNames = Array.isArray(runResult?.meta?.model?.inputNames)
-      ? runResult.meta.model.inputNames
-      : []
-    const conditionNames = Array.isArray(runResult?.meta?.model?.conditionNames)
-      ? runResult.meta.model.conditionNames
-      : []
-    const stateCount = stateNames.length
-    const algebraicCount = algebraicNames.length
-
-    const mapUnits = (
-      vars: unknown,
-      expectedNames: string[],
-    ): { unitByName: Record<string, string>; withUnitCount: number; totalCount: number } => {
-      const out: Record<string, string> = {}
-      const list = Array.isArray(vars) ? vars : []
-      for (const entry of list) {
-        if (!entry || typeof entry !== 'object') continue
-        const item = entry as Record<string, unknown>
-        const name = typeof item.name === 'string' ? item.name.trim() : ''
-        const unit = typeof item.unit === 'string' ? item.unit.trim() : ''
-        const u = unit.toLowerCase()
-        if (!name || !unit || u === 'none' || u === 'null') continue
-        out[name] = unit
-      }
-      const withUnitCount = expectedNames.filter((name) => typeof out[name] === 'string').length
-      return {
-        unitByName: out,
-        withUnitCount,
-        totalCount: expectedNames.length,
-      }
-    }
-
-    const stateUnitInfo = mapUnits(runResult?.meta?.model?.stateVariables, stateNames)
-    const algebraicUnitInfo = mapUnits(runResult?.meta?.model?.algebraicVariables, algebraicNames)
-    const inputUnitInfo = mapUnits(runResult?.meta?.model?.inputVariables, inputNames)
-    const conditionUnitInfo = mapUnits(runResult?.meta?.model?.conditionVariables, conditionNames)
-    const totalPhysicalUnitCount =
-      stateUnitInfo.withUnitCount +
-      algebraicUnitInfo.withUnitCount +
-      inputUnitInfo.withUnitCount +
-      conditionUnitInfo.withUnitCount
-    const plotPathUnitsPreview = {
-      t: 's',
-      ...Object.fromEntries(
-        Object.entries(stateUnitInfo.unitByName)
-          .slice(0, 20)
-          .map(([name, unit]) => [`x.${name}`, unit]),
-      ),
-      ...Object.fromEntries(
-        Object.entries(algebraicUnitInfo.unitByName)
-          .slice(0, 20)
-          .map(([name, unit]) => [`y.${name}`, unit]),
-      ),
-      ...Object.fromEntries(
-        Object.entries(inputUnitInfo.unitByName)
-          .slice(0, 20)
-          .map(([name, unit]) => [`u.${name}`, unit]),
-      ),
-      ...Object.fromEntries(
-        Object.entries(conditionUnitInfo.unitByName)
-          .slice(0, 20)
-          .map(([name, unit]) => [`z.${name}`, unit]),
-      ),
-    }
-
-    debug.unitDiagnostics = {
-      ...(debug.unitDiagnostics && typeof debug.unitDiagnostics === 'object'
-        ? (debug.unitDiagnostics as Record<string, unknown>)
-        : {}),
-      runtime: {
-        stateUnits: {
-          withUnitCount: stateUnitInfo.withUnitCount,
-          totalCount: stateUnitInfo.totalCount,
-          preview: Object.fromEntries(Object.entries(stateUnitInfo.unitByName).slice(0, 25)),
-        },
-        algebraicUnits: {
-          withUnitCount: algebraicUnitInfo.withUnitCount,
-          totalCount: algebraicUnitInfo.totalCount,
-          preview: Object.fromEntries(Object.entries(algebraicUnitInfo.unitByName).slice(0, 25)),
-        },
-        inputUnits: {
-          withUnitCount: inputUnitInfo.withUnitCount,
-          totalCount: inputUnitInfo.totalCount,
-          preview: Object.fromEntries(Object.entries(inputUnitInfo.unitByName).slice(0, 25)),
-        },
-        conditionUnits: {
-          withUnitCount: conditionUnitInfo.withUnitCount,
-          totalCount: conditionUnitInfo.totalCount,
-          preview: Object.fromEntries(Object.entries(conditionUnitInfo.unitByName).slice(0, 25)),
-        },
-        plotPathUnitsPreview,
-        totalPhysicalUnitCount,
-      },
-    }
-
-    const compileUnitAttrCount =
-      ((debug.unitDiagnostics as { compile?: { prettyUnitAttrCount?: number } })?.compile
-        ?.prettyUnitAttrCount ??
-        0) ||
-      0
-    const templateUnitPropCount =
-      ((debug.unitDiagnostics as { template?: { generatedUnitPropertyCount?: number } })?.template
-        ?.generatedUnitPropertyCount ??
-        0) ||
-      0
-    if (totalPhysicalUnitCount <= 0) {
-      throw new Error(
-        [
-          'MSL resistor example has no physical units in runtime metadata',
-          `totalPhysicalUnitCount=${totalPhysicalUnitCount}`,
-          `compile.prettyUnitAttrCount=${compileUnitAttrCount}`,
-          `template.generatedUnitPropertyCount=${templateUnitPropCount}`,
-        ].join('\n'),
-      )
-    }
-
-    const xSeriesByName = mapSeriesByNames(runResult?.data?.x, stateNames, 'x')
-    const ySeriesByName = mapSeriesByNames(runResult?.data?.y, algebraicNames, 'y')
-    const topTemporalStates = rankTemporalSeries(xSeriesByName, 12)
-    const topTemporalAlgebraics = rankTemporalSeries(ySeriesByName, 12)
-    debug.seriesDiagnostics = {
-      stateCount,
-      algebraicCount,
-      stateNames,
-      algebraicNamesPreview: algebraicNames.slice(0, 40),
-      stateSeriesSummary: summarizeSeries(xSeriesByName, 20),
-      algebraicSeriesSummary: summarizeSeries(ySeriesByName, 20),
-      topTemporalStates,
-      topTemporalAlgebraics,
-      stateSeriesValues: xSeriesByName,
-    }
-
-    const xAmp = getSeriesAmplitude(runResult?.data?.x, 1)
-    const yAmp = getSeriesAmplitude(runResult?.data?.y, 1)
-    const xTemporal = getMaxTemporalDelta(runResult?.data?.x, 2)
-    const yTemporal = getMaxTemporalDelta(runResult?.data?.y, 2)
-    const xActive = countActiveSeries(runResult?.data?.x)
-    const yActive = countActiveSeries(runResult?.data?.y)
-    debug.runSignalStats = { xAmp, yAmp, xTemporal, yTemporal, xActive, yActive }
-
-    if (stateCount === 0) {
-      const algebraicDynamicsDetected =
-        yLen > 1 && yActive > 0 && Math.max(yAmp, yTemporal) > 1.0e-6
-      if (!algebraicDynamicsDetected) {
-        throw new Error(
-          [
-            'MSL resistor example produced zero states and no convincing algebraic dynamics',
-            `stateCount=${stateCount}`,
-            `algebraicCount=${algebraicCount}`,
-            `xLen=${xLen}`,
-            `yLen=${yLen}`,
-            `xAmp=${xAmp}`,
-            `yAmp=${yAmp}`,
-            `xTemporal=${xTemporal}`,
-            `yTemporal=${yTemporal}`,
-            `xActive=${xActive}`,
-            `yActive=${yActive}`,
-            `baseDae.derivativeRefCount=${derivativeRefs.length}`,
-            `baseDae.derivativeRefsPreview=${serializeObject(derivativeRefs.slice(0, 20), MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
-          ].join('\n'),
-        )
-      }
-    }
-
-    if (Math.max(xAmp, yAmp) <= 1.0e-6) {
-      throw new Error(
-        [
-          'MSL resistor example run has near-zero signal amplitude',
-          `xAmp=${xAmp}`,
-          `yAmp=${yAmp}`,
-          `xTemporal=${xTemporal}`,
-          `yTemporal=${yTemporal}`,
-          `xActive=${xActive}`,
-          `yActive=${yActive}`,
-        ].join(', '),
-      )
-    }
-
-    if (stateCount > 0 && Math.max(xTemporal, yTemporal) <= 1.0e-10) {
-      throw new Error(
-        [
-          'MSL resistor example appears static after initialization; expected dynamic evolution for stateful model',
-          `stateCount=${stateCount}`,
-          `algebraicCount=${algebraicCount}`,
-          `xAmp=${xAmp}`,
-          `yAmp=${yAmp}`,
-          `xTemporal=${xTemporal}`,
-          `yTemporal=${yTemporal}`,
-          `xActive=${xActive}`,
-          `yActive=${yActive}`,
-        ].join(', '),
-      )
-    }
-
-    return {
-      ok: true,
-      simulation: {
-        nSteps,
-        tLen,
-        xLen,
-        yLen,
-        stateCount,
-        algebraicCount,
-        stateNames,
-        algebraicNames,
-        stateSeriesValuesSerialized: serializeObject(
-          xSeriesByName,
-          MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
-        ),
-        xAmplitude: xAmp,
-        yAmplitude: yAmp,
-        unitsAvailable: totalPhysicalUnitCount > 0,
-        unitDiagnosticsSerialized: serializeObject(
-          debug.unitDiagnostics,
-          MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS,
-        ),
-        serializedResult: serializedRunResult,
-      },
-      generatedCode: rendered,
-      generatedCodeSerialized: serializeObject(rendered, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
-      prettyPreview: String(compiled.pretty ?? '').slice(0, 120),
-    }
   } catch (err) {
-    const baseMessage = err instanceof Error ? err.message : String(err)
-    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
-    const phaseValue = debug.phase
-    const phaseLabel =
-      typeof phaseValue === 'string' ||
-      typeof phaseValue === 'number' ||
-      typeof phaseValue === 'boolean'
-        ? String(phaseValue)
-        : phaseValue == null
-          ? 'unknown'
-          : JSON.stringify(phaseValue)
-    throw new Error(
-      [
-        `Modelica diagnostic failed at phase="${phaseLabel}"`,
-        baseMessage,
-        `MSL resistor example debug (compact):\n${debugDump}`,
-      ].join('\n'),
-      {
-        cause: {
-          generatedCode: fullGeneratedCode || '[generated code unavailable]',
-          debugSerialized: serializeObject(debug, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
-        },
-      },
-    )
+    throw buildResistorDiagnosticFailure(err, debug, fullGeneratedCode)
   }
 }
 testModelicaMslResistorExampleSimulation.timeoutMs = 120_000
@@ -4319,21 +4483,369 @@ function makeOrbitFailure(
   )
 }
 
-async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
-  const source = ORBIT_MODEL_SOURCE
+type OrbitCompiledPayload = {
+  dae?: unknown
+  dae_native?: unknown
+  dae_prepared?: unknown
+}
 
+type OrbitSimulationParams = {
+  t0: number
+  tf: number
+  dt: number
+  x0: number[]
+}
+
+type OrbitDiagnosticsPreparation = {
+  mode: OrbitTestMode
+  parsed: OrbitCompiledPayload
+  dae: Record<string, unknown>
+  rendered: string
+  generatedCodeDebug: ReturnType<typeof summarizeGeneratedCodeForDebug>
+  runCode: string
+  simParams: OrbitSimulationParams
+  selectionInfo: ReturnType<typeof describeOrbitDaeSelection>
+  daeDebug: ReturnType<typeof summarizeDaeForOrbitDebug>
+}
+
+type OrbitRunBundle = {
+  currentRun: OrbitSolverRun
+  irk4Run: OrbitSolverRun | null
+}
+
+type OrbitCanvasFrame = {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+type OrbitCanvasRange = {
+  xMin: number
+  xMax: number
+  yMin: number
+  yMax: number
+}
+
+function countDaeEntries(daeObj: unknown, key: string): number {
+  if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return 0
+  const map = (daeObj as Record<string, unknown>)[key]
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
+  return Object.keys(map as Record<string, unknown>).length
+}
+
+function countDaeEquations(daeObj: unknown): number {
+  if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return 0
+  const fx = (daeObj as Record<string, unknown>).f_x
+  return Array.isArray(fx) ? fx.length : 0
+}
+
+function countDaeObservables(daeObj: unknown): number {
+  if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return 0
+  const list = (daeObj as Record<string, unknown>).__rumoca_observables
+  return Array.isArray(list) ? list.length : 0
+}
+
+function describeOrbitDaeSelection(
+  parsed: OrbitCompiledPayload,
+  selectedDae: Record<string, unknown>,
+) {
+  const nativeDae = parsed.dae_native ?? parsed.dae
+  const preparedDae = parsed.dae_prepared
+  const describe = (dae: unknown) => ({
+    xCount: countDaeEntries(dae, 'x'),
+    yCount: countDaeEntries(dae, 'y'),
+    fxCount: countDaeEquations(dae),
+    observablesCount: countDaeObservables(dae),
+  })
+  return {
+    selected:
+      selectedDae === preparedDae ? 'prepared' : selectedDae === nativeDae ? 'native' : 'unknown',
+    native: describe(nativeDae),
+    prepared: describe(preparedDae),
+  }
+}
+
+function buildOrbitSimulationParams(): OrbitSimulationParams {
+  const mu = 398600.4418
+  const r0 = 7000
+  const v0 = Math.sqrt(mu / r0)
+  const orbitalPeriod = 2 * Math.PI * Math.sqrt((r0 * r0 * r0) / mu)
+  return { t0: 0, tf: orbitalPeriod, dt: 20, x0: [r0, 0, 0, v0] }
+}
+
+function readNumericSeries(container: unknown, name: string): number[] {
+  if (!container || typeof container !== 'object' || Array.isArray(container)) return []
+  const record = container as Record<string, unknown>
+  for (const key of [name, name.replaceAll('.', '__')]) {
+    const value = record[key]
+    if (Array.isArray(value)) {
+      return value.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
+    }
+  }
+  return []
+}
+
+function getStateSeries(run: OrbitSolverRun, name: string): number[] {
+  return readNumericSeries(run?.data?.x, name)
+}
+
+function getAlgebraicSeries(run: OrbitSolverRun, name: string): number[] {
+  return readNumericSeries(run?.data?.y, name)
+}
+
+function getOrbitTime(run: OrbitSolverRun): number[] {
+  const tRaw = run?.data?.t
+  if (!Array.isArray(tRaw)) return []
+  return tRaw.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
+}
+
+function summarizeFiniteSeries(values: number[]) {
+  const finite = values.filter((v) => Number.isFinite(v))
+  return {
+    finiteCount: finite.length,
+    firstFiniteValues: finite.slice(0, 6).map((v) => Number(v.toPrecision(8))),
+  }
+}
+
+function summarizeSeriesMap(series: Record<string, number[]>) {
+  const lengths: Record<string, number> = {}
+  const finiteCounts: Record<string, number> = {}
+  const firstFiniteValues: Record<string, number[]> = {}
+  for (const [name, values] of Object.entries(series)) {
+    const summary = summarizeFiniteSeries(values)
+    lengths[name] = values.length
+    finiteCounts[name] = summary.finiteCount
+    firstFiniteValues[name] = summary.firstFiniteValues
+  }
+  return { lengths, finiteCounts, firstFiniteValues }
+}
+
+function collectOrbitExtractionDebug(label: string, run: OrbitSolverRun): OrbitExtractionDebug {
+  const ySeries = {
+    inv_r: getAlgebraicSeries(run, 'inv_r'),
+    inv_a: getAlgebraicSeries(run, 'inv_a'),
+    inv_ecc: getAlgebraicSeries(run, 'inv_ecc'),
+    inv_energy: getAlgebraicSeries(run, 'inv_energy'),
+    inv_h: getAlgebraicSeries(run, 'inv_h'),
+  }
+  const summary = summarizeSeriesMap(ySeries)
+  const algebraicNames = run?.meta?.model?.algebraicNames
+  return {
+    label,
+    timeLength: getOrbitTime(run).length,
+    stateLengths: {
+      rx: getStateSeries(run, 'rx').length,
+      ry: getStateSeries(run, 'ry').length,
+      vx: getStateSeries(run, 'vx').length,
+      vy: getStateSeries(run, 'vy').length,
+    },
+    yLengths: summary.lengths,
+    yFiniteCounts: summary.finiteCounts,
+    yFirstFiniteValues: summary.firstFiniteValues,
+    modelAlgebraicNames: Array.isArray(algebraicNames)
+      ? algebraicNames.filter((name): name is string => typeof name === 'string')
+      : [],
+  }
+}
+
+function readOrbitSeries(run: OrbitSolverRun) {
+  return {
+    t: getOrbitTime(run),
+    rx: getStateSeries(run, 'rx'),
+    ry: getStateSeries(run, 'ry'),
+    vx: getStateSeries(run, 'vx'),
+    vy: getStateSeries(run, 'vy'),
+    r: getAlgebraicSeries(run, 'inv_r'),
+    semiMajorAxis: getAlgebraicSeries(run, 'inv_a'),
+    eccentricity: getAlgebraicSeries(run, 'inv_ecc'),
+    specificEnergy: getAlgebraicSeries(run, 'inv_energy'),
+    angularMomentum: getAlgebraicSeries(run, 'inv_h'),
+  }
+}
+
+function collectOrbitSamples(run: OrbitSolverRun): OrbitSamples {
+  const raw = readOrbitSeries(run)
+  const keys = Object.keys(raw) as Array<keyof OrbitSamples>
+  const count = Math.min(...keys.map((key) => raw[key].length))
+  const finiteIndices: number[] = []
+  for (let i = 0; i < count; i++) {
+    if (keys.every((key) => Number.isFinite(raw[key][i] ?? Number.NaN))) finiteIndices.push(i)
+  }
+  const pick = (values: number[]) => finiteIndices.map((i) => values[i] ?? Number.NaN)
+  return {
+    t: pick(raw.t),
+    rx: pick(raw.rx),
+    ry: pick(raw.ry),
+    vx: pick(raw.vx),
+    vy: pick(raw.vy),
+    r: pick(raw.r),
+    semiMajorAxis: pick(raw.semiMajorAxis),
+    eccentricity: pick(raw.eccentricity),
+    specificEnergy: pick(raw.specificEnergy),
+    angularMomentum: pick(raw.angularMomentum),
+  }
+}
+
+function summarizeOrbitDrift(values: number[]) {
+  const ref = values[0] ?? 0
+  let maxAbsSeries = 0
+  for (const value of values) maxAbsSeries = Math.max(maxAbsSeries, Math.abs(value))
+  const baselineFloor = 1e-12
+  const relativeScale = Math.abs(ref) > baselineFloor ? Math.abs(ref) : Math.max(1e-9, maxAbsSeries)
+  let maxAbsDrift = 0
+  for (const value of values) maxAbsDrift = Math.max(maxAbsDrift, Math.abs(value - ref))
+  return {
+    maxAbsoluteDrift: maxAbsDrift,
+    maxNormalizedDrift: maxAbsDrift / relativeScale,
+  }
+}
+
+function describeOrbitInvariant(values: number[]) {
+  const drift = summarizeOrbitDrift(values)
+  return {
+    first: values[0],
+    last: values[values.length - 1],
+    maxRelativeDrift: drift.maxNormalizedDrift,
+    maxAbsoluteDrift: drift.maxAbsoluteDrift,
+  }
+}
+
+function collectInvariants(samples: OrbitSamples) {
+  if (
+    samples.semiMajorAxis.length < 4 ||
+    samples.eccentricity.length < 4 ||
+    samples.specificEnergy.length < 4 ||
+    samples.angularMomentum.length < 4
+  ) {
+    throw new Error('Orbit invariants contain too few finite values')
+  }
+  return {
+    sampleCount: samples.semiMajorAxis.length,
+    semiMajorAxis: describeOrbitInvariant(samples.semiMajorAxis),
+    eccentricity: describeOrbitInvariant(samples.eccentricity),
+    specificEnergy: describeOrbitInvariant(samples.specificEnergy),
+    angularMomentum: describeOrbitInvariant(samples.angularMomentum),
+  }
+}
+
+function maxOrbitInvariantDrift(invariant: ReturnType<typeof collectInvariants>): number {
+  return Math.max(
+    invariant.semiMajorAxis.maxRelativeDrift,
+    invariant.specificEnergy.maxRelativeDrift,
+    invariant.angularMomentum.maxRelativeDrift,
+    invariant.eccentricity.maxAbsoluteDrift,
+  )
+}
+
+function safeOrbitLast(values: number[]): number | null {
+  for (let i = values.length - 1; i >= 0; i--) {
+    const value = values[i]
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+  }
+  return null
+}
+
+function getRawFirstStateValues(run: OrbitSolverRun, names: string[]) {
+  const values: Record<string, number | null> = {}
+  for (const name of names) {
+    const series = getStateSeries(run, name)
+    const first = series.length > 0 ? (series[0] ?? Number.NaN) : Number.NaN
+    values[name] = Number.isFinite(first) ? first : null
+  }
+  return values
+}
+
+function summarizeOrbitRun(label: string, run: OrbitSolverRun, samples: OrbitSamples) {
+  const stateNames = run?.meta?.model?.stateNames ?? []
+  return {
+    label,
+    stopReason: run?.meta?.stopReason ?? null,
+    stopError: run?.meta?.stopError ?? null,
+    stopDetails: run?.meta?.stopDetails ?? null,
+    sampleCount: samples.t.length,
+    tLast: safeOrbitLast(samples.t),
+    rxLast: safeOrbitLast(samples.rx),
+    ryLast: safeOrbitLast(samples.ry),
+    vxLast: safeOrbitLast(samples.vx),
+    vyLast: safeOrbitLast(samples.vy),
+    rMin: samples.r.length > 0 ? Math.min(...samples.r) : null,
+    rMax: samples.r.length > 0 ? Math.max(...samples.r) : null,
+    stateNames,
+    firstStateValues: getRawFirstStateValues(run, stateNames),
+  }
+}
+
+function runOrbitNumericDiagnostics(label: string, run: OrbitSolverRun, samples: OrbitSamples) {
+  const times = getOrbitTime(run)
+  let firstNonFiniteTimeIndex: number | null = null
+  for (let i = 0; i < times.length; i++) {
+    if (!Number.isFinite(times[i] ?? Number.NaN)) {
+      firstNonFiniteTimeIndex = i
+      break
+    }
+  }
+  return {
+    label,
+    tStats: orbitSeriesStats(samples.t),
+    rxStats: orbitSeriesStats(samples.rx),
+    ryStats: orbitSeriesStats(samples.ry),
+    vxStats: orbitSeriesStats(samples.vx),
+    vyStats: orbitSeriesStats(samples.vy),
+    rStats: orbitSeriesStats(samples.r),
+    firstNonFiniteTimeIndex,
+    stopReason: run?.meta?.stopReason ?? null,
+    stopError: run?.meta?.stopError ?? null,
+  }
+}
+
+async function runOrbitSimulation(
+  runCode: string,
+  simParams: OrbitSimulationParams,
+  runId: string,
+  solverOptions?: Record<string, unknown>,
+): Promise<OrbitSolverRun> {
+  const abort = new AbortController()
+  try {
+    return await executeModelicaDiagnosticInSandbox(
+      {
+        id: runId,
+        code: runCode,
+        sourceURL: `${runId}.js`,
+        stopSignal: abort.signal,
+      },
+      {
+        sim: {
+          ...simParams,
+          solverOptions: {
+            captureFailureState: true,
+            ...(solverOptions || {}),
+          },
+        },
+      },
+      {
+        source: 'ModelicaDiagnostics',
+        __rumocaRunId: runId,
+      },
+    )
+  } finally {
+    abort.abort()
+  }
+}
+
+function summarizeOrbitGeneratedCode(code: ReturnType<typeof summarizeGeneratedCodeForDebug>) {
+  return { length: code.length, lineCount: code.lineCount, checksum: code.checksum }
+}
+
+async function prepareOrbitDiagnostics(mode: OrbitTestMode): Promise<OrbitDiagnosticsPreparation> {
   const wasm = await getDiagnosticsWasm()
   if (typeof wasm.compile_to_json !== 'function') {
     throw new Error('Rumoca wasm export missing: compile_to_json')
   }
   assertTemplateRendererAvailable(wasm)
 
-  const compiled = wasm.compile_to_json(source, 'SatelliteOrbit2D')
-  const parsed = JSON.parse(compiled) as {
-    dae?: unknown
-    dae_native?: unknown
-    dae_prepared?: unknown
-  }
+  const compiled = wasm.compile_to_json(ORBIT_MODEL_SOURCE, 'SatelliteOrbit2D')
+  const parsed = JSON.parse(compiled) as OrbitCompiledPayload
   const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
   if (!dae) {
     throw new Error('Rumoca compile_to_json returned no DAE payload for SatelliteOrbit2D')
@@ -4349,747 +4861,152 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for SatelliteOrbit2D')
   }
-  const generatedCodeDebug = summarizeGeneratedCodeForDebug(rendered)
-
   const runCode = await buildWorkerSandboxCodeChecked(
     rendered,
     'modelica-satellite-orbit-2d-runtime',
   )
-  const mu = 398600.4418
-  const r0 = 7000
-  const v0 = Math.sqrt(mu / r0)
-  const expectedX0 = [r0, 0, 0, v0]
-  const orbitalPeriod = 2 * Math.PI * Math.sqrt((7000 * 7000 * 7000) / mu)
-  const simParams = {
-    t0: 0,
-    tf: orbitalPeriod,
-    dt: 20,
-    x0: expectedX0,
+  return {
+    mode,
+    parsed,
+    dae,
+    rendered,
+    generatedCodeDebug: summarizeGeneratedCodeForDebug(rendered),
+    runCode,
+    simParams: buildOrbitSimulationParams(),
+    selectionInfo: describeOrbitDaeSelection(parsed, dae),
+    daeDebug: summarizeDaeForOrbitDebug(dae),
   }
-  const countVarMapEntries = (daeObj: unknown, key: string): number => {
-    if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return 0
-    const map = (daeObj as Record<string, unknown>)[key]
-    if (!map || typeof map !== 'object' || Array.isArray(map)) return 0
-    return Object.keys(map as Record<string, unknown>).length
-  }
-  const countObservables = (daeObj: unknown): number => {
-    if (!daeObj || typeof daeObj !== 'object' || Array.isArray(daeObj)) return 0
-    const obj = daeObj as Record<string, unknown>
-    const list = obj.__rumoca_observables
-    return Array.isArray(list) ? list.length : 0
-  }
-  const nativeDae = parsed.dae_native ?? parsed.dae
-  const preparedDae = parsed.dae_prepared
-  const selectionInfo = {
-    selected: dae === preparedDae ? 'prepared' : dae === nativeDae ? 'native' : 'unknown',
-    native: {
-      xCount: countVarMapEntries(nativeDae, 'x'),
-      yCount: countVarMapEntries(nativeDae, 'y'),
-      fxCount: Array.isArray((nativeDae as Record<string, unknown> | undefined)?.f_x)
-        ? (((nativeDae as Record<string, unknown>).f_x as unknown[])?.length ?? 0)
-        : 0,
-      observablesCount: countObservables(nativeDae),
+}
+
+function makeOrbitBootFailure(
+  preparation: OrbitDiagnosticsPreparation,
+  phase: string,
+  label: string,
+  error: unknown,
+): Error {
+  const errorMessage = error instanceof Error ? error.message : String(error)
+  return makeOrbitFailure(
+    `Orbit ${label} failed before producing results: ${errorMessage}`,
+    {
+      mode: preparation.mode,
+      phase,
+      simParams: preparation.simParams,
+      daeDebug: preparation.daeDebug,
+      generatedCode: summarizeOrbitGeneratedCode(preparation.generatedCodeDebug),
+      errorMessage,
     },
-    prepared: {
-      xCount: countVarMapEntries(preparedDae, 'x'),
-      yCount: countVarMapEntries(preparedDae, 'y'),
-      fxCount: Array.isArray((preparedDae as Record<string, unknown> | undefined)?.f_x)
-        ? (((preparedDae as Record<string, unknown>).f_x as unknown[])?.length ?? 0)
-        : 0,
-      observablesCount: countObservables(preparedDae),
-    },
-  }
-  const daeDebug = summarizeDaeForOrbitDebug(dae)
+    preparation.generatedCodeDebug,
+    preparation.rendered,
+  )
+}
 
-  const runSimulation = async (
-    runId: string,
-    solverOptions?: Record<string, unknown>,
-  ): Promise<OrbitSolverRun> => {
-    const abort = new AbortController()
-    try {
-      return await executeModelicaDiagnosticInSandbox(
-        {
-          id: runId,
-          code: runCode,
-          sourceURL: `${runId}.js`,
-          stopSignal: abort.signal,
-        },
-        {
-          sim: {
-            ...simParams,
-            solverOptions: {
-              captureFailureState: true,
-              ...(solverOptions || {}),
-            },
-          },
-        },
-        {
-          source: 'ModelicaDiagnostics',
-          __rumocaRunId: runId,
-        },
-      )
-    } finally {
-      abort.abort()
-    }
-  }
-
-  const getSeries = (run: OrbitSolverRun, name: string): number[] => {
-    const x = run?.data?.x
-    if (!x || typeof x !== 'object' || Array.isArray(x)) return []
-    const byName = x[name]
-    if (Array.isArray(byName)) {
-      return byName.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-    }
-    const alt = name.replaceAll('.', '__')
-    const byAlt = x[alt]
-    if (Array.isArray(byAlt)) {
-      return byAlt.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-    }
-    return []
-  }
-
-  const getYSeries = (run: OrbitSolverRun, name: string): number[] => {
-    const y = run?.data?.y
-    if (!y || typeof y !== 'object' || Array.isArray(y)) return []
-    const byName = y[name]
-    if (Array.isArray(byName)) {
-      return byName.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-    }
-    const alt = name.replaceAll('.', '__')
-    const byAlt = y[alt]
-    if (Array.isArray(byAlt)) {
-      return byAlt.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-    }
-    return []
-  }
-
-  const getTime = (run: OrbitSolverRun): number[] => {
-    const tRaw = run?.data?.t
-    if (!Array.isArray(tRaw)) return []
-    return tRaw.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : Number.NaN))
-  }
-
-  const summarizeFiniteSeries = (values: number[]) => {
-    const finite = values.filter((v) => Number.isFinite(v))
-    return {
-      finiteCount: finite.length,
-      firstFiniteValues: finite.slice(0, 6).map((v) => Number(v.toPrecision(8))),
-    }
-  }
-
-  const collectOrbitExtractionDebug = (
-    label: string,
-    run: OrbitSolverRun,
-  ): OrbitExtractionDebug => {
-    const invR = getYSeries(run, 'inv_r')
-    const invA = getYSeries(run, 'inv_a')
-    const invE = getYSeries(run, 'inv_ecc')
-    const invEnergy = getYSeries(run, 'inv_energy')
-    const invH = getYSeries(run, 'inv_h')
-    const algebraicNames =
-      run?.meta?.model?.algebraicNames && Array.isArray(run.meta.model.algebraicNames)
-        ? run.meta.model.algebraicNames.filter((n): n is string => typeof n === 'string')
-        : []
-    return {
-      label,
-      timeLength: getTime(run).length,
-      stateLengths: {
-        rx: getSeries(run, 'rx').length,
-        ry: getSeries(run, 'ry').length,
-        vx: getSeries(run, 'vx').length,
-        vy: getSeries(run, 'vy').length,
-      },
-      yLengths: {
-        inv_r: invR.length,
-        inv_a: invA.length,
-        inv_ecc: invE.length,
-        inv_energy: invEnergy.length,
-        inv_h: invH.length,
-      },
-      yFiniteCounts: {
-        inv_r: summarizeFiniteSeries(invR).finiteCount,
-        inv_a: summarizeFiniteSeries(invA).finiteCount,
-        inv_ecc: summarizeFiniteSeries(invE).finiteCount,
-        inv_energy: summarizeFiniteSeries(invEnergy).finiteCount,
-        inv_h: summarizeFiniteSeries(invH).finiteCount,
-      },
-      yFirstFiniteValues: {
-        inv_r: summarizeFiniteSeries(invR).firstFiniteValues,
-        inv_a: summarizeFiniteSeries(invA).firstFiniteValues,
-        inv_ecc: summarizeFiniteSeries(invE).firstFiniteValues,
-        inv_energy: summarizeFiniteSeries(invEnergy).firstFiniteValues,
-        inv_h: summarizeFiniteSeries(invH).firstFiniteValues,
-      },
-      modelAlgebraicNames: algebraicNames,
-    }
-  }
-
-  const collectOrbitSamples = (run: OrbitSolverRun): OrbitSamples => {
-    const t = getTime(run)
-    const rx = getSeries(run, 'rx')
-    const ry = getSeries(run, 'ry')
-    const vx = getSeries(run, 'vx')
-    const vy = getSeries(run, 'vy')
-    const invRModel = getYSeries(run, 'inv_r')
-    const invAModel = getYSeries(run, 'inv_a')
-    const invEModel = getYSeries(run, 'inv_ecc')
-    const invEnergyModel = getYSeries(run, 'inv_energy')
-    const invHModel = getYSeries(run, 'inv_h')
-    const n = Math.min(
-      t.length,
-      rx.length,
-      ry.length,
-      vx.length,
-      vy.length,
-      invRModel.length,
-      invAModel.length,
-      invEModel.length,
-      invEnergyModel.length,
-      invHModel.length,
-    )
-
-    const tt: number[] = []
-    const rr: number[] = []
-    const rrx: number[] = []
-    const rry: number[] = []
-    const vvx: number[] = []
-    const vvy: number[] = []
-    const semiMajorAxis: number[] = []
-    const eccentricity: number[] = []
-    const specificEnergy: number[] = []
-    const angularMomentum: number[] = []
-
-    for (let i = 0; i < n; i++) {
-      const x = rx[i] ?? Number.NaN
-      const y = ry[i] ?? Number.NaN
-      const vxi = vx[i] ?? Number.NaN
-      const vyi = vy[i] ?? Number.NaN
-      const ti = t[i] ?? Number.NaN
-      const rModel = invRModel[i] ?? Number.NaN
-      const aModel = invAModel[i] ?? Number.NaN
-      const eModel = invEModel[i] ?? Number.NaN
-      const enModel = invEnergyModel[i] ?? Number.NaN
-      const hModel = invHModel[i] ?? Number.NaN
-      if (![ti, x, y, vxi, vyi, rModel, aModel, eModel, enModel, hModel].every(Number.isFinite)) {
-        continue
-      }
-
-      tt.push(ti)
-      rrx.push(x)
-      rry.push(y)
-      vvx.push(vxi)
-      vvy.push(vyi)
-      rr.push(rModel)
-      semiMajorAxis.push(aModel)
-      eccentricity.push(eModel)
-      specificEnergy.push(enModel)
-      angularMomentum.push(hModel)
-    }
-
-    return {
-      t: tt,
-      rx: rrx,
-      ry: rry,
-      vx: vvx,
-      vy: vvy,
-      r: rr,
-      semiMajorAxis,
-      eccentricity,
-      specificEnergy,
-      angularMomentum,
-    }
-  }
-
-  const collectInvariants = (samples: OrbitSamples) => {
-    if (
-      samples.semiMajorAxis.length < 4 ||
-      samples.eccentricity.length < 4 ||
-      samples.specificEnergy.length < 4 ||
-      samples.angularMomentum.length < 4
-    ) {
-      throw new Error('Orbit invariants contain too few finite values')
-    }
-
-    const summarizeDrift = (values: number[]) => {
-      const ref = values[0] ?? 0
-      let maxAbsSeries = 0
-      for (const v of values) maxAbsSeries = Math.max(maxAbsSeries, Math.abs(v))
-      const baselineFloor = 1e-12
-      const relativeScale =
-        Math.abs(ref) > baselineFloor ? Math.abs(ref) : Math.max(1e-9, maxAbsSeries)
-      let maxAbsDrift = 0
-      for (const v of values) {
-        maxAbsDrift = Math.max(maxAbsDrift, Math.abs(v - ref))
-      }
-      return {
-        maxAbsoluteDrift: maxAbsDrift,
-        maxNormalizedDrift: maxAbsDrift / relativeScale,
-      }
-    }
-
-    const aDrift = summarizeDrift(samples.semiMajorAxis)
-    const eDrift = summarizeDrift(samples.eccentricity)
-    const enDrift = summarizeDrift(samples.specificEnergy)
-    const hDrift = summarizeDrift(samples.angularMomentum)
-
-    return {
-      sampleCount: samples.semiMajorAxis.length,
-      semiMajorAxis: {
-        first: samples.semiMajorAxis[0],
-        last: samples.semiMajorAxis[samples.semiMajorAxis.length - 1],
-        maxRelativeDrift: aDrift.maxNormalizedDrift,
-        maxAbsoluteDrift: aDrift.maxAbsoluteDrift,
-      },
-      eccentricity: {
-        first: samples.eccentricity[0],
-        last: samples.eccentricity[samples.eccentricity.length - 1],
-        maxRelativeDrift: eDrift.maxNormalizedDrift,
-        maxAbsoluteDrift: eDrift.maxAbsoluteDrift,
-      },
-      specificEnergy: {
-        first: samples.specificEnergy[0],
-        last: samples.specificEnergy[samples.specificEnergy.length - 1],
-        maxRelativeDrift: enDrift.maxNormalizedDrift,
-        maxAbsoluteDrift: enDrift.maxAbsoluteDrift,
-      },
-      angularMomentum: {
-        first: samples.angularMomentum[0],
-        last: samples.angularMomentum[samples.angularMomentum.length - 1],
-        maxRelativeDrift: hDrift.maxNormalizedDrift,
-        maxAbsoluteDrift: hDrift.maxAbsoluteDrift,
-      },
-    }
-  }
-
-  const safeLast = (arr: number[]) => {
-    for (let i = arr.length - 1; i >= 0; i--) {
-      const v = arr[i]
-      if (typeof v === 'number' && Number.isFinite(v)) return v
-    }
-    return null
-  }
-
-  const getRawFirstStateValues = (run: OrbitSolverRun, names: string[]) => {
-    const out: Record<string, number | null> = {}
-    for (const n of names) {
-      const s = getSeries(run, n)
-      const first = s.length > 0 ? (s[0] ?? Number.NaN) : Number.NaN
-      out[n] = Number.isFinite(first) ? first : null
-    }
-    return out
-  }
-
-  const runSummary = (label: string, run: OrbitSolverRun, samples: OrbitSamples) => {
-    const rMin = samples.r.length > 0 ? Math.min(...samples.r) : null
-    const rMax = samples.r.length > 0 ? Math.max(...samples.r) : null
-    const stateNames = run?.meta?.model?.stateNames ?? []
-    return {
-      label,
-      stopReason: run?.meta?.stopReason ?? null,
-      stopError: run?.meta?.stopError ?? null,
-      stopDetails: run?.meta?.stopDetails ?? null,
-      sampleCount: samples.t.length,
-      tLast: safeLast(samples.t),
-      rxLast: safeLast(samples.rx),
-      ryLast: safeLast(samples.ry),
-      vxLast: safeLast(samples.vx),
-      vyLast: safeLast(samples.vy),
-      rMin,
-      rMax,
-      stateNames,
-      firstStateValues: getRawFirstStateValues(run, stateNames),
-    }
-  }
-
-  const runNumericDiagnostics = (label: string, run: OrbitSolverRun, samples: OrbitSamples) => {
-    const t = getTime(run)
-    let firstNonFiniteTimeIndex: number | null = null
-    for (let i = 0; i < t.length; i++) {
-      if (!Number.isFinite(t[i] ?? Number.NaN)) {
-        firstNonFiniteTimeIndex = i
-        break
-      }
-    }
-    return {
-      label,
-      tStats: orbitSeriesStats(samples.t),
-      rxStats: orbitSeriesStats(samples.rx),
-      ryStats: orbitSeriesStats(samples.ry),
-      vxStats: orbitSeriesStats(samples.vx),
-      vyStats: orbitSeriesStats(samples.vy),
-      rStats: orbitSeriesStats(samples.r),
-      firstNonFiniteTimeIndex,
-      stopReason: run?.meta?.stopReason ?? null,
-      stopError: run?.meta?.stopError ?? null,
-    }
-  }
-
-  const renderDebugCanvas = (
-    current: OrbitSamples,
-    irk4: OrbitSamples,
-    debugSummary: Record<string, unknown>,
-  ) => {
-    if (typeof document === 'undefined') return
-
-    const old = document.getElementById('modelica-orbit-debug-panel')
-    if (old && old.parentNode) old.parentNode.removeChild(old)
-
-    const panel = document.createElement('div')
-    panel.id = 'modelica-orbit-debug-panel'
-    panel.style.marginTop = '16px'
-    panel.style.padding = '12px'
-    panel.style.border = '1px solid #bbb'
-    panel.style.background = '#fff'
-
-    const title = document.createElement('div')
-    title.textContent = 'Modelica Orbit Debug Plot'
-    title.style.fontWeight = '700'
-    title.style.marginBottom = '8px'
-    panel.appendChild(title)
-
-    const canvas = document.createElement('canvas')
-    canvas.width = 1100
-    canvas.height = 560
-    canvas.style.width = '100%'
-    canvas.style.maxWidth = '1100px'
-    canvas.style.border = '1px solid #ddd'
-    panel.appendChild(canvas)
-
-    const pre = document.createElement('pre')
-    pre.style.marginTop = '8px'
-    pre.style.whiteSpace = 'pre-wrap'
-    pre.textContent = serializeObject(debugSummary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
-    panel.appendChild(pre)
-
-    const host = document.querySelector('.q-page') || document.body
-    host.appendChild(panel)
-
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    const drawSeries = (
-      left: number,
-      top: number,
-      width: number,
-      height: number,
-      xVals: number[],
-      yValsA: number[],
-      yValsB: number[],
-      titleText: string,
-      colorA: string,
-      colorB: string,
-    ) => {
-      const n = Math.min(xVals.length, yValsA.length, yValsB.length)
-      if (n < 1) {
-        ctx.strokeStyle = '#999'
-        ctx.strokeRect(left, top, width, height)
-        ctx.fillStyle = '#444'
-        ctx.fillText(`${titleText} (not enough data)`, left + 8, top + 16)
-        return
-      }
-      let xMin = Infinity
-      let xMax = -Infinity
-      let yMin = Infinity
-      let yMax = -Infinity
-      for (let i = 0; i < n; i++) {
-        const xv = xVals[i] ?? Number.NaN
-        const ya = yValsA[i] ?? Number.NaN
-        const yb = yValsB[i] ?? Number.NaN
-        if (!Number.isFinite(xv) || !Number.isFinite(ya) || !Number.isFinite(yb)) continue
-        xMin = Math.min(xMin, xv)
-        xMax = Math.max(xMax, xv)
-        yMin = Math.min(yMin, ya, yb)
-        yMax = Math.max(yMax, ya, yb)
-      }
-      if (
-        !Number.isFinite(xMin) ||
-        !Number.isFinite(xMax) ||
-        !Number.isFinite(yMin) ||
-        !Number.isFinite(yMax)
-      ) {
-        return
-      }
-      if (Math.abs(xMax - xMin) < 1e-12) xMax = xMin + 1
-      if (Math.abs(yMax - yMin) < 1e-12) yMax = yMin + 1
-
-      ctx.strokeStyle = '#999'
-      ctx.strokeRect(left, top, width, height)
-      ctx.fillStyle = '#222'
-      ctx.font = '12px sans-serif'
-      ctx.fillText(titleText, left + 8, top + 16)
-
-      const plot = (yy: number[], color: string) => {
-        ctx.beginPath()
-        let started = false
-        for (let i = 0; i < n; i++) {
-          const xv = xVals[i] ?? Number.NaN
-          const yv = yy[i] ?? Number.NaN
-          if (!Number.isFinite(xv) || !Number.isFinite(yv)) continue
-          const px = left + ((xv - xMin) / (xMax - xMin)) * (width - 20) + 10
-          const py = top + height - (((yv - yMin) / (yMax - yMin)) * (height - 26) + 10)
-          if (!started) {
-            ctx.moveTo(px, py)
-            started = true
-          } else {
-            ctx.lineTo(px, py)
-          }
-        }
-        ctx.strokeStyle = color
-        ctx.lineWidth = 1.4
-        ctx.stroke()
-      }
-      plot(yValsA, colorA)
-      plot(yValsB, colorB)
-    }
-
-    const drawOrbit = (
-      left: number,
-      top: number,
-      width: number,
-      height: number,
-      a: OrbitSamples,
-      b: OrbitSamples,
-    ) => {
-      const n = Math.min(a.rx.length, a.ry.length, b.rx.length, b.ry.length)
-      ctx.strokeStyle = '#999'
-      ctx.strokeRect(left, top, width, height)
-      ctx.fillStyle = '#222'
-      ctx.font = '12px sans-serif'
-      ctx.fillText('Orbit in x-y plane', left + 8, top + 16)
-      if (n < 1) return
-
-      let xMin = Infinity
-      let xMax = -Infinity
-      let yMin = Infinity
-      let yMax = -Infinity
-      for (let i = 0; i < n; i++) {
-        const xs = [a.rx[i], b.rx[i]]
-        const ys = [a.ry[i], b.ry[i]]
-        for (const xv of xs) {
-          if (typeof xv === 'number' && Number.isFinite(xv)) {
-            xMin = Math.min(xMin, xv)
-            xMax = Math.max(xMax, xv)
-          }
-        }
-        for (const yv of ys) {
-          if (typeof yv === 'number' && Number.isFinite(yv)) {
-            yMin = Math.min(yMin, yv)
-            yMax = Math.max(yMax, yv)
-          }
-        }
-      }
-      if (
-        !Number.isFinite(xMin) ||
-        !Number.isFinite(xMax) ||
-        !Number.isFinite(yMin) ||
-        !Number.isFinite(yMax)
-      ) {
-        return
-      }
-      const span = Math.max(Math.abs(xMax - xMin), Math.abs(yMax - yMin), 1)
-      const cx = 0.5 * (xMin + xMax)
-      const cy = 0.5 * (yMin + yMax)
-      xMin = cx - span / 2
-      xMax = cx + span / 2
-      yMin = cy - span / 2
-      yMax = cy + span / 2
-
-      const plotXY = (xs: number[], ys: number[], color: string) => {
-        ctx.beginPath()
-        let started = false
-        for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
-          const xv = xs[i] ?? Number.NaN
-          const yv = ys[i] ?? Number.NaN
-          if (!Number.isFinite(xv) || !Number.isFinite(yv)) continue
-          const px = left + ((xv - xMin) / (xMax - xMin)) * (width - 20) + 10
-          const py = top + height - (((yv - yMin) / (yMax - yMin)) * (height - 26) + 10)
-          if (!started) {
-            ctx.moveTo(px, py)
-            started = true
-          } else {
-            ctx.lineTo(px, py)
-          }
-        }
-        ctx.strokeStyle = color
-        ctx.lineWidth = 1.4
-        ctx.stroke()
-      }
-
-      plotXY(a.rx, a.ry, '#1f77b4')
-      plotXY(b.rx, b.ry, '#d62728')
-    }
-
-    const pad = 18
-    const w = (canvas.width - pad * 3) / 2
-    const h = (canvas.height - pad * 3) / 2
-
-    drawOrbit(pad, pad, w, h, current, irk4)
-    drawSeries(
-      pad * 2 + w,
-      pad,
-      w,
-      h,
-      current.t,
-      current.r,
-      irk4.r,
-      'Radius r(t): current vs irk4',
-      '#1f77b4',
-      '#d62728',
-    )
-    drawSeries(
-      pad,
-      pad * 2 + h,
-      w,
-      h,
-      current.t,
-      current.specificEnergy,
-      irk4.specificEnergy,
-      'Specific energy: current vs irk4',
-      '#1f77b4',
-      '#d62728',
-    )
-    drawSeries(
-      pad * 2 + w,
-      pad * 2 + h,
-      w,
-      h,
-      current.t,
-      current.eccentricity,
-      irk4.eccentricity,
-      'Eccentricity: current vs irk4',
-      '#1f77b4',
-      '#d62728',
-    )
-  }
-
+async function runOrbitSolverRuns(
+  preparation: OrbitDiagnosticsPreparation,
+): Promise<OrbitRunBundle> {
   let currentRun: OrbitSolverRun
   try {
-    currentRun = await runSimulation('modelica-orbit-current-sdirk2')
+    currentRun = await runOrbitSimulation(
+      preparation.runCode,
+      preparation.simParams,
+      'modelica-orbit-current-sdirk2',
+    )
   } catch (error) {
-    const bootDebug = {
-      mode,
-      phase: 'run-current',
-      simParams,
-      daeDebug,
-      generatedCode: {
-        length: generatedCodeDebug.length,
-        lineCount: generatedCodeDebug.lineCount,
-        checksum: generatedCodeDebug.checksum,
-      },
-      errorMessage: error instanceof Error ? error.message : String(error),
-    }
-    throw makeOrbitFailure(
-      `Orbit current run failed before producing results: ${error instanceof Error ? error.message : String(error)}`,
-      bootDebug,
-      generatedCodeDebug,
-      rendered,
-    )
+    throw makeOrbitBootFailure(preparation, 'run-current', 'current run', error)
   }
-  let irk4Run: OrbitSolverRun | null = null
-  if (mode === 'compare') {
-    try {
-      irk4Run = await runSimulation('modelica-orbit-irk4', { timeIntegrator: 'irk4' })
-    } catch (error) {
-      const bootDebug = {
-        mode,
-        phase: 'run-irk4',
-        simParams,
-        daeDebug,
-        generatedCode: {
-          length: generatedCodeDebug.length,
-          lineCount: generatedCodeDebug.lineCount,
-          checksum: generatedCodeDebug.checksum,
-        },
-        errorMessage: error instanceof Error ? error.message : String(error),
-      }
-      throw makeOrbitFailure(
-        `Orbit irk4 run failed before producing results: ${error instanceof Error ? error.message : String(error)}`,
-        bootDebug,
-        generatedCodeDebug,
-        rendered,
-      )
-    }
-  }
-  const currentSamples = collectOrbitSamples(currentRun)
-  const irk4Samples = irk4Run ? collectOrbitSamples(irk4Run) : null
-  const extractionDiagnostics = {
-    current: collectOrbitExtractionDebug('current', currentRun),
-    irk4: irk4Run ? collectOrbitExtractionDebug('irk4', irk4Run) : null,
-  }
-
-  const debugSummary = {
-    mode,
-    simParams,
-    compileSelection: selectionInfo,
-    daeDebug,
-    generatedCode: {
-      length: generatedCodeDebug.length,
-      lineCount: generatedCodeDebug.lineCount,
-      checksum: generatedCodeDebug.checksum,
-    },
-    current: runSummary('current', currentRun, currentSamples),
-    irk4: irk4Run && irk4Samples ? runSummary('irk4', irk4Run, irk4Samples) : null,
-    diagnostics: {
-      current: runNumericDiagnostics('current', currentRun, currentSamples),
-      irk4: irk4Run && irk4Samples ? runNumericDiagnostics('irk4', irk4Run, irk4Samples) : null,
-    },
-    extractionDiagnostics,
-  }
-  if (irk4Samples) {
-    renderDebugCanvas(currentSamples, irk4Samples, debugSummary)
-  }
-
-  const stopReasonCurrent = currentRun?.meta?.stopReason ?? ''
-  const stopReasonIrk4 = irk4Run?.meta?.stopReason ?? ''
-  if (stopReasonCurrent) {
-    throw makeOrbitFailure(
-      `Current solver orbit run stopped early: ${stopReasonCurrent} (${currentRun?.meta?.stopError ?? ''})`,
-      debugSummary,
-      generatedCodeDebug,
-      rendered,
-    )
-  }
-  if (irk4Run && stopReasonIrk4) {
-    throw makeOrbitFailure(
-      `IRK4 solver orbit run stopped early: ${stopReasonIrk4} (${irk4Run?.meta?.stopError ?? ''})`,
-      debugSummary,
-      generatedCodeDebug,
-      rendered,
-    )
-  }
-
-  let currentInv: ReturnType<typeof collectInvariants>
-  let irk4Inv: ReturnType<typeof collectInvariants> | null
+  if (preparation.mode !== 'compare') return { currentRun, irk4Run: null }
   try {
-    currentInv = collectInvariants(currentSamples)
-    irk4Inv = irk4Samples ? collectInvariants(irk4Samples) : null
+    const irk4Run = await runOrbitSimulation(
+      preparation.runCode,
+      preparation.simParams,
+      'modelica-orbit-irk4',
+      { timeIntegrator: 'irk4' },
+    )
+    return { currentRun, irk4Run }
+  } catch (error) {
+    throw makeOrbitBootFailure(preparation, 'run-irk4', 'irk4 run', error)
+  }
+}
+
+function buildOrbitDebugSummary(
+  preparation: OrbitDiagnosticsPreparation,
+  runs: OrbitRunBundle,
+  currentSamples: OrbitSamples,
+  irk4Samples: OrbitSamples | null,
+) {
+  return {
+    mode: preparation.mode,
+    simParams: preparation.simParams,
+    compileSelection: preparation.selectionInfo,
+    daeDebug: preparation.daeDebug,
+    generatedCode: summarizeOrbitGeneratedCode(preparation.generatedCodeDebug),
+    current: summarizeOrbitRun('current', runs.currentRun, currentSamples),
+    irk4: runs.irk4Run && irk4Samples ? summarizeOrbitRun('irk4', runs.irk4Run, irk4Samples) : null,
+    diagnostics: {
+      current: runOrbitNumericDiagnostics('current', runs.currentRun, currentSamples),
+      irk4:
+        runs.irk4Run && irk4Samples
+          ? runOrbitNumericDiagnostics('irk4', runs.irk4Run, irk4Samples)
+          : null,
+    },
+    extractionDiagnostics: {
+      current: collectOrbitExtractionDebug('current', runs.currentRun),
+      irk4: runs.irk4Run ? collectOrbitExtractionDebug('irk4', runs.irk4Run) : null,
+    },
+  }
+}
+
+function assertOrbitRunStability(
+  preparation: OrbitDiagnosticsPreparation,
+  runs: OrbitRunBundle,
+  debugSummary: Record<string, unknown>,
+) {
+  const currentReason = runs.currentRun?.meta?.stopReason ?? ''
+  if (currentReason) {
+    throw makeOrbitFailure(
+      `Current solver orbit run stopped early: ${currentReason} (${runs.currentRun?.meta?.stopError ?? ''})`,
+      debugSummary,
+      preparation.generatedCodeDebug,
+      preparation.rendered,
+    )
+  }
+  const irk4Reason = runs.irk4Run?.meta?.stopReason ?? ''
+  if (runs.irk4Run && irk4Reason) {
+    throw makeOrbitFailure(
+      `IRK4 solver orbit run stopped early: ${irk4Reason} (${runs.irk4Run?.meta?.stopError ?? ''})`,
+      debugSummary,
+      preparation.generatedCodeDebug,
+      preparation.rendered,
+    )
+  }
+}
+
+function collectOrbitInvariantSet(
+  currentSamples: OrbitSamples,
+  irk4Samples: OrbitSamples | null,
+  preparation: OrbitDiagnosticsPreparation,
+  debugSummary: Record<string, unknown>,
+) {
+  try {
+    return {
+      currentInv: collectInvariants(currentSamples),
+      irk4Inv: irk4Samples ? collectInvariants(irk4Samples) : null,
+    }
   } catch (error) {
     throw makeOrbitFailure(
       `Invariant extraction failed: ${error instanceof Error ? error.message : String(error)}`,
       debugSummary,
-      generatedCodeDebug,
-      rendered,
+      preparation.generatedCodeDebug,
+      preparation.rendered,
     )
   }
+}
 
-  const currentMaxDrift = Math.max(
-    currentInv.semiMajorAxis.maxRelativeDrift,
-    currentInv.specificEnergy.maxRelativeDrift,
-    currentInv.angularMomentum.maxRelativeDrift,
-    currentInv.eccentricity.maxAbsoluteDrift,
-  )
-  const irk4MaxDrift = irk4Inv
-    ? Math.max(
-        irk4Inv.semiMajorAxis.maxRelativeDrift,
-        irk4Inv.specificEnergy.maxRelativeDrift,
-        irk4Inv.angularMomentum.maxRelativeDrift,
-        irk4Inv.eccentricity.maxAbsoluteDrift,
-      )
-    : null
-
+function assertOrbitInvariantDrift(
+  currentMaxDrift: number,
+  irk4MaxDrift: number | null,
+  debugSummary: Record<string, unknown>,
+  preparation: OrbitDiagnosticsPreparation,
+) {
   if (
     !Number.isFinite(currentMaxDrift) ||
     (irk4MaxDrift !== null && !Number.isFinite(irk4MaxDrift))
@@ -5097,23 +5014,32 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
     throw makeOrbitFailure(
       `Orbit invariants contain non-finite drift metrics; current=${currentMaxDrift}, irk4=${String(irk4MaxDrift)}`,
       debugSummary,
-      generatedCodeDebug,
-      rendered,
+      preparation.generatedCodeDebug,
+      preparation.rendered,
     )
   }
   if (irk4MaxDrift !== null && irk4MaxDrift > currentMaxDrift * 1.25 + 1e-12) {
     throw makeOrbitFailure(
       `IRK4 should be at least comparable on invariants drift; current=${currentMaxDrift}, irk4=${irk4MaxDrift}`,
       debugSummary,
-      generatedCodeDebug,
-      rendered,
+      preparation.generatedCodeDebug,
+      preparation.rendered,
     )
   }
+}
 
+function assembleOrbitDiagnosticResult(
+  preparation: OrbitDiagnosticsPreparation,
+  currentInv: ReturnType<typeof collectInvariants>,
+  irk4Inv: ReturnType<typeof collectInvariants> | null,
+  currentMaxDrift: number,
+  irk4MaxDrift: number | null,
+  debugSummary: Record<string, unknown>,
+) {
   return {
     ok: true,
     model: 'SatelliteOrbit2D',
-    sim: simParams,
+    sim: preparation.simParams,
     debugSummarySerialized: serializeObject(debugSummary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS),
     currentSolver: {
       id: 'sdirk2',
@@ -5128,12 +5054,299 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
             maxRelativeDrift: irk4MaxDrift,
           }
         : null,
-    generatedCode: {
-      length: generatedCodeDebug.length,
-      lineCount: generatedCodeDebug.lineCount,
-      checksum: generatedCodeDebug.checksum,
-    },
+    generatedCode: summarizeOrbitGeneratedCode(preparation.generatedCodeDebug),
   }
+}
+
+function plotCanvasPolyline(
+  ctx: CanvasRenderingContext2D,
+  frame: OrbitCanvasFrame,
+  range: OrbitCanvasRange,
+  xValues: number[],
+  yValues: number[],
+  color: string,
+) {
+  const count = Math.min(xValues.length, yValues.length)
+  ctx.beginPath()
+  let started = false
+  for (let i = 0; i < count; i++) {
+    const xv = xValues[i] ?? Number.NaN
+    const yv = yValues[i] ?? Number.NaN
+    if (!Number.isFinite(xv) || !Number.isFinite(yv)) continue
+    const px =
+      frame.left + ((xv - range.xMin) / (range.xMax - range.xMin)) * (frame.width - 20) + 10
+    const py =
+      frame.top +
+      frame.height -
+      (((yv - range.yMin) / (range.yMax - range.yMin)) * (frame.height - 26) + 10)
+    if (!started) {
+      ctx.moveTo(px, py)
+      started = true
+    } else {
+      ctx.lineTo(px, py)
+    }
+  }
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1.4
+  ctx.stroke()
+}
+
+function computeOrbitSeriesRange(
+  xValues: number[],
+  valuesA: number[],
+  valuesB: number[],
+): OrbitCanvasRange | null {
+  const count = Math.min(xValues.length, valuesA.length, valuesB.length)
+  let xMin = Infinity
+  let xMax = -Infinity
+  let yMin = Infinity
+  let yMax = -Infinity
+  for (let i = 0; i < count; i++) {
+    const xv = xValues[i] ?? Number.NaN
+    const ya = valuesA[i] ?? Number.NaN
+    const yb = valuesB[i] ?? Number.NaN
+    if (!Number.isFinite(xv) || !Number.isFinite(ya) || !Number.isFinite(yb)) continue
+    xMin = Math.min(xMin, xv)
+    xMax = Math.max(xMax, xv)
+    yMin = Math.min(yMin, ya, yb)
+    yMax = Math.max(yMax, ya, yb)
+  }
+  if (
+    !Number.isFinite(xMin) ||
+    !Number.isFinite(xMax) ||
+    !Number.isFinite(yMin) ||
+    !Number.isFinite(yMax)
+  ) {
+    return null
+  }
+  if (Math.abs(xMax - xMin) < 1e-12) xMax = xMin + 1
+  if (Math.abs(yMax - yMin) < 1e-12) yMax = yMin + 1
+  return { xMin, xMax, yMin, yMax }
+}
+
+function drawOrbitSeriesPanel(
+  ctx: CanvasRenderingContext2D,
+  frame: OrbitCanvasFrame,
+  series: {
+    xValues: number[]
+    valuesA: number[]
+    valuesB: number[]
+    title: string
+    colorA: string
+    colorB: string
+  },
+) {
+  const count = Math.min(series.xValues.length, series.valuesA.length, series.valuesB.length)
+  if (count < 1) {
+    ctx.strokeStyle = '#999'
+    ctx.strokeRect(frame.left, frame.top, frame.width, frame.height)
+    ctx.fillStyle = '#444'
+    ctx.fillText(`${series.title} (not enough data)`, frame.left + 8, frame.top + 16)
+    return
+  }
+  const range = computeOrbitSeriesRange(series.xValues, series.valuesA, series.valuesB)
+  if (!range) return
+  ctx.strokeStyle = '#999'
+  ctx.strokeRect(frame.left, frame.top, frame.width, frame.height)
+  ctx.fillStyle = '#222'
+  ctx.font = '12px sans-serif'
+  ctx.fillText(series.title, frame.left + 8, frame.top + 16)
+  plotCanvasPolyline(ctx, frame, range, series.xValues, series.valuesA, series.colorA)
+  plotCanvasPolyline(ctx, frame, range, series.xValues, series.valuesB, series.colorB)
+}
+
+function computeOrbitXYRange(
+  a: OrbitSamples,
+  b: OrbitSamples,
+  count: number,
+): OrbitCanvasRange | null {
+  let xMin = Infinity
+  let xMax = -Infinity
+  let yMin = Infinity
+  let yMax = -Infinity
+  for (let i = 0; i < count; i++) {
+    for (const xv of [a.rx[i], b.rx[i]]) {
+      if (typeof xv === 'number' && Number.isFinite(xv)) {
+        xMin = Math.min(xMin, xv)
+        xMax = Math.max(xMax, xv)
+      }
+    }
+    for (const yv of [a.ry[i], b.ry[i]]) {
+      if (typeof yv === 'number' && Number.isFinite(yv)) {
+        yMin = Math.min(yMin, yv)
+        yMax = Math.max(yMax, yv)
+      }
+    }
+  }
+  if (
+    !Number.isFinite(xMin) ||
+    !Number.isFinite(xMax) ||
+    !Number.isFinite(yMin) ||
+    !Number.isFinite(yMax)
+  ) {
+    return null
+  }
+  const span = Math.max(Math.abs(xMax - xMin), Math.abs(yMax - yMin), 1)
+  const cx = 0.5 * (xMin + xMax)
+  const cy = 0.5 * (yMin + yMax)
+  return { xMin: cx - span / 2, xMax: cx + span / 2, yMin: cy - span / 2, yMax: cy + span / 2 }
+}
+
+function drawOrbitXYPanel(
+  ctx: CanvasRenderingContext2D,
+  frame: OrbitCanvasFrame,
+  a: OrbitSamples,
+  b: OrbitSamples,
+) {
+  const count = Math.min(a.rx.length, a.ry.length, b.rx.length, b.ry.length)
+  ctx.strokeStyle = '#999'
+  ctx.strokeRect(frame.left, frame.top, frame.width, frame.height)
+  ctx.fillStyle = '#222'
+  ctx.font = '12px sans-serif'
+  ctx.fillText('Orbit in x-y plane', frame.left + 8, frame.top + 16)
+  if (count < 1) return
+  const range = computeOrbitXYRange(a, b, count)
+  if (!range) return
+  plotCanvasPolyline(ctx, frame, range, a.rx, a.ry, '#1f77b4')
+  plotCanvasPolyline(ctx, frame, range, b.rx, b.ry, '#d62728')
+}
+
+function createOrbitDebugPanel(debugSummary: Record<string, unknown>) {
+  if (typeof document === 'undefined') return null
+
+  const existing = document.getElementById('modelica-orbit-debug-panel')
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing)
+
+  const panel = document.createElement('div')
+  panel.id = 'modelica-orbit-debug-panel'
+  panel.style.marginTop = '16px'
+  panel.style.padding = '12px'
+  panel.style.border = '1px solid #bbb'
+  panel.style.background = '#fff'
+
+  const title = document.createElement('div')
+  title.textContent = 'Modelica Orbit Debug Plot'
+  title.style.fontWeight = '700'
+  title.style.marginBottom = '8px'
+  panel.appendChild(title)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = 1100
+  canvas.height = 560
+  canvas.style.width = '100%'
+  canvas.style.maxWidth = '1100px'
+  canvas.style.border = '1px solid #ddd'
+  panel.appendChild(canvas)
+
+  const pre = document.createElement('pre')
+  pre.style.marginTop = '8px'
+  pre.style.whiteSpace = 'pre-wrap'
+  pre.textContent = serializeObject(debugSummary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
+  panel.appendChild(pre)
+
+  const host = document.querySelector('.q-page') || document.body
+  host.appendChild(panel)
+  return canvas
+}
+
+function drawOrbitSeriesPanelForRun(
+  ctx: CanvasRenderingContext2D,
+  frame: OrbitCanvasFrame,
+  current: OrbitSamples,
+  irk4: OrbitSamples,
+  valuesA: number[],
+  valuesB: number[],
+  title: string,
+) {
+  drawOrbitSeriesPanel(ctx, frame, {
+    xValues: current.t,
+    valuesA,
+    valuesB,
+    title,
+    colorA: '#1f77b4',
+    colorB: '#d62728',
+  })
+}
+
+function drawOrbitDebugPanels(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  current: OrbitSamples,
+  irk4: OrbitSamples,
+) {
+  const pad = 18
+  const w = (canvas.width - pad * 3) / 2
+  const h = (canvas.height - pad * 3) / 2
+  drawOrbitXYPanel(ctx, { left: pad, top: pad, width: w, height: h }, current, irk4)
+  drawOrbitSeriesPanelForRun(
+    ctx,
+    { left: pad * 2 + w, top: pad, width: w, height: h },
+    current,
+    irk4,
+    current.r,
+    irk4.r,
+    'Radius r(t): current vs irk4',
+  )
+  drawOrbitSeriesPanelForRun(
+    ctx,
+    { left: pad, top: pad * 2 + h, width: w, height: h },
+    current,
+    irk4,
+    current.specificEnergy,
+    irk4.specificEnergy,
+    'Specific energy: current vs irk4',
+  )
+  drawOrbitSeriesPanelForRun(
+    ctx,
+    { left: pad * 2 + w, top: pad * 2 + h, width: w, height: h },
+    current,
+    irk4,
+    current.eccentricity,
+    irk4.eccentricity,
+    'Eccentricity: current vs irk4',
+  )
+}
+
+function renderOrbitDebugCanvas(
+  current: OrbitSamples,
+  irk4: OrbitSamples,
+  debugSummary: Record<string, unknown>,
+) {
+  const canvas = createOrbitDebugPanel(debugSummary)
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  drawOrbitDebugPanels(ctx, canvas, current, irk4)
+}
+
+async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
+  const preparation = await prepareOrbitDiagnostics(mode)
+  const runs = await runOrbitSolverRuns(preparation)
+  const currentSamples = collectOrbitSamples(runs.currentRun)
+  const irk4Samples = runs.irk4Run ? collectOrbitSamples(runs.irk4Run) : null
+  const debugSummary = buildOrbitDebugSummary(preparation, runs, currentSamples, irk4Samples)
+  if (irk4Samples) renderOrbitDebugCanvas(currentSamples, irk4Samples, debugSummary)
+
+  assertOrbitRunStability(preparation, runs, debugSummary)
+  const { currentInv, irk4Inv } = collectOrbitInvariantSet(
+    currentSamples,
+    irk4Samples,
+    preparation,
+    debugSummary,
+  )
+  const currentMaxDrift = maxOrbitInvariantDrift(currentInv)
+  const irk4MaxDrift = irk4Inv ? maxOrbitInvariantDrift(irk4Inv) : null
+  assertOrbitInvariantDrift(currentMaxDrift, irk4MaxDrift, debugSummary, preparation)
+  return assembleOrbitDiagnosticResult(
+    preparation,
+    currentInv,
+    irk4Inv,
+    currentMaxDrift,
+    irk4MaxDrift,
+    debugSummary,
+  )
 }
 
 testModelicaMslResistorExampleSimulation.timeoutMs = 120_000

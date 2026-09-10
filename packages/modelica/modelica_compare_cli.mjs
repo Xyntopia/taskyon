@@ -3246,12 +3246,14 @@ async function promptBaselineFileSelection() {
   }
 }
 
-async function runComparison(options) {
-  options.rumocaRuntime = normalizeRumocaRuntime(options.rumocaRuntime)
-  if (options.mode !== 'full' && options.mode !== 'random-stop') {
-    throw new Error(`Unsupported --mode ${options.mode}`)
-  }
-  const runId = `run_${Date.now()}_${options.seed}`
+function splitCsv(value) {
+  return String(value || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+}
+
+function logComparisonStart(options, runId) {
   logInfo(`Starting compare run id=${runId}`)
   logInfo(
     `Config mode=${options.mode} seed=${options.seed} maxModels=${options.maxModels || 0} stopThreshold=${options.stopThresholdPercent}% alwaysContinue=${options.alwaysContinue ? 'yes' : 'no'} compileOnly=${options.compileOnly ? 'yes' : 'no'} rumocaRuntime=${options.rumocaRuntime}`,
@@ -3262,10 +3264,9 @@ async function runComparison(options) {
   logInfo(`Path mslZip=${resolve(options.mslZip)}`)
   logInfo(`Path libraryZips=${options.libraryZips.map((x) => resolve(x)).join(', ') || '(none)'}`)
   logInfo(`Path omcWrapper=${resolve(options.omcWrapper)}`)
-  if (options.rumocaRuntime === 'native' && Math.abs(Number(options.t0) || 0) > 1e-12) {
-    throw new Error('native Rumoca wasm comparison currently supports only --t0 0')
-  }
+}
 
+async function prepareComparisonContext(options) {
   const init = await initRumocaEngine()
   const libraries = await loadLibrariesFromZips([options.mslZip, ...options.libraryZips])
   const libraryTag = deriveLibraryTagFromLibraries(libraries)
@@ -3288,39 +3289,36 @@ async function runComparison(options) {
     .filter((zipPath) => zipPath !== mslZipResolved)
     .flatMap((zipPath) => libraries.rootsByZipPath?.[zipPath] ?? [])
   const preferredTargetRoots = [...new Set(additionalZipRoots)].sort()
-
   const solverSource = await readFile(resolve(options.solverFile), 'utf8')
+  return {
+    init,
+    libraries,
+    libraryTag,
+    artifactTag,
+    candidateFile,
+    solverSource,
+    preferredTargetRoots,
+    progressPath: join(RUN_CACHE_DIR, 'latest_run.json'),
+  }
+}
+
+async function loadComparisonTargetCatalog(options, context) {
   const listClassesRaw = rumoca.list_classes()
   const knownClassNames = collectKnownClassNames(listClassesRaw)
   const knownClassInfoByName = collectKnownClassInfoByName(listClassesRaw)
   const rawTargets = await loadTargetModels({
     modelName: options.modelName,
-    libraryRoots: preferredTargetRoots.length > 0 ? preferredTargetRoots : libraries.libraryRoots,
+    libraryRoots:
+      context.preferredTargetRoots.length > 0
+        ? context.preferredTargetRoots
+        : context.libraries.libraryRoots,
     knownClassNames,
   })
-  const targetPrefixes = String(options.targetPrefixesCsv || '')
-    .split(',')
-    .map((x) => x.trim())
-    .filter(Boolean)
-  if (String(options.modelName || '').trim()) {
-    if (!knownClassNames.has(options.modelName)) {
-      throw new Error(`Requested --model not found in loaded classes: ${options.modelName}`)
-    }
-  }
-  const shouldDiscoverFromPrefixes =
-    targetPrefixes.length > 0 && !String(options.modelName || '').trim()
-  let allTargets = shouldDiscoverFromPrefixes
-    ? [...knownClassNames]
-    : rawTargets.filter((name) => knownClassNames.has(name))
-  if (targetPrefixes.length > 0 && !String(options.modelName || '').trim()) {
-    allTargets = allTargets.filter((name) =>
-      targetPrefixes.some((prefix) => name.startsWith(prefix)),
-    )
-  }
-  const targetClassTypes = String(options.targetClassTypesCsv || '')
-    .split(',')
-    .map((x) => x.trim().toLowerCase())
-    .filter(Boolean)
+  return { rawTargets, knownClassNames, knownClassInfoByName }
+}
+
+function resolveEffectiveTargetClassTypes(options, targetPrefixes) {
+  const targetClassTypes = splitCsv(options.targetClassTypesCsv).map((x) => x.toLowerCase())
   const defaultCompareClassTypes =
     !options.compileOnly &&
     targetClassTypes.length === 0 &&
@@ -3332,40 +3330,26 @@ async function runComparison(options) {
     options.compileOnly && targetClassTypes.length === 0 && !String(options.modelName || '').trim()
       ? ['model', 'block']
       : []
-  const effectiveTargetClassTypes =
-    targetClassTypes.length > 0
-      ? targetClassTypes
-      : defaultCompareClassTypes.length > 0
-        ? defaultCompareClassTypes
-        : defaultCompileOnlyClassTypes
-  if (effectiveTargetClassTypes.length > 0) {
-    allTargets = allTargets.filter((name) => {
-      const info = knownClassInfoByName.get(name)
-      const classType = String(info?.classType || '').toLowerCase()
-      return effectiveTargetClassTypes.includes(classType)
-    })
+  if (targetClassTypes.length > 0) return targetClassTypes
+  if (defaultCompareClassTypes.length > 0) return defaultCompareClassTypes
+  return defaultCompileOnlyClassTypes
+}
+
+function pickComparisonTargets(options, allTargets) {
+  if (options.mode === 'random-stop') {
+    return shuffled(allTargets, options.seed).slice(
+      0,
+      options.maxModels > 0 ? options.maxModels : allTargets.length,
+    )
   }
-  const skippedTargets = rawTargets.length - allTargets.length
-  if (skippedTargets > 0) {
-    const missing = rawTargets.filter((name) => !knownClassNames.has(name))
-    logInfo(`Skipped ${skippedTargets} missing targets (not found in loaded classes)`)
-    logInfo(`Missing targets sample: ${missing.slice(0, 10).join(', ')}`)
-  }
-  const targets =
-    options.mode === 'random-stop'
-      ? shuffled(allTargets, options.seed).slice(
-          0,
-          options.maxModels > 0 ? options.maxModels : allTargets.length,
-        )
-      : options.maxModels > 0
-        ? allTargets.slice(0, options.maxModels)
-        : allTargets
+  return options.maxModels > 0 ? allTargets.slice(0, options.maxModels) : allTargets
+}
+
+function logTargetSelection(options, allTargets, targets, classTypes, preferredTargetRoots) {
   logInfo(
     `Selection mode=${options.mode} seed=${options.seed} totalTargets=${allTargets.length} selected=${targets.length}`,
   )
-  if (effectiveTargetClassTypes.length > 0) {
-    logInfo(`Selection class types: ${effectiveTargetClassTypes.join(', ')}`)
-  }
+  if (classTypes.length > 0) logInfo(`Selection class types: ${classTypes.join(', ')}`)
   if (options.mode === 'random-stop') {
     logInfo('Deterministic random selection active (override with --seed <n>)')
   }
@@ -3373,536 +3357,685 @@ async function runComparison(options) {
   if (preferredTargetRoots.length > 0) {
     logInfo(`Target roots constrained to additional libraries: ${preferredTargetRoots.join(', ')}`)
   }
-  const progressPath = join(RUN_CACHE_DIR, 'latest_run.json')
+}
 
-  const records = []
-  let stoppedAtModel = ''
-  let debugPath = ''
-  let alwaysContinue = Boolean(options.alwaysContinue)
-  const stopOnFailure = options.mode === 'random-stop' && !alwaysContinue
-  if (options.compileOnly && Number(options.compileWorkers) > 1) {
-    logInfo(`Compile-only worker pool enabled: workers=${Number(options.compileWorkers)}`)
-    const workerCount = Math.min(Number(options.compileWorkers), Math.max(1, targets.length))
-    const workers = []
-    try {
-      for (let i = 0; i < workerCount; i += 1) {
-        const child = await spawnCompileWorkerProcess(options)
-        workers.push(child)
-      }
-      let nextTargetIndex = 0
-      const active = new Map()
-      const launch = (child) => {
-        if (nextTargetIndex >= targets.length) return
-        const modelName = targets[nextTargetIndex]
-        nextTargetIndex += 1
-        process.stdout.write(`[${nextTargetIndex}/${targets.length}] ${modelName}\n`)
-        logInfo(`[${modelName}] Compile-only mode: validating Rumoca compile`)
-        const run = runCompileOnWorker({
-          child,
-          modelName,
-          compileTimeoutMs: Number(options.compileTimeoutMs),
-        })
-          .then((payload) => ({ ok: true, child, payload }))
-          .catch((error) => ({ ok: false, child, modelName, error }))
-        active.set(child, run)
-      }
-      for (const child of workers) launch(child)
-      while (active.size > 0) {
-        const finished = await Promise.race(active.values())
-        active.delete(finished.child)
-        if (!finished.ok) {
-          const message =
-            finished.error instanceof Error ? finished.error.message : String(finished.error)
-          logInfo(`[${finished.modelName}] Failure captured: ${message}`)
-          records.push({
-            modelName: finished.modelName,
-            status: 'compile_fail',
-            elapsedMs: Number(options.compileTimeoutMs),
-            error: message,
-          })
-          if (stopOnFailure) {
-            stoppedAtModel = finished.modelName
-            break
-          }
-          try {
-            const replacement = await spawnCompileWorkerProcess(options)
-            const idx = workers.indexOf(finished.child)
-            if (idx >= 0) workers[idx] = replacement
-            launch(replacement)
-          } catch {
-            // If worker respawn fails, continue draining other active workers and preserve failures.
-          }
-          logInfo(`[${finished.modelName}] Writing progress snapshot -> ${progressPath}`)
-          await saveProgress(progressPath, {
-            startedAt: records[0]?.startedAt || null,
-            updatedAt: new Date().toISOString(),
-            init,
-            libraries,
-            options,
-            summary: recordSummary(records),
-            records,
-          })
-          continue
-        }
-        const { modelName, elapsedMs, result } = finished.payload
-        if (result.status !== 'compiled') {
-          const message = asString(result.error) || `compile probe failed for ${modelName}`
-          logInfo(`[${modelName}] Failure captured: ${message}`)
-          records.push({
-            modelName,
-            status: 'compile_fail',
-            elapsedMs: Number(elapsedMs) || 0,
-            error: message,
-          })
-          if (stopOnFailure) {
-            stoppedAtModel = modelName
-            break
-          }
-          launch(finished.child)
-          logInfo(`[${modelName}] Writing progress snapshot -> ${progressPath}`)
-          await saveProgress(progressPath, {
-            startedAt: records[0]?.startedAt || null,
-            updatedAt: new Date().toISOString(),
-            init,
-            libraries,
-            options,
-            summary: recordSummary(records),
-            records,
-          })
-          continue
-        }
-        const compileElapsedMs = Number(result?.planStats?.[0]?.elapsedMs || elapsedMs || 0)
-        if (compileElapsedMs > Number(options.compileTimeoutMs)) {
-          const message = `compile timeout after ${options.compileTimeoutMs}ms for ${modelName}`
-          logInfo(`[${modelName}] Failure captured: ${message}`)
-          records.push({
-            modelName,
-            status: 'compile_fail',
-            elapsedMs: Number(elapsedMs) || compileElapsedMs,
-            error: message,
-          })
-          if (stopOnFailure) {
-            stoppedAtModel = modelName
-            break
-          }
-          launch(finished.child)
-          logInfo(`[${modelName}] Writing progress snapshot -> ${progressPath}`)
-          await saveProgress(progressPath, {
-            startedAt: records[0]?.startedAt || null,
-            updatedAt: new Date().toISOString(),
-            init,
-            libraries,
-            options,
-            summary: recordSummary(records),
-            records,
-          })
-          continue
-        }
-        records.push({
-          modelName,
-          status: 'compiled',
-          elapsedMs: Number(elapsedMs) || compileElapsedMs,
-          compileElapsedMs,
-        })
-        logInfo(`[${modelName}] Compile-only success`)
-        launch(finished.child)
-        logInfo(`[${modelName}] Writing progress snapshot -> ${progressPath}`)
-        await saveProgress(progressPath, {
-          startedAt: records[0]?.startedAt || null,
-          updatedAt: new Date().toISOString(),
-          init,
-          libraries,
-          options,
-          summary: recordSummary(records),
-          records,
-        })
-      }
-    } finally {
-      for (const child of workers) {
-        try {
-          child.kill('SIGKILL')
-        } catch (error) {
-          void error
-        }
-      }
-    }
-    const summary = {
-      init,
-      libraries,
-      mode: options.mode,
-      seed: options.seed,
-      thresholdPercent: options.stopThresholdPercent,
-      stoppedAtModel: stoppedAtModel || null,
-      debugPath: debugPath || null,
-      summary: recordSummary(records),
-      records,
-      progressPath,
-      omcCacheDir: OMC_CACHE_DIR,
-      cliLogs: RUN_LOG_BUFFER.slice(),
-      libraryTag,
-      artifactTag,
-      rumocaRuntime: options.rumocaRuntime,
-    }
-    await saveProgress(progressPath, summary)
-    const datedRunFile = datedRunFileForLibraryTag(artifactTag, new Date().toISOString())
-    await writeJsonFile(candidateFile, summary)
-    await writeJsonFile(datedRunFile, summary)
-    if (
-      options.rumocaRuntime !== 'native' &&
-      resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE)
+function selectComparisonTargets(options, catalog, preferredTargetRoots) {
+  const targetPrefixes = splitCsv(options.targetPrefixesCsv)
+  const explicitModelName = String(options.modelName || '').trim()
+  if (explicitModelName && !catalog.knownClassNames.has(options.modelName)) {
+    throw new Error(`Requested --model not found in loaded classes: ${options.modelName}`)
+  }
+  const shouldDiscoverFromPrefixes = targetPrefixes.length > 0 && !explicitModelName
+  let allTargets = shouldDiscoverFromPrefixes
+    ? [...catalog.knownClassNames]
+    : catalog.rawTargets.filter((name) => catalog.knownClassNames.has(name))
+  if (targetPrefixes.length > 0 && !explicitModelName) {
+    allTargets = allTargets.filter((name) =>
+      targetPrefixes.some((prefix) => name.startsWith(prefix)),
     )
-      await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
-    summary.candidateFile = candidateFile
-    summary.datedRunFile = datedRunFile
-    return summary
   }
-  for (let i = 0; i < targets.length; i += 1) {
-    const modelName = targets[i]
-    const startedAt = Date.now()
-    let sourceModelica = ''
-    let renderedJs = ''
-    let solverTraceSnapshot = null
-    let solverEventLogSnapshot = null
-    let omcTraceSnapshot = null
-    process.stdout.write(`[${i + 1}/${targets.length}] ${modelName}\n`)
-    try {
-      if (options.compileOnly) {
-        const compileStartedAt = Date.now()
-        logInfo(`[${modelName}] Compile-only mode: validating Rumoca compile`)
-        const probe = await Promise.resolve(compileCurrentModelInLoadedSession(modelName, options))
-        if (options.compileDebug && Array.isArray(probe.planStats)) {
-          for (const stat of probe.planStats) {
-            const base = `[${modelName}] compile-debug ${stat.label} => ${stat.result} in ${Number(stat.elapsedMs) || 0}ms`
-            if (stat.error) {
-              logInfo(`${base}; error=${stat.error}`)
-            } else if (stat.daePreparedStatus || stat.daePreparedError) {
-              logInfo(
-                `${base}; dae_prepared_status=${stat.daePreparedStatus || 'n/a'}; dae_prepared_error=${stat.daePreparedError || 'n/a'}`,
-              )
-            } else if (stat.compilePhaseTiming) {
-              const p = stat.compilePhaseTiming
-              const fmt = (k) => {
-                const calls = Number(p?.[k]?.calls || 0)
-                const ms = Number(p?.[k]?.total_ms || 0)
-                return `${k}=${ms.toFixed(1)}ms(calls=${calls})`
-              }
-              logInfo(
-                `${base}; phases ${fmt('instantiate')} ${fmt('typecheck')} ${fmt('flatten')} ${fmt('todae')}`,
-              )
-              if (stat.compileCheckTiming) {
-                const t = stat.compileCheckTiming
-                logInfo(
-                  `[${modelName}] compile-debug check-timing load=${Number(t.load_source_roots_ms) || 0}ms update=${Number(t.update_document_ms) || 0}ms qualify=${Number(t.qualify_model_ms) || 0}ms check=${Number(t.check_model_ms) || 0}ms total=${Number(t.total_ms) || 0}ms`,
-                )
-                const s = asObj(t.strict) ?? null
-                if (s) {
-                  logInfo(
-                    `[${modelName}] compile-debug strict-check build_resolved=${Number(s.build_resolved_ms) || 0}ms reachable_closure=${Number(s.reachable_closure_ms) || 0}ms parse_failures=${Number(s.collect_parse_failures_ms) || 0}ms resolve_failures=${Number(s.collect_resolve_failures_ms) || 0}ms dae_query=${Number(s.dae_phase_query_ms) || 0}ms strict_total=${Number(s.total_ms) || 0}ms`,
-                  )
-                }
-              }
-            } else {
-              logInfo(base)
-            }
-          }
-        }
-        if (probe.status !== 'compiled') {
-          throw new Error(probe.error || `compile probe failed for ${modelName}`)
-        }
-        const measuredCompileMs = Number(
-          probe?.planStats?.[0]?.elapsedMs || Date.now() - compileStartedAt,
-        )
-        if (measuredCompileMs > Number(options.compileTimeoutMs)) {
-          throw new Error(`compile timeout after ${options.compileTimeoutMs}ms for ${modelName}`)
-        }
-        records.push({
-          modelName,
-          status: 'compiled',
-          elapsedMs: Date.now() - startedAt,
-          compileElapsedMs: Date.now() - compileStartedAt,
-        })
-        logInfo(`[${modelName}] Compile-only success`)
-        continue
-      }
-      const classInfo = parseJson(rumoca.get_class_info(modelName))
-      sourceModelica = asString(classInfo?.source_modelica)
-      if (!sourceModelica.trim()) {
-        records.push({ modelName, status: 'compile_fail', error: 'missing source_modelica' })
-        continue
-      }
-
-      const omcStart = Date.now()
-      let omcRun = null
-      let omcError = ''
-      logInfo(`[${modelName}] Step 1/4 running OMC reference simulation`)
-      try {
-        omcRun = await loadOrCreateOmcTrace({
-          modelName,
-          sim: { t0: options.t0, tf: options.tf, dt: options.dt },
-          omcWrapper: resolve(options.omcWrapper),
-          omcMslDir: resolve(options.omcMslDir),
-          omcTimeoutMs: Number(options.omcTimeoutMs),
-          omcMaxCsvBytes: Number(options.omcMaxCsvBytes),
-        })
-        logInfo(
-          `[${modelName}] OMC done in ${Date.now() - omcStart}ms (cache=${omcRun.fromCache ? 'hit' : 'miss'}) -> ${omcRun.cachePath}`,
-        )
-      } catch (error) {
-        omcError = error instanceof Error ? error.message : String(error)
-        logInfo(`[${modelName}] OMC failed but continuing to solver stage: ${omcError}`)
-      }
-      const omcElapsedMs = Date.now() - omcStart
-
-      const solverStart = Date.now()
-      logInfo(
-        `[${modelName}] Step 2/4 running Rumoca ${options.rumocaRuntime === 'native' ? 'native wasm' : 'template-based'} simulation`,
-      )
-      let solverRun = null
-      try {
-        solverRun = await runSolverProbeInSubprocess({
-          modelName,
-          mslZip: options.mslZip,
-          libraryZips: options.libraryZips,
-          solverTimeoutMs: Number(options.solverTimeoutMs),
-          solverFile: options.solverFile,
-          templateFile: options.templateFile,
-          t0: options.t0,
-          tf: options.tf,
-          dt: options.dt,
-          solverOptionsJson: options.solverOptionsJson,
-          rumocaRuntime: options.rumocaRuntime,
-        })
-      } catch (subprocessError) {
-        const msg =
-          subprocessError instanceof Error ? subprocessError.message : String(subprocessError)
-        if (isSolverTimeoutError(subprocessError)) {
-          throw subprocessError
-        }
-        logInfo(`[${modelName}] Solver subprocess failed (${msg}); retrying in-process`)
-        solverRun = await runSolverProbeInProcess({
-          modelName,
-          mslZip: options.mslZip,
-          libraryZips: options.libraryZips,
-          solverFile: options.solverFile,
-          templateFile: options.templateFile,
-          t0: options.t0,
-          tf: options.tf,
-          dt: options.dt,
-          solverOptionsJson: options.solverOptionsJson,
-          rumocaRuntime: options.rumocaRuntime,
-        })
-      }
-      if (asString(solverRun?.status) !== 'ok') {
-        renderedJs = asString(solverRun?.renderedJs || '')
-        throw new Error(asString(solverRun?.error) || `solver run failed for ${modelName}`)
-      }
-      logInfo(`[${modelName}] Rumoca run done in ${Date.now() - solverStart}ms`)
-      const solverElapsedMs = Date.now() - solverStart
-      renderedJs = asString(solverRun?.renderedJs || '')
-      solverEventLogSnapshot = null
-      omcTraceSnapshot = omcRun?.trace || null
-
-      const solverTrace = normalizeSolverTrace(solverRun.solverTrace)
-      solverTraceSnapshot = solverTrace
-      validateSolverTrace(solverTrace, { modelName })
-      if (!omcRun) {
-        records.push({
-          modelName,
-          status: 'run_fail',
-          rumocaRuntime: options.rumocaRuntime,
-          elapsedMs: Date.now() - startedAt,
-          compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
-          omcElapsedMs,
-          solverElapsedMs,
-          compareElapsedMs: 0,
-          error: `OMC trace unavailable; solver stage completed. ${omcError || 'OMC failed'}`,
-        })
-        logInfo(`[${modelName}] Step 3/4 skipped: no OMC trace available`)
-        logInfo(`[${modelName}] Step 4/4 storing progress/results`)
-        continue
-      }
-      const compareStart = Date.now()
-      logInfo(`[${modelName}] Step 3/4 comparing Rumoca vs OMC traces`)
-      const comparison = compareTraces(omcRun.trace, solverTrace)
-      logInfo(`[${modelName}] Trace comparison done in ${Date.now() - compareStart}ms`)
-      const compareElapsedMs = Date.now() - compareStart
-      if (!comparison) {
-        records.push({
-          modelName,
-          status: 'missing_channels',
-          rumocaRuntime: options.rumocaRuntime,
-          elapsedMs: Date.now() - startedAt,
-          compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
-          omcElapsedMs,
-          solverElapsedMs,
-          compareElapsedMs,
-          omcCachePath: omcRun.cachePath,
-        })
-      } else {
-        const hint = traceDiagnosticHint(omcRun.trace, solverTrace, comparison)
-        let comparedDebugPath = ''
-        if (options.debugBundle || options.modelName) {
-          comparedDebugPath = await writeDebugBundle({
-            modelName,
-            sourceModelica,
-            renderedJs,
-            daePrepared: null,
-            solverSource,
-            solverTrace,
-            solverEventLog: solverEventLogSnapshot,
-            omcTrace: omcRun.trace,
-            comparison,
-            summary: { comparison, thresholdPercent: options.stopThresholdPercent },
-          })
-        }
-        records.push({
-          modelName,
-          status: 'compared',
-          elapsedMs: Date.now() - startedAt,
-          compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
-          omcElapsedMs,
-          solverElapsedMs,
-          compareElapsedMs,
-          omcCachePath: omcRun.cachePath,
-          omcFromCache: omcRun.fromCache,
-          rumocaRuntime: options.rumocaRuntime,
-          ...comparison,
-          ...(hint ? { diagnosticHint: hint } : {}),
-          ...(comparedDebugPath ? { debugPath: comparedDebugPath } : {}),
-        })
-      }
-      logInfo(`[${modelName}] Step 4/4 storing progress/results`)
-
-      const record = records[records.length - 1]
-      const isBad =
-        record.status !== 'compared' ||
-        Number(record.maxDeviationPercent) >= Number(options.stopThresholdPercent)
-      if (options.mode === 'random-stop' && isBad) {
-        if (alwaysContinue) {
-          logInfo(
-            `[${modelName}] random-stop guard triggered but continuing due to --always-continue`,
-          )
-        } else {
-          const choice = await promptChoice(modelName, Number(record.maxDeviationPercent) || 0)
-          if (choice === 'continue') {
-            // continue
-          } else if (choice === 'always_continue') {
-            alwaysContinue = true
-            options.alwaysContinue = true
-            logInfo(
-              `[${modelName}] Interactive mode switched to always-continue for remaining models`,
-            )
-          } else if (choice === 'debug') {
-            debugPath = await writeDebugBundle({
-              modelName,
-              sourceModelica,
-              renderedJs,
-              daePrepared: null,
-              solverSource,
-              solverTrace,
-              solverEventLog: solverEventLogSnapshot,
-              omcTrace: omcRun.trace,
-              summary: { record, thresholdPercent: options.stopThresholdPercent },
-            })
-            stoppedAtModel = modelName
-            break
-          } else {
-            stoppedAtModel = modelName
-            break
-          }
-        }
-      }
-    } catch (error) {
-      let message = error instanceof Error ? error.message : String(error)
-      const stack = error instanceof Error ? error.stack : undefined
-      logInfo(`[${modelName}] Failure captured: ${message}`)
-      let failureDebugPath = ''
-      try {
-        failureDebugPath = await writeDebugBundle({
-          modelName,
-          sourceModelica,
-          renderedJs,
-          solverSource,
-          solverTrace: solverTraceSnapshot,
-          solverEventLog: solverEventLogSnapshot,
-          omcTrace: omcTraceSnapshot,
-          summary: {
-            status: 'run_fail',
-            error: message,
-            stack: stack || null,
-            thresholdPercent: options.stopThresholdPercent,
-          },
-        })
-      } catch {
-        failureDebugPath = ''
-      }
-      const status =
-        options.compileOnly || /^Compilation error:/i.test(message) ? 'compile_fail' : 'run_fail'
-      records.push({
-        modelName,
-        status,
-        rumocaRuntime: options.rumocaRuntime,
-        elapsedMs: Date.now() - startedAt,
-        ...(options.compileOnly
-          ? {}
-          : { compileElapsedMs: 0, omcElapsedMs: 0, solverElapsedMs: 0, compareElapsedMs: 0 }),
-        error: message,
-        ...(stack ? { stack } : {}),
-        ...(failureDebugPath ? { debugPath: failureDebugPath } : {}),
-      })
-      if (failureDebugPath) {
-        logInfo(`[${modelName}] Failure debug bundle: ${failureDebugPath}`)
-      }
-      if (options.mode === 'random-stop' && !alwaysContinue) {
-        stoppedAtModel = modelName
-        break
-      }
-      if (options.mode === 'random-stop' && alwaysContinue) {
-        logInfo(`[${modelName}] Failure recorded; continuing due to --always-continue`)
-      }
-    } finally {
-      logInfo(`[${modelName}] Writing progress snapshot -> ${progressPath}`)
-      await saveProgress(progressPath, {
-        startedAt: records[0]?.startedAt || null,
-        updatedAt: new Date().toISOString(),
-        init,
-        libraries,
-        options,
-        summary: recordSummary(records),
-        records,
-      })
-    }
+  const effectiveTargetClassTypes = resolveEffectiveTargetClassTypes(options, targetPrefixes)
+  if (effectiveTargetClassTypes.length > 0) {
+    allTargets = allTargets.filter((name) => {
+      const info = catalog.knownClassInfoByName.get(name)
+      const classType = String(info?.classType || '').toLowerCase()
+      return effectiveTargetClassTypes.includes(classType)
+    })
   }
+  const skippedTargets = catalog.rawTargets.length - allTargets.length
+  if (skippedTargets > 0) {
+    const missing = catalog.rawTargets.filter((name) => !catalog.knownClassNames.has(name))
+    logInfo(`Skipped ${skippedTargets} missing targets (not found in loaded classes)`)
+    logInfo(`Missing targets sample: ${missing.slice(0, 10).join(', ')}`)
+  }
+  const targets = pickComparisonTargets(options, allTargets)
+  logTargetSelection(options, allTargets, targets, effectiveTargetClassTypes, preferredTargetRoots)
+  return targets
+}
 
-  const summary = {
-    init,
-    libraries,
+function buildComparisonSummary(options, context, records, runState) {
+  return {
+    init: context.init,
+    libraries: context.libraries,
     mode: options.mode,
     seed: options.seed,
     thresholdPercent: options.stopThresholdPercent,
-    stoppedAtModel: stoppedAtModel || null,
-    debugPath: debugPath || null,
+    stoppedAtModel: runState.stoppedAtModel || null,
+    debugPath: runState.debugPath || null,
     summary: recordSummary(records),
     records,
-    progressPath,
+    progressPath: context.progressPath,
     omcCacheDir: OMC_CACHE_DIR,
     cliLogs: RUN_LOG_BUFFER.slice(),
-    libraryTag,
-    artifactTag,
+    libraryTag: context.libraryTag,
+    artifactTag: context.artifactTag,
     rumocaRuntime: options.rumocaRuntime,
   }
-  await saveProgress(progressPath, summary)
-  const datedRunFile = datedRunFileForLibraryTag(artifactTag, new Date().toISOString())
+}
+
+async function persistComparisonSummary(candidateFile, summary) {
+  await saveProgress(summary.progressPath, summary)
+  const datedRunFile = datedRunFileForLibraryTag(summary.artifactTag, new Date().toISOString())
   await writeJsonFile(candidateFile, summary)
   await writeJsonFile(datedRunFile, summary)
   if (
-    options.rumocaRuntime !== 'native' &&
+    summary.rumocaRuntime !== 'native' &&
     resolve(candidateFile) !== resolve(DEFAULT_RUN_JSON_FILE)
-  )
+  ) {
     await writeJsonFile(DEFAULT_RUN_JSON_FILE, summary)
+  }
   summary.candidateFile = candidateFile
   summary.datedRunFile = datedRunFile
   return summary
+}
+
+function launchCompileWorker(pool, child) {
+  if (pool.nextTargetIndex >= pool.targets.length) return
+  const modelName = pool.targets[pool.nextTargetIndex]
+  pool.nextTargetIndex += 1
+  process.stdout.write(`[${pool.nextTargetIndex}/${pool.targets.length}] ${modelName}\n`)
+  logInfo(`[${modelName}] Compile-only mode: validating Rumoca compile`)
+  const run = runCompileOnWorker({
+    child,
+    modelName,
+    compileTimeoutMs: Number(pool.options.compileTimeoutMs),
+  })
+    .then((payload) => ({ ok: true, child, payload }))
+    .catch((error) => ({ ok: false, child, modelName, error }))
+  pool.active.set(child, run)
+}
+
+async function saveComparisonProgress(context, options, records, modelName) {
+  logInfo(`[${modelName}] Writing progress snapshot -> ${context.progressPath}`)
+  await saveProgress(context.progressPath, {
+    startedAt: records[0]?.startedAt || null,
+    updatedAt: new Date().toISOString(),
+    init: context.init,
+    libraries: context.libraries,
+    options,
+    summary: recordSummary(records),
+    records,
+  })
+}
+
+async function recordCompileWorkerFailure(pool, finished, launch, failure) {
+  const modelName = failure ? finished.payload.modelName : finished.modelName
+  const message = failure
+    ? failure.message
+    : finished.error instanceof Error
+      ? finished.error.message
+      : String(finished.error)
+  const elapsedMs = failure ? failure.elapsedMs : Number(pool.options.compileTimeoutMs)
+  logInfo(`[${modelName}] Failure captured: ${message}`)
+  pool.records.push({ modelName, status: 'compile_fail', elapsedMs, error: message })
+  if (pool.stopOnFailure) {
+    pool.runState.stoppedAtModel = modelName
+    return 'stop'
+  }
+  if (failure) {
+    launch(finished.child)
+  } else {
+    try {
+      const replacement = await spawnCompileWorkerProcess(pool.options)
+      const idx = pool.workers.indexOf(finished.child)
+      if (idx >= 0) pool.workers[idx] = replacement
+      launch(replacement)
+    } catch {
+      // If worker respawn fails, continue draining other active workers and preserve failures.
+    }
+  }
+  await saveComparisonProgress(pool.context, pool.options, pool.records, modelName)
+  return 'continue'
+}
+
+async function handleCompileWorkerResult(pool, finished, launch) {
+  if (!finished.ok) return recordCompileWorkerFailure(pool, finished, launch, null)
+  const { modelName, elapsedMs, result } = finished.payload
+  const compileElapsedMs = Number(result?.planStats?.[0]?.elapsedMs || elapsedMs || 0)
+  if (result.status !== 'compiled') {
+    return recordCompileWorkerFailure(pool, finished, launch, {
+      message: asString(result.error) || `compile probe failed for ${modelName}`,
+      elapsedMs: Number(elapsedMs) || 0,
+    })
+  }
+  if (compileElapsedMs > Number(pool.options.compileTimeoutMs)) {
+    return recordCompileWorkerFailure(pool, finished, launch, {
+      message: `compile timeout after ${pool.options.compileTimeoutMs}ms for ${modelName}`,
+      elapsedMs: Number(elapsedMs) || compileElapsedMs,
+    })
+  }
+  pool.records.push({
+    modelName,
+    status: 'compiled',
+    elapsedMs: Number(elapsedMs) || compileElapsedMs,
+    compileElapsedMs,
+  })
+  logInfo(`[${modelName}] Compile-only success`)
+  launch(finished.child)
+  await saveComparisonProgress(pool.context, pool.options, pool.records, modelName)
+  return 'continue'
+}
+
+async function runCompileOnlyWorkerPool(options, context, targets, records, runState) {
+  logInfo(`Compile-only worker pool enabled: workers=${Number(options.compileWorkers)}`)
+  const workerCount = Math.min(Number(options.compileWorkers), Math.max(1, targets.length))
+  const pool = {
+    options,
+    context,
+    targets,
+    records,
+    runState,
+    stopOnFailure: options.mode === 'random-stop' && !runState.alwaysContinue,
+    workers: [],
+    active: new Map(),
+    nextTargetIndex: 0,
+  }
+  try {
+    for (let i = 0; i < workerCount; i += 1) {
+      pool.workers.push(await spawnCompileWorkerProcess(options))
+    }
+    const launch = (child) => launchCompileWorker(pool, child)
+    for (const child of pool.workers) launch(child)
+    while (pool.active.size > 0) {
+      const finished = await Promise.race(pool.active.values())
+      pool.active.delete(finished.child)
+      if ((await handleCompileWorkerResult(pool, finished, launch)) === 'stop') break
+    }
+  } finally {
+    for (const child of pool.workers) {
+      try {
+        child.kill('SIGKILL')
+      } catch (error) {
+        void error
+      }
+    }
+  }
+  const summary = buildComparisonSummary(options, context, records, runState)
+  return persistComparisonSummary(context.candidateFile, summary)
+}
+
+function logCompileCheckTiming(modelName, timing) {
+  logInfo(
+    `[${modelName}] compile-debug check-timing load=${Number(timing.load_source_roots_ms) || 0}ms update=${Number(timing.update_document_ms) || 0}ms qualify=${Number(timing.qualify_model_ms) || 0}ms check=${Number(timing.check_model_ms) || 0}ms total=${Number(timing.total_ms) || 0}ms`,
+  )
+  const strict = asObj(timing.strict) ?? null
+  if (strict) {
+    logInfo(
+      `[${modelName}] compile-debug strict-check build_resolved=${Number(strict.build_resolved_ms) || 0}ms reachable_closure=${Number(strict.reachable_closure_ms) || 0}ms parse_failures=${Number(strict.collect_parse_failures_ms) || 0}ms resolve_failures=${Number(strict.collect_resolve_failures_ms) || 0}ms dae_query=${Number(strict.dae_phase_query_ms) || 0}ms strict_total=${Number(strict.total_ms) || 0}ms`,
+    )
+  }
+}
+
+function formatCompilePhaseTimings(timing) {
+  const fmt = (key) => {
+    const calls = Number(timing?.[key]?.calls || 0)
+    const ms = Number(timing?.[key]?.total_ms || 0)
+    return `${key}=${ms.toFixed(1)}ms(calls=${calls})`
+  }
+  return `phases ${fmt('instantiate')} ${fmt('typecheck')} ${fmt('flatten')} ${fmt('todae')}`
+}
+
+function logCompileDebugStats(modelName, probe) {
+  if (!Array.isArray(probe.planStats)) return
+  for (const stat of probe.planStats) {
+    const base = `[${modelName}] compile-debug ${stat.label} => ${stat.result} in ${Number(stat.elapsedMs) || 0}ms`
+    if (stat.error) {
+      logInfo(`${base}; error=${stat.error}`)
+    } else if (stat.daePreparedStatus || stat.daePreparedError) {
+      logInfo(
+        `${base}; dae_prepared_status=${stat.daePreparedStatus || 'n/a'}; dae_prepared_error=${stat.daePreparedError || 'n/a'}`,
+      )
+    } else if (stat.compilePhaseTiming) {
+      logInfo(`${base}; ${formatCompilePhaseTimings(stat.compilePhaseTiming)}`)
+      if (stat.compileCheckTiming) logCompileCheckTiming(modelName, stat.compileCheckTiming)
+    } else {
+      logInfo(base)
+    }
+  }
+}
+
+async function runCompileOnlyModelProbe(options, modelName, startedAt) {
+  const compileStartedAt = Date.now()
+  logInfo(`[${modelName}] Compile-only mode: validating Rumoca compile`)
+  const probe = await Promise.resolve(compileCurrentModelInLoadedSession(modelName, options))
+  if (options.compileDebug) logCompileDebugStats(modelName, probe)
+  if (probe.status !== 'compiled') {
+    throw new Error(probe.error || `compile probe failed for ${modelName}`)
+  }
+  const measuredCompileMs = Number(
+    probe?.planStats?.[0]?.elapsedMs || Date.now() - compileStartedAt,
+  )
+  if (measuredCompileMs > Number(options.compileTimeoutMs)) {
+    throw new Error(`compile timeout after ${options.compileTimeoutMs}ms for ${modelName}`)
+  }
+  logInfo(`[${modelName}] Compile-only success`)
+  return {
+    modelName,
+    status: 'compiled',
+    elapsedMs: Date.now() - startedAt,
+    compileElapsedMs: Date.now() - compileStartedAt,
+  }
+}
+
+async function runOmcReferenceStage(options, modelName) {
+  const omcStart = Date.now()
+  let omcRun = null
+  let omcError = ''
+  logInfo(`[${modelName}] Step 1/4 running OMC reference simulation`)
+  try {
+    omcRun = await loadOrCreateOmcTrace({
+      modelName,
+      sim: { t0: options.t0, tf: options.tf, dt: options.dt },
+      omcWrapper: resolve(options.omcWrapper),
+      omcMslDir: resolve(options.omcMslDir),
+      omcTimeoutMs: Number(options.omcTimeoutMs),
+      omcMaxCsvBytes: Number(options.omcMaxCsvBytes),
+    })
+    logInfo(
+      `[${modelName}] OMC done in ${Date.now() - omcStart}ms (cache=${omcRun.fromCache ? 'hit' : 'miss'}) -> ${omcRun.cachePath}`,
+    )
+  } catch (error) {
+    omcError = error instanceof Error ? error.message : String(error)
+    logInfo(`[${modelName}] OMC failed but continuing to solver stage: ${omcError}`)
+  }
+  return { omcRun, omcError, omcElapsedMs: Date.now() - omcStart }
+}
+
+async function runSolverStage(options, modelName) {
+  logInfo(
+    `[${modelName}] Step 2/4 running Rumoca ${options.rumocaRuntime === 'native' ? 'native wasm' : 'template-based'} simulation`,
+  )
+  const request = {
+    modelName,
+    mslZip: options.mslZip,
+    libraryZips: options.libraryZips,
+    solverFile: options.solverFile,
+    templateFile: options.templateFile,
+    t0: options.t0,
+    tf: options.tf,
+    dt: options.dt,
+    solverOptionsJson: options.solverOptionsJson,
+    rumocaRuntime: options.rumocaRuntime,
+  }
+  try {
+    return await runSolverProbeInSubprocess({
+      ...request,
+      solverTimeoutMs: Number(options.solverTimeoutMs),
+    })
+  } catch (subprocessError) {
+    const msg = subprocessError instanceof Error ? subprocessError.message : String(subprocessError)
+    if (isSolverTimeoutError(subprocessError)) {
+      throw subprocessError
+    }
+    logInfo(`[${modelName}] Solver subprocess failed (${msg}); retrying in-process`)
+    return await runSolverProbeInProcess(request)
+  }
+}
+
+function buildUnavailableOmcRecord(options, modelName, omc, solverRun, modelRun) {
+  return {
+    modelName,
+    status: 'run_fail',
+    rumocaRuntime: options.rumocaRuntime,
+    elapsedMs: Date.now() - modelRun.startedAt,
+    compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
+    omcElapsedMs: omc.omcElapsedMs,
+    solverElapsedMs: modelRun.solverElapsedMs,
+    compareElapsedMs: 0,
+    error: `OMC trace unavailable; solver stage completed. ${omc.omcError || 'OMC failed'}`,
+  }
+}
+
+function buildMissingChannelsRecord(
+  options,
+  modelName,
+  omc,
+  solverRun,
+  modelRun,
+  compareElapsedMs,
+) {
+  return {
+    modelName,
+    status: 'missing_channels',
+    rumocaRuntime: options.rumocaRuntime,
+    elapsedMs: Date.now() - modelRun.startedAt,
+    compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
+    omcElapsedMs: omc.omcElapsedMs,
+    solverElapsedMs: modelRun.solverElapsedMs,
+    compareElapsedMs,
+    omcCachePath: omc.omcRun.cachePath,
+  }
+}
+
+async function writeComparedDebugBundle(
+  options,
+  context,
+  modelName,
+  omc,
+  solverTrace,
+  comparison,
+  modelRun,
+) {
+  if (!options.debugBundle && !options.modelName) return ''
+  return await writeDebugBundle({
+    modelName,
+    sourceModelica: modelRun.sourceModelica,
+    renderedJs: modelRun.renderedJs,
+    daePrepared: null,
+    solverSource: context.solverSource,
+    solverTrace,
+    solverEventLog: modelRun.solverEventLogSnapshot,
+    omcTrace: omc.omcRun.trace,
+    comparison,
+    summary: { comparison, thresholdPercent: options.stopThresholdPercent },
+  })
+}
+
+async function buildComparedRecord(
+  options,
+  context,
+  modelName,
+  omc,
+  solverRun,
+  solverTrace,
+  comparison,
+  compareElapsedMs,
+  modelRun,
+) {
+  const hint = traceDiagnosticHint(omc.omcRun.trace, solverTrace, comparison)
+  const comparedDebugPath = await writeComparedDebugBundle(
+    options,
+    context,
+    modelName,
+    omc,
+    solverTrace,
+    comparison,
+    modelRun,
+  )
+  return {
+    modelName,
+    status: 'compared',
+    elapsedMs: Date.now() - modelRun.startedAt,
+    compileElapsedMs: Number(solverRun.compileElapsedMs) || 0,
+    omcElapsedMs: omc.omcElapsedMs,
+    solverElapsedMs: modelRun.solverElapsedMs,
+    compareElapsedMs,
+    omcCachePath: omc.omcRun.cachePath,
+    omcFromCache: omc.omcRun.fromCache,
+    rumocaRuntime: options.rumocaRuntime,
+    ...comparison,
+    ...(hint ? { diagnosticHint: hint } : {}),
+    ...(comparedDebugPath ? { debugPath: comparedDebugPath } : {}),
+  }
+}
+
+async function finalizeModelComparison(options, context, modelName, omc, solverRun, modelRun) {
+  const solverTrace = normalizeSolverTrace(solverRun.solverTrace)
+  modelRun.solverTraceSnapshot = solverTrace
+  validateSolverTrace(solverTrace, { modelName })
+  if (!omc.omcRun) {
+    logInfo(`[${modelName}] Step 3/4 skipped: no OMC trace available`)
+    return {
+      record: buildUnavailableOmcRecord(options, modelName, omc, solverRun, modelRun),
+      logStep4: true,
+    }
+  }
+  logInfo(`[${modelName}] Step 3/4 comparing Rumoca vs OMC traces`)
+  const compareStart = Date.now()
+  const comparison = compareTraces(omc.omcRun.trace, solverTrace)
+  logInfo(`[${modelName}] Trace comparison done in ${Date.now() - compareStart}ms`)
+  const compareElapsedMs = Date.now() - compareStart
+  const record = comparison
+    ? await buildComparedRecord(
+        options,
+        context,
+        modelName,
+        omc,
+        solverRun,
+        solverTrace,
+        comparison,
+        compareElapsedMs,
+        modelRun,
+      )
+    : buildMissingChannelsRecord(options, modelName, omc, solverRun, modelRun, compareElapsedMs)
+  return { record, logStep4: true }
+}
+
+async function runModelComparisonStages(options, context, modelName, modelRun) {
+  const classInfo = parseJson(rumoca.get_class_info(modelName))
+  modelRun.sourceModelica = asString(classInfo?.source_modelica)
+  if (!modelRun.sourceModelica.trim()) {
+    return {
+      record: { modelName, status: 'compile_fail', error: 'missing source_modelica' },
+      logStep4: false,
+      omcRun: null,
+    }
+  }
+  const omc = await runOmcReferenceStage(options, modelName)
+  const solverStart = Date.now()
+  const solverRun = await runSolverStage(options, modelName)
+  if (asString(solverRun?.status) !== 'ok') {
+    modelRun.renderedJs = asString(solverRun?.renderedJs || '')
+    throw new Error(asString(solverRun?.error) || `solver run failed for ${modelName}`)
+  }
+  logInfo(`[${modelName}] Rumoca run done in ${Date.now() - solverStart}ms`)
+  modelRun.solverElapsedMs = Date.now() - solverStart
+  modelRun.renderedJs = asString(solverRun?.renderedJs || '')
+  modelRun.omcTraceSnapshot = omc.omcRun?.trace || null
+  const result = await finalizeModelComparison(
+    options,
+    context,
+    modelName,
+    omc,
+    solverRun,
+    modelRun,
+  )
+  return { ...result, omcRun: omc.omcRun }
+}
+
+async function applyRandomStopGuard(options, context, modelName, records, runState, modelRun, omc) {
+  const record = records[records.length - 1]
+  const isBad =
+    record.status !== 'compared' ||
+    Number(record.maxDeviationPercent) >= Number(options.stopThresholdPercent)
+  if (options.mode !== 'random-stop' || !isBad) return false
+  if (runState.alwaysContinue) {
+    logInfo(`[${modelName}] random-stop guard triggered but continuing due to --always-continue`)
+    return false
+  }
+  const choice = await promptChoice(modelName, Number(record.maxDeviationPercent) || 0)
+  if (choice === 'continue') return false
+  if (choice === 'always_continue') {
+    runState.alwaysContinue = true
+    options.alwaysContinue = true
+    logInfo(`[${modelName}] Interactive mode switched to always-continue for remaining models`)
+    return false
+  }
+  if (choice === 'debug') {
+    runState.debugPath = await writeDebugBundle({
+      modelName,
+      sourceModelica: modelRun.sourceModelica,
+      renderedJs: modelRun.renderedJs,
+      daePrepared: null,
+      solverSource: context.solverSource,
+      solverTrace: modelRun.solverTraceSnapshot,
+      solverEventLog: modelRun.solverEventLogSnapshot,
+      omcTrace: omc.trace,
+      summary: { record, thresholdPercent: options.stopThresholdPercent },
+    })
+  }
+  runState.stoppedAtModel = modelName
+  return true
+}
+
+async function writeFailureDebugBundle(options, context, modelName, modelRun, message, stack) {
+  try {
+    return await writeDebugBundle({
+      modelName,
+      sourceModelica: modelRun.sourceModelica,
+      renderedJs: modelRun.renderedJs,
+      solverSource: context.solverSource,
+      solverTrace: modelRun.solverTraceSnapshot,
+      solverEventLog: modelRun.solverEventLogSnapshot,
+      omcTrace: modelRun.omcTraceSnapshot,
+      summary: {
+        status: 'run_fail',
+        error: message,
+        stack: stack || null,
+        thresholdPercent: options.stopThresholdPercent,
+      },
+    })
+  } catch {
+    return ''
+  }
+}
+
+function buildComparisonFailureRecord(
+  options,
+  modelName,
+  modelRun,
+  message,
+  stack,
+  failureDebugPath,
+) {
+  return {
+    modelName,
+    status:
+      options.compileOnly || /^Compilation error:/i.test(message) ? 'compile_fail' : 'run_fail',
+    rumocaRuntime: options.rumocaRuntime,
+    elapsedMs: Date.now() - modelRun.startedAt,
+    ...(options.compileOnly
+      ? {}
+      : { compileElapsedMs: 0, omcElapsedMs: 0, solverElapsedMs: 0, compareElapsedMs: 0 }),
+    error: message,
+    ...(stack ? { stack } : {}),
+    ...(failureDebugPath ? { debugPath: failureDebugPath } : {}),
+  }
+}
+
+async function handleComparisonModelError(
+  options,
+  context,
+  modelName,
+  error,
+  modelRun,
+  records,
+  runState,
+) {
+  const message = error instanceof Error ? error.message : String(error)
+  const stack = error instanceof Error ? error.stack : undefined
+  logInfo(`[${modelName}] Failure captured: ${message}`)
+  const failureDebugPath = await writeFailureDebugBundle(
+    options,
+    context,
+    modelName,
+    modelRun,
+    message,
+    stack,
+  )
+  if (failureDebugPath) logInfo(`[${modelName}] Failure debug bundle: ${failureDebugPath}`)
+  records.push(
+    buildComparisonFailureRecord(options, modelName, modelRun, message, stack, failureDebugPath),
+  )
+  if (options.mode === 'random-stop' && !runState.alwaysContinue) {
+    runState.stoppedAtModel = modelName
+    return true
+  }
+  if (options.mode === 'random-stop' && runState.alwaysContinue) {
+    logInfo(`[${modelName}] Failure recorded; continuing due to --always-continue`)
+  }
+  return false
+}
+
+function createModelRunState() {
+  return {
+    startedAt: Date.now(),
+    sourceModelica: '',
+    renderedJs: '',
+    solverTraceSnapshot: null,
+    solverEventLogSnapshot: null,
+    omcTraceSnapshot: null,
+    solverElapsedMs: 0,
+  }
+}
+
+async function runComparisonModel(options, context, modelName, records, runState) {
+  const modelRun = createModelRunState()
+  try {
+    if (options.compileOnly) {
+      records.push(await runCompileOnlyModelProbe(options, modelName, modelRun.startedAt))
+      return false
+    }
+    const stages = await runModelComparisonStages(options, context, modelName, modelRun)
+    records.push(stages.record)
+    if (stages.logStep4) logInfo(`[${modelName}] Step 4/4 storing progress/results`)
+    if (stages.omcRun) {
+      return await applyRandomStopGuard(
+        options,
+        context,
+        modelName,
+        records,
+        runState,
+        modelRun,
+        stages.omcRun,
+      )
+    }
+    return false
+  } catch (error) {
+    return await handleComparisonModelError(
+      options,
+      context,
+      modelName,
+      error,
+      modelRun,
+      records,
+      runState,
+    )
+  } finally {
+    await saveComparisonProgress(context, options, records, modelName)
+  }
+}
+
+async function runSequentialComparison(options, context, targets, records, runState) {
+  for (let i = 0; i < targets.length; i += 1) {
+    const modelName = targets[i]
+    process.stdout.write(`[${i + 1}/${targets.length}] ${modelName}\n`)
+    const shouldStop = await runComparisonModel(options, context, modelName, records, runState)
+    if (shouldStop) break
+  }
+}
+
+async function finalizeComparisonRun(options, context, records, runState) {
+  return persistComparisonSummary(
+    context.candidateFile,
+    buildComparisonSummary(options, context, records, runState),
+  )
+}
+
+async function runComparison(options) {
+  options.rumocaRuntime = normalizeRumocaRuntime(options.rumocaRuntime)
+  if (options.mode !== 'full' && options.mode !== 'random-stop') {
+    throw new Error(`Unsupported --mode ${options.mode}`)
+  }
+  const runId = `run_${Date.now()}_${options.seed}`
+  logComparisonStart(options, runId)
+  if (options.rumocaRuntime === 'native' && Math.abs(Number(options.t0) || 0) > 1e-12) {
+    throw new Error('native Rumoca wasm comparison currently supports only --t0 0')
+  }
+  const context = await prepareComparisonContext(options)
+  const catalog = await loadComparisonTargetCatalog(options, context)
+  const targets = selectComparisonTargets(options, catalog, context.preferredTargetRoots)
+  const records = []
+  const runState = {
+    stoppedAtModel: '',
+    debugPath: '',
+    alwaysContinue: Boolean(options.alwaysContinue),
+  }
+  if (options.compileOnly && Number(options.compileWorkers) > 1) {
+    return runCompileOnlyWorkerPool(options, context, targets, records, runState)
+  }
+  await runSequentialComparison(options, context, targets, records, runState)
+  return finalizeComparisonRun(options, context, records, runState)
 }
 
 async function main() {

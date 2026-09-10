@@ -1,3 +1,4 @@
+// code-analysis-disable function-lines -- Standalone simulation; kept in one file for sandbox execution.
 const simulateModel = (params, context, model) => {
   // -----------------------------------------------------------------------------------------------
   // Logging
@@ -89,7 +90,15 @@ const simulateModel = (params, context, model) => {
   let c0 = Array.isArray(model.c0) ? model.c0.slice() : null
   if (!c0 && haveEvents) {
     try {
-      const cProbe = model.evalConditions(0, x0_model, y0_model, new Array(nu).fill(0), null, [], [])
+      const cProbe = model.evalConditions(
+        0,
+        x0_model,
+        y0_model,
+        new Array(nu).fill(0),
+        null,
+        [],
+        [],
+      )
       if (Array.isArray(cProbe)) c0 = cProbe.slice()
     } catch {
       /* empty */
@@ -658,9 +667,10 @@ const simulateModel = (params, context, model) => {
     stageName,
     xDotGuess,
   ) {
-    const xSeed = Array.isArray(xDotGuess) && xDotGuess.length === nx
-      ? xBase.map((xi, i) => xi + dtStage * (Number(xDotGuess[i]) || 0))
-      : xBase
+    const xSeed =
+      Array.isArray(xDotGuess) && xDotGuess.length === nx
+        ? xBase.map((xi, i) => xi + dtStage * (Number(xDotGuess[i]) || 0))
+        : xBase
     const z0 = regularizeGuessVector(xSeed.concat(yGuess), newtonOpts)
 
     function residual(z) {
@@ -1365,7 +1375,15 @@ const simulateModel = (params, context, model) => {
       }
       return Array.isArray(fallback) ? fallback.slice() : []
     }
-    function evalEventIndicatorsSafe(tLocal, xLocal, yLocal, uLocal, cLocal, cPrevLocal, cCurrLocal) {
+    function evalEventIndicatorsSafe(
+      tLocal,
+      xLocal,
+      yLocal,
+      uLocal,
+      cLocal,
+      cPrevLocal,
+      cCurrLocal,
+    ) {
       if (haveEventIndicators) {
         const cPrevSafe = Array.isArray(cPrevLocal) ? cPrevLocal.slice() : []
         const cCurrSafe = Array.isArray(cCurrLocal)
@@ -1493,9 +1511,27 @@ const simulateModel = (params, context, model) => {
         return rk4Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, stepNewtonOpts, xDotSeed)
       }
       if (integratorName === 'rk45') {
-        return rk45Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, stepNewtonOpts, xDotSeed)
+        return rk45Step(
+          tLocal,
+          xLocal,
+          yLocal,
+          uLocal,
+          dtLocal,
+          pOverride,
+          stepNewtonOpts,
+          xDotSeed,
+        )
       }
-      return sdirk2Step(tLocal, xLocal, yLocal, uLocal, dtLocal, pOverride, stepNewtonOpts, xDotSeed)
+      return sdirk2Step(
+        tLocal,
+        xLocal,
+        yLocal,
+        uLocal,
+        dtLocal,
+        pOverride,
+        stepNewtonOpts,
+        xDotSeed,
+      )
     }
 
     function performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed) {
@@ -1573,7 +1609,8 @@ const simulateModel = (params, context, model) => {
         return performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
       } catch (e) {
         if (!adaptiveSubsteps || depth >= maxSubstepDepth || dtLocal * 0.5 < minSubstepDt) throw e
-        const state = retryState && typeof retryState === 'object' ? retryState : { count: 0, failures: [] }
+        const state =
+          retryState && typeof retryState === 'object' ? retryState : { count: 0, failures: [] }
         const nextRetryCount = Number(state.count || 0) + 1
         const parsed = parseNewtonFailureError(e)
         const nextFailures = Array.isArray(state.failures) ? state.failures : []
@@ -1593,7 +1630,9 @@ const simulateModel = (params, context, model) => {
             const key = f.stage || 'unknown'
             stageCounts[key] = (stageCounts[key] || 0) + 1
           }
-          const rankedStages = Object.entries(stageCounts).sort((a, b) => b[1] - a[1]).slice(0, 5)
+          const rankedStages = Object.entries(stageCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
           const representative = nextFailures.slice(-5)
           throw new Error(
             `Non-convergence detected: exceeded maxAdaptiveRetriesPerMacroStep=${maxAdaptiveRetriesPerMacroStep}. ` +
@@ -1604,7 +1643,10 @@ const simulateModel = (params, context, model) => {
         }
         solverStats.adaptiveRetryCount += 1
         solverStats.adaptiveSplitCount += 1
-        if (logAdaptiveRetryEvery > 0 && solverStats.adaptiveRetryCount % logAdaptiveRetryEvery === 0) {
+        if (
+          logAdaptiveRetryEvery > 0 &&
+          solverStats.adaptiveRetryCount % logAdaptiveRetryEvery === 0
+        ) {
           log('Adaptive retry progress', {
             retriesTotal: solverStats.adaptiveRetryCount,
             macroStepCount: solverStats.macroStepCount,
@@ -1618,15 +1660,7 @@ const simulateModel = (params, context, model) => {
           )
         }
         const half = dtLocal * 0.5
-        const a = advanceAdaptiveOnFailure(
-          tLocal,
-          xLocal,
-          yLocal,
-          half,
-          xDotSeed,
-          depth + 1,
-          state,
-        )
+        const a = advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, half, xDotSeed, depth + 1, state)
         return advanceAdaptiveOnFailure(
           tLocal + half,
           a.xNext,
@@ -1866,7 +1900,15 @@ const simulateModel = (params, context, model) => {
       if (!haveEvents || !enableEventLocalization) {
         const flow = advanceFlowInterval(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
         const uNext = f_u(tTarget) || new Array(nu).fill(0)
-        const cEval = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uNext, cLocal, cLocal, cLocal)
+        const cEval = evalConditionsSafe(
+          tTarget,
+          flow.xNext,
+          flow.yNext,
+          uNext,
+          cLocal,
+          cLocal,
+          cLocal,
+        )
         const applied = applyResetsSafe(tTarget, flow.xNext, flow.yNext, uNext, cLocal, cEval)
         return {
           xNext: applied.xNext,
