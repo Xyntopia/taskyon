@@ -40,7 +40,16 @@ export async function runCodexOauthTerminalFixture() {
     api,
     storage: { authDir, secretId: 'synthetic' },
     taskyon: {
-      getSecret: (_id: string | number, name: string) => Promise.resolve(secrets.get(name) ?? null),
+      getSecret: (
+        _id: string | number,
+        name: string,
+        _askNew: boolean | string,
+        _saveNew?: boolean,
+      ) => {
+        void _askNew
+        void _saveNew
+        return Promise.resolve(secrets.get(name) ?? null)
+      },
       setSecret: (_id: string | number, name: string, value: string) => {
         secrets.set(name, value)
         return Promise.resolve()
@@ -49,10 +58,16 @@ export async function runCodexOauthTerminalFixture() {
   }
   let pinnedWorkspace = false
   let callback: Promise<void> | undefined
-  process.stdout.write = (chunk) => {
+  process.stdout.write = (chunk, encodingOrCallback, writeDone) => {
     const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString()
     const authorization = text.match(/https:\/\/provider\.example\/authorize\?\S+/)?.[0]
-    if (!authorization) return originalWrite(chunk)
+    if (!authorization) {
+      if (typeof encodingOrCallback === 'function') {
+        return originalWrite(chunk, encodingOrCallback)
+      }
+      if (encodingOrCallback) return originalWrite(chunk, encodingOrCallback, writeDone)
+      return writeDone ? originalWrite(chunk, writeDone) : originalWrite(chunk)
+    }
     const url = new URL(authorization)
     pinnedWorkspace ||= url.searchParams.has('allowed_workspace_id')
     const redirect = new URL(url.searchParams.get('redirect_uri')!)
@@ -68,17 +83,24 @@ export async function runCodexOauthTerminalFixture() {
         )
       }).on('error', reject)
     })
+    const writeCallback = typeof encodingOrCallback === 'function' ? encodingOrCallback : writeDone
+    writeCallback?.(undefined)
     return true
   }
   globalThis.fetch = (url) => {
-    const href = url instanceof Request ? url.url : url.toString()
-    if (href !== 'https://provider.example/token') throw new Error('Unexpected network call')
+    const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+    if (requestUrl !== 'https://provider.example/token') {
+      throw new Error('Unexpected network call')
+    }
     originalWrite('TOKEN_EXCHANGED\n')
     return Promise.resolve(
       Response.json({ access_token: token, id_token: token, expires_in: 3600 }),
     )
   }
   try {
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write('', (error) => (error ? reject(error) : resolve()))
+    })
     const session = await loginWithCodexOauthCli({ ...args, forceReauth: true, timeoutMs: 5000 })
     await callback
     if (session.accountId !== 'selected-workspace') throw new Error('Wrong selected workspace')

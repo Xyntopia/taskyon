@@ -141,6 +141,10 @@ Common commands:
 
 - `yarn dev` starts the development app.
 - `yarn build` creates a production build.
+- `yarn check:file-sizes` checks tracked and non-ignored text/config files against the 2 MiB review
+  limit.
+- `yarn test` runs the file-size preflight; browser E2E and CLI diagnostic entry points include it
+  as well.
 - `yarn test:e2e` runs the Playwright browser E2E suite against local development.
 - `yarn test:e2e:production` builds and tests the local production SPA.
 - `yarn lint` runs typechecking and ESLint.

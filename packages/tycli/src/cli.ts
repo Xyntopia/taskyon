@@ -2957,20 +2957,13 @@ async function findNearestAncestorWithAnyFile(
   }
 }
 
-async function main(host: InteractiveCliHost) {
-  const argv = process.argv.slice(2)
-  if (hasHelpFlag(argv)) {
-    printCliHelp(host)
-    return
-  }
-  if (hasCleanLogsFlag(argv)) {
-    const removed = await cleanCliDebugArtifacts(host.storagePaths.logDir)
-    process.stdout.write(
-      `Removed ${removed} ${removed === 1 ? 'debug file' : 'debug files'} from ${host.storagePaths.logDir}\n`,
-    )
-    return
-  }
-  const conversationFormat = resolveConversationFormat(argv)
+type CliInvocation = {
+  conversationFormat: ConversationFormat
+  debugConfiguration: ReturnType<typeof resolveCliDebugConfiguration>
+  taskyonClientCommand: string | null
+}
+
+function resolveCliInvocation(host: InteractiveCliHost, argv: string[]): CliInvocation {
   process.title = host.commandName
   const debugConfiguration = resolveCliDebugConfiguration(
     argv,
@@ -2980,12 +2973,29 @@ async function main(host: InteractiveCliHost) {
   )
   debugLogsEnabled = debugConfiguration.debugLogsEnabled
   adoptInvocationWorkingDirectory(host.environmentPrefix)
-  const taskyonClientCommand = parseTaskyonClientCliArgs(process.argv.slice(2))
+  return {
+    conversationFormat: resolveConversationFormat(argv),
+    debugConfiguration,
+    taskyonClientCommand: parseTaskyonClientCliArgs(argv),
+  }
+}
 
-  let restoreConsoleLogging: (() => void) | undefined
+async function handleEarlyCliInvocation(host: InteractiveCliHost, argv: string[]) {
+  if (hasHelpFlag(argv)) {
+    printCliHelp(host)
+    return true
+  }
+  if (!hasCleanLogsFlag(argv)) return false
+  const removed = await cleanCliDebugArtifacts(host.storagePaths.logDir)
+  process.stdout.write(
+    `Removed ${removed} ${removed === 1 ? 'debug file' : 'debug files'} from ${host.storagePaths.logDir}\n`,
+  )
+  return true
+}
+
+function createCliTiming(host: InteractiveCliHost) {
   const sessionStartedAt = new Date()
   const startupStartedAt = host.startupStartedAt ?? performance.now()
-  const commandLoadMs = performance.now() - startupStartedAt
   let timingStartedAt = startupStartedAt
   let timingScope = 'startup'
   const activeSteps = new Map<string, number>()
@@ -3010,7 +3020,21 @@ async function main(host: InteractiveCliHost) {
     const duration = event.phase === 'started' ? '' : ` (${Math.round(event.durationMs)} ms)`
     writeLine(`[${timingScope} +${elapsed}s] ${event.step}: ${event.phase}${duration}`)
   }
-  const timeStartup = createStepTimer(reportStartup)
+  return {
+    sessionStartedAt,
+    startupStartedAt,
+    commandLoadMs: performance.now() - startupStartedAt,
+    reportStartup,
+    timeStartup: createStepTimer(reportStartup),
+    startRuntimeTiming: () => {
+      timingScope = 'runtime'
+      timingStartedAt = performance.now()
+    },
+  }
+}
+
+async function initializeCliRuntimeLog(host: InteractiveCliHost) {
+  let restoreConsoleLogging: (() => void) | undefined
   writeLine(`Starting ${host.commandName}...`)
   try {
     writeLine('Initializing runtime log...')
@@ -3019,15 +3043,22 @@ async function main(host: InteractiveCliHost) {
   } catch (error) {
     writeError(`Runtime log unavailable: ${error instanceof Error ? error.message : String(error)}`)
   }
+  return restoreConsoleLogging
+}
+
+async function createCliPersistentBootstrap(
+  host: InteractiveCliHost,
+  timing: ReturnType<typeof createCliTiming>,
+) {
   writeLine('Loading CLI configuration...')
-  reportStartup({
+  timing.reportStartup({
     step: 'cli.command-and-shell-loading',
     phase: 'completed',
-    durationMs: commandLoadMs,
+    durationMs: timing.commandLoadMs,
   })
-  const startupMeta = await timeStartup('cli.version-metadata', () => loadStartupMeta(host))
+  const startupMeta = await timing.timeStartup('cli.version-metadata', () => loadStartupMeta(host))
   const configStore = createCliConfigStore(host.storagePaths)
-  const { cryptoSession, stored } = await timeStartup('cli.config-and-crypto', () =>
+  const { cryptoSession, stored } = await timing.timeStartup('cli.config-and-crypto', () =>
     configStore.initPersistentCryptoSession(),
   )
   const configDir = await configStore.resolveConfigDirectoryPath()
@@ -3043,59 +3074,91 @@ async function main(host: InteractiveCliHost) {
   configureStaticEmbeddingAssetReader(
     createStaticEmbeddingAssetReader(join(dataDir, 'models', 'static-embeddings')),
   )
-  const previousSessions = normalizeSessionRecords(stored.sessions)
-  const previousSession = previousSessions[0]
+  const previousSession = normalizeSessionRecords(stored.sessions)[0]
   const pgliteNodeDir = join(configDir, 'runtime', `${errorTimestamp()}-${process.pid}`, 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
-  const cliSecretStore = configStore.createCliSecretStore(cryptoSession)
-  const preferredApi = stored.selectedApi ?? host.defaultProvider
-  const selectedApi = resolveProviderSelection(
-    { ...stored, ...(preferredApi ? { selectedApi: preferredApi } : {}) },
-    host.environmentPrefix,
-  )
+  return {
+    startupMeta,
+    configStore,
+    cryptoSession,
+    stored,
+    configDir,
+    dataDir,
+    persistence,
+    previousSession,
+    pgliteNodeDir,
+    cliSecretStore: configStore.createCliSecretStore(cryptoSession),
+  }
+}
 
+function createCliModelBootstrap(
+  host: InteractiveCliHost,
+  invocation: CliInvocation,
+  persistent: Awaited<ReturnType<typeof createCliPersistentBootstrap>>,
+) {
+  const selectedApiConfig =
+    host.defaultProvider && !persistent.stored.selectedApi
+      ? { ...persistent.stored, selectedApi: host.defaultProvider }
+      : persistent.stored
+  const selectedApi = resolveProviderSelection(selectedApiConfig, host.environmentPrefix)
   if (!SUPPORTED_PROVIDERS.includes(selectedApi as (typeof SUPPORTED_PROVIDERS)[number])) {
     throw new Error(
       `Unsupported provider '${selectedApi}'. Choose one of: ${SUPPORTED_PROVIDERS.join(', ')}`,
     )
   }
-
-  const model = resolveStoredModel(stored, selectedApi)
-  const reasoningEffort = resolveStoredReasoningEffort(stored)
+  const model = resolveStoredModel(persistent.stored, selectedApi)
+  const reasoningEffort = resolveStoredReasoningEffort(persistent.stored)
   const config = {
     ...(selectedApi ? { selectedApi } : {}),
     ...(model ? { model } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),
   } as CliApiConfig
-  const chatCompletionTrace = debugConfiguration.chatCompletionTrace
-  if (chatCompletionTrace) {
-    setChatCompletionTraceWriter(createCliChatCompletionTraceWriter(chatCompletionTrace.dir))
-  } else {
-    setChatCompletionTraceWriter(undefined)
-  }
+  const chatCompletionTrace = invocation.debugConfiguration.chatCompletionTrace
+  setChatCompletionTraceWriter(
+    chatCompletionTrace ? createCliChatCompletionTraceWriter(chatCompletionTrace.dir) : undefined,
+  )
   const explorationContextFiles: Record<string, string> = {}
   const workspaceOperations = createNodeWorkspaceOperations(process.cwd(), {
     onDidWrite: (path) => delete explorationContextFiles[path],
   })
-  const explorationTool = createExplorationTool(explorationContextFiles, workspaceOperations)
-  const updateFilesTool = createUpdateFilesTool(workspaceOperations)
-
-  const toolchainProfiles = chatCompletionTrace
-    ? {
-        ...host.toolchainProfiles,
-        base: {
-          ...host.toolchainProfiles.base,
-          [host.entryNodeName]: {
-            ...host.toolchainProfiles.base[host.entryNodeName],
-            trace: {
-              enabled: true,
-              ...(chatCompletionTrace.label ? { label: chatCompletionTrace.label } : {}),
-            },
-          },
-        },
-      }
-    : host.toolchainProfiles
+  const toolchainProfiles = createCliToolchainProfiles(host, chatCompletionTrace)
   const llmState = createCliLlmState(config, toolchainProfiles, host.entryNodeName)
+  const rl = createCliReadline(persistent.stored, persistent.configStore)
+  return {
+    chatCompletionTrace,
+    explorationContextFiles,
+    workspaceOperations,
+    explorationTool: createExplorationTool(explorationContextFiles, workspaceOperations),
+    updateFilesTool: createUpdateFilesTool(workspaceOperations),
+    llmState,
+    rl,
+  }
+}
+
+function createCliToolchainProfiles(
+  host: InteractiveCliHost,
+  chatCompletionTrace: ReturnType<typeof resolveCliDebugConfiguration>['chatCompletionTrace'],
+) {
+  if (!chatCompletionTrace) return host.toolchainProfiles
+  return {
+    ...host.toolchainProfiles,
+    base: {
+      ...host.toolchainProfiles.base,
+      [host.entryNodeName]: {
+        ...host.toolchainProfiles.base[host.entryNodeName],
+        trace: {
+          enabled: true,
+          ...(chatCompletionTrace.label ? { label: chatCompletionTrace.label } : {}),
+        },
+      },
+    },
+  }
+}
+
+function createCliReadline(
+  stored: Awaited<ReturnType<typeof createCliPersistentBootstrap>>['stored'],
+  configStore: CliConfigStore,
+) {
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -3113,143 +3176,296 @@ async function main(host: InteractiveCliHost) {
       )
     })
   })
-  let pendingInput: string | undefined
-  if (taskyonClientCommand === null) {
-    writeIntro(`${host.commandName} ${startupMeta.version}`)
-    writeStartupNote('Session', [
-      `Build: ${startupMeta.commit}, ${startupMeta.buildDate}`,
-      `${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`,
-      'Conversation storage: deferred until the task engine is needed.',
-    ])
-    writeNotice(
-      'info',
-      `${host.commandName} prompt ready. provider=${llmState.selectedToolchainProfile} model=${getSelectedProviderSettings(llmState).model}`,
-    )
-    writeLine(
-      'Slash commands: /provider, /model, /keys, /help, /exit, /quit. Other commands and messages start the task engine on first use.',
-    )
-    reportStartup({
-      step: 'cli.prompt-ready',
-      phase: 'completed',
-      durationMs: performance.now() - startupStartedAt,
-    })
-    let promptAbort = new AbortController()
-    let interrupted = false
-    const interruptPrompt = () => {
-      if (activeCliMenuDepth > 0 || interrupted) return
-      interrupted = true
-      writeLine('Ctrl-C received.')
-      promptAbort.abort()
-    }
-    process.on('SIGINT', interruptPrompt)
-    rl.on('SIGINT', interruptPrompt)
-    try {
-      while (!isReadlineClosed(rl)) {
-        promptAbort = new AbortController()
-        interrupted = false
-        const input = await promptForMainInput(
-          rl,
-          '> ',
-          () => selectSlashCommand(rl, ''),
-          async () => {
-            const file = await selectFileReference(rl, '')
-            return file ? `@${file}` : null
-          },
-          interruptPrompt,
-          () => writeLine('Ctrl-D received.'),
-          undefined,
-          host.environmentPrefix,
-          promptAbort.signal,
-        )
-        if (interrupted) {
-          promptAbort = new AbortController()
-          interrupted = false
-          let quitOnEof = false
-          const answer = await promptForMainInput(
-            rl,
-            `Quit ${host.commandName}? (y/N) `,
-            () => Promise.resolve(null),
-            () => Promise.resolve(null),
-            interruptPrompt,
-            () => {
-              quitOnEof = true
-              writeLine('Ctrl-D received.')
-            },
-            undefined,
-            host.environmentPrefix,
-            promptAbort.signal,
-          )
-          if (quitOnEof || isReadlineClosed(rl) || answer?.trim().toLowerCase() === 'y') break
-          writeLine('Quit cancelled.')
-          continue
-        }
-        if (input === null || ['/exit', '/quit'].includes(input.trim())) break
-        if (!input.trim()) continue
-        try {
-          switch (input.trim()) {
-            case '/provider':
-              await handleProviderCommand(rl, cliSecretStore, llmState, persistence)
-              continue
-            case '/model':
-              await handleModelCommand(rl, cliSecretStore, llmState, persistence)
-              continue
-            case '/keys':
-              await handleKeysCommand(rl, cliSecretStore, llmState, persistence)
-              continue
-            case '/help':
-              printCliHelp(host)
-              continue
-          }
-        } catch (error) {
-          writeError(error instanceof Error ? error.message : String(error))
-          continue
-        }
-        pendingInput = input
-        break
-      }
-    } finally {
-      process.off('SIGINT', interruptPrompt)
-      rl.off('SIGINT', interruptPrompt)
-    }
-    if (pendingInput === undefined) {
-      rl.close()
-      restoreTerminalInput()
-      await configStore.flushConfigWrites()
-      writeOutro('No conversation saved: no messages.')
-      writeOutro(`${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`)
-      setChatCompletionTraceWriter(undefined)
-      restoreConsoleLogging?.()
-      await runtimeLog?.flush()
-      return
-    }
-  }
-  timingScope = 'runtime'
-  timingStartedAt = performance.now()
-  rl.pause()
-  const uiSettings = {
-    showRoleTag: stored.cliUi?.showRoleTag ?? true,
-    showFullFunctionResults: false,
-    searchOpenMode: stored.cliUi?.searchOpenMode ?? 'conversation',
-    vectorizer: stored.cliUi?.vectorizer ?? 'static-multilingual',
-  }
-  const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
-  const projectInstructions = await timeStartup('cli.project-instructions', () =>
-    loadProjectInstructions(process.cwd(), host.environmentPrefix),
+  return rl
+}
+
+async function createCliBootstrap(
+  host: InteractiveCliHost,
+  invocation: CliInvocation,
+  timing: ReturnType<typeof createCliTiming>,
+) {
+  const restoreConsoleLogging = await initializeCliRuntimeLog(host)
+  const persistent = await createCliPersistentBootstrap(host, timing)
+  const model = createCliModelBootstrap(host, invocation, persistent)
+  return { ...invocation, ...timing, ...persistent, ...model, restoreConsoleLogging }
+}
+
+type PromptReadyResult =
+  | { kind: 'interactive'; pendingInput?: string }
+  | { kind: 'client'; command: string }
+  | { kind: 'exit' }
+
+async function runPromptReadyPhase(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+): Promise<PromptReadyResult> {
+  if (bootstrap.taskyonClientCommand !== null)
+    return { kind: 'client', command: bootstrap.taskyonClientCommand }
+  const { rl, llmState, startupMeta, startupStartedAt } = bootstrap
+  writeIntro(`${host.commandName} ${startupMeta.version}`)
+  writeStartupNote('Session', [
+    `Build: ${startupMeta.commit}, ${startupMeta.buildDate}`,
+    `${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`,
+    'Conversation storage: deferred until the task engine is needed.',
+  ])
+  writeNotice(
+    'info',
+    `${host.commandName} prompt ready. provider=${llmState.selectedToolchainProfile} model=${getSelectedProviderSettings(llmState).model}`,
   )
-  const taskyonRef: { current?: Taskyon } = {}
   writeLine(
-    `Initializing ${host.productName} runtime for provider '${llmState.selectedToolchainProfile}'...`,
+    'Slash commands: /provider, /model, /keys, /help, /exit, /quit. Other commands and messages start the task engine on first use.',
   )
-  const nativePythonExecutable = await timeStartup(
-    'cli.python-detection',
-    findNativePythonExecutable,
+  bootstrap.reportStartup({
+    step: 'cli.prompt-ready',
+    phase: 'completed',
+    durationMs: performance.now() - startupStartedAt,
+  })
+  const pendingInput = await readPromptReadyInput(host, bootstrap)
+  if (pendingInput !== undefined) return { kind: 'interactive', pendingInput }
+  rl.close()
+  restoreTerminalInput()
+  await bootstrap.configStore.flushConfigWrites()
+  writeOutro('No conversation saved: no messages.')
+  writeOutro(`${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`)
+  setChatCompletionTraceWriter(undefined)
+  bootstrap.restoreConsoleLogging?.()
+  await runtimeLog?.flush()
+  return { kind: 'exit' }
+}
+
+async function readPromptReadyInput(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+) {
+  const promptState = { promptAbort: new AbortController(), interrupted: false }
+  const interruptPrompt = () => {
+    if (activeCliMenuDepth > 0 || promptState.interrupted) return
+    promptState.interrupted = true
+    writeLine('Ctrl-C received.')
+    promptState.promptAbort.abort()
+  }
+  const { rl, cliSecretStore, llmState, persistence } = bootstrap
+  process.on('SIGINT', interruptPrompt)
+  rl.on('SIGINT', interruptPrompt)
+  try {
+    while (!isReadlineClosed(rl)) {
+      const input = await readCliPromptReadyIteration(
+        host,
+        bootstrap,
+        promptState,
+        interruptPrompt,
+        { cliSecretStore, llmState, persistence },
+      )
+      if (input === null) return undefined
+      if (input.trim()) return input
+    }
+    return undefined
+  } finally {
+    process.off('SIGINT', interruptPrompt)
+    rl.off('SIGINT', interruptPrompt)
+  }
+}
+
+async function handleCliPromptReadyInterrupt(
+  host: InteractiveCliHost,
+  rl: ReturnType<typeof createInterface>,
+  promptState: { promptAbort: AbortController; interrupted: boolean },
+  interruptPrompt: () => void,
+) {
+  promptState.promptAbort = new AbortController()
+  promptState.interrupted = false
+  let quitOnEof = false
+  const answer = await promptForMainInput(
+    rl,
+    `Quit ${host.commandName}? (y/N) `,
+    () => Promise.resolve(null),
+    () => Promise.resolve(null),
+    interruptPrompt,
+    () => {
+      quitOnEof = true
+      writeLine('Ctrl-D received.')
+    },
+    undefined,
+    host.environmentPrefix,
+    promptState.promptAbort.signal,
   )
-  const unavailableToolNames = new Set(
-    host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES,
+  if (quitOnEof || isReadlineClosed(rl) || answer?.trim().toLowerCase() === 'y') return null
+  writeLine('Quit cancelled.')
+  return ''
+}
+
+async function readCliPromptReadyIteration(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  promptState: { promptAbort: AbortController; interrupted: boolean },
+  interruptPrompt: () => void,
+  dependencies: {
+    cliSecretStore: CliProviderSecrets
+    llmState: CliLlmState
+    persistence: CliPersistence
+  },
+) {
+  const { rl } = bootstrap
+  promptState.promptAbort = new AbortController()
+  promptState.interrupted = false
+  const input = await promptForMainInput(
+    rl,
+    '> ',
+    () => selectSlashCommand(rl, ''),
+    async () => {
+      const file = await selectFileReference(rl, '')
+      return file ? `@${file}` : null
+    },
+    interruptPrompt,
+    () => writeLine('Ctrl-D received.'),
+    undefined,
+    host.environmentPrefix,
+    promptState.promptAbort.signal,
   )
-  if (!nativePythonExecutable) unavailableToolNames.add('executePythonScript')
+  if (promptState.interrupted) {
+    return handleCliPromptReadyInterrupt(host, rl, promptState, interruptPrompt)
+  }
+  if (input === null || ['/exit', '/quit'].includes(input.trim())) return null
+  if (!input.trim()) return ''
+  const handled = await handlePromptReadyCommand(
+    host,
+    input,
+    rl,
+    dependencies.cliSecretStore,
+    dependencies.llmState,
+    dependencies.persistence,
+  )
+  return handled ? '' : input
+}
+
+async function handlePromptReadyCommand(
+  host: InteractiveCliHost,
+  input: string,
+  rl: ReturnType<typeof createInterface>,
+  cliSecretStore: CliProviderSecrets,
+  llmState: CliLlmState,
+  persistence: CliPersistence,
+) {
+  try {
+    switch (input.trim()) {
+      case '/provider':
+        await handleProviderCommand(rl, cliSecretStore, llmState, persistence)
+        return true
+      case '/model':
+        await handleModelCommand(rl, cliSecretStore, llmState, persistence)
+        return true
+      case '/keys':
+        await handleKeysCommand(rl, cliSecretStore, llmState, persistence)
+        return true
+      case '/help':
+        printCliHelp(host)
+        return true
+      default:
+        return false
+    }
+  } catch (error) {
+    writeError(error instanceof Error ? error.message : String(error))
+    return true
+  }
+}
+
+type CliInteractiveApprovalUi = {
+  beforeApproval: () => void
+  afterApproval: () => void
+}
+
+async function createCliStorageRuntime(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+) {
+  const { x: taskStorageClientPort, y: taskStorageServicePort } =
+    createProtocolPort(taskyonStorageProtocol)
+  const storageRoot = join(bootstrap.dataDir, 'storage')
+  const storageSelection = resolveCliStorageSelection(bootstrap.stored)
+  const stopTaskStorageService = await bootstrap.timeStartup('cli.storage-service', () =>
+    createCliSelectedStorageService({
+      port: taskStorageServicePort,
+      dataDirectory: bootstrap.dataDir,
+      selection: storageSelection,
+    }),
+  )
+  const storageNamespace = host.storageNamespace ?? 'taskyon'
+  const storageClient = createStorageClient(taskStorageClientPort, {
+    namespacePrefix: storageNamespace,
+    distribution: 'local-only',
+  })
+  let graphPreparation: Promise<void> | undefined
+  if (host.initializeStorage)
+    await bootstrap.timeStartup('cli.host-storage-initialization', () =>
+      host.initializeStorage!(storageClient, bootstrap.reportStartup),
+    )
+  return {
+    storageRoot,
+    storageSelection,
+    storageNamespace,
+    storageClient,
+    stopTaskStorageService,
+    ...(host.prepareGraphRepository
+      ? {
+          prepareGraphRepository: () => {
+            graphPreparation ??= host.prepareGraphRepository!(
+              storageClient,
+              bootstrap.reportStartup,
+            ).catch((error: unknown) => {
+              graphPreparation = undefined
+              throw error
+            })
+            return graphPreparation
+          },
+        }
+      : {}),
+  }
+}
+
+function createCliLoggingRuntime(
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  sessionStartedAt: Date,
+) {
+  const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
+  const directRuntimeLog = runtimeLog
+  const stopLoggingService = directRuntimeLog
+    ? createLoggingProtocolServer(loggingServicePort, {
+        write: ({ level, source, message }) => {
+          directRuntimeLog.append(`${level}:${source}`, message)
+        },
+        flush: directRuntimeLog.flush,
+      })
+    : () => undefined
+  if (!directRuntimeLog) {
+    return {
+      loggingClientPort,
+      stopLoggingService,
+      restoreConsoleLogging: bootstrap.restoreConsoleLogging,
+    }
+  }
+  runtimeLog = routeRuntimeLogThroughProtocol(
+    directRuntimeLog,
+    createLoggingClient(loggingClientPort),
+    `tycli-${sessionStartedAt.toISOString()}-${process.pid}`,
+  )
+  bootstrap.restoreConsoleLogging?.()
+  return {
+    loggingClientPort,
+    stopLoggingService,
+    restoreConsoleLogging: installRuntimeConsoleLogging(runtimeLog),
+  }
+}
+
+function createCliEntryNodeTool(
+  host: InteractiveCliHost,
+  projectInstructions: string,
+  explorationContextFiles: Record<string, string>,
+  workspaceOperations: ReturnType<typeof createNodeWorkspaceOperations>,
+  unavailableToolNames: Set<string>,
+  taskyonRef: { current?: Taskyon },
+) {
   const agentUnavailableToolNames = new Set([...unavailableToolNames, host.entryNodeName])
-  const cliEntryNodeTool = createStandardEntryNodeTool({
+  return createStandardEntryNodeTool({
     name: host.entryNodeName,
     renderOptions: { hideLlm: true, hideChat: true },
     getToolCatalog: async ({
@@ -3261,9 +3477,7 @@ async function main(host: InteractiveCliHost) {
     }) => {
       const ty = taskyonRef.current
       if (!ty) return []
-      const allTools = await createCliTaskyonClient(ty.port).tools.list({
-        includeHidden: true,
-      })
+      const allTools = await createCliTaskyonClient(ty.port).tools.list({ includeHidden: true })
       const tools = resolveTaskTreeAgentToolWindow(
         allTools,
         taskChain,
@@ -3286,56 +3500,13 @@ async function main(host: InteractiveCliHost) {
     includeRoutinePrompt: false,
     ...(host.defaultAllowedTools ? { defaultAllowedTools: host.defaultAllowedTools } : {}),
   })
-  const cliEntryTask = toolCall({
-    name: host.entryNodeName,
-    arguments: {},
-  })
-  llmState.settings = {
-    ...llmState.settings,
-    entryFunction: host.entryNodeName,
-  }
-  const { x: taskStorageClientPort, y: taskStorageServicePort } =
-    createProtocolPort(taskyonStorageProtocol)
-  const storageRoot = join(dataDir, 'storage')
-  const storageSelection = resolveCliStorageSelection(stored)
-  const stopTaskStorageService = await timeStartup('cli.storage-service', () =>
-    createCliSelectedStorageService({
-      port: taskStorageServicePort,
-      dataDirectory: dataDir,
-      selection: storageSelection,
-    }),
-  )
-  const storageNamespace = host.storageNamespace ?? 'taskyon'
-  const storageClient = createStorageClient(taskStorageClientPort, {
-    namespacePrefix: storageNamespace,
-    distribution: 'local-only',
-  })
-  let graphPreparation: Promise<void> | undefined
-  if (host.initializeStorage)
-    await timeStartup('cli.host-storage-initialization', () =>
-      host.initializeStorage!(storageClient, reportStartup),
-    )
-  const { x: loggingClientPort, y: loggingServicePort } = createProtocolPort(taskyonLoggingProtocol)
-  const directRuntimeLog = runtimeLog
-  const stopLoggingService = directRuntimeLog
-    ? createLoggingProtocolServer(loggingServicePort, {
-        write: ({ level, source, message }) => {
-          directRuntimeLog.append(`${level}:${source}`, message)
-        },
-        flush: directRuntimeLog.flush,
-      })
-    : () => undefined
-  if (directRuntimeLog) {
-    runtimeLog = routeRuntimeLogThroughProtocol(
-      directRuntimeLog,
-      createLoggingClient(loggingClientPort),
-      `tycli-${sessionStartedAt.toISOString()}-${process.pid}`,
-    )
-    restoreConsoleLogging?.()
-    restoreConsoleLogging = installRuntimeConsoleLogging(runtimeLog)
-  }
-  const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
-  const sandboxCapabilityPolicy = createCapabilityPolicy({
+}
+
+function createCliSandboxCapabilityPolicy(
+  interactiveReadlineRef: { current?: ReturnType<typeof createInterface> },
+  approvalUiRef: { current?: CliInteractiveApprovalUi },
+) {
+  return createCapabilityPolicy({
     storage: {
       get: () => Promise.resolve(null),
       set: () => Promise.resolve(),
@@ -3345,10 +3516,7 @@ async function main(host: InteractiveCliHost) {
     prompt: async ({ tool, capability }) => {
       const readline = interactiveReadlineRef.current
       if (!readline) return { decision: 'deny', scope: 'once' }
-      taskInterruptKeysCleanup?.()
-      taskInterruptKeysCleanup = undefined
-      clearThinkingPanel()
-      stopWorkerStatusLine()
+      approvalUiRef.current?.beforeApproval()
       try {
         const capabilityDescription =
           capability.action === 'fetch'
@@ -3361,112 +3529,141 @@ async function main(host: InteractiveCliHost) {
         const allowed = ['y', 'yes'].includes(answer?.trim().toLowerCase() ?? '')
         return { decision: allowed ? 'allow' : 'deny', scope: 'session' }
       } finally {
-        if (waitingForTask) {
-          taskInterruptKeysCleanup = startTaskInterruptKeys()
-          renderThinkingPanel()
-          setWorkerStatusLine('task: processing')
-        }
+        approvalUiRef.current?.afterApproval()
       }
     },
   })
-  const taskyon = await timeStartup('cli.taskyon-core', () =>
+}
+
+async function createCliTaskyonRuntime(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  storage: Awaited<ReturnType<typeof createCliStorageRuntime>>,
+  entryTool: InternalTool,
+  unavailableToolNames: Set<string>,
+  sandboxCapabilityPolicy: ReturnType<typeof createCapabilityPolicy>,
+) {
+  const cliEntryTask = toolCall({ name: host.entryNodeName, arguments: {} })
+  bootstrap.llmState.settings = {
+    ...bootstrap.llmState.settings,
+    entryFunction: host.entryNodeName,
+  }
+  return bootstrap.timeStartup('cli.taskyon-core', () =>
     tyCore(
-      () => llmState.settings,
+      () => bootstrap.llmState.settings,
       () => cliEntryTask,
-      getSelectedToolchainConfig(llmState),
-      cryptoSession,
+      getSelectedToolchainConfig(bootstrap.llmState),
+      bootstrap.cryptoSession,
       {
-        onInitializationProgress: reportStartup,
+        onInitializationProgress: bootstrap.reportStartup,
         toolSetup: createDefaultTaskyonToolSetup({
           unavailableToolNames,
           pythonTool: null,
-          storageClient,
-          workspaceOperations,
-          ...(host.prepareGraphRepository
-            ? {
-                prepareGraphRepository: () => {
-                  graphPreparation ??= host.prepareGraphRepository!(
-                    storageClient,
-                    reportStartup,
-                  ).catch((error: unknown) => {
-                    graphPreparation = undefined
-                    throw error
-                  })
-                  return graphPreparation
-                },
-              }
+          storageClient: storage.storageClient,
+          workspaceOperations: bootstrap.workspaceOperations,
+          ...(storage.prepareGraphRepository
+            ? { prepareGraphRepository: storage.prepareGraphRepository }
             : {}),
         }),
         createIframeMultiPlexer: () =>
           createUnavailableIframeMux('Iframe message bridging is not available in this CLI.'),
         indexTaskVectors: false,
-        nodePgLiteDataDir: pgliteNodeDir,
-        secretStore: cliSecretStore,
+        nodePgLiteDataDir: bootstrap.pgliteNodeDir,
+        secretStore: bootstrap.cliSecretStore,
         taskManagerStorageFactory: ({ sessionId }) =>
-          connectTaskManagerStorageFromProtocol(storageClient, sessionId),
+          connectTaskManagerStorageFromProtocol(storage.storageClient, sessionId),
         artifactStoreFactory: ({ sessionId }) =>
           createArtifactStore(
-            createProtocolStorageBlobBackend(storageClient, `${sessionId}/artifacts`),
+            createProtocolStorageBlobBackend(storage.storageClient, `${sessionId}/artifacts`),
           ),
         authorizeSandboxFetch: sandboxCapabilityPolicy.authorize,
       },
     ),
   )
-  const taskyonHost = createTaskyonHostClient(taskyon.hostPort)
-  taskyonRef.current = taskyon
+}
+
+function createCliSearchRuntime(bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>) {
   const taskSearchIndex = 'tasks'
   let stopTaskSearchService: (() => void) | undefined
   let closeTaskSearchDatabase: (() => Promise<void>) | undefined
   let taskSearchClient: Promise<ReturnType<typeof createSearchClient>> | undefined
-  const getTaskSearchClient = () => {
-    taskSearchClient ??= timeStartup('cli.search-initialization', async () => {
-      const database = await timeStartup('cli.search-database', () =>
-        getInMemoryDatabase(`tycli-task-search-${process.pid}`),
-      )
-      closeTaskSearchDatabase = () => database.close()
-      const backend = createPgLiteSearchIndexBackend(database, 'tycliTaskSearch')
-      const { x, y } = createProtocolPort(taskyonSearchProtocol)
-      stopTaskSearchService = createSearchProtocolServer(y, (index) => {
-        if (index !== taskSearchIndex) throw new Error(`Unknown CLI search index: ${index}`)
-        return backend
-      })
-      return createSearchClient(x)
-    }).catch((error: unknown) => {
-      stopTaskSearchService?.()
-      taskSearchClient = undefined
-      throw error
-    })
-    return taskSearchClient
-  }
   const taskSearchState: {
     loadedVectorizer?: 'static-multilingual' | 'transformer-minilm'
     ids: Set<string>
   } = { ids: new Set() }
-  const taskStorageNamespace = `${await cryptoSession.getSessionId()}/taskyonNodes`
+  const getTaskSearchClient = () => {
+    taskSearchClient ??= bootstrap
+      .timeStartup('cli.search-initialization', async () => {
+        const database = await bootstrap.timeStartup('cli.search-database', () =>
+          getInMemoryDatabase(`tycli-task-search-${process.pid}`),
+        )
+        closeTaskSearchDatabase = () => database.close()
+        const backend = createPgLiteSearchIndexBackend(database, 'tycliTaskSearch')
+        const { x, y } = createProtocolPort(taskyonSearchProtocol)
+        stopTaskSearchService = createSearchProtocolServer(y, (index) => {
+          if (index !== taskSearchIndex) throw new Error(`Unknown CLI search index: ${index}`)
+          return backend
+        })
+        return createSearchClient(x)
+      })
+      .catch((error: unknown) => {
+        stopTaskSearchService?.()
+        taskSearchClient = undefined
+        throw error
+      })
+    return taskSearchClient
+  }
+  return {
+    taskSearchIndex,
+    getTaskSearchClient,
+    taskSearchState,
+    stopTaskSearchService: () => stopTaskSearchService?.(),
+    closeTaskSearchDatabase: () => closeTaskSearchDatabase?.(),
+  }
+}
+
+async function createCliConversationRuntime(
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  storage: Awaited<ReturnType<typeof createCliStorageRuntime>>,
+  taskyon: Taskyon,
+  taskyonHost: TaskyonHostClient,
+) {
+  const taskStorageNamespace = `${await bootstrap.cryptoSession.getSessionId()}/taskyonNodes`
   writeLine('Synchronizing provider credentials...')
-  await timeStartup('cli.provider-credentials', () =>
+  await bootstrap.timeStartup('cli.provider-credentials', () =>
     syncProviderRuntimeConfig(
       taskyon,
       taskyonHost,
-      llmState,
-      llmState.selectedToolchainProfile,
-      persistence.oauthStorage,
+      bootstrap.llmState,
+      bootstrap.llmState.selectedToolchainProfile,
+      bootstrap.persistence.oauthStorage,
     ),
   )
   writeLine('Preparing conversation storage...')
-  const conversationPersistence = await timeStartup('cli.conversation-storage', () =>
+  const conversationPersistence = await bootstrap.timeStartup('cli.conversation-storage', () =>
     createConversationPersistence({
-      ...(storageSelection.blobs === 'files' ? { storageRoot } : {}),
-      storageNamespace,
-      storageClient,
-      startedAt: sessionStartedAt,
-      format: conversationFormat,
+      ...(storage.storageSelection.blobs === 'files' ? { storageRoot: storage.storageRoot } : {}),
+      storageNamespace: storage.storageNamespace,
+      storageClient: storage.storageClient,
+      startedAt: bootstrap.sessionStartedAt,
+      format: bootstrap.conversationFormat,
     }),
   )
+  return {
+    taskStorageNamespace,
+    conversationPersistence,
+    ...createCliSessionRecorders(bootstrap, conversationPersistence),
+  }
+}
+
+function createCliSessionRecorders(
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  conversationPersistence: Awaited<ReturnType<typeof createConversationPersistence>>,
+) {
   const currentSession: TycliSessionRecord = {
     conversationPath: conversationPersistence.filePath,
     logPath: runtimeLog?.filePath ?? 'unavailable',
-    startedAt: sessionStartedAt.toISOString(),
+    startedAt: bootstrap.sessionStartedAt.toISOString(),
   }
   const currentSessionLocations = (): SessionLocationInfo => ({
     conversationPath: conversationPersistence.filePath,
@@ -3476,28 +3673,20 @@ async function main(host: InteractiveCliHost) {
   const recordCurrentSession = async (endedAt?: string) => {
     if (!conversationPersistence.hasPersistedConversation()) return
     if (currentSessionRecorded && !endedAt) return
-    await configStore.persistConfigPatch({
+    await bootstrap.configStore.persistConfigPatch({
       sessions: normalizeSessionRecords([
         { ...currentSession, ...(endedAt ? { endedAt } : {}) },
-        ...normalizeSessionRecords((await configStore.loadStoredConfig()).sessions).filter(
-          (session) => session.conversationPath !== currentSession.conversationPath,
-        ),
+        ...normalizeSessionRecords(
+          (await bootstrap.configStore.loadStoredConfig()).sessions,
+        ).filter((session) => session.conversationPath !== currentSession.conversationPath),
       ]),
     })
     currentSessionRecorded = true
   }
+  return { currentSessionLocations, recordCurrentSession }
+}
 
-  if (llmState.selectedToolchainProfile === 'local' && taskyonClientCommand === null) {
-    const localApi = getProviderSettings(llmState, 'local')
-    if (!localApi) throw new Error('Local provider profile is missing')
-    const isReachable = await canReachLocalApi(localApi.baseURL)
-    if (!isReachable) {
-      writeLine(
-        'Warning: local provider selected but http://localhost:8080 is unreachable. Configure a provider via /keys and switch with /provider.',
-      )
-    }
-  }
-
+function createCliTaskyonProtocolRuntime(taskyon: Taskyon) {
   const { x: clientPort, y: bridgePort } = createProtocolPort(taskyonProtocol)
   const taskyonApi = createCliTaskyonClient(clientPort)
   const unsubscribeBridgeToTaskyon = bridgePort.receive((msg: unknown) =>
@@ -3506,29 +3695,37 @@ async function main(host: InteractiveCliHost) {
   const unsubscribeTaskyonToBridge = taskyon.port.receive((msg: unknown) =>
     bridgePort.send(msg as Parameters<typeof bridgePort.send>[0]),
   )
+  return { clientPort, taskyonApi, unsubscribeBridgeToTaskyon, unsubscribeTaskyonToBridge }
+}
 
-  writeLine('Registering CLI tools...')
+function createCliDocumentationRuntime(
+  host: InteractiveCliHost,
+  storageClient: ReturnType<typeof createStorageClient>,
+  taskyonApi: ReturnType<typeof createCliTaskyonClient>,
+) {
   const documentation = host.documentation
-  const documentationBases = documentation
-    ? createProtocolDocumentationBaseStore(
-        storageClient,
-        createNodeResourceFilesLoader(
-          documentation.docsRoot,
-          () => taskyonApi.discovery.describe({}),
-          {
-            apiSource: documentation.apiSource,
-            apiFileName: `${documentation.baseId}.openapi.json`,
-          },
-        ),
-      )
-    : undefined
-  if (documentationBases && documentation) {
-    await timeStartup('cli.documentation-registration', () =>
-      documentationBases.register(documentation.manifest, documentation.baseId),
-    )
-  }
-  const cliTools: InternalTool[] = [
-    cliEntryNodeTool,
+  if (!documentation) return undefined
+  const documentationBases = createProtocolDocumentationBaseStore(
+    storageClient,
+    createNodeResourceFilesLoader(documentation.docsRoot, () => taskyonApi.discovery.describe({}), {
+      apiSource: documentation.apiSource,
+      apiFileName: `${documentation.baseId}.openapi.json`,
+    }),
+  )
+  return { documentation, documentationBases }
+}
+
+function createCliToolSet(
+  host: InteractiveCliHost,
+  nativePythonExecutable: string | undefined,
+  documentation: ReturnType<typeof createCliDocumentationRuntime>,
+  interactiveReadlineRef: { current?: ReturnType<typeof createInterface> },
+  explorationTool: ReturnType<typeof createExplorationTool>,
+  updateFilesTool: ReturnType<typeof createUpdateFilesTool>,
+  entryTool: ReturnType<typeof createCliEntryNodeTool>,
+) {
+  return [
+    entryTool,
     createCliClarificationTool(() => interactiveReadlineRef.current),
     explorationTool,
     updateFilesTool,
@@ -3549,19 +3746,29 @@ async function main(host: InteractiveCliHost) {
                 readline,
                 'Allow native Python full host filesystem and network access for this session? [y/N] ',
               )
-              return answer?.trim().toLowerCase() === 'y' || answer?.trim().toLowerCase() === 'yes'
+              return ['y', 'yes'].includes(answer?.trim().toLowerCase() ?? '')
             },
           }),
         ]
       : []),
-    ...(documentationBases ? [createDocumentationIndexClientTool(documentationBases)] : []),
-    ...(documentation ? [documentation.tool] : []),
+    ...(documentation
+      ? [createDocumentationIndexClientTool(documentation.documentationBases)]
+      : []),
+    ...(documentation ? [documentation.documentation.tool] : []),
     ...(host.additionalTools ?? []),
   ].map((tool) => InternalToolSchema.parse(tool))
-  const cliToolRpcHost = await timeStartup('cli.tool-registration', () =>
+}
+
+async function registerCliTools(
+  taskyonApi: ReturnType<typeof createCliTaskyonClient>,
+  clientPort: ReturnType<typeof createProtocolPort<typeof taskyonProtocol>>['x'],
+  tools: InternalTool[],
+  timing: Awaited<ReturnType<typeof createCliBootstrap>>,
+) {
+  return timing.timeStartup('cli.tool-registration', () =>
     registerToolRpcTools({
       port: clientPort,
-      tools: () => cliTools,
+      tools: () => tools,
       createContext: (call, stopSignal) =>
         createExternalToolContext(stopSignal, {
           getExecutionTaskChain: () => {
@@ -3575,152 +3782,1208 @@ async function main(host: InteractiveCliHost) {
         }),
     }),
   )
-  await timeStartup('cli.tool-display-metadata', () =>
-    refreshToolRenderOptions(taskyon, toolRenderOptions),
+}
+
+function createCliEngineSettings(bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>) {
+  const toolRenderOptions: Record<string, { hideChat?: boolean }> = {}
+  return {
+    uiSettings: {
+      showRoleTag: bootstrap.stored.cliUi?.showRoleTag ?? true,
+      showFullFunctionResults: false,
+      searchOpenMode: bootstrap.stored.cliUi?.searchOpenMode ?? 'conversation',
+      vectorizer: bootstrap.stored.cliUi?.vectorizer ?? 'static-multilingual',
+    },
+    toolRenderOptions,
+  }
+}
+
+async function loadCliEngineTooling(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+) {
+  const projectInstructions = await bootstrap.timeStartup('cli.project-instructions', () =>
+    loadProjectInstructions(process.cwd(), host.environmentPrefix),
   )
+  writeLine(
+    `Initializing ${host.productName} runtime for provider '${bootstrap.llmState.selectedToolchainProfile}'...`,
+  )
+  const nativePythonExecutable =
+    (await bootstrap.timeStartup('cli.python-detection', findNativePythonExecutable)) ?? undefined
+  const unavailableToolNames = new Set(
+    host.unavailableToolNames ?? DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES,
+  )
+  if (!nativePythonExecutable) unavailableToolNames.add('executePythonScript')
+  return { projectInstructions, nativePythonExecutable, unavailableToolNames }
+}
+
+async function createCliEnginePreparation(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+) {
+  const { uiSettings, toolRenderOptions } = createCliEngineSettings(bootstrap)
+  const { projectInstructions, nativePythonExecutable, unavailableToolNames } =
+    await loadCliEngineTooling(host, bootstrap)
+  const taskyonRef: { current?: Taskyon } = {}
+  const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
+  const approvalUiRef: { current?: CliInteractiveApprovalUi } = {}
+  const entryTool = createCliEntryNodeTool(
+    host,
+    projectInstructions,
+    bootstrap.explorationContextFiles,
+    bootstrap.workspaceOperations,
+    unavailableToolNames,
+    taskyonRef,
+  )
+  const storage = await createCliStorageRuntime(host, bootstrap)
+  const logging = createCliLoggingRuntime(bootstrap, bootstrap.sessionStartedAt)
+  const sandboxCapabilityPolicy = createCliSandboxCapabilityPolicy(
+    interactiveReadlineRef,
+    approvalUiRef,
+  )
+  return {
+    uiSettings,
+    toolRenderOptions,
+    nativePythonExecutable,
+    unavailableToolNames,
+    taskyonRef,
+    interactiveReadlineRef,
+    approvalUiRef,
+    entryTool,
+    storage,
+    logging,
+    sandboxCapabilityPolicy,
+  }
+}
+
+async function createCliEngineCore(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  preparation: Awaited<ReturnType<typeof createCliEnginePreparation>>,
+) {
+  const taskyon = await createCliTaskyonRuntime(
+    host,
+    bootstrap,
+    preparation.storage,
+    preparation.entryTool,
+    preparation.unavailableToolNames,
+    preparation.sandboxCapabilityPolicy,
+  )
+  const taskyonHost = createTaskyonHostClient(taskyon.hostPort)
+  preparation.taskyonRef.current = taskyon
+  const search = createCliSearchRuntime(bootstrap)
+  const conversation = await createCliConversationRuntime(
+    bootstrap,
+    preparation.storage,
+    taskyon,
+    taskyonHost,
+  )
+  if (
+    bootstrap.llmState.selectedToolchainProfile === 'local' &&
+    bootstrap.taskyonClientCommand === null
+  )
+    await warnIfLocalProviderIsUnavailable(bootstrap.llmState)
+  const protocol = createCliTaskyonProtocolRuntime(taskyon)
+  return { taskyon, taskyonHost, search, conversation, protocol }
+}
+
+async function createCliEngineTools(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  preparation: Awaited<ReturnType<typeof createCliEnginePreparation>>,
+  core: Awaited<ReturnType<typeof createCliEngineCore>>,
+) {
+  writeLine('Registering CLI tools...')
+  const documentation = createCliDocumentationRuntime(
+    host,
+    preparation.storage.storageClient,
+    core.protocol.taskyonApi,
+  )
+  if (documentation) {
+    await bootstrap.timeStartup('cli.documentation-registration', () =>
+      documentation.documentationBases.register(
+        documentation.documentation.manifest,
+        documentation.documentation.baseId,
+      ),
+    )
+  }
+  const tools = createCliToolSet(
+    host,
+    preparation.nativePythonExecutable,
+    documentation,
+    preparation.interactiveReadlineRef,
+    bootstrap.explorationTool,
+    bootstrap.updateFilesTool,
+    preparation.entryTool,
+  )
+  const cliToolRpcHost = await registerCliTools(
+    core.protocol.taskyonApi,
+    core.protocol.clientPort,
+    tools,
+    bootstrap,
+  )
+  await bootstrap.timeStartup('cli.tool-display-metadata', () =>
+    refreshToolRenderOptions(core.taskyon, preparation.toolRenderOptions),
+  )
+  return { cliToolRpcHost }
+}
+
+async function createCliEngine(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+) {
+  const preparation = await createCliEnginePreparation(host, bootstrap)
+  const core = await createCliEngineCore(host, bootstrap, preparation)
+  const tools = await createCliEngineTools(host, bootstrap, preparation, core)
   const isFunctionHiddenInChat = (name: string) =>
     name === host.entryNodeName ||
     name === 'chatCompletion' ||
     name === 'selectTaskyonTools' ||
-    Boolean(toolRenderOptions[name]?.hideChat)
+    Boolean(preparation.toolRenderOptions[name]?.hideChat)
   const writeChatDebugLine = (text: string) => {
     if (!debugLogsEnabled) return
     runtimeLog?.append('chat.debug', `${text}\n`)
   }
   writeLine('Opening interactive prompt...')
+  return {
+    ...preparation.storage,
+    ...preparation.logging,
+    ...core.search,
+    ...core.conversation,
+    ...core.protocol,
+    ...tools,
+    uiSettings: preparation.uiSettings,
+    toolRenderOptions: preparation.toolRenderOptions,
+    unavailableToolNames: preparation.unavailableToolNames,
+    taskyon: core.taskyon,
+    taskyonHost: core.taskyonHost,
+    interactiveReadlineRef: preparation.interactiveReadlineRef,
+    approvalUiRef: preparation.approvalUiRef,
+    isFunctionHiddenInChat,
+    writeChatDebugLine,
+  }
+}
 
-  if (taskyonClientCommand !== null) {
+async function warnIfLocalProviderIsUnavailable(llmState: CliLlmState) {
+  const localApi = getProviderSettings(llmState, 'local')
+  if (!localApi) throw new Error('Local provider profile is missing')
+  if (await canReachLocalApi(localApi.baseURL)) return
+  writeLine(
+    'Warning: local provider selected but http://localhost:8080 is unreachable. Configure a provider via /keys and switch with /provider.',
+  )
+}
+
+type CliWorkerStateEffects = {
+  onFinished: () => void
+  onIdleSettled: () => void
+  onStateChanged: () => void
+}
+
+type CliWorkerStateData = {
+  waitingForTask: boolean
+  workerIdleSettleTimer: ReturnType<typeof setTimeout> | null
+  hasWorkerProcessing: boolean
+  taskProcessingStatus: 'idle' | 'processing' | 'finished'
+  activeWorkerTasks: Set<string>
+  suppressedTaskIds: Set<string>
+  taskSnapshotById: Map<string, string>
+  taskById: Map<string, TaskNode>
+  workerTaskStateById: Map<string, TyTaskStreamData['stage']>
+  workerIdleWaiters: Set<() => void>
+}
+
+function createCliWorkerStateData(): CliWorkerStateData {
+  return {
+    waitingForTask: false,
+    workerIdleSettleTimer: null,
+    hasWorkerProcessing: false,
+    taskProcessingStatus: 'idle',
+    activeWorkerTasks: new Set(),
+    suppressedTaskIds: new Set(),
+    taskSnapshotById: new Map(),
+    taskById: new Map(),
+    workerTaskStateById: new Map(),
+    workerIdleWaiters: new Set(),
+  }
+}
+
+function cliWorkerActiveTaskCount(data: CliWorkerStateData) {
+  return data.activeWorkerTasks.size > 0
+    ? data.activeWorkerTasks.size
+    : data.hasWorkerProcessing
+      ? 1
+      : 0
+}
+
+function cliWorkerHasActiveTask(data: CliWorkerStateData) {
+  return hasInterruptibleWorkerActivity({
+    waitingForTask: data.waitingForTask,
+    activeWorkerTaskCount: data.activeWorkerTasks.size,
+    hasWorkerProcessing: data.hasWorkerProcessing,
+  })
+}
+
+function notifyCliWorkerIdleWaiters(data: CliWorkerStateData) {
+  if (cliWorkerActiveTaskCount(data) > 0) return
+  const waiters = [...data.workerIdleWaiters]
+  data.workerIdleWaiters.clear()
+  waiters.forEach((resolve) => resolve())
+}
+
+function clearCliWorkerIdleSettleTimer(data: CliWorkerStateData) {
+  if (data.workerIdleSettleTimer === null) return
+  clearTimeout(data.workerIdleSettleTimer)
+  data.workerIdleSettleTimer = null
+}
+
+async function waitForCliWorkerIdle(
+  data: CliWorkerStateData,
+  timeoutMs: number,
+  signal?: AbortSignal,
+) {
+  await new Promise<void>((resolve, reject) => {
+    if (cliWorkerActiveTaskCount(data) <= 0) return resolve()
+    if (signal?.aborted) return reject(new DOMException('Worker idle wait aborted', 'AbortError'))
+    const timeout = setTimeout(() => {
+      cleanup()
+      reject(new Error(`Timed out waiting for worker to settle after ${timeoutMs}ms`))
+    }, timeoutMs)
+    const onIdle = () => {
+      cleanup()
+      resolve()
+    }
+    const onAbort = () => {
+      cleanup()
+      reject(new DOMException('Worker idle wait aborted', 'AbortError'))
+    }
+    const cleanup = () => {
+      clearTimeout(timeout)
+      data.workerIdleWaiters.delete(onIdle)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    data.workerIdleWaiters.add(onIdle)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+function recordCliWorkerTask(data: CliWorkerStateData, task: TaskNode) {
+  const suppressed = isCliWorkerTaskSuppressed(data, task)
+  const snapshot = JSON.stringify(task)
+  const previous = data.taskSnapshotById.get(task.id)
+  if (previous === snapshot) return { changed: false, suppressed, previous }
+  data.taskSnapshotById.set(task.id, snapshot)
+  data.taskById.set(task.id, task)
+  return { changed: true, suppressed, previous }
+}
+
+function resetCliWorkerStateData(data: CliWorkerStateData) {
+  clearCliWorkerIdleSettleTimer(data)
+  data.activeWorkerTasks.clear()
+  data.workerTaskStateById.clear()
+  data.hasWorkerProcessing = false
+}
+
+function startCliWorkerTask(data: CliWorkerStateData) {
+  data.waitingForTask = true
+  data.hasWorkerProcessing = true
+  data.taskProcessingStatus = 'processing'
+}
+
+function suppressCliInterruptedWorkerTasks(data: CliWorkerStateData) {
+  for (const taskId of data.activeWorkerTasks) data.suppressedTaskIds.add(taskId)
+}
+
+function isCliWorkerTaskSuppressed(data: CliWorkerStateData, task: TaskNode) {
+  if (data.suppressedTaskIds.has(task.id)) return true
+  if (task.parentID && data.suppressedTaskIds.has(task.parentID)) {
+    data.suppressedTaskIds.add(task.id)
+    return true
+  }
+  if (task.priorID && data.suppressedTaskIds.has(task.priorID)) {
+    data.suppressedTaskIds.add(task.id)
+    return true
+  }
+  return false
+}
+
+function isCliWorkerEventSuppressed(data: CliWorkerStateData, event: WorkerEvent) {
+  const taskId = event.task?.id ?? event.taskId ?? null
+  return taskId !== null && data.suppressedTaskIds.has(taskId)
+}
+
+function updateCliWorkerStage(
+  data: CliWorkerStateData,
+  stage: TyTaskStreamData['stage'] | '',
+  taskId: string | null,
+  effects: CliWorkerStateEffects,
+) {
+  if (stage !== 'waiting') clearCliWorkerIdleSettleTimer(data)
+  if (stage === 'queued' || stage === 'processing') {
+    if (taskId) data.activeWorkerTasks.add(taskId)
+    if (stage === 'processing') data.hasWorkerProcessing = true
+  }
+  if (stage === 'processing' || stage === 'in loop' || stage === 'subtasks')
+    data.taskProcessingStatus = 'processing'
+  if (stage === 'all processed') {
+    clearCliWorkerIdleSettleTimer(data)
+    data.activeWorkerTasks.clear()
+    data.hasWorkerProcessing = false
+    data.taskProcessingStatus = 'finished'
+    effects.onFinished()
+  }
+}
+
+function settleCliWorkerStage(
+  data: CliWorkerStateData,
+  stage: TyTaskStreamData['stage'] | '',
+  taskId: string | null,
+  effects: CliWorkerStateEffects,
+) {
+  if (
+    stage === 'waiting' &&
+    cliWorkerActiveTaskCount(data) > 0 &&
+    data.workerIdleSettleTimer === null
+  ) {
+    data.workerIdleSettleTimer = setTimeout(() => {
+      data.workerIdleSettleTimer = null
+      data.activeWorkerTasks.clear()
+      data.hasWorkerProcessing = false
+      data.taskProcessingStatus = 'finished'
+      effects.onIdleSettled()
+      notifyCliWorkerIdleWaiters(data)
+    }, 100)
+    data.workerIdleSettleTimer.unref()
+  }
+  if (['processed', 'finished', 'aborted', 'error'].includes(stage)) {
+    if (taskId) data.activeWorkerTasks.delete(taskId)
+    if (stage !== 'processed' && stage !== 'finished') data.hasWorkerProcessing = false
+    if (data.activeWorkerTasks.size === 0 && (stage === 'processed' || stage === 'finished'))
+      data.hasWorkerProcessing = false
+    if (cliWorkerActiveTaskCount(data) <= 0) effects.onStateChanged()
+  }
+}
+
+function trackCliWorkerProgress(
+  data: CliWorkerStateData,
+  event: WorkerEvent,
+  effects: CliWorkerStateEffects,
+) {
+  const taskId = event.task?.id ?? event.taskId ?? null
+  const stage = event.stage ?? ''
+  if (taskId && event.stage) {
+    if (['processed', 'finished', 'aborted', 'error'].includes(event.stage))
+      data.workerTaskStateById.delete(taskId)
+    else data.workerTaskStateById.set(taskId, event.stage)
+  }
+  updateCliWorkerStage(data, stage, taskId, effects)
+  settleCliWorkerStage(data, stage, taskId, effects)
+  effects.onStateChanged()
+  notifyCliWorkerIdleWaiters(data)
+}
+
+function createCliWorkerState() {
+  const data = createCliWorkerStateData()
+  return {
+    getWaitingForTask: () => data.waitingForTask,
+    setWaitingForTask: (value: boolean) => {
+      data.waitingForTask = value
+    },
+    startTask: () => startCliWorkerTask(data),
+    activeTaskCount: () => cliWorkerActiveTaskCount(data),
+    hasActiveWorkerTask: () => cliWorkerHasActiveTask(data),
+    taskProcessingStatus: () => data.taskProcessingStatus,
+    taskById: data.taskById,
+    workerTaskStateById: data.workerTaskStateById,
+    recordTask: (task: TaskNode) => recordCliWorkerTask(data, task),
+    reset: () => resetCliWorkerStateData(data),
+    suppressInterruptedWorkerTasks: () => suppressCliInterruptedWorkerTasks(data),
+    isSuppressedWorkerEvent: (event: WorkerEvent) => isCliWorkerEventSuppressed(data, event),
+    trackWorkerProgress: (event: WorkerEvent, effects: CliWorkerStateEffects) =>
+      trackCliWorkerProgress(data, event, effects),
+    waitForWorkerIdle: (timeoutMs: number, signal?: AbortSignal) =>
+      waitForCliWorkerIdle(data, timeoutMs, signal),
+    clearWorkerIdleSettleTimer: () => clearCliWorkerIdleSettleTimer(data),
+    notifyWorkerIdleWaiters: () => notifyCliWorkerIdleWaiters(data),
+  }
+}
+
+function isCliInteractivePromptWorkerEvent(event: WorkerEvent) {
+  const functionName =
+    event.task?.content?.type === 'functioncall' ? event.task.content.data?.name : undefined
+  return typeof functionName === 'string' && INTERACTIVE_PROMPT_TOOL_NAMES.has(functionName)
+}
+
+function cliTransientLineWidth() {
+  return Math.max(20, (process.stdout.columns || 88) - 4)
+}
+
+function fitCliTransientLine(text: string, maxWidth = cliTransientLineWidth()) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  return normalized.length <= maxWidth
+    ? normalized
+    : `${normalized.slice(0, Math.max(0, maxWidth - 1)).trimEnd()}…`
+}
+
+function wrapCliThinkingText(text: string, maxWidth = cliTransientLineWidth()) {
+  const paragraphs = text
+    .replace(/\r\n?/g, '\n')
+    .trim()
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line.length > 0)
+  const lines: string[] = []
+  for (const paragraph of paragraphs) {
+    let current = ''
+    for (const word of paragraph.split(' ')) {
+      if (!word) continue
+      const next = current ? `${current} ${word}` : word
+      if (next.length <= maxWidth) {
+        current = next
+        continue
+      }
+      if (current) lines.push(current)
+      current = word
+    }
+    if (current) lines.push(current)
+  }
+  return lines
+}
+
+function dimCliText(text: string) {
+  return process.stdout.isTTY ? `\x1b[90m${text}\x1b[0m` : text
+}
+
+type CliTerminalViewContext = {
+  host: InteractiveCliHost
+  rl: ReturnType<typeof createInterface>
+  llmState: CliLlmState
+  taskyon: Taskyon
+  workerState: ReturnType<typeof createCliWorkerState>
+  conversationPersistence: Awaited<
+    ReturnType<typeof createCliConversationRuntime>
+  >['conversationPersistence']
+  currentSessionLocations: () => SessionLocationInfo
+  uiSettings: { showRoleTag: boolean; showFullFunctionResults: boolean }
+  toolRenderOptions: Record<string, { hideChat?: boolean }>
+  isFunctionHiddenInChat: (name: string) => boolean
+  writeChatDebugLine: (text: string) => void
+  chatView: { detailed: boolean }
+  getCurrentLeafId: () => string | undefined
+  isWaitingForTask: () => boolean
+  isInMenuInteraction: () => boolean
+  isQuitPending: () => boolean
+  isShuttingDown: () => boolean
+}
+
+function createCliTerminalViewOptions(
+  context: CliTerminalViewContext,
+  view: {
+    clearThinkingPanel: () => void
+    renderThinkingPanel: () => void
+    noteHiddenNode: (toolName: string) => void
+    flushHiddenNodeMarkers: () => void
+  },
+) {
+  const common = {
+    detailedViewEnabled: () => context.chatView.detailed,
+    showRoleTag: () => context.uiSettings.showRoleTag,
+    showFullFunctionResults: () => context.uiSettings.showFullFunctionResults,
+    isFunctionHiddenInChat: context.isFunctionHiddenInChat,
+    ...(debugLogsEnabled ? { writeDebugLine: context.writeChatDebugLine } : {}),
+  }
+  return {
+    task: {
+      ...common,
+      noteHiddenNode: view.noteHiddenNode,
+      flushHiddenNodeMarkers: view.flushHiddenNodeMarkers,
+      clearThinkingPanel: view.clearThinkingPanel,
+      renderThinkingPanel: view.renderThinkingPanel,
+      writeLine,
+    },
+    worker: {
+      ...common,
+      clearThinkingPanel: view.clearThinkingPanel,
+      renderThinkingPanel: view.renderThinkingPanel,
+      writeLine,
+    },
+  }
+}
+
+type CliTerminalViewState = {
+  latestCostFooter: ReturnType<typeof formatTaskCostFooter> | undefined
+  costRefreshPromise: Promise<void> | null
+  costRefreshTimer: ReturnType<typeof setTimeout> | null
+  workerCleanupNoticeTimer: ReturnType<typeof setTimeout> | null
+  workerStatusTimer: ReturnType<typeof setInterval> | null
+  workerStatusFrameIndex: number
+  workerStatusText: string
+  workerStatusRendered: boolean
+  thinkingLines: string[]
+  toolProgressLines: string[]
+  transientActivity: Array<{ kind: 'thinking' | 'progress'; text: string }>
+  thinkingText: string
+  thinkingPanelHeight: number
+  thinkingRenderTimer: ReturnType<typeof setTimeout> | null
+  renderedThinkingPanelText: string
+  pendingHiddenNodeMarkers: string[]
+  completedSubtaskSummaryIds: Set<string>
+}
+
+function createCliTerminalViewState(): CliTerminalViewState {
+  return {
+    latestCostFooter: undefined,
+    costRefreshPromise: null,
+    costRefreshTimer: null,
+    workerCleanupNoticeTimer: null,
+    workerStatusTimer: null,
+    workerStatusFrameIndex: 0,
+    workerStatusText: '',
+    workerStatusRendered: false,
+    thinkingLines: [],
+    toolProgressLines: [],
+    transientActivity: [],
+    thinkingText: '',
+    thinkingPanelHeight: 0,
+    thinkingRenderTimer: null,
+    renderedThinkingPanelText: '',
+    pendingHiddenNodeMarkers: [],
+    completedSubtaskSummaryIds: new Set(),
+  }
+}
+
+function clearCliWorkerStatusLine(state: CliTerminalViewState) {
+  if (!state.workerStatusRendered) return
+  process.stdout.write('\r\x1b[2K')
+  state.workerStatusRendered = false
+}
+
+function clearCliThinkingRenderTimer(state: CliTerminalViewState) {
+  if (state.thinkingRenderTimer === null) return
+  clearTimeout(state.thinkingRenderTimer)
+  state.thinkingRenderTimer = null
+}
+
+function eraseCliThinkingPanel(state: CliTerminalViewState) {
+  if (state.thinkingPanelHeight <= 0) return
+  for (let i = 0; i < state.thinkingPanelHeight; i += 1) process.stdout.write('\x1b[1A\x1b[2K')
+  state.thinkingPanelHeight = 0
+}
+
+function clearCliThinkingPanel(state: CliTerminalViewState) {
+  clearCliThinkingRenderTimer(state)
+  eraseCliThinkingPanel(state)
+  state.renderedThinkingPanelText = ''
+}
+
+function collectCliQueuedTasks(context: CliTerminalViewContext, currentTask: TaskNode | undefined) {
+  if (!currentTask) return []
+  const siblingChains = currentTask.parentID
+    ? selectChildTaskChains(currentTask.parentID, context.workerState.taskById.values())
+    : []
+  const lineage: TaskNode[] = []
+  const visited = new Set<string>()
+  let cursor: TaskNode | undefined = currentTask
+  while (cursor && !visited.has(cursor.id)) {
+    visited.add(cursor.id)
+    lineage.push(cursor)
+    cursor = cursor.parentID ? context.workerState.taskById.get(cursor.parentID) : undefined
+  }
+  const childChains = lineage
+    .filter((task) => task.content.type === 'functioncall')
+    .flatMap((task) => selectChildTaskChains(task.id, context.workerState.taskById.values()))
+  return selectTaskQueueBranches(
+    [...siblingChains, ...childChains],
+    context.workerState.workerTaskStateById,
+  )
+    .flatMap((branch) => branch.pendingTasks)
+    .filter(
+      (task) =>
+        task.content.type === 'message' ||
+        (task.content.type === 'functioncall' &&
+          !context.toolRenderOptions[task.content.data.name]?.hideChat),
+    )
+}
+
+function formatCliQueueLines(tasks: TaskNode[]) {
+  if (tasks.length <= 0) return []
+  return [
+    `[queue] ${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'} queued`,
+    ...tasks.slice(0, 3).map((task) => `  - ${getTaskQueueLabel(task)}`),
+    ...(tasks.length > 3 ? [`  - ... ${tasks.length - 3} more`] : []),
+  ]
+}
+
+function formatCliActivityLines(state: CliTerminalViewState) {
+  const recentActivity = state.transientActivity.slice(-5)
+  const recentProgress = recentActivity
+    .filter((entry) => entry.kind === 'progress')
+    .map((entry) => entry.text)
+  const recentThinking = recentActivity
+    .filter((entry) => entry.kind === 'thinking' && entry.text.trim().length > 0)
+    .map((entry) => entry.text.trim())
+  return {
+    progress:
+      recentProgress.length > 0
+        ? ['[tool progress]', ...recentProgress.map((line) => `  ${line}`)]
+        : [],
+    thinking:
+      recentThinking.length > 0 ? ['[thinking]', ...recentThinking.map((line) => `  ${line}`)] : [],
+  }
+}
+
+function buildCliThinkingPanel(context: CliTerminalViewContext, state: CliTerminalViewState) {
+  const leafId = context.getCurrentLeafId()
+  const currentTask = leafId ? context.workerState.taskById.get(leafId) : undefined
+  const queueLines = formatCliQueueLines(collectCliQueuedTasks(context, currentTask))
+  const activity = formatCliActivityLines(state)
+  const processingPanel = state.workerStatusText
+    ? [
+        `${['-', '\\', '|', '/'][state.workerStatusFrameIndex % 4] ?? '-'} ${state.workerStatusText}`,
+      ]
+    : []
+  const panel = [...processingPanel, ...queueLines, ...activity.progress, ...activity.thinking]
+  return {
+    panel,
+    panelText: panel.join('\n'),
+    queueLineCount: processingPanel.length + queueLines.length,
+  }
+}
+
+function renderCliThinkingPanel(context: CliTerminalViewContext, state: CliTerminalViewState) {
+  if (!context.isWaitingForTask()) return
+  const { panel, panelText, queueLineCount } = buildCliThinkingPanel(context, state)
+  if (panelText === state.renderedThinkingPanelText) return
+  clearCliThinkingRenderTimer(state)
+  eraseCliThinkingPanel(state)
+  if (panel.length <= 0) {
+    state.renderedThinkingPanelText = ''
+    return
+  }
+  clearCliWorkerStatusLine(state)
+  const displayPanel = panel.map((line, index) =>
+    index >= queueLineCount ? dimCliText(fitCliTransientLine(line)) : fitCliTransientLine(line),
+  )
+  process.stdout.write(`${displayPanel.join('\n')}\n`)
+  state.thinkingPanelHeight = panel.length
+  state.renderedThinkingPanelText = panelText
+}
+
+function scheduleCliThinkingPanel(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  render: () => void,
+) {
+  if (!context.isWaitingForTask()) return
+  if (state.thinkingPanelHeight <= 0 && state.renderedThinkingPanelText.length === 0)
+    return render()
+  if (state.thinkingRenderTimer !== null) return
+  state.thinkingRenderTimer = setTimeout(() => {
+    state.thinkingRenderTimer = null
+    render()
+  }, 300)
+  state.thinkingRenderTimer.unref()
+}
+
+function appendCliThinkingText(state: CliTerminalViewState, delta: string, schedule: () => void) {
+  if (!delta) return
+  state.thinkingText = `${state.thinkingText}${delta}`.slice(-MAX_TRANSIENT_THINKING_CHARS)
+  const next = wrapCliThinkingText(state.thinkingText)
+  if (next.length <= 0) return
+  state.thinkingLines = next.slice(-MAX_TRANSIENT_THINKING_LINES)
+  const latestThinkingLine = state.thinkingLines.at(-1)?.trim()
+  if (latestThinkingLine) {
+    const lastActivity = state.transientActivity.at(-1)
+    state.transientActivity =
+      lastActivity?.kind === 'thinking'
+        ? [...state.transientActivity.slice(0, -1), { kind: 'thinking', text: latestThinkingLine }]
+        : [...state.transientActivity, { kind: 'thinking', text: latestThinkingLine }]
+    state.transientActivity = state.transientActivity.slice(-5)
+  }
+  schedule()
+}
+
+function resetCliThinking(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  stopStatus?: () => void,
+) {
+  clearCliThinkingPanel(state)
+  stopStatus?.()
+  context.workerState.reset()
+  state.thinkingLines = []
+  state.toolProgressLines = []
+  state.transientActivity = []
+  state.thinkingText = ''
+}
+
+function recordCliToolProgress(
+  state: CliTerminalViewState,
+  event: WorkerEvent,
+  schedule: () => void,
+) {
+  if (event.stage !== 'tool progress' || !event.progress) return
+  const prefix = event.progress.kind ? `[${event.progress.kind}] ` : ''
+  const lines = event.progress.message
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => `${prefix}${line.slice(0, cliTransientLineWidth())}`)
+  state.toolProgressLines = [...state.toolProgressLines, ...lines].slice(-5)
+  state.transientActivity = [
+    ...state.transientActivity,
+    ...lines.map((text) => ({ kind: 'progress' as const, text })),
+  ].slice(-5)
+  writeDebug(
+    `tool progress: ${JSON.stringify({ taskId: event.task?.id ?? event.taskId, toolName: event.toolName, ...event.progress })}`,
+  )
+  schedule()
+}
+
+function createCliThinkingController(context: CliTerminalViewContext, state: CliTerminalViewState) {
+  const render = () => renderCliThinkingPanel(context, state)
+  const schedule = () => scheduleCliThinkingPanel(context, state, render)
+  return {
+    clear: () => clearCliThinkingPanel(state),
+    render,
+    schedule,
+    reset: (stopStatus?: () => void) => resetCliThinking(context, state, stopStatus),
+    append: (delta: string) => appendCliThinkingText(state, delta, schedule),
+    recordToolProgress: (event: WorkerEvent) => recordCliToolProgress(state, event, schedule),
+  }
+}
+
+function updateCliFooter(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  footer: Awaited<ReturnType<typeof createCliFooter>>,
+) {
+  const provider = context.llmState.selectedToolchainProfile
+  const model = getSelectedProviderSettings(context.llmState).model
+  footer.setStatus({
+    provider,
+    model,
+    taskState: context.workerState.taskProcessingStatus(),
+    activeTasks: context.workerState.activeTaskCount(),
+    ...(state.latestCostFooter?.cost ? { cost: state.latestCostFooter.cost } : {}),
+    ...(state.latestCostFooter ? { costIncomplete: state.latestCostFooter.incomplete } : {}),
+    ...(state.latestCostFooter ? { cachePercent: state.latestCostFooter.cachePercent } : {}),
+    ...(runtimeLog?.filePath ? { logPath: runtimeLog.filePath } : {}),
+    conversationPath: context.conversationPersistence.filePath,
+  })
+}
+
+function refreshCliCostFooter(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  footer: Awaited<ReturnType<typeof createCliFooter>>,
+) {
+  const leafId = context.getCurrentLeafId()
+  if (!leafId) {
+    state.latestCostFooter = undefined
+    return updateCliFooter(context, state, footer)
+  }
+  if (state.costRefreshPromise) return
+  state.costRefreshPromise = (async () => {
     try {
-      await handleClientCommand(
-        { client: taskyonApi, taskPort: clientPort as Parameters<typeof waitForTaskResult>[0] },
-        taskyonClientCommand,
-      )
-      await recordCurrentSession(new Date().toISOString()).catch(() => {})
+      const summary = await context.taskyon.getTaskCostSummary(leafId)
+      if (context.getCurrentLeafId() === leafId)
+        state.latestCostFooter = formatTaskCostFooter(summary)
+    } catch {
+      if (context.getCurrentLeafId() === leafId) state.latestCostFooter = undefined
     } finally {
-      cliToolRpcHost.destroy()
-      unsubscribeBridgeToTaskyon()
-      unsubscribeTaskyonToBridge()
-      taskyon.cancelCurrentRun(`${host.commandName} client command complete`)
-      setChatCompletionTraceWriter(undefined)
-      restoreConsoleLogging?.()
-      await runtimeLog?.flush().catch(() => {})
+      state.costRefreshPromise = null
+      updateCliFooter(context, state, footer)
+      if (context.getCurrentLeafId() !== leafId) refreshCliCostFooter(context, state, footer)
     }
-    process.exit(0)
+  })()
+}
+
+function scheduleCliCostFooterRefresh(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  footer: Awaited<ReturnType<typeof createCliFooter>>,
+  delayMs: number,
+) {
+  if (state.costRefreshTimer !== null) clearTimeout(state.costRefreshTimer)
+  state.costRefreshTimer = setTimeout(() => {
+    state.costRefreshTimer = null
+    refreshCliCostFooter(context, state, footer)
+  }, delayMs)
+  state.costRefreshTimer.unref()
+}
+
+function createCliCostController(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  footer: Awaited<ReturnType<typeof createCliFooter>>,
+) {
+  const update = () => updateCliFooter(context, state, footer)
+  const refresh = () => refreshCliCostFooter(context, state, footer)
+  return {
+    update,
+    refresh,
+    schedule: (delayMs: number) => scheduleCliCostFooterRefresh(context, state, footer, delayMs),
   }
+}
 
-  interactiveReadlineRef.current = rl
-  rl.resume()
-
-  let currentLeafId: string | undefined
-  let waitingForTask = false
-  const chatView = { detailed: false }
-  let interruptedCurrentTask = false
-  let interruptNoticePrinted = false
-  let requestQuitOnNextPrompt = false
-  let quitPromptAbortController: AbortController | null = null
-  let eofRequested = false
-  let inMenuInteraction = false
-  let shuttingDown = false
-  let stopMainLoop = false
-  let requestedExitCode = 0
-  let shutdownForceTimer: ReturnType<typeof setTimeout> | null = null
-  let workerCleanupNoticeTimer: ReturnType<typeof setTimeout> | null = null
-  let taskInterruptKeysCleanup: (() => void) | undefined
-  let activeTaskWaitController: AbortController | undefined
-  let thinkingLines: string[] = []
-  let toolProgressLines: string[] = []
-  let transientActivity: Array<{ kind: 'thinking' | 'progress'; text: string }> = []
-  let thinkingText = ''
-  let thinkingPanelHeight = 0
-  let thinkingRenderTimer: ReturnType<typeof setTimeout> | null = null
-  let renderedThinkingPanelText = ''
-  const pendingHiddenNodeMarkers: string[] = []
-  let workerIdleSettleTimer: ReturnType<typeof setTimeout> | null = null
-  const activeWorkerTasks = new Set<string>()
-  const suppressedTaskIds = new Set<string>()
-  const completedSubtaskSummaryIds = new Set<string>()
-  let hasWorkerProcessing = false
-  let taskProcessingStatus: 'idle' | 'processing' | 'finished' = 'idle'
-  const taskSnapshotById = new Map<string, string>()
-  const taskById = new Map<string, TaskNode>()
-  const workerTaskStateById = new Map<string, TyTaskStreamData['stage']>()
-  const footer = await createCliFooter(host.environmentPrefix)
-  let latestCostFooter: ReturnType<typeof formatTaskCostFooter> | undefined
-  let costRefreshPromise: Promise<void> | null = null
-  let costRefreshTimer: ReturnType<typeof setTimeout> | null = null
-  const workerSpinnerFrames = ['-', '\\', '|', '/']
-  let workerStatusTimer: ReturnType<typeof setInterval> | null = null
-  let workerStatusFrameIndex = 0
-  let workerStatusText = ''
-  let workerStatusRendered = false
-
-  const clearWorkerStatusLine = () => {
-    if (!workerStatusRendered) return
-    process.stdout.write('\r\x1b[2K')
-    workerStatusRendered = false
+function setCliWorkerStatusLine(state: CliTerminalViewState, text: string, schedule: () => void) {
+  if (!process.stdout.isTTY) return
+  state.workerStatusText = text
+  if (activeCliMenuDepth > 0) {
+    clearCliWorkerStatusLine(state)
+    return
   }
+  if (state.workerStatusTimer === null) {
+    state.workerStatusTimer = setInterval(() => {
+      state.workerStatusFrameIndex += 1
+      schedule()
+    }, 120)
+    state.workerStatusTimer.unref()
+  }
+  schedule()
+}
 
-  clearTransientStatusLine = clearWorkerStatusLine
+function stopCliWorkerStatusLine(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  schedule: () => void,
+) {
+  if (state.workerStatusTimer !== null) {
+    clearInterval(state.workerStatusTimer)
+    state.workerStatusTimer = null
+  }
+  state.workerStatusText = ''
+  state.workerStatusFrameIndex = 0
+  clearCliWorkerStatusLine(state)
+  if (context.isWaitingForTask()) schedule()
+}
 
-  const setWorkerStatusLine = (text: string) => {
-    if (!process.stdout.isTTY) return
-    workerStatusText = text
-    if (activeCliMenuDepth > 0) {
-      clearWorkerStatusLine()
+function updateCliWorkerStatusLine(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  event: WorkerEvent,
+  suppressed: boolean,
+  schedule: () => void,
+) {
+  if (context.workerState.activeTaskCount() <= 0)
+    return stopCliWorkerStatusLine(context, state, schedule)
+  if (isCliInteractivePromptWorkerEvent(event))
+    return stopCliWorkerStatusLine(context, state, schedule)
+  if (activeCliMenuDepth > 0) return clearCliWorkerStatusLine(state)
+  if (suppressed) return
+  const text = resolveWorkerStatusText(event, context.isFunctionHiddenInChat, true)
+  if (text) setCliWorkerStatusLine(state, text, schedule)
+  else if (event.stage === 'processing' || event.stage === 'subtasks')
+    setCliWorkerStatusLine(state, 'task: processing', schedule)
+  else stopCliWorkerStatusLine(context, state, schedule)
+}
+
+function createCliWorkerStatusController(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  schedule: () => void,
+) {
+  return {
+    set: (text: string) => setCliWorkerStatusLine(state, text, schedule),
+    stop: () => stopCliWorkerStatusLine(context, state, schedule),
+    update: (event: WorkerEvent, suppressed: boolean) =>
+      updateCliWorkerStatusLine(context, state, event, suppressed, schedule),
+  }
+}
+
+function writeCliPromptPrefix(context: CliTerminalViewContext, state: CliTerminalViewState) {
+  const provider = context.llmState.selectedToolchainProfile
+  const model = getSelectedProviderSettings(context.llmState).model
+  writeLine(
+    formatPromptPrefixLine({
+      provider,
+      model,
+      taskState: context.workerState.taskProcessingStatus(),
+      activeTasks: context.workerState.activeTaskCount(),
+      ...(state.latestCostFooter?.cost ? { cost: state.latestCostFooter.cost } : {}),
+      ...(state.latestCostFooter ? { costIncomplete: state.latestCostFooter.incomplete } : {}),
+      ...(state.latestCostFooter ? { cachePercent: state.latestCostFooter.cachePercent } : {}),
+    }),
+  )
+  writeLine('')
+}
+
+function createCliPromptController(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  footer: Awaited<ReturnType<typeof createCliFooter>>,
+  updateFooter: () => void,
+) {
+  const mainPrompt = () =>
+    process.stdout.isTTY &&
+    (process.env[`${context.host.environmentPrefix}_TERMINAL_UI`] ?? '').trim().toLowerCase() ===
+      'terminal-kit'
+      ? '\x1b[36m>\x1b[0m '
+      : '> '
+  const restorePromptIfIdle = () => {
+    if (
+      context.isWaitingForTask() ||
+      context.isInMenuInteraction() ||
+      context.isQuitPending() ||
+      context.isShuttingDown()
+    )
       return
-    }
-    if (workerStatusTimer === null) {
-      workerStatusTimer = setInterval(() => {
-        workerStatusFrameIndex += 1
-        scheduleThinkingRender()
-      }, 120)
-      workerStatusTimer.unref()
-    }
-    scheduleThinkingRender()
-  }
-
-  const stopWorkerStatusLine = () => {
-    if (workerStatusTimer !== null) {
-      clearInterval(workerStatusTimer)
-      workerStatusTimer = null
-    }
-    workerStatusText = ''
-    workerStatusFrameIndex = 0
-    clearWorkerStatusLine()
-    if (waitingForTask) scheduleThinkingRender()
-  }
-
-  const clearWorkerIdleSettleTimer = () => {
-    if (workerIdleSettleTimer === null) return
-    clearTimeout(workerIdleSettleTimer)
-    workerIdleSettleTimer = null
-  }
-
-  const updateWorkerStatusLine = (event: WorkerEvent, suppressed: boolean) => {
-    if (activeTaskCount() <= 0) {
-      stopWorkerStatusLine()
+    if (
+      !process.stdin.isTTY ||
+      process.env[`${context.host.environmentPrefix}_HOTKEY_MENUS`] === '0'
+    )
       return
-    }
-    if (isInteractivePromptWorkerEvent(event)) {
-      stopWorkerStatusLine()
-      return
-    }
-    if (activeCliMenuDepth > 0) {
-      clearWorkerStatusLine()
-      return
-    }
-    if (suppressed) return
-    const text = resolveWorkerStatusText(event, (name) => isFunctionHiddenInChat(name), true)
-    if (text) setWorkerStatusLine(text)
-    else if (event.stage === 'processing' || event.stage === 'subtasks') {
-      setWorkerStatusLine('task: processing')
-    } else stopWorkerStatusLine()
+    if (isReadlineClosed(context.rl)) return
+    updateFooter()
+    footer.beforePrompt()
   }
+  return {
+    mainPrompt,
+    writePromptPrefix: () => writeCliPromptPrefix(context, state),
+    restorePromptIfIdle,
+  }
+}
 
+function createCliMarkerController(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+  clearThinkingPanel: () => void,
+) {
+  const noteHiddenNode = (toolName: string) => state.pendingHiddenNodeMarkers.push(toolName)
+  const resetTransientMarkers = () => {
+    state.pendingHiddenNodeMarkers.length = 0
+    state.completedSubtaskSummaryIds.clear()
+  }
+  const flushHiddenNodeMarkers = () => {
+    if (state.pendingHiddenNodeMarkers.length <= 0) return
+    writeLine(state.pendingHiddenNodeMarkers.map((toolName) => `>${toolName}`).join('\n'))
+    state.pendingHiddenNodeMarkers.length = 0
+  }
+  const renderCompletedSubtaskSummary = (event: WorkerEvent) => {
+    const taskId = event.task?.id ?? event.taskId
+    if (event.stage !== 'finished' || !taskId || state.completedSubtaskSummaryIds.has(taskId))
+      return
+    const toolCallCount = countDelegatedSubtaskToolCalls(
+      taskId,
+      context.workerState.taskById.values(),
+    )
+    if (toolCallCount === null) return
+    state.completedSubtaskSummaryIds.add(taskId)
+    clearThinkingPanel()
+    flushHiddenNodeMarkers()
+    writeLine(
+      `>subtask completed: ${String(toolCallCount)} ${toolCallCount === 1 ? 'tool call' : 'tool calls'}`,
+    )
+  }
+  return {
+    noteHiddenNode,
+    resetTransientMarkers,
+    flushHiddenNodeMarkers,
+    renderCompletedSubtaskSummary,
+  }
+}
+
+function createCliCleanupNoticeController(
+  context: CliTerminalViewContext,
+  state: CliTerminalViewState,
+) {
+  const clear = () => {
+    if (state.workerCleanupNoticeTimer === null) return
+    clearTimeout(state.workerCleanupNoticeTimer)
+    state.workerCleanupNoticeTimer = null
+  }
+  const schedule = () => {
+    clear()
+    state.workerCleanupNoticeTimer = setTimeout(() => {
+      writeLine('Worker cleanup still pending...')
+      writeSessionLocations(
+        'Session Locations',
+        context.currentSessionLocations(),
+        context.host.commandName,
+      )
+    }, 1500)
+    state.workerCleanupNoticeTimer.unref()
+  }
+  return { clear, schedule }
+}
+
+type CliTerminalViewControllers = {
+  footer: Awaited<ReturnType<typeof createCliFooter>>
+  state: CliTerminalViewState
+  thinking: ReturnType<typeof createCliThinkingController>
+  status: ReturnType<typeof createCliWorkerStatusController>
+  cost: ReturnType<typeof createCliCostController>
+  prompt: ReturnType<typeof createCliPromptController>
+  markers: ReturnType<typeof createCliMarkerController>
+  cleanup: ReturnType<typeof createCliCleanupNoticeController>
+}
+
+function createCliTerminalViewEffects(
+  thinking: CliTerminalViewControllers['thinking'],
+  status: CliTerminalViewControllers['status'],
+  cost: CliTerminalViewControllers['cost'],
+  markers: CliTerminalViewControllers['markers'],
+  cleanup: CliTerminalViewControllers['cleanup'],
+): CliWorkerStateEffects {
+  return {
+    onFinished: () => {
+      cleanup.clear()
+      status.stop()
+      thinking.clear()
+      markers.flushHiddenNodeMarkers()
+      cost.refresh()
+      cost.schedule(7_000)
+    },
+    onIdleSettled: () => {
+      cleanup.clear()
+      status.stop()
+      cost.update()
+      cost.refresh()
+    },
+    onStateChanged: () => {
+      thinking.schedule()
+      cost.update()
+    },
+  }
+}
+
+function disposeCliTerminalView(controllers: CliTerminalViewControllers) {
+  const { footer, state, status, cleanup } = controllers
+  cleanup.clear()
+  clearCliThinkingRenderTimer(state)
+  if (state.costRefreshTimer !== null) clearTimeout(state.costRefreshTimer)
+  status.stop()
+  footer.restore()
+  clearTransientStatusLine = undefined
+}
+
+function createCliTerminalViewApi(
+  controllers: CliTerminalViewControllers,
+  effects: CliWorkerStateEffects,
+  renderOptions: ReturnType<typeof createCliTerminalViewOptions>,
+) {
+  const { footer, state, thinking, status, cost, prompt, markers, cleanup } = controllers
+  const dispose = () => disposeCliTerminalView(controllers)
+  clearTransientStatusLine = () => clearCliWorkerStatusLine(state)
+  return {
+    footer,
+    clearThinkingPanel: thinking.clear,
+    renderThinkingPanel: thinking.render,
+    scheduleThinkingRender: thinking.schedule,
+    setWorkerStatusLine: status.set,
+    stopWorkerStatusLine: status.stop,
+    updateWorkerStatusLine: status.update,
+    updateFooter: cost.update,
+    refreshCostFooter: cost.refresh,
+    scheduleCostFooterRefresh: cost.schedule,
+    writePromptPrefix: prompt.writePromptPrefix,
+    mainPrompt: prompt.mainPrompt,
+    restorePromptIfIdle: prompt.restorePromptIfIdle,
+    resetThinking: () => thinking.reset(status.stop),
+    appendThinkingText: thinking.append,
+    noteHiddenNode: markers.noteHiddenNode,
+    resetTransientMarkers: markers.resetTransientMarkers,
+    flushHiddenNodeMarkers: markers.flushHiddenNodeMarkers,
+    renderCompletedSubtaskSummary: markers.renderCompletedSubtaskSummary,
+    recordToolProgress: thinking.recordToolProgress,
+    scheduleWorkerCleanupNotice: cleanup.schedule,
+    clearWorkerCleanupNoticeTimer: cleanup.clear,
+    workerStateEffects: effects,
+    renderTask: (task: TaskNode, previous: boolean) =>
+      renderTaskProgress(renderOptions.task, task, previous),
+    renderWorker: (event: WorkerEvent) => renderWorkerProgress(renderOptions.worker, event),
+    dispose,
+  }
+}
+
+async function createCliTerminalView(context: CliTerminalViewContext) {
+  const footer = await createCliFooter(context.host.environmentPrefix)
+  const state = createCliTerminalViewState()
+  const thinking = createCliThinkingController(context, state)
+  const status = createCliWorkerStatusController(context, state, thinking.schedule)
+  const cost = createCliCostController(context, state, footer)
+  const prompt = createCliPromptController(context, state, footer, cost.update)
+  const markers = createCliMarkerController(context, state, thinking.clear)
+  const cleanup = createCliCleanupNoticeController(context, state)
+  const controllers: CliTerminalViewControllers = {
+    footer,
+    state,
+    thinking,
+    status,
+    cost,
+    prompt,
+    markers,
+    cleanup,
+  }
+  const effects = createCliTerminalViewEffects(thinking, status, cost, markers, cleanup)
+  const renderOptions = createCliTerminalViewOptions(context, {
+    clearThinkingPanel: thinking.clear,
+    renderThinkingPanel: thinking.render,
+    noteHiddenNode: markers.noteHiddenNode,
+    flushHiddenNodeMarkers: markers.flushHiddenNodeMarkers,
+  })
+  return createCliTerminalViewApi(controllers, effects, renderOptions)
+}
+
+type CliInteractiveState = {
+  currentLeafId: string | undefined
+  waitingForTask: boolean
+  chatView: { detailed: boolean }
+  interruptedCurrentTask: boolean
+  interruptNoticePrinted: boolean
+  requestQuitOnNextPrompt: boolean
+  quitPromptAbortController: AbortController | null
+  eofRequested: boolean
+  inMenuInteraction: boolean
+  shuttingDown: boolean
+  stopMainLoop: boolean
+  requestedExitCode: number
+  shutdownForceTimer: ReturnType<typeof setTimeout> | null
+  taskInterruptKeysCleanup: (() => void) | undefined
+  activeTaskWaitController: AbortController | undefined
+}
+
+type CliInteractiveRuntime = {
+  host: InteractiveCliHost
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>
+  engine: Awaited<ReturnType<typeof createCliEngine>>
+  state: CliInteractiveState
+  workerState: ReturnType<typeof createCliWorkerState>
+  conversationPersistQueue: ReturnType<typeof createConversationPersistQueue>
+  queueConversationPersist: (task?: TaskNode) => void
+  flushConversationPersist: (warnUnresolved?: boolean) => Promise<void>
+  view: Awaited<ReturnType<typeof createCliTerminalView>>
+  trackWorkerProgress: (event: WorkerEvent) => void
+}
+
+function createCliInteractiveState(): CliInteractiveState {
+  return {
+    currentLeafId: undefined,
+    waitingForTask: false,
+    chatView: { detailed: false },
+    interruptedCurrentTask: false,
+    interruptNoticePrinted: false,
+    requestQuitOnNextPrompt: false,
+    quitPromptAbortController: null,
+    eofRequested: false,
+    inMenuInteraction: false,
+    shuttingDown: false,
+    stopMainLoop: false,
+    requestedExitCode: 0,
+    shutdownForceTimer: null,
+    taskInterruptKeysCleanup: undefined,
+    activeTaskWaitController: undefined,
+  }
+}
+
+function createCliConversationPersistenceBridge(
+  state: CliInteractiveState,
+  workerState: ReturnType<typeof createCliWorkerState>,
+  engine: Awaited<ReturnType<typeof createCliEngine>>,
+) {
   const conversationPersistQueue = createConversationPersistQueue(
     async (leafId) => {
-      await conversationPersistence.persist(leafId)
-      await recordCurrentSession()
+      await engine.conversationPersistence.persist(leafId)
+      await engine.recordCurrentSession()
     },
     (error) => {
       writeDebug(
@@ -3728,724 +4991,340 @@ async function main(host: InteractiveCliHost) {
       )
     },
   )
-
   const queueConversationPersist = (
-    task = currentLeafId ? taskById.get(currentLeafId) : undefined,
+    task = state.currentLeafId ? workerState.taskById.get(state.currentLeafId) : undefined,
   ) => {
     conversationPersistQueue.request(task)
   }
-
   const flushConversationPersist = async (warnUnresolved = false) => {
     await conversationPersistQueue.flush()
-    await conversationPersistence.flush(warnUnresolved)
+    await engine.conversationPersistence.flush(warnUnresolved)
   }
+  return { conversationPersistQueue, queueConversationPersist, flushConversationPersist }
+}
 
-  const currentProviderModel = () => {
-    const provider = llmState.selectedToolchainProfile
-    const settings = getSelectedProviderSettings(llmState)
-    return {
-      provider,
-      model: settings.model,
-    }
-  }
-
-  const activeTaskCount = () =>
-    activeWorkerTasks.size > 0 ? activeWorkerTasks.size : hasWorkerProcessing ? 1 : 0
-
-  const hasActiveWorkerTask = () =>
-    hasInterruptibleWorkerActivity({
-      waitingForTask,
-      activeWorkerTaskCount: activeWorkerTasks.size,
-      hasWorkerProcessing,
-    })
-
-  const workerIdleWaiters = new Set<() => void>()
-
-  const notifyWorkerIdleWaiters = () => {
-    if (activeTaskCount() > 0) return
-    const waiters = [...workerIdleWaiters]
-    workerIdleWaiters.clear()
-    waiters.forEach((resolve) => resolve())
-  }
-
-  const waitForWorkerIdle = async (timeoutMs: number, signal?: AbortSignal) =>
-    await new Promise<void>((resolve, reject) => {
-      if (activeTaskCount() <= 0) {
-        resolve()
-        return
-      }
-      if (signal?.aborted) {
-        reject(new DOMException('Worker idle wait aborted', 'AbortError'))
-        return
-      }
-
-      const timeout = setTimeout(() => {
-        cleanup()
-        reject(new Error(`Timed out waiting for worker to settle after ${timeoutMs}ms`))
-      }, timeoutMs)
-
-      const cleanup = () => {
-        clearTimeout(timeout)
-        workerIdleWaiters.delete(onIdle)
-        signal?.removeEventListener('abort', onAbort)
-      }
-
-      const onIdle = () => {
-        cleanup()
-        resolve()
-      }
-
-      const onAbort = () => {
-        cleanup()
-        reject(new DOMException('Worker idle wait aborted', 'AbortError'))
-      }
-
-      workerIdleWaiters.add(onIdle)
-      signal?.addEventListener('abort', onAbort, { once: true })
-    })
-
-  const updateFooter = () => {
-    const providerModel = currentProviderModel()
-    footer.setStatus({
-      provider: providerModel.provider,
-      model: providerModel.model,
-      taskState: taskProcessingStatus,
-      activeTasks: activeTaskCount(),
-      ...(latestCostFooter?.cost ? { cost: latestCostFooter.cost } : {}),
-      ...(latestCostFooter ? { costIncomplete: latestCostFooter.incomplete } : {}),
-      ...(latestCostFooter ? { cachePercent: latestCostFooter.cachePercent } : {}),
-      ...(runtimeLog?.filePath ? { logPath: runtimeLog.filePath } : {}),
-      conversationPath: conversationPersistence.filePath,
-    })
-  }
-
-  const refreshCostFooter = () => {
-    const leafId = currentLeafId
-    if (!leafId) {
-      latestCostFooter = undefined
-      updateFooter()
-      return
-    }
-    if (costRefreshPromise) return
-    costRefreshPromise = (async () => {
-      try {
-        const summary = await taskyon.getTaskCostSummary(leafId)
-        if (currentLeafId === leafId) latestCostFooter = formatTaskCostFooter(summary)
-      } catch {
-        if (currentLeafId === leafId) latestCostFooter = undefined
-      } finally {
-        costRefreshPromise = null
-        updateFooter()
-        if (currentLeafId !== leafId) refreshCostFooter()
-      }
-    })()
-  }
-
-  const scheduleCostFooterRefresh = (delayMs: number) => {
-    if (costRefreshTimer !== null) clearTimeout(costRefreshTimer)
-    costRefreshTimer = setTimeout(() => {
-      costRefreshTimer = null
-      refreshCostFooter()
-    }, delayMs)
-    costRefreshTimer.unref()
-  }
-
-  const writePromptPrefix = () => {
-    const providerModel = currentProviderModel()
-    writeLine(
-      formatPromptPrefixLine({
-        provider: providerModel.provider,
-        model: providerModel.model,
-        taskState: taskProcessingStatus,
-        activeTasks: activeTaskCount(),
-        ...(latestCostFooter?.cost ? { cost: latestCostFooter.cost } : {}),
-        ...(latestCostFooter ? { costIncomplete: latestCostFooter.incomplete } : {}),
-        ...(latestCostFooter ? { cachePercent: latestCostFooter.cachePercent } : {}),
-      }),
-    )
-    writeLine('')
-  }
-
-  const clearThinkingRenderTimer = () => {
-    if (thinkingRenderTimer === null) return
-    clearTimeout(thinkingRenderTimer)
-    thinkingRenderTimer = null
-  }
-
-  const eraseThinkingPanel = () => {
-    if (thinkingPanelHeight <= 0) return
-    for (let i = 0; i < thinkingPanelHeight; i += 1) {
-      process.stdout.write('\x1b[1A\x1b[2K')
-    }
-    thinkingPanelHeight = 0
-  }
-
-  const clearThinkingPanel = () => {
-    clearThinkingRenderTimer()
-    eraseThinkingPanel()
-    renderedThinkingPanelText = ''
-  }
-
-  const noteHiddenNode = (toolName: string) => {
-    pendingHiddenNodeMarkers.push(toolName)
-  }
-
-  const flushHiddenNodeMarkers = () => {
-    if (pendingHiddenNodeMarkers.length <= 0) return
-    writeLine(pendingHiddenNodeMarkers.map((toolName) => `>${toolName}`).join('\n'))
-    pendingHiddenNodeMarkers.length = 0
-  }
-
-  const renderCompletedSubtaskSummary = (event: WorkerEvent) => {
-    const taskId = event.task?.id ?? event.taskId
-    if (event.stage !== 'finished' || !taskId || completedSubtaskSummaryIds.has(taskId)) return
-    const toolCallCount = countDelegatedSubtaskToolCalls(taskId, taskById.values())
-    if (toolCallCount === null) return
-    completedSubtaskSummaryIds.add(taskId)
-    clearThinkingPanel()
-    flushHiddenNodeMarkers()
-    writeLine(
-      `>subtask completed: ${String(toolCallCount)} ${toolCallCount === 1 ? 'tool call' : 'tool calls'}`,
-    )
-  }
-
-  const mainPrompt = () =>
-    process.stdout.isTTY &&
-    (process.env[`${host.environmentPrefix}_TERMINAL_UI`] ?? '').trim().toLowerCase() ===
-      'terminal-kit'
-      ? '\x1b[36m>\x1b[0m '
-      : '> '
-
-  const restorePromptIfIdle = () => {
-    if (waitingForTask || inMenuInteraction || requestQuitOnNextPrompt || shuttingDown) return
-    if (!process.stdin.isTTY || process.env[`${host.environmentPrefix}_HOTKEY_MENUS`] === '0')
-      return
-    if (isReadlineClosed(rl)) return
-    updateFooter()
-    footer.beforePrompt()
-  }
-
-  const resetThinking = () => {
-    clearThinkingPanel()
-    stopWorkerStatusLine()
-    clearWorkerIdleSettleTimer()
-    thinkingLines = []
-    toolProgressLines = []
-    transientActivity = []
-    thinkingText = ''
-    activeWorkerTasks.clear()
-    workerTaskStateById.clear()
-    hasWorkerProcessing = false
-  }
-
-  const suppressInterruptedWorkerTasks = () => {
-    for (const taskId of activeWorkerTasks) {
-      suppressedTaskIds.add(taskId)
-    }
-  }
-
-  const isSuppressedTask = (task: TaskNode) => {
-    if (suppressedTaskIds.has(task.id)) return true
-    if (task.parentID && suppressedTaskIds.has(task.parentID)) {
-      suppressedTaskIds.add(task.id)
-      return true
-    }
-    if (task.priorID && suppressedTaskIds.has(task.priorID)) {
-      suppressedTaskIds.add(task.id)
-      return true
-    }
-    return false
-  }
-
-  const isSuppressedWorkerEvent = (event: WorkerEvent) => {
-    const taskId = event.task?.id ?? event.taskId ?? null
-    if (taskId === null) return false
-    if (suppressedTaskIds.has(taskId)) return true
-    return false
-  }
-
-  const isInteractivePromptWorkerEvent = (event: WorkerEvent) => {
-    const functionName =
-      event.task?.content?.type === 'functioncall' ? event.task.content.data?.name : undefined
-    return typeof functionName === 'string' && INTERACTIVE_PROMPT_TOOL_NAMES.has(functionName)
-  }
-
-  const transientLineWidth = () => Math.max(20, (process.stdout.columns || 88) - 4)
-
-  const fitTransientLine = (text: string) => {
-    const normalized = text.replace(/\s+/g, ' ').trim()
-    const maxWidth = transientLineWidth()
-    return normalized.length <= maxWidth
-      ? normalized
-      : `${normalized.slice(0, Math.max(0, maxWidth - 1)).trimEnd()}…`
-  }
-
-  const wrapThinkingText = (text: string, maxWidth = transientLineWidth()) => {
-    const paragraphs = text
-      .replace(/\r\n?/g, '\n')
-      .trim()
-      .split('\n')
-      .map((line) => line.replace(/\s+/g, ' ').trim())
-      .filter((line) => line.length > 0)
-    const lines: string[] = []
-
-    for (const paragraph of paragraphs) {
-      let current = ''
-      for (const word of paragraph.split(' ')) {
-        if (!word) continue
-        const next = current ? `${current} ${word}` : word
-        if (next.length <= maxWidth) {
-          current = next
-          continue
-        }
-        if (current) lines.push(current)
-        current = word
-      }
-      if (current) lines.push(current)
-    }
-
-    return lines
-  }
-
-  const dimCliText = (text: string) => (process.stdout.isTTY ? `\x1b[90m${text}\x1b[0m` : text)
-
-  const renderThinkingPanel = () => {
-    if (!waitingForTask) return
-    const currentTask = currentLeafId ? taskById.get(currentLeafId) : undefined
-    const siblingChains = currentTask?.parentID
-      ? selectChildTaskChains(currentTask.parentID, taskById.values())
-      : []
-    const lineage: TaskNode[] = []
-    const visited = new Set<string>()
-    let cursor = currentTask
-    while (cursor && !visited.has(cursor.id)) {
-      visited.add(cursor.id)
-      lineage.push(cursor)
-      cursor = cursor.parentID ? taskById.get(cursor.parentID) : undefined
-    }
-    const childChains = lineage
-      .filter((task) => task.content.type === 'functioncall')
-      .flatMap((task) => selectChildTaskChains(task.id, taskById.values()))
-    const queuedTasks = selectTaskQueueBranches(
-      [...siblingChains, ...childChains],
-      workerTaskStateById,
-    )
-      .flatMap((branch) => branch.pendingTasks)
-      .filter(
-        (task) =>
-          task.content.type === 'message' ||
-          (task.content.type === 'functioncall' &&
-            !toolRenderOptions[task.content.data.name]?.hideChat),
-      )
-    const queueLines =
-      queuedTasks.length > 0
-        ? [
-            `[queue] ${queuedTasks.length} ${queuedTasks.length === 1 ? 'task' : 'tasks'} queued`,
-            ...queuedTasks.slice(0, 3).map((task) => `  - ${getTaskQueueLabel(task)}`),
-            ...(queuedTasks.length > 3 ? [`  - ... ${queuedTasks.length - 3} more`] : []),
-          ]
-        : []
-    const recentActivity = transientActivity.slice(-5)
-    const recentProgress = recentActivity
-      .filter((entry) => entry.kind === 'progress')
-      .map((entry) => entry.text)
-    const recentThinking = recentActivity
-      .filter((entry) => entry.kind === 'thinking' && entry.text.trim().length > 0)
-      .map((entry) => entry.text.trim())
-    const progressPanel =
-      recentProgress.length > 0
-        ? ['[tool progress]', ...recentProgress.map((line) => `  ${line}`)]
-        : []
-    const thinkingPanel =
-      recentThinking.length > 0 ? ['[thinking]', ...recentThinking.map((line) => `  ${line}`)] : []
-    const processingPanel = workerStatusText
-      ? [
-          `${workerSpinnerFrames[workerStatusFrameIndex % workerSpinnerFrames.length] ?? '-'} ${workerStatusText}`,
-        ]
-      : []
-    const panel = [...processingPanel, ...queueLines, ...progressPanel, ...thinkingPanel]
-    const panelText = panel.join('\n')
-    const queueLineCount = processingPanel.length + queueLines.length
-    const processingLineCount = processingPanel.length
-    const displayPanel = panel.map((line, index) => {
-      if (index < processingLineCount) return fitTransientLine(line)
-      return index >= queueLineCount ? dimCliText(fitTransientLine(line)) : line
-    })
-    if (panelText === renderedThinkingPanelText) return
-
-    clearThinkingRenderTimer()
-    eraseThinkingPanel()
-    if (panel.length <= 0) {
-      renderedThinkingPanelText = ''
-      return
-    }
-
-    clearWorkerStatusLine()
-    process.stdout.write(`${displayPanel.join('\n')}\n`)
-    thinkingPanelHeight = panel.length
-    renderedThinkingPanelText = panelText
-  }
-
-  const scheduleThinkingRender = () => {
-    if (!waitingForTask) return
-    if (thinkingPanelHeight <= 0 && renderedThinkingPanelText.length === 0) {
-      renderThinkingPanel()
-      return
-    }
-    if (thinkingRenderTimer !== null) return
-    thinkingRenderTimer = setTimeout(() => {
-      thinkingRenderTimer = null
-      renderThinkingPanel()
-    }, 300)
-    thinkingRenderTimer.unref()
-  }
-
-  const clearWorkerCleanupNoticeTimer = () => {
-    if (workerCleanupNoticeTimer === null) return
-    clearTimeout(workerCleanupNoticeTimer)
-    workerCleanupNoticeTimer = null
-  }
-
-  const scheduleWorkerCleanupNotice = () => {
-    clearWorkerCleanupNoticeTimer()
-    workerCleanupNoticeTimer = setTimeout(() => {
-      writeLine('Worker cleanup still pending...')
-      writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
-    }, 1500)
-    workerCleanupNoticeTimer.unref()
-  }
-
-  const noteInterruptPhase = (message: string) => {
-    writeLine(message)
-  }
-
-  const writeTaskInterruptedNotice = () => {
-    if (interruptNoticePrinted) return
-    interruptNoticePrinted = true
-    writeLine('Task interrupted.')
-    writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
-  }
-
+async function createCliInteractiveRuntime(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+): Promise<CliInteractiveRuntime> {
+  bootstrap.startRuntimeTiming()
+  bootstrap.rl.pause()
+  const engine = await createCliEngine(host, bootstrap)
+  engine.interactiveReadlineRef.current = bootstrap.rl
+  bootstrap.rl.resume()
+  const state = createCliInteractiveState()
+  const workerState = createCliWorkerState()
+  const persistence = createCliConversationPersistenceBridge(state, workerState, engine)
+  const view = await createCliTerminalView({
+    host,
+    rl: bootstrap.rl,
+    llmState: bootstrap.llmState,
+    taskyon: engine.taskyon,
+    workerState,
+    conversationPersistence: engine.conversationPersistence,
+    currentSessionLocations: engine.currentSessionLocations,
+    uiSettings: engine.uiSettings,
+    toolRenderOptions: engine.toolRenderOptions,
+    isFunctionHiddenInChat: engine.isFunctionHiddenInChat,
+    writeChatDebugLine: engine.writeChatDebugLine,
+    chatView: state.chatView,
+    getCurrentLeafId: () => state.currentLeafId,
+    isWaitingForTask: () => state.waitingForTask,
+    isInMenuInteraction: () => state.inMenuInteraction,
+    isQuitPending: () => state.requestQuitOnNextPrompt,
+    isShuttingDown: () => state.shuttingDown,
+  })
   const trackWorkerProgress = (event: WorkerEvent) => {
-    const taskId = event.task?.id ?? event.taskId ?? null
-    const stage = event.stage ?? ''
-    if (stage === 'tool progress' && event.progress) {
-      const prefix = event.progress.kind ? `[${event.progress.kind}] ` : ''
-      const lines = event.progress.message
-        .replace(/\r\n?/g, '\n')
-        .split('\n')
-        .filter((line) => line.length > 0)
-        .map((line) => `${prefix}${line.slice(0, transientLineWidth())}`)
-      toolProgressLines = [...toolProgressLines, ...lines].slice(-5)
-      lines.forEach((text) => transientActivity.push({ kind: 'progress', text }))
-      transientActivity = transientActivity.slice(-5)
-      writeDebug(
-        `tool progress: ${JSON.stringify({ taskId, toolName: event.toolName, ...event.progress })}`,
-      )
-      scheduleThinkingRender()
-    }
-    if (taskId && event.stage) {
-      if (['processed', 'finished', 'aborted', 'error'].includes(event.stage)) {
-        workerTaskStateById.delete(taskId)
-      } else {
-        workerTaskStateById.set(taskId, event.stage)
-      }
-      scheduleThinkingRender()
-    }
-    if (stage !== 'waiting') clearWorkerIdleSettleTimer()
-    if (stage === 'queued' || stage === 'processing') {
-      if (taskId) activeWorkerTasks.add(taskId)
-      if (stage === 'processing') hasWorkerProcessing = true
-    }
-    if (stage === 'processing' || stage === 'in loop' || stage === 'subtasks') {
-      taskProcessingStatus = 'processing'
-    }
-    if (stage === 'all processed') {
-      clearWorkerIdleSettleTimer()
-      activeWorkerTasks.clear()
-      hasWorkerProcessing = false
-      taskProcessingStatus = 'finished'
-      clearWorkerCleanupNoticeTimer()
-      stopWorkerStatusLine()
-      clearThinkingPanel()
-      flushHiddenNodeMarkers()
-      refreshCostFooter()
-      scheduleCostFooterRefresh(7_000)
-    }
-    if (stage === 'waiting' && activeTaskCount() > 0 && workerIdleSettleTimer === null) {
-      workerIdleSettleTimer = setTimeout(() => {
-        workerIdleSettleTimer = null
-        activeWorkerTasks.clear()
-        hasWorkerProcessing = false
-        taskProcessingStatus = 'finished'
-        clearWorkerCleanupNoticeTimer()
-        stopWorkerStatusLine()
-        updateFooter()
-        refreshCostFooter()
-        notifyWorkerIdleWaiters()
-      }, 100)
-      workerIdleSettleTimer.unref()
-    }
-    if (stage === 'processed' || stage === 'finished' || stage === 'aborted' || stage === 'error') {
-      if (taskId) activeWorkerTasks.delete(taskId)
-      if (stage !== 'processed' && stage !== 'finished') hasWorkerProcessing = false
-      if (activeWorkerTasks.size === 0 && (stage === 'processed' || stage === 'finished')) {
-        hasWorkerProcessing = false
-      }
-      if (activeWorkerTasks.size === 0 && !hasWorkerProcessing) taskProcessingStatus = 'finished'
-      if (stage !== 'processed' && stage !== 'finished') clearWorkerCleanupNoticeTimer()
-      if (activeTaskCount() <= 0) stopWorkerStatusLine()
-    }
-    updateFooter()
-    notifyWorkerIdleWaiters()
+    view.recordToolProgress(event)
+    workerState.trackWorkerProgress(event, view.workerStateEffects)
   }
+  return { host, bootstrap, engine, state, workerState, ...persistence, view, trackWorkerProgress }
+}
 
-  const appendThinkingText = (delta: string) => {
-    if (!delta) return
-    thinkingText = `${thinkingText}${delta}`.slice(-MAX_TRANSIENT_THINKING_CHARS)
-    const next = wrapThinkingText(thinkingText, transientLineWidth())
-    if (next.length <= 0) return
-    thinkingLines = next.slice(-MAX_TRANSIENT_THINKING_LINES)
-    const latestThinkingLine = thinkingLines.at(-1)?.trim()
-    if (latestThinkingLine) {
-      const lastActivity = transientActivity.at(-1)
-      transientActivity =
-        lastActivity?.kind === 'thinking'
-          ? [...transientActivity.slice(0, -1), { kind: 'thinking', text: latestThinkingLine }]
-          : [...transientActivity, { kind: 'thinking', text: latestThinkingLine }]
-      transientActivity = transientActivity.slice(-5)
+function startCliTaskInterruptKeys(
+  rl: ReturnType<typeof createInterface>,
+  onSigint: () => void,
+  onCtrld: () => void,
+  onStop: () => void,
+) {
+  const stdin = process.stdin
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return undefined
+  emitKeypressEvents(stdin)
+  let cleanedUp = false
+  let activeCommandBuffer = ''
+  const preserveReadlineOnSigint = () => undefined
+  const onKeypress = (str: string, key: { ctrl?: boolean; name?: string }) => {
+    if (key.ctrl && key.name === 'c') return onSigint()
+    if (key.ctrl && key.name === 'd') return onCtrld()
+    if (key.name === 'backspace') {
+      activeCommandBuffer = activeCommandBuffer.slice(0, -1)
+      return
     }
-    scheduleThinkingRender()
+    if (key.name === 'return' || key.name === 'enter') {
+      const command = activeCommandBuffer.trim()
+      activeCommandBuffer = ''
+      if (command === '/stop') onStop()
+      else if (command.length > 0) writeLine('Only /stop is accepted while a task is active.')
+      return
+    }
+    if (!key.ctrl && /^[\x20-\x7e]$/.test(str) && activeCommandBuffer.length < 32)
+      activeCommandBuffer += str
   }
-
-  const requestImmediateShutdown = (reason: string, exitCode = 0) => {
-    if (shuttingDown) return
-    shuttingDown = true
-    stopMainLoop = true
-    requestedExitCode = exitCode
-    interruptedCurrentTask = true
-    requestQuitOnNextPrompt = false
-    clearThinkingPanel()
-    stopWorkerStatusLine()
-    footer.restore()
-    writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
+  try {
+    stdin.setRawMode(true)
+    stdin.resume()
+    stdin.on('keypress', onKeypress)
+    rl.on('SIGINT', preserveReadlineOnSigint)
+  } catch {
+    return undefined
+  }
+  return () => {
+    if (cleanedUp) return
+    cleanedUp = true
+    stdin.off('keypress', onKeypress)
+    rl.off('SIGINT', preserveReadlineOnSigint)
     restoreTerminalInput()
-    try {
-      taskyon.cancelCurrentRun(reason)
-    } catch {
-      // best effort
-    }
-    if (shutdownForceTimer === null) {
-      shutdownForceTimer = setTimeout(() => {
-        process.exit(exitCode === 0 ? 1 : exitCode)
-      }, 2000)
-    }
-    if (!isReadlineClosed(rl)) rl.close()
+    rl.resume()
   }
+}
 
-  const interruptCurrentTask = (source: 'Ctrl-C' | 'Ctrl-D' | '/stop') => {
-    interruptedCurrentTask = true
-    noteInterruptPhase(`${source} received.`)
-    noteInterruptPhase('Stopping current worker task...')
-    suppressInterruptedWorkerTasks()
-    try {
-      taskyon.cancelCurrentRun(`Interrupted by ${source}`)
-      noteInterruptPhase('Worker stop requested. Waiting for task cleanup...')
-    } catch (error) {
-      writeError(
-        `Worker stop request failed: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    }
-    activeTaskWaitController?.abort(`${source} received`)
-    queueConversationPersist()
-    scheduleWorkerCleanupNotice()
-    resetThinking()
-    updateFooter()
-  }
+type CliInteractiveControls = {
+  requestImmediateShutdown: (reason: string, exitCode?: number) => void
+  onSigint: () => void
+  onCtrld: () => void
+  onSigterm: () => void
+  onSighup: () => void
+  onSigcont: () => void
+  onResize: () => void
+  startTaskInterruptKeys: () => (() => void) | undefined
+  writeTaskInterruptedNotice: () => void
+}
 
-  const onSigint = () => {
-    if (shuttingDown) {
-      noteInterruptPhase('Ctrl-C received during shutdown.')
-      writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
-      if (shutdownForceTimer !== null) {
-        writeLine('\nForce exiting...')
-        process.exit(requestedExitCode === 0 ? 1 : requestedExitCode)
-      }
-      return
-    }
-    if (hasActiveWorkerTask()) {
-      interruptCurrentTask('Ctrl-C')
-      return
-    }
-    noteInterruptPhase('Ctrl-C received.')
-    if (requestQuitOnNextPrompt) {
-      requestQuitOnNextPrompt = false
-      quitPromptAbortController?.abort()
-      writeLine('Quit cancelled.')
-      return
-    }
-    const line = getCurrentInputText(rl)
-    if (line.length > 0 || inMenuInteraction) {
-      restoreTerminalInput()
-      writeLine('Input cancelled.')
-      return
-    }
-    requestQuitOnNextPrompt = true
-    writeLine(`\nQuit ${host.commandName}? (y/N)`)
-    writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
+function writeCliTaskInterruptedNotice(runtime: CliInteractiveRuntime) {
+  const { host, engine, state } = runtime
+  if (state.interruptNoticePrinted) return
+  state.interruptNoticePrinted = true
+  writeLine('Task interrupted.')
+  writeSessionLocations('Session Locations', engine.currentSessionLocations(), host.commandName)
+}
+
+function requestCliImmediateShutdown(runtime: CliInteractiveRuntime, reason: string, exitCode = 0) {
+  const { host, bootstrap, engine, state, view } = runtime
+  if (state.shuttingDown) return
+  state.shuttingDown = true
+  state.stopMainLoop = true
+  state.requestedExitCode = exitCode
+  state.interruptedCurrentTask = true
+  state.requestQuitOnNextPrompt = false
+  view.clearThinkingPanel()
+  view.stopWorkerStatusLine()
+  view.footer.restore()
+  writeSessionLocations('Session Locations', engine.currentSessionLocations(), host.commandName)
+  restoreTerminalInput()
+  try {
+    engine.taskyon.cancelCurrentRun(reason)
+  } catch {
+    // best effort
   }
-  const onCtrld = () => {
-    if (shuttingDown) {
-      noteInterruptPhase('Ctrl-D received during shutdown.')
-      writeSessionLocations('Session Locations', currentSessionLocations(), host.commandName)
-      return
-    }
-    if (hasActiveWorkerTask()) {
-      interruptCurrentTask('Ctrl-D')
-      return
-    }
-    if (requestQuitOnNextPrompt) {
-      eofRequested = true
-      requestQuitOnNextPrompt = false
-      quitPromptAbortController?.abort()
-      noteInterruptPhase('Ctrl-D received.')
-      return
-    }
-    eofRequested = true
-    noteInterruptPhase('Ctrl-D received.')
+  if (state.shutdownForceTimer === null) {
+    state.shutdownForceTimer = setTimeout(() => {
+      process.exit(exitCode === 0 ? 1 : exitCode)
+    }, 2000)
   }
-  const startTaskInterruptKeys = () => {
-    const stdin = process.stdin
-    if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return undefined
-    emitKeypressEvents(stdin)
-    let cleanedUp = false
-    let activeCommandBuffer = ''
-    const preserveReadlineOnSigint = () => undefined
-    const onKeypress = (str: string, key: { ctrl?: boolean; name?: string }) => {
-      if (key.ctrl && key.name === 'c') {
-        onSigint()
-        return
-      }
-      if (key.ctrl && key.name === 'd') {
-        onCtrld()
-        return
-      }
-      if (key.name === 'backspace') {
-        activeCommandBuffer = activeCommandBuffer.slice(0, -1)
-        return
-      }
-      if (key.name === 'return' || key.name === 'enter') {
-        const command = activeCommandBuffer.trim()
-        activeCommandBuffer = ''
-        if (command === '/stop') {
-          interruptCurrentTask('/stop')
-        } else if (command.length > 0) {
-          writeLine('Only /stop is accepted while a task is active.')
-        }
-        return
-      }
-      if (!key.ctrl && /^[\x20-\x7e]$/.test(str) && activeCommandBuffer.length < 32) {
-        activeCommandBuffer += str
-      }
-    }
-    try {
-      stdin.setRawMode(true)
-      stdin.resume()
-      stdin.on('keypress', onKeypress)
-      rl.on('SIGINT', preserveReadlineOnSigint)
-    } catch {
-      return undefined
-    }
-    return () => {
-      if (cleanedUp) return
-      cleanedUp = true
-      stdin.off('keypress', onKeypress)
-      rl.off('SIGINT', preserveReadlineOnSigint)
-      restoreTerminalInput()
-      rl.resume()
-    }
+  if (!isReadlineClosed(bootstrap.rl)) bootstrap.rl.close()
+}
+
+function interruptCliCurrentTask(
+  runtime: CliInteractiveRuntime,
+  source: 'Ctrl-C' | 'Ctrl-D' | '/stop',
+) {
+  const { engine, state, workerState, view, queueConversationPersist } = runtime
+  state.interruptedCurrentTask = true
+  writeLine(`${source} received.`)
+  writeLine('Stopping current worker task...')
+  workerState.suppressInterruptedWorkerTasks()
+  try {
+    engine.taskyon.cancelCurrentRun(`Interrupted by ${source}`)
+    writeLine('Worker stop requested. Waiting for task cleanup...')
+  } catch (error) {
+    writeError(
+      `Worker stop request failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
   }
-  const onSigterm = () => requestImmediateShutdown('Received SIGTERM', 143)
-  const onSighup = () => requestImmediateShutdown('Received SIGHUP', 129)
-  const onSigcont = () => {
-    updateFooter()
-    restorePromptIfIdle()
+  state.activeTaskWaitController?.abort(`${source} received`)
+  queueConversationPersist()
+  view.scheduleWorkerCleanupNotice()
+  view.resetThinking()
+  view.updateFooter()
+}
+
+function handleCliSigint(
+  runtime: CliInteractiveRuntime,
+  interruptCurrentTask: (source: 'Ctrl-C') => void,
+) {
+  const { host, bootstrap, engine, state, workerState } = runtime
+  if (state.shuttingDown) {
+    writeLine('Ctrl-C received during shutdown.')
+    writeSessionLocations('Session Locations', engine.currentSessionLocations(), host.commandName)
+    if (state.shutdownForceTimer !== null) {
+      writeLine('\nForce exiting...')
+      process.exit(state.requestedExitCode === 0 ? 1 : state.requestedExitCode)
+    }
+    return
   }
-  const onResize = () => updateFooter()
-  process.on('SIGINT', onSigint)
-  process.on('SIGTERM', onSigterm)
-  process.on('SIGHUP', onSighup)
-  process.on('SIGCONT', onSigcont)
-  process.stdout.on('resize', onResize)
-  const unsubscribeThinkingStream = taskyon.chatCompletionStream(
-    ({ chunk }: { chunk: unknown }) => {
-      if (!waitingForTask) return
-      appendThinkingText(normalizeThinkingChunk(chunk))
+  if (workerState.hasActiveWorkerTask()) return interruptCurrentTask('Ctrl-C')
+  writeLine('Ctrl-C received.')
+  if (state.requestQuitOnNextPrompt) {
+    state.requestQuitOnNextPrompt = false
+    state.quitPromptAbortController?.abort()
+    writeLine('Quit cancelled.')
+    return
+  }
+  const line = getCurrentInputText(bootstrap.rl)
+  if (line.length > 0 || state.inMenuInteraction) {
+    restoreTerminalInput()
+    writeLine('Input cancelled.')
+    return
+  }
+  state.requestQuitOnNextPrompt = true
+  writeLine(`\nQuit ${host.commandName}? (y/N)`)
+  writeSessionLocations('Session Locations', engine.currentSessionLocations(), host.commandName)
+}
+
+function handleCliCtrld(
+  runtime: CliInteractiveRuntime,
+  interruptCurrentTask: (source: 'Ctrl-D') => void,
+) {
+  const { host, engine, state, workerState } = runtime
+  if (state.shuttingDown) {
+    writeLine('Ctrl-D received during shutdown.')
+    writeSessionLocations('Session Locations', engine.currentSessionLocations(), host.commandName)
+    return
+  }
+  if (workerState.hasActiveWorkerTask()) return interruptCurrentTask('Ctrl-D')
+  if (state.requestQuitOnNextPrompt) {
+    state.eofRequested = true
+    state.requestQuitOnNextPrompt = false
+    state.quitPromptAbortController?.abort()
+    writeLine('Ctrl-D received.')
+    return
+  }
+  state.eofRequested = true
+  writeLine('Ctrl-D received.')
+}
+
+function createCliInteractiveControls(runtime: CliInteractiveRuntime): CliInteractiveControls {
+  const requestImmediateShutdown = (reason: string, exitCode = 0) =>
+    requestCliImmediateShutdown(runtime, reason, exitCode)
+  const interruptCurrentTask = (source: 'Ctrl-C' | 'Ctrl-D' | '/stop') =>
+    interruptCliCurrentTask(runtime, source)
+  const onSigint = () => handleCliSigint(runtime, (source) => interruptCurrentTask(source))
+  const onCtrld = () => handleCliCtrld(runtime, (source) => interruptCurrentTask(source))
+  return {
+    requestImmediateShutdown,
+    onSigint,
+    onCtrld,
+    onSigterm: () => requestImmediateShutdown('Received SIGTERM', 143),
+    onSighup: () => requestImmediateShutdown('Received SIGHUP', 129),
+    onSigcont: () => {
+      runtime.view.updateFooter()
+      runtime.view.restorePromptIfIdle()
     },
-  )
-  const unsubscribeTaskProgress = clientPort.receive((msg) => {
+    onResize: () => runtime.view.updateFooter(),
+    startTaskInterruptKeys: () =>
+      startCliTaskInterruptKeys(runtime.bootstrap.rl, onSigint, onCtrld, () =>
+        interruptCurrentTask('/stop'),
+      ),
+    writeTaskInterruptedNotice: () => writeCliTaskInterruptedNotice(runtime),
+  }
+}
+
+type CliInteractiveSubscriptions = {
+  unsubscribeThinkingStream: () => void
+  unsubscribeTaskProgress: () => void
+  unsubscribeWorkerProgress: () => void
+  disposeProcessHandlers: () => void
+}
+
+function subscribeCliProcessHandlers(controls: CliInteractiveControls) {
+  process.on('SIGINT', controls.onSigint)
+  process.on('SIGTERM', controls.onSigterm)
+  process.on('SIGHUP', controls.onSighup)
+  process.on('SIGCONT', controls.onSigcont)
+  process.stdout.on('resize', controls.onResize)
+  return () => {
+    process.off('SIGINT', controls.onSigint)
+    process.off('SIGTERM', controls.onSigterm)
+    process.off('SIGHUP', controls.onSighup)
+    process.off('SIGCONT', controls.onSigcont)
+    process.stdout.off('resize', controls.onResize)
+  }
+}
+
+function subscribeCliThinkingStream(runtime: CliInteractiveRuntime) {
+  const { taskyon } = runtime.engine
+  return taskyon.chatCompletionStream(({ chunk }: { chunk: unknown }) => {
+    if (runtime.state.waitingForTask) runtime.view.appendThinkingText(normalizeThinkingChunk(chunk))
+  })
+}
+
+function subscribeCliTaskProgress(runtime: CliInteractiveRuntime) {
+  const { clientPort } = runtime.engine
+  const { state, workerState, view, queueConversationPersist } = runtime
+  return clientPort.receive((msg) => {
     if (!isTaskCreatedMessage(msg)) return
     const task = msg.task
-    const suppressed = isSuppressedTask(task)
-    const snapshot = JSON.stringify(task)
-    const prev = taskSnapshotById.get(task.id)
-    if (prev === snapshot) return
-    taskSnapshotById.set(task.id, snapshot)
-    taskById.set(task.id, task)
-    currentLeafId = task.id
-    refreshCostFooter()
+    const { changed, suppressed, previous } = workerState.recordTask(task)
+    if (!changed) return
+    state.currentLeafId = task.id
+    view.refreshCostFooter()
     queueConversationPersist(task)
     if (suppressed) return
-    scheduleThinkingRender()
-    renderTaskProgress(
-      {
-        detailedViewEnabled: () => chatView.detailed,
-        showRoleTag: () => uiSettings.showRoleTag,
-        showFullFunctionResults: () => uiSettings.showFullFunctionResults,
-        isFunctionHiddenInChat,
-        ...(debugLogsEnabled ? { writeDebugLine: writeChatDebugLine } : {}),
-        noteHiddenNode,
-        flushHiddenNodeMarkers,
-        clearThinkingPanel,
-        renderThinkingPanel,
-        writeLine,
-      },
-      task,
-      Boolean(prev),
-    )
-    restorePromptIfIdle()
+    view.scheduleThinkingRender()
+    view.renderTask(task, Boolean(previous))
+    view.restorePromptIfIdle()
   })
-  const unsubscribeWorkerProgress = taskyon.workerStream((event: unknown) => {
-    const workerEvent = event as WorkerEvent
-    const suppressed = isSuppressedWorkerEvent(workerEvent)
-    trackWorkerProgress(workerEvent)
-    updateWorkerStatusLine(workerEvent, suppressed)
-    if (suppressed) return
-    renderCompletedSubtaskSummary(workerEvent)
-    renderWorkerProgress(
-      {
-        detailedViewEnabled: () => chatView.detailed,
-        showRoleTag: () => uiSettings.showRoleTag,
-        showFullFunctionResults: () => uiSettings.showFullFunctionResults,
-        isFunctionHiddenInChat,
-        ...(debugLogsEnabled ? { writeDebugLine: writeChatDebugLine } : {}),
-        clearThinkingPanel,
-        renderThinkingPanel,
-        writeLine,
-      },
-      workerEvent,
-    )
-    renderThinkingPanel()
-    restorePromptIfIdle()
-  })
+}
 
+function subscribeCliWorkerProgress(runtime: CliInteractiveRuntime) {
+  const { taskyon } = runtime.engine
+  const { workerState, view, trackWorkerProgress } = runtime
+  return taskyon.workerStream((event: unknown) => {
+    const workerEvent = event as WorkerEvent
+    const suppressed = workerState.isSuppressedWorkerEvent(workerEvent)
+    trackWorkerProgress(workerEvent)
+    view.updateWorkerStatusLine(workerEvent, suppressed)
+    if (suppressed) return
+    view.renderCompletedSubtaskSummary(workerEvent)
+    view.renderWorker(workerEvent)
+    view.renderThinkingPanel()
+    view.restorePromptIfIdle()
+  })
+}
+
+function subscribeCliInteractiveStreams(
+  runtime: CliInteractiveRuntime,
+  controls: CliInteractiveControls,
+): CliInteractiveSubscriptions {
+  const disposeProcessHandlers = subscribeCliProcessHandlers(controls)
+  return {
+    unsubscribeThinkingStream: subscribeCliThinkingStream(runtime),
+    unsubscribeTaskProgress: subscribeCliTaskProgress(runtime),
+    unsubscribeWorkerProgress: subscribeCliWorkerProgress(runtime),
+    disposeProcessHandlers,
+  }
+}
+
+function writeCliInteractiveIntro(runtime: CliInteractiveRuntime) {
+  const { host, bootstrap, engine, view } = runtime
+  const { startupMeta, previousSession, chatCompletionTrace } = bootstrap
   writeIntro(`${host.commandName} ${startupMeta.version}`)
   writeStartupNote(
     'Session',
     [
       `Build: ${startupMeta.commit}, ${startupMeta.buildDate}`,
       runtimeLog ? `${host.commandName} log: ${runtimeLog.filePath} (max 100 MB)` : null,
-      `Conversation storage: ${conversationPersistence.filePath}`,
+      `Conversation storage: ${engine.conversationPersistence.filePath}`,
     ].filter(isNonEmptyString),
   )
   if (previousSession) {
@@ -4454,359 +5333,506 @@ async function main(host: InteractiveCliHost) {
       `Previous ${host.commandName} log: ${previousSession.logPath}`,
     ])
   }
-  const activeApi = getSelectedProviderSettings(llmState)
+  const activeApi = getSelectedProviderSettings(bootstrap.llmState)
   writeNotice(
     'info',
-    `${host.commandName} engine ready. provider=${llmState.selectedToolchainProfile} model=${activeApi.model}`,
+    `${host.commandName} engine ready. provider=${bootstrap.llmState.selectedToolchainProfile} model=${activeApi.model}`,
   )
   writeNotice(
     'info',
     'Slash commands: /keys, /provider, /model, /tools, /debug, /settings, /client, /resume, /search, /tree, /cost, /exit, /quit',
   )
-  if (debugLogsEnabled) {
+  if (debugLogsEnabled)
     writeNotice(
       'warn',
       `Debug mode enabled: runtime logs and chatCompletion traces are recorded in ${chatCompletionTrace?.dir ?? host.storagePaths.logDir}. Detailed task/worker diagnostics are logged while chat remains compact; use /debug view on for details.`,
     )
-  } else if (chatCompletionTrace) {
+  else if (chatCompletionTrace)
     writeNotice('warn', `ChatCompletion request tracing enabled: ${chatCompletionTrace.dir}.`)
+  view.updateFooter()
+}
+
+async function handleCliQuitPrompt(
+  runtime: CliInteractiveRuntime,
+  controls: CliInteractiveControls,
+): Promise<'continue' | 'stop'> {
+  const { bootstrap, state, view } = runtime
+  const { rl } = bootstrap
+  view.updateFooter()
+  view.footer.beforePrompt()
+  view.writePromptPrefix()
+  state.quitPromptAbortController = new AbortController()
+  const answerRaw = await askQuestion(rl, '> ', {
+    signal: state.quitPromptAbortController.signal,
+    interruptNotice: false,
+    onSigint: controls.onSigint,
+  })
+  state.quitPromptAbortController = null
+  if (state.eofRequested) {
+    state.eofRequested = false
+    controls.requestImmediateShutdown('EOF/Readline closed', 0)
+    return 'stop'
   }
-  updateFooter()
+  state.requestQuitOnNextPrompt = false
+  if (answerRaw === null) {
+    return state.shuttingDown || isReadlineClosed(rl) ? 'stop' : 'continue'
+  }
+  if (['y', 'yes'].includes(answerRaw.trim().toLowerCase())) {
+    controls.requestImmediateShutdown('User requested exit', 0)
+    return 'stop'
+  }
+  return 'continue'
+}
+
+async function promptCliMainInput(
+  runtime: CliInteractiveRuntime,
+  controls: CliInteractiveControls,
+): Promise<string | null> {
+  const { host, bootstrap, state, view } = runtime
+  const { rl } = bootstrap
+  view.updateFooter()
+  view.footer.beforePrompt()
+  view.writePromptPrefix()
+  const input = await promptForMainInput(
+    rl,
+    view.mainPrompt(),
+    async () => {
+      state.inMenuInteraction = true
+      const selected = await selectSlashCommand(rl, '')
+      state.inMenuInteraction = false
+      return selected
+    },
+    async () => {
+      state.inMenuInteraction = true
+      const selected = await selectFileReference(rl, '')
+      state.inMenuInteraction = false
+      return selected ? `@${selected}` : null
+    },
+    controls.onSigint,
+    controls.onCtrld,
+    () => {
+      if (!state.interruptedCurrentTask || state.interruptNoticePrinted) return
+      setImmediate(controls.writeTaskInterruptedNotice)
+    },
+    host.environmentPrefix,
+  )
+  if (input !== null) return input
+  if (state.eofRequested || isReadlineClosed(rl)) {
+    if (!state.eofRequested) writeLine('Ctrl-D/EOF received.')
+    state.eofRequested = false
+    controls.requestImmediateShutdown('EOF/Readline closed', 0)
+  }
+  return null
+}
+
+async function handleCliFileContextInput(
+  input: string,
+  runtime: CliInteractiveRuntime,
+): Promise<boolean> {
+  if (!input.startsWith('@')) return false
+  const { bootstrap } = runtime
+  const rawQuery = input.slice(1).trim()
+  const selectedPath =
+    rawQuery.length > 0 && (await fileExistsInWorkspace(rawQuery))
+      ? rawQuery
+      : await selectFileReference(bootstrap.rl, rawQuery)
+  if (!selectedPath) return true
+  try {
+    const content = await readFile(join(process.cwd(), selectedPath), 'utf8')
+    bootstrap.explorationContextFiles[selectedPath] = content
+    writeLine(`Added file context: ${selectedPath} (${content.length} chars)`)
+  } catch (error) {
+    writeError(
+      `Failed to load file '${selectedPath}': ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+  return true
+}
+
+async function resolveCliSlashInput(input: string, runtime: CliInteractiveRuntime) {
+  if (!input.startsWith('/')) return input
+  const parsedDirect = parseSlashName(input)
+  const knownDirect =
+    parsedDirect !== null &&
+    SLASH_COMMANDS.includes(parsedDirect.name as (typeof SLASH_COMMANDS)[number])
+  if (input !== '/' && knownDirect) return input
+  runtime.state.inMenuInteraction = true
+  const selected = await selectSlashCommand(runtime.bootstrap.rl, input.slice(1).trim())
+  runtime.state.inMenuInteraction = false
+  return selected
+}
+
+async function handleCliResumeCommand(parsed: SlashParsed, runtime: CliInteractiveRuntime) {
+  const { bootstrap, engine, state, view, flushConversationPersist } = runtime
+  const resumedLeafId = await handleResumeCommand({
+    rl: bootstrap.rl,
+    ty: engine.taskyon,
+    configDir: bootstrap.configDir,
+    sessions: normalizeSessionRecords((await bootstrap.configStore.loadStoredConfig()).sessions),
+    storageClient: engine.storageClient,
+    commandArgs: parsed.args,
+  })
+  if (resumedLeafId) {
+    state.currentLeafId = resumedLeafId
+    view.refreshCostFooter()
+    await flushConversationPersist()
+  }
+}
+
+async function handleCliSearchCommand(parsed: SlashParsed, runtime: CliInteractiveRuntime) {
+  const { bootstrap, engine, state, view } = runtime
+  const selectedLeafId = await handleSearchCommand({
+    rl: bootstrap.rl,
+    storageClient: engine.storageClient,
+    taskStorageNamespace: engine.taskStorageNamespace,
+    query: parsed.args,
+    searchClient: await engine.getTaskSearchClient(),
+    searchIndex: engine.taskSearchIndex,
+    searchDataDirectory: join(bootstrap.dataDir, 'search', 'tasks'),
+    configStore: bootstrap.configStore,
+    searchState: engine.taskSearchState,
+    uiSettings: engine.uiSettings,
+  })
+  if (selectedLeafId) {
+    state.currentLeafId = selectedLeafId
+    view.refreshCostFooter()
+  }
+}
+
+async function handleCliSlashCommand(
+  parsed: SlashParsed,
+  runtime: CliInteractiveRuntime,
+): Promise<'continue' | 'stop'> {
+  const { bootstrap, engine, state } = runtime
+  if (parsed.name === 'resume') {
+    state.inMenuInteraction = true
+    try {
+      await handleCliResumeCommand(parsed, runtime)
+    } catch (error) {
+      writeError(error instanceof Error ? error.message : String(error))
+    } finally {
+      state.inMenuInteraction = false
+    }
+    return 'continue'
+  }
+  if (parsed.name === 'search') {
+    state.inMenuInteraction = true
+    try {
+      await handleCliSearchCommand(parsed, runtime)
+    } catch (error) {
+      writeError(error instanceof Error ? error.message : String(error))
+    } finally {
+      state.inMenuInteraction = false
+    }
+    return 'continue'
+  }
+  state.inMenuInteraction = true
+  const keepRunning = await handleSlashCommand(
+    parsed,
+    bootstrap.rl,
+    state.chatView,
+    engine.taskyon,
+    engine.taskyonHost,
+    engine.taskyonApi,
+    engine.clientPort as Parameters<typeof waitForTaskResult>[0],
+    bootstrap.llmState,
+    engine.uiSettings,
+    engine.toolRenderOptions,
+    state.currentLeafId,
+    bootstrap.persistence,
+    runtime.host.entryNodeName,
+    engine.unavailableToolNames,
+  )
+  state.inMenuInteraction = false
+  if (keepRunning) return 'continue'
+  state.stopMainLoop = true
+  state.requestedExitCode = 0
+  return 'stop'
+}
+
+async function createCliTaskChain(runtime: CliInteractiveRuntime, input: string) {
+  const { bootstrap, engine, host, state } = runtime
+  const currentProvider = bootstrap.llmState.selectedToolchainProfile
+  if (
+    !(await syncProviderRuntimeConfig(
+      engine.taskyon,
+      engine.taskyonHost,
+      bootstrap.llmState,
+      currentProvider,
+      bootstrap.persistence.oauthStorage,
+    ))
+  ) {
+    writeError(missingProviderCredentialsMessage(bootstrap.llmState, currentProvider))
+    return undefined
+  }
+  runtime.view.resetTransientMarkers()
+  const { ids } = await engine.taskyonApi.task.createChain({
+    tasks: [
+      {
+        role: 'user',
+        content: { type: 'message', data: input },
+        ...(state.currentLeafId ? { priorID: state.currentLeafId } : {}),
+      },
+      toolCall({ name: host.entryNodeName, arguments: {} }),
+    ],
+    execute: true,
+    show: true,
+  })
+  const entryTaskId = ids.at(-1)
+  if (!entryTaskId) throw new Error('CLI message submission created no tasks.')
+  state.currentLeafId = entryTaskId
+  runtime.view.refreshCostFooter()
+  runtime.queueConversationPersist()
+  writeDebug(`queued task chain: ${ids.join(', ')}`)
+  return ids
+}
+
+function clearCliTaskWaitState(runtime: CliInteractiveRuntime) {
+  const { state, view } = runtime
+  state.waitingForTask = false
+  runtime.workerState.setWaitingForTask(false)
+  state.activeTaskWaitController = undefined
+  state.taskInterruptKeysCleanup?.()
+  state.taskInterruptKeysCleanup = undefined
+  view.clearWorkerCleanupNoticeTimer()
+  view.clearThinkingPanel()
+  view.stopWorkerStatusLine()
+}
+
+async function waitForCliTaskCompletion(
+  runtime: CliInteractiveRuntime,
+  controls: CliInteractiveControls,
+  taskIds: string[],
+) {
+  const { engine, state, workerState, view } = runtime
+  workerState.startTask()
+  state.waitingForTask = true
+  state.interruptedCurrentTask = false
+  state.interruptNoticePrinted = false
+  view.resetThinking()
+  view.updateFooter()
+  view.setWorkerStatusLine('task: processing')
+  view.renderThinkingPanel()
+  state.taskInterruptKeysCleanup = controls.startTaskInterruptKeys()
+  const controller = new AbortController()
+  state.activeTaskWaitController = controller
+  const result = await waitForTaskResult(
+    engine.clientPort as Parameters<typeof waitForTaskResult>[0],
+    taskIds,
+    ['message', 'error', 'return'],
+    TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS,
+    controller.signal,
+    isInteractiveTaskResult,
+    () => workerState.activeTaskCount() <= 0,
+    isInteractiveTaskResult,
+  )
+  state.currentLeafId = result.id
+  view.refreshCostFooter()
+  writeDebug(`received result task: ${result.id} (${result.content.type})`)
+  await workerState.waitForWorkerIdle(10 * 60 * 1000, controller.signal)
+  view.refreshCostFooter()
+  view.scheduleCostFooterRefresh(7_000)
+}
+
+async function runCliTask(
+  runtime: CliInteractiveRuntime,
+  controls: CliInteractiveControls,
+  input: string,
+) {
+  const taskIds = await createCliTaskChain(runtime, input)
+  if (!taskIds) return
+  try {
+    await waitForCliTaskCompletion(runtime, controls, taskIds)
+    const { state } = runtime
+    clearCliTaskWaitState(runtime)
+    if (state.interruptedCurrentTask) {
+      await runtime.flushConversationPersist()
+      runtime.view.restorePromptIfIdle()
+      return
+    }
+    await runtime.flushConversationPersist()
+    runtime.view.restorePromptIfIdle()
+  } catch (error) {
+    const { state } = runtime
+    clearCliTaskWaitState(runtime)
+    if (state.interruptedCurrentTask) {
+      await runtime.flushConversationPersist()
+      runtime.view.restorePromptIfIdle()
+      return
+    }
+    writeError(error instanceof Error ? error.message : String(error))
+    runtime.view.restorePromptIfIdle()
+  }
+}
+
+async function runCliInteractiveInputLoop(
+  runtime: CliInteractiveRuntime,
+  controls: CliInteractiveControls,
+  initialInput: string | undefined,
+) {
+  let pendingInput = initialInput
+  while (!runtime.state.stopMainLoop) {
+    const { state } = runtime
+    state.inMenuInteraction = false
+    if (state.requestQuitOnNextPrompt) {
+      if ((await handleCliQuitPrompt(runtime, controls)) === 'stop') break
+      continue
+    }
+    const inputRaw = pendingInput ?? (await promptCliMainInput(runtime, controls))
+    pendingInput = undefined
+    if (inputRaw === null) continue
+    let input = inputRaw.trim()
+    if (!input) continue
+    recordReadlineHistory(runtime.bootstrap.rl, input)
+    if (await handleCliFileContextInput(input, runtime)) continue
+    const resolvedInput = await resolveCliSlashInput(input, runtime)
+    if (!resolvedInput) continue
+    input = resolvedInput
+    const parsed = parseSlashName(input)
+    if (parsed) {
+      if ((await handleCliSlashCommand(parsed, runtime)) === 'stop') break
+      continue
+    }
+    await runCliTask(runtime, controls, input)
+  }
+}
+
+async function flushCliSessionRecords(runtime: CliInteractiveRuntime, flushConversation = true) {
+  const { engine, bootstrap, host } = runtime
+  if (flushConversation) await runtime.flushConversationPersist(true).catch(() => {})
+  if (engine.conversationPersistence.hasPersistedConversation()) {
+    writeOutro(`Conversation saved: ${engine.conversationPersistence.filePath}`)
+    await engine.recordCurrentSession(new Date().toISOString()).catch(() => {})
+  } else {
+    writeOutro('No conversation saved: no messages.')
+  }
+  await bootstrap.configStore.flushConfigWrites().catch((error: unknown) => {
+    writeDebug(
+      `Failed to flush CLI configuration: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  })
+  writeOutro(`${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`)
+  runtime.engine.restoreConsoleLogging?.()
+  await runtimeLog?.flush().catch(() => {})
+}
+
+async function disposeCliInteractiveSession(
+  runtime: CliInteractiveRuntime,
+  subscriptions: CliInteractiveSubscriptions,
+) {
+  const { bootstrap, engine, state, view } = runtime
+  subscriptions.disposeProcessHandlers()
+  restoreTerminalInput()
+  subscriptions.unsubscribeThinkingStream()
+  subscriptions.unsubscribeTaskProgress()
+  subscriptions.unsubscribeWorkerProgress()
+  if (!isReadlineClosed(bootstrap.rl)) bootstrap.rl.close()
+  engine.cliToolRpcHost.destroy()
+  engine.stopTaskSearchService?.()
+  await engine.closeTaskSearchDatabase?.()
+  engine.unsubscribeBridgeToTaskyon()
+  engine.unsubscribeTaskyonToBridge()
+  state.activeTaskWaitController = undefined
+  state.taskInterruptKeysCleanup?.()
+  state.taskInterruptKeysCleanup = undefined
+  delete engine.approvalUiRef.current
+  delete engine.interactiveReadlineRef.current
+  view.dispose()
+  await runtime.flushConversationPersist(true).catch(() => {})
+  engine.taskyon.cancelCurrentRun(`${runtime.host.commandName} exit`)
+  setChatCompletionTraceWriter(undefined)
+  await flushCliSessionRecords(runtime, false)
+  engine.stopLoggingService()
+  engine.stopTaskStorageService()
+  if (state.shutdownForceTimer !== null) {
+    clearTimeout(state.shutdownForceTimer)
+    state.shutdownForceTimer = null
+  }
+  process.exitCode = state.requestedExitCode
+  process.exit(state.requestedExitCode)
+}
+
+async function runCliClientCommand(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  command: string,
+) {
+  bootstrap.startRuntimeTiming()
+  bootstrap.rl.pause()
+  const engine = await createCliEngine(host, bootstrap)
+  try {
+    await handleClientCommand(
+      {
+        client: engine.taskyonApi,
+        taskPort: engine.clientPort as Parameters<typeof waitForTaskResult>[0],
+      },
+      command,
+    )
+    await engine.recordCurrentSession(new Date().toISOString()).catch(() => {})
+  } finally {
+    engine.cliToolRpcHost.destroy()
+    engine.unsubscribeBridgeToTaskyon()
+    engine.unsubscribeTaskyonToBridge()
+    engine.taskyon.cancelCurrentRun(`${host.commandName} client command complete`)
+    engine.stopTaskSearchService?.()
+    await engine.closeTaskSearchDatabase?.()
+    if (!isReadlineClosed(bootstrap.rl)) bootstrap.rl.close()
+    restoreTerminalInput()
+    setChatCompletionTraceWriter(undefined)
+    engine.restoreConsoleLogging?.()
+    await runtimeLog?.flush().catch(() => {})
+    engine.stopLoggingService()
+    engine.stopTaskStorageService()
+    process.exit(0)
+  }
+}
+
+async function runCliInteractiveSession(
+  host: InteractiveCliHost,
+  bootstrap: Awaited<ReturnType<typeof createCliBootstrap>>,
+  pendingInput: string | undefined,
+) {
+  const runtime = await createCliInteractiveRuntime(host, bootstrap)
+  const { state, view, engine } = runtime
+  const controls = createCliInteractiveControls(runtime)
+  const { startTaskInterruptKeys } = controls
+  engine.approvalUiRef.current = {
+    beforeApproval: () => {
+      state.taskInterruptKeysCleanup?.()
+      state.taskInterruptKeysCleanup = undefined
+      view.clearThinkingPanel()
+      view.stopWorkerStatusLine()
+    },
+    afterApproval: () => {
+      if (!state.waitingForTask) return
+      state.taskInterruptKeysCleanup = startTaskInterruptKeys()
+      view.renderThinkingPanel()
+      view.setWorkerStatusLine('task: processing')
+    },
+  }
+  const subscriptions = subscribeCliInteractiveStreams(runtime, controls)
+  writeCliInteractiveIntro(runtime)
 
   try {
-    while (true) {
-      if (stopMainLoop) break
-      let input = ''
-      inMenuInteraction = false
-      if (requestQuitOnNextPrompt) {
-        updateFooter()
-        footer.beforePrompt()
-        writePromptPrefix()
-        quitPromptAbortController = new AbortController()
-        const answerRaw = await askQuestion(rl, '> ', {
-          signal: quitPromptAbortController.signal,
-          interruptNotice: false,
-          onSigint,
-        })
-        quitPromptAbortController = null
-        if (eofRequested) {
-          eofRequested = false
-          requestImmediateShutdown('EOF/Readline closed', 0)
-          break
-        }
-        requestQuitOnNextPrompt = false
-        if (answerRaw === null) {
-          if (shuttingDown || isReadlineClosed(rl)) break
-          continue
-        }
-        const answer = answerRaw.trim().toLowerCase()
-        if (answer === 'y' || answer === 'yes') {
-          requestImmediateShutdown('User requested exit', 0)
-          break
-        }
-        continue
-      }
-      updateFooter()
-      footer.beforePrompt()
-      writePromptPrefix()
-      const inputRaw =
-        pendingInput ??
-        (await promptForMainInput(
-          rl,
-          mainPrompt(),
-          async () => {
-            inMenuInteraction = true
-            const selected = await selectSlashCommand(rl, '')
-            inMenuInteraction = false
-            return selected
-          },
-          async () => {
-            inMenuInteraction = true
-            const selected = await selectFileReference(rl, '')
-            inMenuInteraction = false
-            return selected ? `@${selected}` : null
-          },
-          onSigint,
-          onCtrld,
-          () => {
-            if (!interruptedCurrentTask || interruptNoticePrinted) return
-            setImmediate(writeTaskInterruptedNotice)
-          },
-          host.environmentPrefix,
-        ))
-      pendingInput = undefined
-      if (inputRaw === null) {
-        if (eofRequested || isReadlineClosed(rl)) {
-          if (!eofRequested) noteInterruptPhase('Ctrl-D/EOF received.')
-          eofRequested = false
-          requestImmediateShutdown('EOF/Readline closed', 0)
-          break
-        }
-        continue
-      }
-      input = inputRaw.trim()
-      if (!input) continue
-      recordReadlineHistory(rl, input)
-      if (input.startsWith('@')) {
-        const rawQuery = input.slice(1).trim()
-        const selectedPath =
-          rawQuery.length > 0 && (await fileExistsInWorkspace(rawQuery))
-            ? rawQuery
-            : await selectFileReference(rl, rawQuery)
-        if (!selectedPath) continue
-        try {
-          const content = await readFile(join(process.cwd(), selectedPath), 'utf8')
-          explorationContextFiles[selectedPath] = content
-          writeLine(`Added file context: ${selectedPath} (${content.length} chars)`)
-        } catch (error) {
-          writeError(
-            `Failed to load file '${selectedPath}': ${error instanceof Error ? error.message : String(error)}`,
-          )
-        }
-        continue
-      }
-      if (input.startsWith('/')) {
-        const parsedDirect = parseSlashName(input)
-        const knownDirect =
-          parsedDirect !== null &&
-          SLASH_COMMANDS.includes(parsedDirect.name as (typeof SLASH_COMMANDS)[number])
-        if (input === '/' || !knownDirect) {
-          const initialQuery = input.slice(1).trim()
-          inMenuInteraction = true
-          const selected = await selectSlashCommand(rl, initialQuery)
-          inMenuInteraction = false
-          if (!selected) continue
-          input = selected
-        }
-      }
-
-      const parsed = parseSlashName(input)
-      if (parsed) {
-        if (parsed.name === 'resume') {
-          inMenuInteraction = true
-          try {
-            const resumedLeafId = await handleResumeCommand({
-              rl,
-              ty: taskyon,
-              configDir,
-              sessions: normalizeSessionRecords((await configStore.loadStoredConfig()).sessions),
-              storageClient,
-              commandArgs: parsed.args,
-            })
-            if (resumedLeafId) {
-              currentLeafId = resumedLeafId
-              refreshCostFooter()
-              await flushConversationPersist()
-            }
-          } catch (error) {
-            writeError(error instanceof Error ? error.message : String(error))
-          } finally {
-            inMenuInteraction = false
-          }
-          continue
-        }
-        if (parsed.name === 'search') {
-          inMenuInteraction = true
-          try {
-            const selectedLeafId = await handleSearchCommand({
-              rl,
-              storageClient,
-              taskStorageNamespace,
-              query: parsed.args,
-              searchClient: await getTaskSearchClient(),
-              searchIndex: taskSearchIndex,
-              searchDataDirectory: join(dataDir, 'search', 'tasks'),
-              configStore,
-              searchState: taskSearchState,
-              uiSettings,
-            })
-            if (selectedLeafId) {
-              currentLeafId = selectedLeafId
-              refreshCostFooter()
-            }
-          } catch (error) {
-            writeError(error instanceof Error ? error.message : String(error))
-          } finally {
-            inMenuInteraction = false
-          }
-          continue
-        }
-        inMenuInteraction = true
-        const keepRunning = await handleSlashCommand(
-          parsed,
-          rl,
-          chatView,
-          taskyon,
-          taskyonHost,
-          taskyonApi,
-          clientPort as Parameters<typeof waitForTaskResult>[0],
-          llmState,
-          uiSettings,
-          toolRenderOptions,
-          currentLeafId,
-          persistence,
-          host.entryNodeName,
-          unavailableToolNames,
-        )
-        inMenuInteraction = false
-        if (!keepRunning) {
-          stopMainLoop = true
-          requestedExitCode = 0
-          break
-        }
-        continue
-      }
-
-      const currentProvider = llmState.selectedToolchainProfile
-      if (
-        !(await syncProviderRuntimeConfig(
-          taskyon,
-          taskyonHost,
-          llmState,
-          currentProvider,
-          persistence.oauthStorage,
-        ))
-      ) {
-        writeError(missingProviderCredentialsMessage(llmState, currentProvider))
-        continue
-      }
-
-      pendingHiddenNodeMarkers.length = 0
-      completedSubtaskSummaryIds.clear()
-
-      const { ids: taskIds } = await taskyonApi.task.createChain({
-        tasks: [
-          {
-            role: 'user',
-            content: {
-              type: 'message',
-              data: input,
-            },
-            ...(currentLeafId ? { priorID: currentLeafId } : {}),
-          },
-          toolCall({
-            name: host.entryNodeName,
-            arguments: {},
-          }),
-        ],
-        execute: true,
-        show: true,
-      })
-      const entryTaskId = taskIds.at(-1)
-      if (!entryTaskId) throw new Error('CLI message submission created no tasks.')
-      currentLeafId = entryTaskId
-      refreshCostFooter()
-      queueConversationPersist()
-      writeDebug(`queued task chain: ${taskIds.join(', ')}`)
-      try {
-        waitingForTask = true
-        interruptedCurrentTask = false
-        interruptNoticePrinted = false
-        resetThinking()
-        taskProcessingStatus = 'processing'
-        hasWorkerProcessing = true
-        updateFooter()
-        setWorkerStatusLine('task: processing')
-        renderThinkingPanel()
-        taskInterruptKeysCleanup = startTaskInterruptKeys()
-        activeTaskWaitController = new AbortController()
-        const result = await waitForTaskResult(
-          clientPort as Parameters<typeof waitForTaskResult>[0],
-          taskIds,
-          ['message', 'error', 'return'],
-          TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS,
-          activeTaskWaitController.signal,
-          isInteractiveTaskResult,
-          () => activeTaskCount() <= 0,
-          isInteractiveTaskResult,
-        )
-        currentLeafId = result.id
-        refreshCostFooter()
-        writeDebug(`received result task: ${result.id} (${result.content.type})`)
-        await waitForWorkerIdle(10 * 60 * 1000, activeTaskWaitController.signal)
-        refreshCostFooter()
-        scheduleCostFooterRefresh(7_000)
-        waitingForTask = false
-        activeTaskWaitController = undefined
-        taskInterruptKeysCleanup?.()
-        taskInterruptKeysCleanup = undefined
-        clearWorkerCleanupNoticeTimer()
-        clearThinkingPanel()
-        stopWorkerStatusLine()
-        if (interruptedCurrentTask) {
-          await flushConversationPersist()
-          restorePromptIfIdle()
-          continue
-        }
-        await flushConversationPersist()
-        restorePromptIfIdle()
-      } catch (error) {
-        waitingForTask = false
-        activeTaskWaitController = undefined
-        taskInterruptKeysCleanup?.()
-        taskInterruptKeysCleanup = undefined
-        clearWorkerCleanupNoticeTimer()
-        clearThinkingPanel()
-        stopWorkerStatusLine()
-        if (interruptedCurrentTask) {
-          await flushConversationPersist()
-          restorePromptIfIdle()
-          continue
-        }
-        writeError(error instanceof Error ? error.message : String(error))
-        restorePromptIfIdle()
-      }
-    }
+    await runCliInteractiveInputLoop(runtime, controls, pendingInput)
   } finally {
-    process.off('SIGINT', onSigint)
-    process.off('SIGTERM', onSigterm)
-    process.off('SIGHUP', onSighup)
-    process.off('SIGCONT', onSigcont)
-    process.stdout.off('resize', onResize)
-    footer.restore()
-    restoreTerminalInput()
-    unsubscribeThinkingStream()
-    unsubscribeTaskProgress()
-    unsubscribeWorkerProgress()
-    if (!isReadlineClosed(rl)) rl.close()
-    cliToolRpcHost.destroy()
-    stopTaskSearchService?.()
-    await closeTaskSearchDatabase?.()
-    unsubscribeBridgeToTaskyon()
-    unsubscribeTaskyonToBridge()
-    activeTaskWaitController = undefined
-    taskInterruptKeysCleanup?.()
-    taskInterruptKeysCleanup = undefined
-    clearWorkerCleanupNoticeTimer()
-    stopWorkerStatusLine()
-    if (costRefreshTimer !== null) clearTimeout(costRefreshTimer)
-    clearTransientStatusLine = undefined
-    await flushConversationPersist(true).catch(() => {})
-    taskyon.cancelCurrentRun(`${host.commandName} exit`)
-    setChatCompletionTraceWriter(undefined)
-    if (conversationPersistence.hasPersistedConversation()) {
-      writeOutro(`Conversation saved: ${conversationPersistence.filePath}`)
-      await recordCurrentSession(new Date().toISOString()).catch(() => {})
-    } else {
-      writeOutro('No conversation saved: no messages.')
-    }
-    await configStore.flushConfigWrites().catch((error: unknown) => {
-      writeDebug(
-        `Failed to flush CLI configuration: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    })
-    writeOutro(`${host.commandName} log: ${runtimeLog?.filePath ?? 'unavailable'}`)
-    restoreConsoleLogging?.()
-    await runtimeLog?.flush().catch(() => {})
-    stopLoggingService()
-    stopTaskStorageService()
-    if (shutdownForceTimer !== null) {
-      clearTimeout(shutdownForceTimer)
-      shutdownForceTimer = null
-    }
-    process.exitCode = requestedExitCode
-    process.exit(requestedExitCode)
+    await disposeCliInteractiveSession(runtime, subscriptions)
   }
+}
+
+async function main(host: InteractiveCliHost) {
+  const argv = process.argv.slice(2)
+  if (await handleEarlyCliInvocation(host, argv)) return
+  const invocation = resolveCliInvocation(host, argv)
+  const timing = createCliTiming(host)
+  const bootstrap = await createCliBootstrap(host, invocation, timing)
+  const promptReady = await runPromptReadyPhase(host, bootstrap)
+  if (promptReady.kind === 'exit') return
+  if (promptReady.kind === 'client') {
+    await runCliClientCommand(host, bootstrap, promptReady.command)
+    return
+  }
+  await runCliInteractiveSession(host, bootstrap, promptReady.pendingInput)
 }
 
 export async function runInteractiveCli(host: InteractiveCliHost): Promise<void> {
