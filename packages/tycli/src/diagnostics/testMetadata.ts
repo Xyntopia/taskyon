@@ -28,6 +28,10 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
     requiresAuth: true,
     requiresNetwork: true,
   },
+  testInstanceBoundTokenSettlement: {
+    requiresAuth: true,
+    requiresNetwork: true,
+  },
   testTokenMintSecurity: {
     requiresAuth: true,
     requiresNetwork: true,

@@ -9,10 +9,13 @@ import { sleep } from '../utils/asyncUtils'
 export { WsProxyCloseCode, WsProxyCloseError } from '@taskyon/common/modules/wsProxyClose'
 import {
   ServiceTokenPayloadSchema,
+  ConfirmationSchema,
+  type TokenConfirmation,
   TOKEN_SERVICE_BASE_URL,
   TOKEN_SERVICE_ROUTES,
-  type MintTokenRequest,
   type MintTokenResponse,
+  type MintTokensResponse,
+  type TokenRequestDefinition,
   type ReturnTokenRequest,
   type ReturnTokenResponse,
   type ServiceTokenPayload,
@@ -30,10 +33,10 @@ import {
  * @param {string} authToken A JWT or API key used as Bearer auth
  * @returns {Promise<string>} The minted token
  */
-export async function mintToken(baseUrl: string, authToken: string) {
+export async function mintToken(baseUrl: string, authToken: string, cnf?: TokenConfirmation) {
   const url = `${baseUrl}/mint`
 
-  const response = await axios.post<MintTokenResponse>(url, null as MintTokenRequest, {
+  const response = await axios.post<MintTokenResponse>(url, cnf ? { cnf } : null, {
     headers: {
       Authorization: `Bearer ${authToken}`,
     },
@@ -44,24 +47,74 @@ export async function mintToken(baseUrl: string, authToken: string) {
   return response.data.token
 }
 
+export async function mintTokens(
+  baseUrl: string,
+  authToken: string,
+  requests: TokenRequestDefinition[],
+) {
+  const response = await axios.post<MintTokensResponse>(
+    `${baseUrl}/mint`,
+    { requests },
+    { headers: { Authorization: `Bearer ${authToken}` } },
+  )
+  return response.data.tokens
+}
+
+export async function getSettlementConfirmation(serviceUrl: string): Promise<TokenConfirmation> {
+  const url = new URL('/settlement-public-key', serviceUrl)
+  if (url.protocol === 'wss:') url.protocol = 'https:'
+  if (url.protocol === 'ws:') url.protocol = 'http:'
+  const response = await axios.get<{ cnf: unknown }>(url.toString())
+  return ConfirmationSchema.parse(response.data.cnf)
+}
+
+export function createSettlementConfirmationLoader(serviceUrl: string) {
+  let pending: Promise<TokenConfirmation> | undefined
+  return {
+    get: () => {
+      pending ??= getSettlementConfirmation(serviceUrl).catch((error: unknown) => {
+        pending = undefined
+        throw error
+      })
+      return pending
+    },
+    clear: () => {
+      pending = undefined
+    },
+  }
+}
+
+export function createTunnelTokenProvider(serviceUrl: string, baseUrl: string, authToken: string) {
+  const confirmation = createSettlementConfirmationLoader(serviceUrl)
+  return async (destination: { host: string; port: 80 | 443 }, refreshInstanceKey = false) => {
+    if (refreshInstanceKey) confirmation.clear()
+    const cnf = await confirmation.get()
+    const tokens = await mintTokens(baseUrl, authToken, [
+      { service: 'web_tunnel', claims: { destination }, cnf },
+    ])
+    if (!tokens[0]) throw new Error('Token service returned no tunnel token')
+    return tokens[0]
+  }
+}
+
 export async function returnToken(
   baseUrl: string,
   token: string,
   credits_spent_increase: number,
   reference_data: JsonObject,
+  signSettlement?: (body: ReturnTokenRequest) => Promise<string>,
 ) {
   const url = `${baseUrl}/return`
 
-  console.log('[returnToken] Returning token usage data:', {
-    credits_spent_increase,
-    reference_data,
-  })
-
-  const response = await axios.post<ReturnTokenResponse>(url, {
+  const body = {
     token,
     credits_spent_increase,
     reference_data: reference_data,
-  } as ReturnTokenRequest)
+  }
+  const response = await axios.post<ReturnTokenResponse>(
+    url,
+    signSettlement ? { settlementJwt: await signSettlement(body) } : body,
+  )
 
   return response.data
 }
@@ -166,8 +219,6 @@ export const getTyJwtPublicKey = async () => {
 
   const pkeyUrl = `${TOKEN_SERVICE_BASE_URL}${TOKEN_SERVICE_ROUTES.pkey}`
   const PROXY_JWT_PUBLIC_KEY = (await axios.get(pkeyUrl)).data ?? process.env
-
-  console.log('[getTyJwtPublicKey] Retrieved public key:', PROXY_JWT_PUBLIC_KEY)
 
   if (!PROXY_JWT_PUBLIC_KEY) {
     console.error('[attachWsProxy] Missing PROXY_JWT_PUBLIC_KEY env var, WS proxy disabled')

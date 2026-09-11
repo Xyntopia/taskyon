@@ -6,10 +6,18 @@ import {
   returnToken,
   verifyServiceToken,
 } from '../taskyon.space/taskyon.space_api'
-import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
+import {
+  ConfirmationSchema,
+  SETTLEMENT_JWT_TYPE,
+  SettlementBodySchema,
+  TOKEN_SERVICE_BASE_URL,
+  TOKEN_SERVICE_PREFIX,
+  type ReturnTokenRequest,
+} from '../taskyon.space/tokenservice.types'
 import { sleep } from '../utils/asyncUtils'
 import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
 import axios from 'axios'
+import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 
 async function expectThrows(
   fn: () => Promise<unknown>,
@@ -61,6 +69,48 @@ export const testTokenMintClaims = async (ctx: { tyauth: string }) => {
     allowed_models: svcTokenData.allowed_models,
     services: svcTokenData.services,
     has_auid: true,
+  }
+}
+
+export const testInstanceBoundTokenSettlement = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+  const { publicKey, privateKey } = await generateKeyPair('EdDSA', { extractable: true })
+  const { kty, crv, x } = await exportJWK(publicKey)
+  const cnf = ConfirmationSchema.parse({ jwk: { kty, crv, x } })
+  const signSettlement = (body: ReturnTokenRequest) =>
+    new SignJWT(SettlementBodySchema.parse(body))
+      .setProtectedHeader({ alg: 'EdDSA', typ: SETTLEMENT_JWT_TYPE })
+      .sign(privateKey)
+
+  let token: string | undefined
+  let settled = false
+  try {
+    token = await mintToken(baseUrl, ctx.tyauth, cnf)
+    const issuerKey = await getTyJwtPublicKey()
+    if (!issuerKey) throw new Error('Could not fetch tokenservice public key')
+    const payload = await verifyServiceToken(issuerKey, token)
+    if (payload.cnf?.jwk.x !== cnf.jwk.x) {
+      throw new Error('Minted token does not contain the requested confirmation key')
+    }
+    const result = await returnToken(
+      baseUrl,
+      token,
+      0,
+      { test_name: 'testInstanceBoundTokenSettlement' },
+      signSettlement,
+    )
+    settled = true
+    return { success: !('error' in result), confirmationKeyBound: true, creditsSpent: 0 }
+  } finally {
+    if (token && !settled) {
+      await returnToken(
+        baseUrl,
+        token,
+        0,
+        { test_name: 'testInstanceBoundTokenSettlement', cleanup: true },
+        signSettlement,
+      ).catch(() => undefined)
+    }
   }
 }
 
@@ -574,6 +624,7 @@ export const testWasmHttpsTunne = async () => {
 
 testTokenMinting.requiresAuth = true
 testTokenMintClaims.requiresAuth = true
+testInstanceBoundTokenSettlement.requiresAuth = true
 testTokenMintSecurity.requiresAuth = true
 testTokenReturnAfterJwtExpButBeforeOms.requiresAuth = true
 testTokenReturnAfterOms.requiresAuth = true

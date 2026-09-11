@@ -13,6 +13,7 @@ import {
   getTaskyonCosts,
   getTyJwtPublicKey,
   mintToken,
+  createSettlementConfirmationLoader,
   verifyServiceToken,
 } from '../taskyon.space/taskyon.space_api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
@@ -127,6 +128,7 @@ export function createChatCompletionTool(
   },
 ) {
   const providerConnection = resolveChatCompletionConnection(connection)
+  const settlementConfirmation = createSettlementConfirmationLoader(providerConnection.baseURL)
   const ajv = new Ajv()
   const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
   const chatCompletion = createTool({
@@ -365,7 +367,8 @@ export function createChatCompletionTool(
         const tokenServiceBaseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
         let delegationToken = ''
         try {
-          delegationToken = await mintToken(tokenServiceBaseUrl, apiKey)
+          const cnf = await settlementConfirmation.get()
+          delegationToken = await mintToken(tokenServiceBaseUrl, apiKey, cnf)
           const publicKeyPromise = await getTyJwtPublicKey()
           if (publicKeyPromise) {
             delegatedTokenJti = (await verifyServiceToken(publicKeyPromise, delegationToken)).jti
@@ -464,6 +467,8 @@ export function createChatCompletionTool(
       const { completion: chatCompletion, rawOutput, partialTextOutput } = streamResult
 
       if (!streamResult.ok) {
+        // The next attempt discovers a restarted instance; never replay completed work here.
+        if (selectedApi === 'taskyon') settlementConfirmation.clear()
         const effectiveErr = streamResult.error
         const failure = streamResult.failure
         const humanized = humanizeError(effectiveErr)

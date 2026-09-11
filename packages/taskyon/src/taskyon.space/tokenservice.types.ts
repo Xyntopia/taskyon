@@ -1,5 +1,41 @@
 // tokenservice.types.ts
 import z from 'zod'
+import type { JsonObject } from 'type-fest'
+
+export const ConfirmationSchema = z
+  .object({
+    jwk: z
+      .object({
+        kty: z.literal('OKP'),
+        crv: z.literal('Ed25519'),
+        x: z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/),
+      })
+      .strict(),
+  })
+  .strict()
+export type TokenConfirmation = z.infer<typeof ConfirmationSchema>
+
+export const SETTLEMENT_JWT_TYPE = 'taskyon-settlement+jwt'
+export const SettlementBodySchema = z
+  .object({
+    token: z.string().min(1).max(32768),
+    credits_spent_increase: z.number().finite().nonnegative(),
+    reference_data: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict()
+export const SignedSettlementSchema = z
+  .object({ settlementJwt: z.string().min(1).max(65536) })
+  .strict()
+
+export const MAX_TOKEN_MINT_BATCH_SIZE = 10
+
+export type ServiceRequestDefinition = {
+  service: string
+  claims: JsonObject
+}
+export type TokenRequestDefinition = ServiceRequestDefinition & {
+  cnf?: TokenConfirmation
+}
 
 // ==============================
 // 1. JWT payload
@@ -16,6 +52,8 @@ import z from 'zod'
 
 export const ServiceTokenPayloadSchema = z
   .object({
+    cnf: ConfirmationSchema.optional(),
+    iss: z.literal('taskyon.space'),
     principal_type: z.enum(['user', 'api_key']),
     allowed_models: z.array(z.string()).min(1),
     max_costs: z.number().positive(),
@@ -23,6 +61,13 @@ export const ServiceTokenPayloadSchema = z
     oms: z.number().positive(), // seconds
     jti: z.string().min(1).describe('JWT ID bound to api_usage_log.id'),
     auid: z.string().min(1).describe('The anonymous user id that owns this token'),
+    aud: z.union([z.string(), z.array(z.string())]).optional(),
+    request: z
+      .object({
+        service: z.string().min(1),
+        claims: z.record(z.string(), z.unknown()),
+      })
+      .optional(),
 
     exp: z.number().optional().describe('Expiration time (epoch seconds)'),
     iat: z.number().optional().describe('Issued at (epoch seconds)'),
@@ -36,11 +81,18 @@ export type ServiceTokenPayload = z.infer<typeof ServiceTokenPayloadSchema>
 // ==============================
 
 // Request body for POST /tokenservice/mint
-export type MintTokenRequest = unknown
+export type MintTokenRequest =
+  | null
+  | { cnf: TokenConfirmation }
+  | { requests: TokenRequestDefinition[] }
 
 // Response body for POST /tokenservice/mint
 export interface MintTokenResponse {
   token: string // The minted JWT
+}
+
+export interface MintTokensResponse {
+  tokens: string[]
 }
 
 // ==============================
