@@ -1,3 +1,23 @@
+# Build browser-compatible Rustls before the Node build. The generated WASM is
+# intentionally not committed.
+FROM rust:bookworm AS https-tunnel-wasm-builder
+RUN rustup target add wasm32-unknown-unknown && \
+    cargo install wasm-bindgen-cli \
+      --version 0.2.108 \
+      --locked
+WORKDIR /build
+COPY packages/https_tunnel_wasm/Cargo.toml \
+     packages/https_tunnel_wasm/Cargo.lock ./
+COPY packages/https_tunnel_wasm/src ./src
+RUN cargo build \
+      --target wasm32-unknown-unknown \
+      --release && \
+    wasm-bindgen \
+      target/wasm32-unknown-unknown/release/https_tunnel_wasm.wasm \
+      --target web \
+      --typescript \
+      --out-dir pkg
+
 # Stage 1: Build the Quasar application
 FROM node:22.14.0 AS prepare
 # Set up Yarn cache directory
@@ -31,6 +51,7 @@ COPY package.json yarn.lock .yarnrc.yml /app/
 COPY packages/tyclient/package.json /app/packages/tyclient/
 COPY packages/taskyon/package.json /app/packages/taskyon/
 COPY packages/secure-tunnel/package.json /app/packages/secure-tunnel/
+COPY packages/https_tunnel_wasm/package.json /app/packages/https_tunnel_wasm/
 
 RUN ls -a packages/*
 
@@ -40,6 +61,9 @@ RUN --mount=type=cache,target=$YARN_CACHE_FOLDER yarn install
 
 # Copy the rest of the project files
 COPY . .
+COPY --from=https-tunnel-wasm-builder \
+  /build/pkg \
+  /app/packages/https_tunnel_wasm/pkg
 
 FROM prepare AS production-builder
 

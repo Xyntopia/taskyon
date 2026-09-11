@@ -2,6 +2,8 @@ import { secureFetch } from '@taskyon/secure-tunnel'
 import { humanizeError } from '../utils/error'
 import {
   getTyJwtPublicKey,
+  getSettlementConfirmation,
+  createTunnelTokenProvider,
   mintToken,
   returnToken,
   verifyServiceToken,
@@ -92,6 +94,7 @@ export const testInstanceBoundTokenSettlement = async (ctx: { tyauth: string }) 
     if (payload.cnf?.jwk.x !== cnf.jwk.x) {
       throw new Error('Minted token does not contain the requested confirmation key')
     }
+
     const result = await returnToken(
       baseUrl,
       token,
@@ -100,7 +103,11 @@ export const testInstanceBoundTokenSettlement = async (ctx: { tyauth: string }) 
       signSettlement,
     )
     settled = true
-    return { success: !('error' in result), confirmationKeyBound: true, creditsSpent: 0 }
+    return {
+      success: !('error' in result),
+      confirmationKeyBound: true,
+      creditsSpent: 0,
+    }
   } finally {
     if (token && !settled) {
       await returnToken(
@@ -357,82 +364,122 @@ testTokenReturnAfterOms.timeoutMs = 3_700_000
 export const testSecureFetch = async (ctx: { tyauth: string }) => {
   const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
 
-  const token = await mintToken(baseUrl, ctx.tyauth)
-
   const tunnelUrl = 'wss://share.taskyon.space/ws-proxy/'
+  const getToken = createTunnelTokenProvider(tunnelUrl, baseUrl, ctx.tyauth)
+  const nodeLoader = '@taskyon/https-tunnel-wasm/node'
+  const tlsClientFactory =
+    typeof window === 'undefined'
+      ? await import(/* @vite-ignore */ nodeLoader).then(({ createNodeRustlsClientFactory }) =>
+          createNodeRustlsClientFactory(),
+        )
+      : undefined
 
   const sfetchGet = async (url: string, tunnelToken: string) => {
     return await secureFetch(url, {
       method: 'GET',
       tunnelUrl,
       tunnelToken,
+      ...(tlsClientFactory ? { tlsClientFactory } : {}),
     })
   }
 
-  // const testApiUrl1 = 'https://api.nasdaq.com/api/quote/AAPL/chart'
-  const testApiUrl2 = 'https://example.com'
+  const httpsUrl = 'https://example.com/'
+  const httpsDestination = { host: 'example.com', port: 443 } as const
+  const httpsResponse = await sfetchGet(httpsUrl, await getToken(httpsDestination))
+  if (httpsResponse.status !== 200) {
+    throw new Error(`secureFetch HTTPS request returned ${httpsResponse.status}`)
+  }
+  const httpsBody = await httpsResponse.text()
+  if (!httpsBody.includes('Example Domain')) {
+    throw new Error('secureFetch HTTPS response did not contain Example Domain')
+  }
 
-  const response = await sfetchGet(testApiUrl2, token)
+  const httpUrl = 'http://example.com/'
+  const httpDestination = { host: 'example.com', port: 80 } as const
+  const httpResponse = await sfetchGet(httpUrl, await getToken(httpDestination))
+  if (httpResponse.status !== 200) {
+    throw new Error(`secureFetch HTTP request returned ${httpResponse.status}`)
+  }
+  const httpBody = await httpResponse.text()
+  if (!httpBody.includes('Example Domain')) {
+    throw new Error('secureFetch HTTP response did not contain Example Domain')
+  }
 
-  console.log(response.status)
-  console.log(response.body)
-  const data1 = response.text()
-  /*const expectedString = '<!doctype html><html lang="en"><head><title>Example Domain</title>'
-  if (data1.slice(0, expectedString.length) !== expectedString) {
-    console.error('Not the correct string:', { data1 })
-    throw new Error('We did not get the correct string...')
-  }*/
-
-  const err1 = await expectThrows(async () => await fetch(testApiUrl2))
+  const err1 = await expectThrows(async () => await fetch(httpsUrl))
   const expectedCorsError =
     "Success: Error while downloading 'normal' browser based fetch, but expected" +
     humanizeError(err1)
 
   // error should occur for no double spending with the same token.
-  const err = await expectThrows(async () => await sfetchGet(testApiUrl2, token))
+  const replayToken = await getToken(httpsDestination)
+  await sfetchGet(httpsUrl, replayToken)
+  const err = await expectThrows(async () => await sfetchGet(httpsUrl, replayToken))
   const expectedDoubleSpendError =
     'This Error is expected and should occur during double spending! ' + humanizeError(err)
 
   await sleep(5000)
   // we have mint a new token for every request
-  const data2 = (await sfetchGet(testApiUrl2, await mintToken(baseUrl, ctx.tyauth))).text()
+  const data2 = await (await sfetchGet(httpsUrl, await getToken(httpsDestination))).text()
 
   return {
-    fetch1: data1.slice(0, 500),
+    https: httpsBody.slice(0, 500),
+    http: httpBody.slice(0, 500),
     fetch2: data2.slice(0, 500),
     expectedCorsError,
     expectedError: expectedDoubleSpendError,
   }
 }
 
-export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) => {
-  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+type ProxyFetchOptions = {
+  cacheBust?: boolean
+  stripHeaders?: boolean
+}
 
-  const token = await mintToken(baseUrl, ctx.tyauth)
-
-  const tunnelUrl = 'https://share.taskyon.space/proxy'
-
-  const proxyFetch = async (url: string, tunnelToken: string, opts?: { cacheBust?: boolean }) => {
+const createProxyFetchClient = (tunnelUrl: string) => {
+  return async (url: string, tunnelToken: string, opts?: ProxyFetchOptions) => {
     const urlObj = new URL(tunnelUrl)
     urlObj.searchParams.set('url', url)
 
-    // Optionally add a cache-busting query parameter so that the *browser* URL is unique
-    // and cannot be satisfied from its cache.
     if (opts?.cacheBust) {
       urlObj.searchParams.set('cb', Date.now().toString())
     }
+    if (opts?.stripHeaders) {
+      urlObj.searchParams.set('sH', '1')
+    }
 
-    return await axios.get<string>(urlObj.toString(), {
+    return await axios.get<unknown>(urlObj.toString(), {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${tunnelToken}`,
-        // NOTE: We deliberately do *not* send Cache-Control/Pragma here, because they
-        // would trigger a CORS preflight and are not whitelisted in
-        // Access-Control-Allow-Headers. Cache control for the browser is handled
-        // purely via the cache-busting query parameter.
       },
     })
   }
+}
+
+const responseDataToText = (data: unknown): string => {
+  if (typeof data === 'string') return data
+  if (data === null || data === undefined) return ''
+  try {
+    return JSON.stringify(data)
+  } catch {
+    return Object.prototype.toString.call(data)
+  }
+}
+
+const isPvgisRejectedHtml = (body: unknown): boolean =>
+  /request rejected|support id|requested url was rejected/i.test(responseDataToText(body))
+
+export const testTyProxy = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+
+  const token = await mintToken(
+    baseUrl,
+    ctx.tyauth,
+    await getSettlementConfirmation('https://share.taskyon.space'),
+  )
+
+  const tunnelUrl = 'https://share.taskyon.space/proxy'
+  const proxyFetch = createProxyFetchClient(tunnelUrl)
 
   // const testApiUrl1 = 'https://api.nasdaq.com/api/quote/AAPL/chart'
   const testApiUrl2 = 'https://example.com'
@@ -443,32 +490,17 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
 
   console.log(response1.status)
   console.log(response1.data)
-  const data1 = response1.data
+  const data1Text = responseDataToText(response1.data)
 
   let expectedCorsError: string
-  let cypressNote: string | undefined
 
   if (typeof window === 'undefined') {
     expectedCorsError = 'CORS enforcement check is not applicable outside a browser runtime.'
   } else {
-    try {
-      const err1 = await expectThrows(
-        async () => await fetch(testApiUrl2),
-        'No CORS error received!',
-      )
-      expectedCorsError =
-        "Success: Error while downloading 'normal' browser based fetch, but expected" +
-        humanizeError(err1)
-    } catch (err) {
-      if (ctx.isCypress && err instanceof Error && err.message === 'No CORS error received!') {
-        expectedCorsError =
-          'CORS browser-enforcement check skipped because Cypress may proxy or relax cross-origin requests.'
-        cypressNote =
-          'Plain browser fetch to example.com did not trigger a CORS failure under Cypress. This is acceptable in the Cypress environment.'
-      } else {
-        throw err
-      }
-    }
+    const err1 = await expectThrows(async () => await fetch(testApiUrl2), 'No CORS error received!')
+    expectedCorsError =
+      "Success: Error while downloading 'normal' browser based fetch, but expected" +
+      humanizeError(err1)
   }
 
   // For the no-cache test, we *expect* the server to see a second request and reject it
@@ -485,15 +517,28 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
   await sleep(5000)
   // we have to mint a new token for every request
   const data2 = (
-    await proxyFetch(testApiUrl2, await mintToken(baseUrl, ctx.tyauth), { cacheBust: true })
+    await proxyFetch(
+      testApiUrl2,
+      await mintToken(
+        baseUrl,
+        ctx.tyauth,
+        await getSettlementConfirmation('https://share.taskyon.space'),
+      ),
+      { cacheBust: true },
+    )
   ).data
+  const data2Text = responseDataToText(data2)
 
   // --- Test 2: allow browser caching and detect if it hides double-spend errors ---
   // Now we intentionally do NOT use cache-busting. If the browser caches the first
   // successful response, the second call might be served from cache and never reach
   // the server, so no double-spend error occurs.
 
-  const tokenForCacheTest = await mintToken(baseUrl, ctx.tyauth)
+  const tokenForCacheTest = await mintToken(
+    baseUrl,
+    ctx.tyauth,
+    await getSettlementConfirmation('https://share.taskyon.space'),
+  )
 
   const cacheTestResponse1 = await proxyFetch(testApiUrl2, tokenForCacheTest, { cacheBust: false })
 
@@ -526,10 +571,9 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
 
   return {
     // Test 1 (no-cache) outputs
-    fetch1: data1.slice(0, 500),
-    fetch2: data2.slice(0, 500),
+    fetch1: data1Text.slice(0, 500),
+    fetch2: data2Text.slice(0, 500),
     expectedCorsError,
-    cypressNote,
     expectedError: expectedDoubleSpendError,
 
     // Test 2 (with cache allowed)
@@ -541,7 +585,70 @@ export const testTyProxy = async (ctx: { tyauth: string; isCypress?: boolean }) 
   }
 }
 
-testSecureFetch.experimental = true
+export const testTyProxyPvgisHeaderStripping = async (ctx: { tyauth: string }) => {
+  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
+  const tunnelUrl = 'https://share.taskyon.space/proxy'
+  const proxyFetch = createProxyFetchClient(tunnelUrl)
+
+  const pvgisUrl =
+    'https://re.jrc.ec.europa.eu/api/tmy?lat=52.52&lon=13.405&outputformat=json&usehorizon=1'
+
+  const tokenDefault = await mintToken(
+    baseUrl,
+    ctx.tyauth,
+    await getSettlementConfirmation('https://share.taskyon.space'),
+  )
+  const defaultResp = await proxyFetch(pvgisUrl, tokenDefault, {
+    cacheBust: true,
+    stripHeaders: false,
+  })
+  const defaultBodyText = responseDataToText(defaultResp.data)
+  const defaultRejected = isPvgisRejectedHtml(defaultBodyText)
+
+  const tokenStripped = await mintToken(
+    baseUrl,
+    ctx.tyauth,
+    await getSettlementConfirmation('https://share.taskyon.space'),
+  )
+  const strippedResp = await proxyFetch(pvgisUrl, tokenStripped, {
+    cacheBust: true,
+    stripHeaders: true,
+  })
+  const strippedBodyText = responseDataToText(strippedResp.data)
+  const strippedRejected = isPvgisRejectedHtml(strippedBodyText)
+  const strippedLooksJson =
+    strippedBodyText.trim().startsWith('{') ||
+    (typeof strippedResp.data === 'object' && strippedResp.data !== null)
+
+  if (strippedRejected || !strippedLooksJson) {
+    throw new Error(
+      `strip mode failed for PVGIS. status=${strippedResp.status}, rejected=${strippedRejected}, bodyPreview=${strippedBodyText.slice(
+        0,
+        180,
+      )}`,
+    )
+  }
+
+  return {
+    pvgisUrl,
+    withoutStrip: {
+      status: defaultResp.status,
+      rejected: defaultRejected,
+      bodyPreview: defaultBodyText.slice(0, 180),
+    },
+    withStrip: {
+      status: strippedResp.status,
+      rejected: strippedRejected,
+      bodyPreview: strippedBodyText.slice(0, 180),
+      looksJson: strippedLooksJson,
+    },
+    note: defaultRejected
+      ? 'PVGIS rejected browser-like proxy request without strip mode; strip mode avoided rejection.'
+      : 'PVGIS did not reject the non-stripped request in this run. Upstream behavior may vary.',
+  }
+}
+
+testTyProxyPvgisHeaderStripping.experimental = true
 
 export const testTauriHttpPluginHttpsFetch = async () => {
   if (!canUseTauriHttpPlugin()) {
@@ -594,33 +701,6 @@ export const testTauriHttpPluginHttpsFetch = async () => {
     strictTlsError,
   }
 }
-
-/*
-// 1) Get the wasm file URL as a string (Vite will copy it and give you a URL).
-import httpsTunnelWasmUrl from '../../../https_tunnel_wasm/pkg/https_tunnel_wasm_bg.wasm?url'
-
-// 2) Import the JS glue as a module.
-import wasmModule from '../../../https_tunnel_wasm/pkg/https_tunnel_wasm'
-
-export const testWasmHttpsTunne = async () => {
-  console.log('Loading HTTPS tunnel WASM module...')
-
-  await wasmModule.default(httpsTunnelWasmUrl)
-
-  // 3) Initialize the wasm module, passing the wasm URL.
-  //    This mirrors your rumoca pattern:
-  //    await wasmModule.default(rumocaWasmUrl)
-
-  console.log('WASM module initialized')
-
-  wasmModule.test_rustls_client('example.com')
-  // run_https_tunnel_test('ws://localhost:8443/?host=example.com');
-
-  return {
-    success: true,
-}
-
-}*/
 
 testTokenMinting.requiresAuth = true
 testTokenMintClaims.requiresAuth = true

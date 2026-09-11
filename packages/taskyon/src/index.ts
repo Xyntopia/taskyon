@@ -22,6 +22,7 @@ export {
   createProtocolStorageCrudWrapper,
   createProtocolStorageBlobBackend,
   createStorageClient,
+  createStorageClientSecureFetchCache,
   getLogicalStorageNamespace,
   createStorageProtocolServer,
   createStorageRecordBackend,

@@ -96,6 +96,31 @@ export async function tool_security_contractsMediatedFetchAuthorizesOncePerExecu
 tool_security_contractsMediatedFetchAuthorizesOncePerExecution.description =
   'A capability decision covers repeated requests to the same origin during one tool execution.'
 
+export async function tool_security_contractsMediatedFetchSupportsHttpAndHttps() {
+  const requestedUrls: string[] = []
+  const mediatedFetch = createMediatedFetch({
+    authorize: () => Promise.resolve(true),
+    fetch: (input) => {
+      requestedUrls.push(String(input))
+      return Promise.resolve(new Response('ok'))
+    },
+  })
+
+  await mediatedFetch('http://example.com/plaintext')
+  await mediatedFetch('https://example.com/encrypted')
+  await mediatedFetch('ftp://example.com/file').then(
+    () => {
+      throw new Error('Unsupported fetch protocol unexpectedly succeeded')
+    },
+    () => undefined,
+  )
+
+  assert(requestedUrls.length === 2, 'Expected only HTTP and HTTPS requests to reach fetch')
+}
+
+tool_security_contractsMediatedFetchSupportsHttpAndHttps.description =
+  'Taskyon-mediated fetch accepts HTTP and HTTPS while rejecting unrelated URL protocols.'
+
 export async function tool_security_contractsMediatedFetchBlocksPrivateNetworks() {
   let hostFetchCalled = false
   const mediatedFetch = createMediatedFetch({

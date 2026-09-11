@@ -5,214 +5,224 @@ export interface HttpResponse {
   body: Uint8Array
 }
 
-/**
- * Encodes an HTTP/1.1 request for transmission over an established TLS connection.
- */
+export interface HttpStreamResponse extends Omit<HttpResponse, 'body'> {
+  body: ReadableStream<Uint8Array>
+}
+
+const append = (left: Uint8Array, right: Uint8Array) => {
+  const combined = new Uint8Array(left.length + right.length)
+  combined.set(left)
+  combined.set(right, left.length)
+  return combined
+}
+
+const findSequence = (buffer: Uint8Array, sequence: readonly number[]) => {
+  outer: for (let offset = 0; offset <= buffer.length - sequence.length; offset++) {
+    for (let index = 0; index < sequence.length; index++) {
+      if (buffer[offset + index] !== sequence[index]) continue outer
+    }
+    return offset
+  }
+  return -1
+}
+
 export function buildHttpRequest(
   method: string,
   urlStr: string,
   headers: Record<string, string>,
   body?: Uint8Array | string,
 ): Uint8Array {
+  if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(method)) throw new Error('Invalid HTTP method')
   const url = new URL(urlStr)
-  const path = url.pathname + url.search
-  const host = url.hostname
-  const port = url.port || '443'
+  const finalHeaders = Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]),
+  )
+  const port = url.port || (url.protocol === 'http:' ? '80' : '443')
+  const defaultPort = url.protocol === 'http:' ? '80' : '443'
+  finalHeaders.host ??= port === defaultPort ? url.hostname : `${url.hostname}:${port}`
+  finalHeaders['user-agent'] ??= 'taskyon-secure-fetch/1.0'
+  finalHeaders.connection ??= 'close'
+  finalHeaders['accept-encoding'] = 'identity'
 
-  const finalHeaders: Record<string, string> = {}
-  Object.entries(headers).forEach(([k, v]) => {
-    finalHeaders[k.toLowerCase()] = v
-  })
-
-  if (!finalHeaders['host']) {
-    finalHeaders['host'] = `${host}:${port}`
+  const bodyBytes = typeof body === 'string' ? new TextEncoder().encode(body) : body
+  if (bodyBytes) finalHeaders['content-length'] = String(bodyBytes.length)
+  else if (['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
+    finalHeaders['content-length'] ??= '0'
   }
 
-  if (!finalHeaders['user-agent']) {
-    finalHeaders['user-agent'] = 'secure-tunnel/1.0'
-  }
-
-  let bodyBytes: Uint8Array | undefined
-  if (body) {
-    if (typeof body === 'string') {
-      bodyBytes = new TextEncoder().encode(body)
-    } else {
-      bodyBytes = body
-    }
-    finalHeaders['content-length'] = bodyBytes.length.toString()
-  } else if (method === 'POST' || method === 'PUT') {
-    if (!finalHeaders['content-length']) {
-      finalHeaders['content-length'] = '0'
-    }
-  }
-
-  let req = `${method.toUpperCase()} ${path} HTTP/1.1\r\n`
-  for (const [k, v] of Object.entries(finalHeaders)) {
-    req += `${k}: ${v}\r\n`
-  }
-  req += '\r\n'
-
-  const headBytes = new TextEncoder().encode(req)
-
-  if (bodyBytes) {
-    const combined = new Uint8Array(headBytes.length + bodyBytes.length)
-    combined.set(headBytes)
-    combined.set(bodyBytes, headBytes.length)
-    return combined
-  }
-
-  return headBytes
+  const path = `${url.pathname || '/'}${url.search}`
+  const lines = [`${method.toUpperCase()} ${path} HTTP/1.1`]
+  for (const [name, value] of Object.entries(finalHeaders)) lines.push(`${name}: ${value}`)
+  const head = new TextEncoder().encode(`${lines.join('\r\n')}\r\n\r\n`)
+  return bodyBytes ? append(head, bodyBytes) : head
 }
 
-/**
- * Reads and decodes one HTTP/1.1 response from a TLS byte-stream reader.
- */
-export async function parseHttpResponse(
-  reader: () => Promise<Uint8Array | null>,
-): Promise<HttpResponse> {
-  const decoder = new TextDecoder()
-  let buffer = new Uint8Array(0)
-
-  async function readUntilHeaders(): Promise<string> {
-    let str = ''
-    while (true) {
-      str = decoder.decode(buffer, { stream: true })
-      const headerEnd = str.indexOf('\r\n\r\n')
-      if (headerEnd !== -1) {
-        return str
-      }
-
-      const chunk = await reader()
-      if (!chunk) break
-
-      const newBuf = new Uint8Array(buffer.length + chunk.length)
-      newBuf.set(buffer)
-      newBuf.set(chunk, buffer.length)
-      buffer = newBuf
-    }
-    return str
-  }
-
-  const fullDataStr = await readUntilHeaders()
-  const headerEndIdx = fullDataStr.indexOf('\r\n\r\n')
-
-  if (headerEndIdx === -1) {
-    throw new Error('Incomplete response headers')
-  }
-
-  const headerPart = fullDataStr.substring(0, headerEndIdx)
-
-  let headerByteSize = 0
-  for (let i = 0; i < buffer.length - 3; i++) {
-    if (buffer[i] === 13 && buffer[i + 1] === 10 && buffer[i + 2] === 13 && buffer[i + 3] === 10) {
-      headerByteSize = i + 4
-      break
-    }
-  }
-
-  const lines = headerPart.split('\r\n')
-  const statusLine = lines[0]
-  if (!statusLine) throw new Error('Invalid response status line')
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_, statusCode, ...statusTextParts] = statusLine.split(' ')
-  if (!statusCode) throw new Error('Invalid response status code')
-  const status = parseInt(statusCode, 10)
-  const statusText = statusTextParts.join(' ')
-
+const parseHead = (bytes: Uint8Array) => {
+  const lines = new TextDecoder().decode(bytes).split('\r\n')
+  const statusLine = lines.shift() ?? ''
+  const match = /^HTTP\/\d(?:\.\d)?\s+(\d{3})(?:\s+(.*))?$/.exec(statusLine)
+  if (!match) throw new Error('Invalid HTTP response status line')
   const headers: Record<string, string> = {}
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]!
+  for (const line of lines) {
     const colon = line.indexOf(':')
-    if (colon !== -1) {
-      const k = line.substring(0, colon).trim().toLowerCase()
-      const v = line.substring(colon + 1).trim()
-      headers[k] = v
-    }
+    if (colon <= 0) continue
+    const name = line.slice(0, colon).trim().toLowerCase()
+    const value = line.slice(colon + 1).trim()
+    headers[name] = headers[name] ? `${headers[name]}, ${value}` : value
   }
+  return { status: Number(match[1]), statusText: match[2] ?? '', headers }
+}
 
-  let bodyBytes = buffer.slice(headerByteSize)
-
-  if (headers['content-length']) {
-    const len = parseInt(headers['content-length'], 10)
-    while (bodyBytes.length < len) {
-      const chunk = await reader()
-      if (!chunk) break
-      const newBuf = new Uint8Array(bodyBytes.length + chunk.length)
-      newBuf.set(bodyBytes)
-      newBuf.set(chunk, bodyBytes.length)
-      bodyBytes = newBuf
+const createBufferedReader = (reader: () => Promise<Uint8Array | null>) => {
+  let buffer = new Uint8Array()
+  const readMore = async () => {
+    const chunk = await reader()
+    if (chunk) buffer = append(buffer, chunk)
+    return chunk !== null
+  }
+  const take = (length: number) => {
+    const value = buffer.slice(0, length)
+    buffer = buffer.slice(length)
+    return value
+  }
+  const ensure = async (length: number) => {
+    while (buffer.length < length && (await readMore())) continue
+    if (buffer.length < length) throw new Error('Unexpected EOF in HTTP response')
+  }
+  const readLine = async () => {
+    let end = findSequence(buffer, [13, 10])
+    while (end < 0) {
+      if (!(await readMore())) throw new Error('Unexpected EOF in HTTP response line')
+      end = findSequence(buffer, [13, 10])
     }
-    bodyBytes = bodyBytes.slice(0, len)
-  } else if (headers['transfer-encoding'] === 'chunked') {
-    const decodedChunks: Uint8Array[] = []
-    let currentBuffer = bodyBytes
-
-    while (true) {
-      let newlineIdx = -1
-      for (let i = 0; i < currentBuffer.length - 1; i++) {
-        if (currentBuffer[i] === 13 && currentBuffer[i + 1] === 10) {
-          newlineIdx = i
-          break
-        }
-      }
-
-      if (newlineIdx === -1) {
-        const chunk = await reader()
-        if (!chunk) break
-        const newBuf = new Uint8Array(currentBuffer.length + chunk.length)
-        newBuf.set(currentBuffer)
-        newBuf.set(chunk, currentBuffer.length)
-        currentBuffer = newBuf
-        continue
-      }
-
-      const hexLine = new TextDecoder().decode(currentBuffer.slice(0, newlineIdx))
-      const chunkSize = parseInt(hexLine, 16)
-
-      if (chunkSize === 0) {
-        break
-      }
-
-      const dataStart = newlineIdx + 2
-      const dataEnd = dataStart + chunkSize
-      const totalNeeded = dataEnd + 2
-
-      while (currentBuffer.length < totalNeeded) {
-        const chunk = await reader()
-        if (!chunk) throw new Error('Unexpected EOF in chunked body')
-        const newBuf = new Uint8Array(currentBuffer.length + chunk.length)
-        newBuf.set(currentBuffer)
-        newBuf.set(chunk, currentBuffer.length)
-        currentBuffer = newBuf
-      }
-
-      decodedChunks.push(currentBuffer.slice(dataStart, dataEnd))
-      currentBuffer = currentBuffer.slice(totalNeeded)
-    }
-
-    const totalLen = decodedChunks.reduce((acc, c) => acc + c.length, 0)
-    const result = new Uint8Array(totalLen)
-    let offset = 0
-    for (const c of decodedChunks) {
-      result.set(c, offset)
-      offset += c.length
-    }
-    bodyBytes = result
-  } else {
-    while (true) {
-      const chunk = await reader()
-      if (!chunk) break
-      const newBuf = new Uint8Array(bodyBytes.length + chunk.length)
-      newBuf.set(bodyBytes)
-      newBuf.set(chunk, bodyBytes.length)
-      bodyBytes = newBuf
-    }
+    const line = new TextDecoder().decode(take(end))
+    take(2)
+    return line
   }
 
   return {
-    status,
-    statusText,
-    headers,
-    body: bodyBytes,
+    available: () => buffer.length,
+    ensure,
+    prepend: (bytes: Uint8Array) => {
+      buffer = append(bytes, buffer)
+    },
+    readLine,
+    readMore,
+    take,
   }
+}
+
+const readResponseHead = async (source: ReturnType<typeof createBufferedReader>) => {
+  let parsed: ReturnType<typeof parseHead>
+  for (;;) {
+    await source.ensure(1)
+    let headerEnd = -1
+    const chunks: Uint8Array[] = []
+    while (headerEnd < 0) {
+      const available = source.available()
+      const bytes = source.take(available)
+      chunks.push(bytes)
+      const combined = chunks.reduce(append, new Uint8Array())
+      if (combined.length > 64 * 1024) throw new Error('HTTP response headers are too large')
+      headerEnd = findSequence(combined, [13, 10, 13, 10])
+      if (headerEnd >= 0) {
+        parsed = parseHead(combined.slice(0, headerEnd))
+        const remainder = combined.slice(headerEnd + 4)
+        return { parsed, remainder }
+      }
+      if (!(await source.readMore())) throw new Error('Incomplete response headers')
+    }
+  }
+}
+
+const streamBody = async function* (
+  source: ReturnType<typeof createBufferedReader>,
+  headers: Record<string, string>,
+) {
+  const transferEncoding = headers['transfer-encoding']?.toLowerCase()
+  const contentLength = headers['content-length']
+  if (transferEncoding?.split(',').some((value) => value.trim() === 'chunked')) {
+    for (;;) {
+      const sizeText = (await source.readLine()).split(';', 1)[0]?.trim() ?? ''
+      if (!/^[0-9a-f]+$/i.test(sizeText)) throw new Error('Invalid chunk size')
+      const size = Number.parseInt(sizeText, 16)
+      if (size === 0) {
+        while ((await source.readLine()) !== '') continue
+        return
+      }
+      await source.ensure(size + 2)
+      yield source.take(size)
+      const terminator = source.take(2)
+      if (terminator[0] !== 13 || terminator[1] !== 10) throw new Error('Invalid chunk terminator')
+    }
+  }
+  if (contentLength !== undefined) {
+    const length = Number(contentLength)
+    if (!Number.isSafeInteger(length) || length < 0) throw new Error('Invalid Content-Length')
+    let remaining = length
+    while (remaining > 0) {
+      if (source.available() === 0 && !(await source.readMore())) {
+        throw new Error('Unexpected EOF in HTTP response')
+      }
+      const chunk = source.take(Math.min(remaining, source.available()))
+      remaining -= chunk.length
+      yield chunk
+    }
+    return
+  }
+  for (;;) {
+    if (source.available() > 0) yield source.take(source.available())
+    if (!(await source.readMore())) return
+  }
+}
+
+export async function parseHttpResponseStream(
+  reader: () => Promise<Uint8Array | null>,
+  onDone: () => void = () => undefined,
+): Promise<HttpStreamResponse> {
+  const source = createBufferedReader(reader)
+  let parsed: ReturnType<typeof parseHead>
+  for (;;) {
+    const head = await readResponseHead(source)
+    parsed = head.parsed
+    if (head.remainder.length) source.prepend(head.remainder)
+    if (parsed.status < 100 || parsed.status >= 200 || parsed.status === 101) break
+  }
+
+  const iterator = streamBody(source, parsed.headers)[Symbol.asyncIterator]()
+  let finished = false
+  const finish = () => {
+    if (finished) return
+    finished = true
+    onDone()
+  }
+  return {
+    ...parsed,
+    body: new ReadableStream<Uint8Array>({
+      pull: async (controller) => {
+        try {
+          const next = await iterator.next()
+          if (next.done) {
+            finish()
+            controller.close()
+          } else controller.enqueue(next.value)
+        } catch (error) {
+          finish()
+          controller.error(error)
+        }
+      },
+      cancel: async () => {
+        finish()
+        await iterator.return?.()
+      },
+    }),
+  }
+}
+
+export async function parseHttpResponse(
+  reader: () => Promise<Uint8Array | null>,
+): Promise<HttpResponse> {
+  const response = await parseHttpResponseStream(reader)
+  const body = new Uint8Array(await new Response(response.body).arrayBuffer())
+  return { ...response, body }
 }

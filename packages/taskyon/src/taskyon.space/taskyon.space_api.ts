@@ -84,16 +84,32 @@ export function createSettlementConfirmationLoader(serviceUrl: string) {
   }
 }
 
-export function createTunnelTokenProvider(serviceUrl: string, baseUrl: string, authToken: string) {
+export function createBoundServiceTokenProvider(
+  serviceUrl: string,
+  baseUrl: string,
+  service: string,
+  getAuthToken: () => string | Promise<string>,
+) {
   const confirmation = createSettlementConfirmationLoader(serviceUrl)
-  return async (destination: { host: string; port: 80 | 443 }, refreshInstanceKey = false) => {
+  return async (claims: JsonObject, refreshInstanceKey = false) => {
     if (refreshInstanceKey) confirmation.clear()
-    const cnf = await confirmation.get()
-    const tokens = await mintTokens(baseUrl, authToken, [
-      { service: 'web_tunnel', claims: { destination }, cnf },
+    const tokens = await mintTokens(baseUrl, await getAuthToken(), [
+      { service, claims, cnf: await confirmation.get() },
     ])
-    if (!tokens[0]) throw new Error('Token service returned no tunnel token')
+    if (!tokens[0]) throw new Error('Token service returned no service token')
     return tokens[0]
+  }
+}
+
+export function createTunnelTokenProvider(serviceUrl: string, baseUrl: string, authToken: string) {
+  const getToken = createBoundServiceTokenProvider(
+    serviceUrl,
+    baseUrl,
+    'web_tunnel',
+    () => authToken,
+  )
+  return async (destination: { host: string; port: 80 | 443 }, refreshInstanceKey = false) => {
+    return await getToken({ destination }, refreshInstanceKey)
   }
 }
 

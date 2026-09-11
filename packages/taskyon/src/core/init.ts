@@ -58,6 +58,8 @@ import {
 import {
   createMediatedFetch,
   type FetchCapability,
+  type FetchWithPolicy,
+  type SandboxFetchOptions,
 } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { createToolManager, type ToolManager } from './toolManager'
 import {
@@ -284,6 +286,8 @@ const dynamicContext =
         tool: ToolIdentity
         capability: FetchCapability
       }) => Promise<boolean>
+      fetchWithPolicy?: FetchWithPolicy
+      fetchPolicy?: SandboxFetchOptions
       authorizePopup?: (args: {
         tool: ToolIdentity
         target: 'custom-html' | `origin:${string}`
@@ -555,6 +559,8 @@ const dynamicContext =
                     Promise.resolve(false))
                   : Promise.resolve(false),
               signal: stopSignal,
+              ...(options.fetchWithPolicy ? { fetchWithPolicy: options.fetchWithPolicy } : {}),
+              ...(options.fetchPolicy ? { fetchPolicy: options.fetchPolicy } : {}),
             }),
             requestPopup: ({ target }) =>
               identity
@@ -730,6 +736,8 @@ export async function tyCore(
       tool: ToolIdentity
       capability: FetchCapability
     }) => Promise<boolean>
+    fetchWithPolicy?: FetchWithPolicy
+    fetchPolicy?: SandboxFetchOptions
     authorizePopup?: (args: {
       tool: ToolIdentity
       target: 'custom-html' | `origin:${string}`
@@ -792,6 +800,8 @@ export async function tyCore(
       ...(options?.authorizeSandboxFetch
         ? { authorizeSandboxFetch: options.authorizeSandboxFetch }
         : {}),
+      ...(options?.fetchWithPolicy ? { fetchWithPolicy: options.fetchWithPolicy } : {}),
+      ...(options?.fetchPolicy ? { fetchPolicy: options.fetchPolicy } : {}),
       ...(options?.authorizePopup ? { authorizePopup: options.authorizePopup } : {}),
     },
   )

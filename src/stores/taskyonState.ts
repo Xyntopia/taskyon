@@ -46,9 +46,17 @@ import {
   registerToolRpcTools,
   TaskNode,
 } from '@taskyon/taskyon'
-import { setTaskyonProviderCredential, type TaskyonHostClient } from '@taskyon/taskyon/api'
+import {
+  createStorageClientSecureFetchCache,
+  setTaskyonProviderCredential,
+  type TaskyonHostClient,
+} from '@taskyon/taskyon/api'
 import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
+import { createHttpProxyFetch } from '@taskyon/common/modules/webFetching/index'
+import { createCachedSecureFetch } from '@taskyon/secure-tunnel'
+import { createBoundServiceTokenProvider } from '@taskyon/taskyon/taskyon-space-api'
+import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '@taskyon/taskyon/token-service-types'
 import {
   createPersistentOauthTokenGetter,
   OAUTH_CREDENTIALS_SECRET_PREFIX,
@@ -1301,6 +1309,13 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   })()
   const opfsStorageBackend = createOpfsStorageBackendResolver()
   const storageNamespacePrefix = 'taskyon'
+  let getTaskyonFetchCredential: () => Promise<string> = () =>
+    Promise.resolve(
+      resolveTaskyonKey({
+        iframeToken: stateRefs.iframeApiKey,
+        credential: stateRefs.effectiveTaskyonCredential,
+      }),
+    )
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({
       ...stateRefs.llmSettings,
@@ -1317,6 +1332,27 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
       }),
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
+    createFetchWithPolicy: (storageClient) => {
+      const proxyUrl = stateRefs.appConfiguration.sandboxFetchProxyUrl
+      const getProxyToken = createBoundServiceTokenProvider(
+        proxyUrl,
+        TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
+        'proxy',
+        () => getTaskyonFetchCredential(),
+      )
+      const proxyFetch = createHttpProxyFetch({
+        proxyUrl,
+        getToken: async (target, refreshInstanceKey = false) => {
+          const port = Number(target.port || (target.protocol === 'http:' ? 80 : 443))
+          return await getProxyToken(
+            { destination: { host: target.hostname, port } },
+            refreshInstanceKey,
+          )
+        },
+      })
+      return createCachedSecureFetch(proxyFetch, createStorageClientSecureFetchCache(storageClient))
+    },
+    fetchPolicy: { policy: 'proxy' },
     authorizePopup: authorizeBrowserPopup,
     storageNamespacePrefix,
     storage: {
@@ -1464,6 +1500,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   }
 
   const apiKeyManagement = useApiManagement(stateRefs, () => taskyon, runtime.host)
+  getTaskyonFetchCredential = () =>
+    Promise.resolve(
+      apiKeyManagement.getTaskyonKeyString() ??
+        resolveTaskyonKey({
+          iframeToken: stateRefs.iframeApiKey,
+          credential: stateRefs.effectiveTaskyonCredential,
+        }),
+    )
   stateRefs.setTaskyonAuthLoading(true)
   void apiKeyManagement
     .initModelsAndStoredKeys()

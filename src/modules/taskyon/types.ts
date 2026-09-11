@@ -120,6 +120,10 @@ export const appConfiguration = z.object({
     title: 'PMTiles Cache Size',
     description: 'Maximum persisted range-cache size per PMTiles archive in megabytes.',
   }),
+  sandboxFetchProxyUrl: z.string().url().default('https://share.taskyon.space/proxy').meta({
+    title: 'Sandbox Fetch Proxy',
+    description: 'HTTP proxy endpoint used by browser tools for cross-origin HTTP and HTTPS.',
+  }),
   guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',
   }),

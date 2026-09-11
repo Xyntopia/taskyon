@@ -9,6 +9,7 @@
     "gdriveDir": "taskyon",
     "useEnterToSend": "auto",
     "taskSearchVectorizer": "static-multilingual",
+    "sandboxFetchProxyUrl": "https://share.taskyon.space/proxy",
     "pmtilesCacheMaxSizeMb": 1024,
     "guiMode": "auto",
     "primaryColor": "#2A3548",

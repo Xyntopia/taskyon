@@ -74,8 +74,8 @@ function isBlockedHostname(hostname: string) {
 
 export function validateSandboxFetchUrl(input: RequestInfo | URL): URL {
   const url = new URL(input instanceof Request ? input.url : input)
-  if (url.protocol !== 'https:') {
-    throw new Error('Sandbox fetch only permits HTTPS URLs')
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Sandbox fetch only permits HTTP and HTTPS URLs')
   }
   if (url.username || url.password) {
     throw new Error('Sandbox fetch does not permit credentials in URLs')

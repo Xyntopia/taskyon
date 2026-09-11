@@ -11,6 +11,8 @@ export const WsProxyCloseCode = {
   PrivateIpForbidden: 4301,
   DnsResolutionFailed: 4302,
   TcpConnectionFailed: 4500,
+  RateLimited: 4600,
+  ResourceLimit: 4601,
   InternalError: 4800,
 } as const
 

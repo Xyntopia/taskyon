@@ -38,6 +38,12 @@
     "./test-support": {
       "import": "./src/testSupport/storageBackendContract.ts"
     },
+    "./taskyon-space-api": {
+      "import": "./src/taskyon.space/taskyon.space_api.ts"
+    },
+    "./token-service-types": {
+      "import": "./src/taskyon.space/tokenservice.types.ts"
+    },
     "./documentationManifest": {
       "import": "./src/documentationManifest.ts"
     },
@@ -57,7 +63,6 @@
     "@msgpack/msgpack": "^3.1.2",
     "@noble/ed25519": "^2.1.0",
     "@openrouter/ai-sdk-provider": "^2.9.1",
-    "@reclaimprotocol/tls": "^0.1.2",
     "@scure/bip39": "^1.5.0",
     "@taskyon/common": "workspace:*",
     "@taskyon/comp-dag": "workspace:*",

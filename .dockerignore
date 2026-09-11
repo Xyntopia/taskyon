@@ -7,6 +7,8 @@ node_modules
 /dist
 #!/dist/spa
 /dist-desktop
+/packages/https_tunnel_wasm/pkg
+/packages/https_tunnel_wasm/target
 /quasar.config.*.temporary.compiled*
 
 # ignore tauri build files

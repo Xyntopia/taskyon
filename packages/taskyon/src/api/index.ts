@@ -26,6 +26,7 @@ export {
   type ClientTaskSource,
 } from './clientTaskModel'
 export { createTaskRecordReader } from './taskRecordReader'
+export { createStorageClientSecureFetchCache } from './secureFetchCache'
 import type { RpcMessagePort } from '@taskyon/common/modules/frpBus'
 import {
   taskyonHostProtocol,

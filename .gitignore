@@ -4,6 +4,9 @@
 .yarn
 .tmp
 tycli-e2e-runs
+/blobs/
+/packages/tycli/blobs/
+/taskyon-task-tree.yml
 node_modules
 .pnpm-store
 

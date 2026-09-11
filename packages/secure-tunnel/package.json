@@ -15,12 +15,12 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build && tsc --emitDeclarationOnly",
+    "build": "vite build && tsc --declaration --emitDeclarationOnly --outDir dist",
     "dev": "vite build --watch"
   },
   "dependencies": {
-    "@reclaimprotocol/tls": "^0.1.2",
-    "@taskyon/common": "workspace:*"
+    "@taskyon/common": "workspace:*",
+    "@taskyon/https-tunnel-wasm": "workspace:*"
   },
   "devDependencies": {
     "vite": "^7.3.6"
