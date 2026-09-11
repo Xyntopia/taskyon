@@ -4770,6 +4770,12 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/https-tunnel-wasm@workspace:packages/https_tunnel_wasm":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/https-tunnel-wasm@workspace:packages/https_tunnel_wasm"
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/modelica@workspace:*, @taskyon/modelica@workspace:packages/modelica":
   version: 0.0.0-use.local
   resolution: "@taskyon/modelica@workspace:packages/modelica"

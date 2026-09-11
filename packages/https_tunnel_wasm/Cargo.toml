@@ -1,0 +1,19 @@
+[package]
+name = "https_tunnel_wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+
+[dependencies]
+wasm-bindgen = "0.2.108"
+rustls = { version = "0.23", default-features = false, features = [
+    "std",
+    "tls12",
+] }
+rustls-rustcrypto = "0.0.2-alpha"
+rustls-pki-types = { version = "1.14", features = ["web"] }
+webpki-roots = "0.26"
+getrandom = { version = "0.2", features = ["js"] }
