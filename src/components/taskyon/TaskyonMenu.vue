@@ -28,7 +28,13 @@
           </q-item-section>
           <q-item-section> Documentation </q-item-section>
         </q-item>
-        <q-item v-ripple clickable exact active-class="text-secondary" @click="openAboutDialog">
+        <q-item
+          v-ripple
+          clickable
+          exact
+          active-class="text-secondary"
+          @click="showAboutDialog = true"
+        >
           <q-item-section avatar>
             <q-icon :name="mdiInformationVariant" />
           </q-item-section>
@@ -54,10 +60,11 @@
       </q-list>
     </q-menu>
   </q-btn>
-  <TaskyonAboutDialog
+  <AboutDialog
     v-model="showAboutDialog"
-    :commit-hash="buildMetadata.commit"
-    :build-time="buildMetadata.publishDate"
+    app-name="Taskyon"
+    description="Taskyon is a local-first AI platform for personalized task management and seamless web integration. It ensures data security with local processing while offering powerful tools like task trees, function execution, and sandboxing. Learn more at taskyon.space."
+    data-cy="taskyon-about"
   >
     <template #actions>
       <q-btn flat color="secondary" to="/diagnostics">
@@ -67,7 +74,19 @@
       </q-btn>
       <q-btn flat label="Reset Settings" to="/settings/profile" />
     </template>
-  </TaskyonAboutDialog>
+    <template #legal>
+      <p>
+        This application uses <strong>Rumoca</strong>, a Modelica compiler written in Rust compiled
+        to WebAssembly. Rumoca is licensed under the Apache-2.0 License.
+      </p>
+      <p>
+        Rumoca — “A Modelica compiler written in Rust” (© 2024–2025 Condie, Woodbury, Goppert,
+        Andersson & contributors). See
+        <a href="https://github.com/condie-etc/rumoca" target="_blank">the Rumoca repository</a>
+        and the included Apache-2.0 license for details.
+      </p>
+    </template>
+  </AboutDialog>
 </template>
 
 <script setup lang="ts">
@@ -75,9 +94,8 @@ import { matHelpOutline, matSettings } from '@quasar/extras/material-icons'
 import { mdiGithub, mdiHospital, mdiInformationVariant, mdiWrench } from '@quasar/extras/mdi-v6'
 import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
+import AboutDialog from '@taskyon/ui/components/AboutDialog.vue'
 import DarkModeButton from '@taskyon/ui/components/DarkModeButton.vue'
-import TaskyonAboutDialog from '@taskyon/ui/components/TaskyonAboutDialog.vue'
-import { loadBuildMetadata, UNKNOWN_BUILD_METADATA } from '@taskyon/common/modules/buildMetadata'
 
 defineProps<{
   btnSize: 'md' | 'sm' | 'xs' | 'lg' | 'xl'
@@ -85,26 +103,6 @@ defineProps<{
 
 const showAboutDialog = ref(false)
 const state = useAppStateStore()
-const buildMetadata = ref(UNKNOWN_BUILD_METADATA)
-let buildMetadataLoaded = false
-let pendingBuildMetadata: Promise<void> | undefined
-
-function openAboutDialog() {
-  showAboutDialog.value = true
-  if (buildMetadataLoaded || pendingBuildMetadata) return
-
-  pendingBuildMetadata = loadBuildMetadata(fetch)
-    .then((metadata) => {
-      buildMetadata.value = metadata
-      buildMetadataLoaded = true
-    })
-    .catch((error: unknown) => {
-      console.warn('Unable to load build metadata:', error)
-    })
-    .finally(() => {
-      pendingBuildMetadata = undefined
-    })
-}
 
 function onThemeChanged(newMode: boolean | 'auto') {
   state.appConfiguration.darkTheme = newMode

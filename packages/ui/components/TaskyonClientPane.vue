@@ -18,7 +18,11 @@
     :worker-stream="workerStream"
     :data-cy="chatDataCy"
     :data-runtime-status="status"
-  />
+  >
+    <template v-if="$slots['header-actions']" #header-actions>
+      <slot name="header-actions" />
+    </template>
+  </TaskChatWindow>
 </template>
 
 <script setup lang="ts">

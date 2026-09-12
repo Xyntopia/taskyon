@@ -4,6 +4,8 @@ export {
   CODEX_PROVIDER_NAME,
   getCodexAccountIdFromCredentials,
   getCodexAuthClaims,
+  fetchModelsForProvider,
+  getProviderModelFallbacks,
   getProviderOauthConfig,
   getProviderOauthCredentialsKey,
   OAuthCredentials,

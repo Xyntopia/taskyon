@@ -6,6 +6,7 @@
         <span class="text-subtitle2">{{ resolvedPresentation.assistantLabel }}</span>
       </div>
       <q-space />
+      <slot name="header-actions" />
       <CopyTaskChatButton
         v-if="copyableThread.length > 0"
         flat

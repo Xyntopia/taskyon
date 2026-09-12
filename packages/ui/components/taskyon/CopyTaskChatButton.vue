@@ -50,7 +50,9 @@ const copyConversation = async (everything: boolean) => {
   try {
     const id = props.selectedTaskId
     const tasks =
-      props.client && id ? await props.client.taskModel.exportSelection(id) : props.tasks
+      everything && props.client && id
+        ? await props.client.taskModel.exportSelection(id)
+        : props.tasks
     const selected = everything ? tasks : selectTasksForChatCopy(tasks, props.tools ?? {}, false)
     await copyToClipboard(
       chat2Md(selected, everything, everything && id ? { leafID: id } : undefined),

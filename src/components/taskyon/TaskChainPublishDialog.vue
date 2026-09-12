@@ -179,9 +179,10 @@ import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import QrCode from '@taskyon/ui/components/QrCode.vue'
 import CopyTaskChatButton from '@taskyon/ui/components/taskyon/CopyTaskChatButton.vue'
 import { selectTasksForChatCopy } from '@taskyon/ui/components/taskyon/taskChatVisibility'
+import { saveFile } from '@taskyon/ui/modules/fileSave'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
-import { exportFile, useQuasar } from 'quasar'
+import { useQuasar } from 'quasar'
 import { getFileId, useGdrive } from 'src/modules/gdrive'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
@@ -338,7 +339,7 @@ async function onExportChatMD(taskList: TaskNode[]) {
         const fileName = `tyn-${task.name || ''}.md`
         const mimeType = 'text/markdown; charset=UTF-8'
 
-        exportFile(fileName, taskThreadMd, mimeType)
+        await saveFile(fileName, mimeType, () => taskThreadMd)
       }
     }
   } catch {
@@ -360,8 +361,7 @@ async function onExportChatYaml(taskList: TaskNode[]) {
         const fileName = `tyn-${task.name || ''}.yaml`
         const mimeType = 'text/yaml'
 
-        // Use Quasar's exportFile function for download
-        exportFile(fileName, taskThreadYaml, mimeType)
+        await saveFile(fileName, mimeType, () => taskThreadYaml)
       }
     }
   } catch {
