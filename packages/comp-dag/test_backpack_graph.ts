@@ -517,7 +517,11 @@ export const testBackpackGraphLoadsImmutableTypeScriptNodeDirectory = async () =
   const initial = await runBackpackRoot(files, rootHash)
   const patched = await patchBackpackMaxWeight(files, rootHash, 5)
   const patchedRun = await runBackpackRoot(patched.files, patched.newHashes.recommendation)
-  const patchedNodesByHash = await loadStoredGraphNodeFiles(patched.files)
+  const patchedNodesByHash = await compileDesignRepositoryNodes({
+    nodesByHash: await loadStoredGraphNodeFiles(patched.files),
+    moduleLocksByHash: {},
+    modulesByHash: {},
+  })
   const staticSummary = await createStaticSummaryRecord(patched.newHashes.recommendation)
   const mixedCompiled = compileDagNodeRecordGraph({
     graph: {
