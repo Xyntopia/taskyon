@@ -101,7 +101,7 @@ const fetchOnce = async (url: URL, options: SecureFetchOptions, token: string) =
         options.body,
       ),
     )
-    const response = await parseHttpResponseStream(connection.read, finish)
+    const response = await parseHttpResponseStream(() => connection.read(), finish)
     const hasBody =
       options.method?.toUpperCase() !== 'HEAD' && ![204, 205, 304].includes(response.status)
     if (!hasBody) await response.body.cancel()
@@ -167,7 +167,8 @@ export async function secureFetch(
     if (becomesGet) {
       headers.delete('content-length')
       headers.delete('content-type')
-      const { body: _body, ...withoutBody } = requestOptions
+      const withoutBody = { ...requestOptions }
+      delete withoutBody.body
       requestOptions = { ...withoutBody, method: 'GET', headers }
     } else requestOptions = { ...requestOptions, headers }
     url = nextUrl

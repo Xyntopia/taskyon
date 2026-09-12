@@ -62,6 +62,9 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testNodeDiscoveryThroughLocalRelay: {
     requiresNetwork: true,
   },
+  testSecureFetchRustTlsThroughLocalRelay: {
+    requiresNetwork: true,
+  },
   testEntryNodeRecoversFromMalformedPythonToolCall: {
     requiresNetwork: true,
     modelBased: true,

@@ -112,12 +112,15 @@ The TLS engine is `packages/https_tunnel_wasm`: TypeScript owns the authenticate
 HTTP/1.1 stream, while Rustls owns certificate validation, the TLS handshake, encryption, and
 record processing. The production build generates the ignored WASM package from Rust source.
 
-Run `yarn test:secure-fetch:local` for a self-contained WSS test with no Supabase dependency. The
-in-app `testSecureFetch` diagnostic exercises browser HTTP and HTTPS requests through the hosted
-WSS relay. Run `yarn test:secure-fetch:online` for the rate-paced 117-case public HTTP/HTTPS
-smoke matrix. Add `--quick`, `--tls`, or `--target=<name>` for focused runs. The TLS matrix permits
-only TLS 1.2 and 1.3 and covers RSA, ECDSA P-256/P-384, several modern cipher suites, and
-invalid-certificate rejection.
+The standard network diagnostics include `testSecureFetchRustTlsThroughLocalRelay`. It starts a
+test-only loopback WebSocket-to-TCP relay and fetches both HTTP and HTTPS from `example.com`; the
+HTTPS connection is terminated by Rustls WASM. This test does not use Supabase or the commercial
+Taskyon proxy. The in-app `testSecureFetch` diagnostic additionally exercises browser requests
+through the hosted WSS relay when that commercial service is available.
+
+The TLS client permits only TLS 1.2 and 1.3. The public smoke-target catalog contains 117 HTTP,
+HTTPS, API, redirect, streaming, compression, and TLS-policy cases for deployments that provide a
+compatible authenticated tunnel.
 
 ## Building
 
