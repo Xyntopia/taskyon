@@ -1791,12 +1791,13 @@ async function loginProvider(
   let accessToken: string
   if (selectedApi === CODEX_PROVIDER_NAME) {
     const { loginWithCodexOauthCli } = await import('./codexOauthLogin')
+    const workspaceId = process.env[`${environmentPrefix}_CHATGPT_WORKSPACE_ID`]?.trim()
     const session = await loginWithCodexOauthCli({
       api,
       taskyon: ty,
       storage: oauthStorage,
       forceReauth: forceLogin,
-      workspaceId: process.env[`${environmentPrefix}_CHATGPT_WORKSPACE_ID`]?.trim(),
+      ...(workspaceId ? { workspaceId } : {}),
     })
     accessToken = session.accessToken
     applyCodexAccountHeader(llmState, session.accountId)
@@ -2017,7 +2018,10 @@ async function promptForMainInput(
 ): Promise<string | null> {
   const stdin = process.stdin
   if (!stdin.isTTY) {
-    const answer = askQuestion(rl, promptText, { signal, interruptNotice: false })
+    const answer = askQuestion(rl, promptText, {
+      ...(signal ? { signal } : {}),
+      interruptNotice: false,
+    })
     onReady?.()
     return await answer
   }
@@ -3044,8 +3048,9 @@ async function main(host: InteractiveCliHost) {
   const pgliteNodeDir = join(configDir, 'runtime', `${errorTimestamp()}-${process.pid}`, 'pglite')
   await mkdir(pgliteNodeDir, { recursive: true })
   const cliSecretStore = configStore.createCliSecretStore(cryptoSession)
+  const preferredApi = stored.selectedApi ?? host.defaultProvider
   const selectedApi = resolveProviderSelection(
-    { ...stored, selectedApi: stored.selectedApi ?? host.defaultProvider },
+    { ...stored, ...(preferredApi ? { selectedApi: preferredApi } : {}) },
     host.environmentPrefix,
   )
 
@@ -3058,7 +3063,7 @@ async function main(host: InteractiveCliHost) {
   const model = resolveStoredModel(stored, selectedApi)
   const reasoningEffort = resolveStoredReasoningEffort(stored)
   const config = {
-    selectedApi,
+    ...(selectedApi ? { selectedApi } : {}),
     ...(model ? { model } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),
   } as CliApiConfig
@@ -3159,11 +3164,22 @@ async function main(host: InteractiveCliHost) {
         if (interrupted) {
           promptAbort = new AbortController()
           interrupted = false
-          const answer = await askQuestion(rl, `Quit ${host.commandName}? (y/N) `, {
-            signal: promptAbort.signal,
-            interruptNotice: false,
-          })
-          if (isReadlineClosed(rl) || answer?.trim().toLowerCase() === 'y') break
+          let quitOnEof = false
+          const answer = await promptForMainInput(
+            rl,
+            `Quit ${host.commandName}? (y/N) `,
+            () => Promise.resolve(null),
+            () => Promise.resolve(null),
+            interruptPrompt,
+            () => {
+              quitOnEof = true
+              writeLine('Ctrl-D received.')
+            },
+            undefined,
+            host.environmentPrefix,
+            promptAbort.signal,
+          )
+          if (quitOnEof || isReadlineClosed(rl) || answer?.trim().toLowerCase() === 'y') break
           writeLine('Quit cancelled.')
           continue
         }
@@ -3366,18 +3382,20 @@ async function main(host: InteractiveCliHost) {
           pythonTool: null,
           storageClient,
           workspaceOperations,
-          prepareGraphRepository: host.prepareGraphRepository
-            ? () => {
-                graphPreparation ??= host.prepareGraphRepository!(
-                  storageClient,
-                  reportStartup,
-                ).catch((error: unknown) => {
-                  graphPreparation = undefined
-                  throw error
-                })
-                return graphPreparation
+          ...(host.prepareGraphRepository
+            ? {
+                prepareGraphRepository: () => {
+                  graphPreparation ??= host.prepareGraphRepository!(
+                    storageClient,
+                    reportStartup,
+                  ).catch((error: unknown) => {
+                    graphPreparation = undefined
+                    throw error
+                  })
+                  return graphPreparation
+                },
               }
-            : undefined,
+            : {}),
         }),
         createIframeMultiPlexer: () =>
           createUnavailableIframeMux('Iframe message bridging is not available in this CLI.'),

@@ -40,8 +40,8 @@ export async function runCodexOauthTerminalFixture() {
     api,
     storage: { authDir, secretId: 'synthetic' },
     taskyon: {
-      getSecret: (_id: string, name: string) => Promise.resolve(secrets.get(name)),
-      setSecret: (_id: string, name: string, value: string) => {
+      getSecret: (_id: string | number, name: string) => Promise.resolve(secrets.get(name) ?? null),
+      setSecret: (_id: string | number, name: string, value: string) => {
         secrets.set(name, value)
         return Promise.resolve()
       },
@@ -49,10 +49,10 @@ export async function runCodexOauthTerminalFixture() {
   }
   let pinnedWorkspace = false
   let callback: Promise<void> | undefined
-  process.stdout.write = (chunk, ...rest) => {
-    const text = String(chunk)
+  process.stdout.write = (chunk) => {
+    const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString()
     const authorization = text.match(/https:\/\/provider\.example\/authorize\?\S+/)?.[0]
-    if (!authorization) return originalWrite(chunk, ...rest)
+    if (!authorization) return originalWrite(chunk)
     const url = new URL(authorization)
     pinnedWorkspace ||= url.searchParams.has('allowed_workspace_id')
     const redirect = new URL(url.searchParams.get('redirect_uri')!)
@@ -71,7 +71,8 @@ export async function runCodexOauthTerminalFixture() {
     return true
   }
   globalThis.fetch = (url) => {
-    if (String(url) !== 'https://provider.example/token') throw new Error('Unexpected network call')
+    const href = url instanceof Request ? url.url : url.toString()
+    if (href !== 'https://provider.example/token') throw new Error('Unexpected network call')
     originalWrite('TOKEN_EXCHANGED\n')
     return Promise.resolve(
       Response.json({ access_token: token, id_token: token, expires_in: 3600 }),

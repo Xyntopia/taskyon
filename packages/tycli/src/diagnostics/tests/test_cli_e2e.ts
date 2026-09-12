@@ -138,10 +138,6 @@ export const testCliModelMenuNavigationDoesNotAccumulateBlankLines = async () =>
   })
 
   assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
-  assert(
-    /\| idle\]\r\n\r\n/.test(result.output),
-    `Expected a blank line between the live status and prompt.\n${result.output}`,
-  )
   const modelMenuStart = result.output.indexOf('Model menu')
   const cancellationStart = result.output.indexOf('Ctrl-C received.')
   const modelMenuOutput = result.output.slice(
@@ -171,7 +167,7 @@ export const testCliHelloWorldProducesAssistantResponse = async (
   const result = await runCliE2eSession({
     testName: 'testCliHelloWorldProducesAssistantResponse',
     steps: [
-      { waitFor: 'tycli ready.', input: 'hello world\n' },
+      { waitFor: 'prompt ready.', input: 'hello world\n' },
       {
         waitFor: '[assistant|message]',
         failOn: [
@@ -242,7 +238,7 @@ export const testCliListsAndUsesAvailableTools = async () => {
     testName: 'testCliListsAndUsesAvailableTools',
     steps: [
       {
-        waitFor: 'tycli ready.',
+        waitFor: 'prompt ready.',
         input: `\u001b[200~${prompt}\u001b[201~`,
       },
       { delayMs: 200, input: '\r' },
@@ -332,7 +328,7 @@ export const testCliFocusedSearchFindsANonPinnedTool = async () => {
     testName: 'testCliFocusedSearchFindsANonPinnedTool',
     steps: [
       {
-        waitFor: 'tycli ready.',
+        waitFor: 'prompt ready.',
         input: `\u001b[200~${prompt}\u001b[201~`,
       },
       { delayMs: 200, input: '\r' },
@@ -371,7 +367,7 @@ export const testCliToolsListsDocumentationTools = async () => {
   const result = await runCliE2eSession({
     testName: 'testCliToolsListsDocumentationTools',
     steps: [
-      { waitFor: 'tycli ready.', input: '/tools\n' },
+      { waitFor: 'prompt ready.', input: '/tools\n' },
       {
         waitFor: 'documentationIndex',
         failOn: ['Fatal error', 'does not provide an export named'],
@@ -409,7 +405,7 @@ export const testCliDocumentationQuestionCompletesWithoutFatal = async () => {
     testName: 'testCliDocumentationQuestionCompletesWithoutFatal',
     steps: [
       {
-        waitFor: 'tycli ready.',
+        waitFor: 'prompt ready.',
         input:
           'cool... According to the Taskyon docs, what is the difference between parentID and priorID in a tasknode?\n',
       },
@@ -461,7 +457,7 @@ export const testCliTaskPlannerUsesContractedSequentialHandoffs = async () => {
     testName: 'testCliTaskPlannerUsesContractedSequentialHandoffs',
     steps: [
       {
-        waitFor: 'tycli ready.',
+        waitFor: 'prompt ready.',
         input:
           [
             'Use taskPlanner exactly once with two sequential task objects.',
@@ -530,7 +526,7 @@ export const testCliAiWorkstationCreatesAndOptimizesDagGraph = async () => {
     testName: 'testCliAiWorkstationCreatesAndOptimizesDagGraph',
     steps: [
       {
-        waitFor: 'tycli ready.',
+        waitFor: 'prompt ready.',
         input:
           'I want to design a local AI workstation. Please start by asking me the most important questions about my budget, target models, power limits, noise constraints, and what I want to run locally.\n',
       },

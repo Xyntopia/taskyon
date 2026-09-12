@@ -499,7 +499,7 @@ export async function testCliStartupShowsVersionCommitAndBuildDate() {
   assertContains(result.output, 'tycli 0.1.0')
   assertMatches(result.output, /tycli log: \S*\/tycli_\d{8}-\d{6}_\d+\.log/)
   assertContains(result.output, 'Conversation storage:')
-  assertContains(result.output, 'tycli ready.')
+  assertContains(result.output, 'tycli prompt ready.')
   assertContains(result.output, '| idle]')
 }
 
@@ -511,7 +511,7 @@ export async function testTerminalKitFooterOptInStartsAndExits() {
     runner: 'pty',
   })
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
-  assertContains(result.output, 'tycli ready.')
+  assertContains(result.output, 'tycli prompt ready.')
   assertContains(result.output, 'No conversation saved: no messages.')
   assertNotContains(result.output, 'Fatal error')
 }
@@ -951,7 +951,7 @@ export async function testCliConcurrentSessionsStartWithSharedHome() {
     runCliE2eSession({
       testName: `testCliConcurrentSessionsStartWithSharedHome-${label}`,
       homeKey: 'testCliConcurrentSessionsStartWithSharedHome',
-      steps: [{ waitFor: 'tycli ready.', failOn: ['Fatal error'], input: '/exit\n' }],
+      steps: [{ waitFor: 'prompt ready.', failOn: ['Fatal error'], input: '/exit\n' }],
       env: { TYCLI_HOTKEY_MENUS: '0' },
       runner: 'pty',
       timeoutMs: 60_000,
@@ -962,7 +962,7 @@ export async function testCliConcurrentSessionsStartWithSharedHome() {
     if (result.code !== 0) {
       throw new Error(`Expected tycli exit code 0, got ${String(result.code)}.\n${result.output}`)
     }
-    assertContains(result.output, 'tycli ready.')
+    assertContains(result.output, 'tycli prompt ready.')
     assertNotContains(result.output, 'Fatal error')
   }
 }
@@ -975,16 +975,6 @@ export async function testEmptyCliSessionDoesNotCreateConversationFile() {
     runner: 'pty',
   })
   if (result.code !== 0) throw new Error(`Expected exit code 0, got ${String(result.code)}`)
-  const storageMatch = result.output.match(/Conversation storage: (.+\.md)/)
-  if (!storageMatch?.[1]) {
-    throw new Error(`Expected the planned conversation path in startup output.\n${result.output}`)
-  }
-  try {
-    await access(storageMatch[1].trim(), fsConstants.F_OK)
-    throw new Error(`Empty session created a conversation file: ${storageMatch[1].trim()}`)
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Empty session created')) throw error
-  }
   const configPath = join(
     TEST_HOME,
     'testEmptyCliSessionDoesNotCreateConversationFile',
@@ -993,7 +983,8 @@ export async function testEmptyCliSessionDoesNotCreateConversationFile() {
     'config.json',
   )
   const storedConfig = await readFile(configPath, 'utf8')
-  assertNotContains(storedConfig, storageMatch[1].trim())
+  assertNotContains(storedConfig, 'conversationPath')
+  assertContains(result.output, 'Conversation storage: deferred until the task engine is needed.')
   assertContains(result.output, 'No conversation saved: no messages.')
   assertNotContains(result.output, 'Conversation saved:')
 }
@@ -1155,7 +1146,7 @@ export async function testEscapeCancelsModelMenuAndKeepsPromptUsable() {
     steps: [
       { waitFor: 'Slash commands:', input: '/model\n' },
       { waitFor: 'Model menu', input: '\u001b' },
-      { waitFor: 'idle]', input: '/tools\n' },
+      { waitFor: '\u001b[?2004h> ', input: '/tools\n' },
       { waitFor: 'Active tool definitions:', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },

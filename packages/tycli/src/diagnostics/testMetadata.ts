@@ -76,6 +76,10 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testCliHelloWorldProducesAssistantResponse: {
     requiresNetwork: true,
   },
+  testCliFocusedSearchFindsANonPinnedTool: {
+    requiresNetwork: true,
+    modelBased: true,
+  },
   testCliListsAndUsesAvailableTools: {
     requiresNetwork: true,
     requiresLargeTokens: true,
