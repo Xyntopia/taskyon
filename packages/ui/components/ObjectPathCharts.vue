@@ -489,7 +489,7 @@ import type {
 } from '@taskyon/common/modules/plotMath'
 import { buildPlotValueFromRows } from '@taskyon/common/modules/plotMath'
 import { useSharedRunLogs } from '@taskyon/common/modules/runLogs'
-import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
+import type { ObjectPathChartDefinition } from './objectPathChartTypes'
 import ObjectPathChartAxesEditor from './ObjectPathChartAxesEditor.vue'
 import ObjectPathChartMapEditor from './ObjectPathChartMapEditor.vue'
 import {
@@ -498,7 +498,7 @@ import {
 } from './objectPathChartsResolver'
 import ListChart from './varViews/ListChart.vue'
 
-export type { ObjectPathChartDefinition }
+export type { ObjectPathChartDefinition } from './objectPathChartTypes'
 export type ObjectPathChartsViewOptions = {
   viewMode?: 'full' | 'viewOnly' | 'thumbnail' | undefined
   minimalView?: boolean | undefined

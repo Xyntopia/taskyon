@@ -129,7 +129,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { PlotResolution } from '@taskyon/common/modules/plotMath'
-import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
+import type { ObjectPathChartDefinition } from './objectPathChartTypes'
 import { decodeQueryAxisKey } from '@taskyon/comp-dag/queryPipeline'
 
 type Option = { label: string; value: string }

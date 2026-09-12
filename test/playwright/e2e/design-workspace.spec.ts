@@ -4,7 +4,7 @@ test.describe('design workspace', () => {
   test('opens, renders, and reruns the local AI workstation example', async ({ page }) => {
     const pageErrors: string[] = []
     const relevantConsoleErrors: string[] = []
-    page.on('pageerror', (error) => pageErrors.push(error.message))
+    page.on('pageerror', (error) => pageErrors.push(error.stack ?? error.message))
     page.on('console', (message) => {
       if (
         message.type() === 'error' &&

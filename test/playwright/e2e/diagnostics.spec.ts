@@ -5,6 +5,7 @@ import {
   dataCy,
   readOnlineEnv,
   selectLlmModel,
+  testModelId,
   waitForTaskyonSession,
   writeMessage,
 } from '../support/taskyon'
@@ -71,7 +72,7 @@ test.describe('diagnostics page', () => {
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()
     await waitForTaskyonSession(page)
-    await selectLlmModel(page, 'openai', 'gpt-5.1')
+    await selectLlmModel(page, 'taskyon', testModelId)
 
     const assistantMessages = page.locator('.assistant.message')
     const initialAssistantMessageCount = await assistantMessages.count()
@@ -91,6 +92,7 @@ test.describe('diagnostics page', () => {
     ).toBe('created')
     const routingErrors = page.locator('.task-container.error, .task-container:has(.text-negative)')
     const clarificationDialog = page.getByRole('dialog').filter({ hasText: 'Clarify Request' })
+    const processingComplete = page.getByRole('button', { name: 'all processed', exact: true })
     const outcome = await Promise.race([
       expect(assistantMessages)
         .toHaveCount(initialAssistantMessageCount + 1, { timeout: diagnosticsTimeoutMs })
@@ -105,6 +107,9 @@ test.describe('diagnostics page', () => {
           type: 'error' as const,
           message: await routingErrors.first().innerText(),
         })),
+      processingComplete
+        .waitFor({ state: 'visible', timeout: diagnosticsTimeoutMs })
+        .then(() => ({ type: 'processed' as const })),
     ])
     expect(outcome.type, outcome.type === 'error' ? outcome.message : undefined).not.toBe('error')
     await expect(routingErrors).toHaveCount(0)
@@ -139,7 +144,7 @@ test.describe('diagnostics page', () => {
 
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()
-    await selectLlmModel(page, 'openai', 'gpt-4.1')
+    await selectLlmModel(page, 'openai', 'gpt-5.1')
     await page.goto('/diagnostics')
 
     await page.getByLabel('Filter tests').fill('testTaskyonUiListsAndUsesAvailableTools')

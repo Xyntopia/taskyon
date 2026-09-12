@@ -1,4 +1,4 @@
-import type { ObjectPathChartDefinition } from './ObjectPathChartAxesEditor.vue'
+import type { ObjectPathChartDefinition } from './objectPathChartTypes'
 
 export type ResolverChartVariant = 'plot' | 'map'
 
@@ -18,8 +18,18 @@ export type ResolvePayloadInput = {
   index: number
   buildPlotPayload: () => ResolverPayload
   buildMapPayload: () => ResolverPayload
-  plotPayloadResolver?: ((args: { chart: ObjectPathChartDefinition; index: number }) => ResolverPayload | Promise<ResolverPayload>) | null
-  mapPayloadResolver?: ((args: { chart: ObjectPathChartDefinition; index: number }) => ResolverPayload | Promise<ResolverPayload>) | null
+  plotPayloadResolver?:
+    | ((args: {
+        chart: ObjectPathChartDefinition
+        index: number
+      }) => ResolverPayload | Promise<ResolverPayload>)
+    | null
+  mapPayloadResolver?:
+    | ((args: {
+        chart: ObjectPathChartDefinition
+        index: number
+      }) => ResolverPayload | Promise<ResolverPayload>)
+    | null
 }
 
 export const resolveObjectPathChartPayload = async (
@@ -42,7 +52,8 @@ export const normalizeResolvedChartPayload = (
   variant: ResolverChartVariant,
   payload: ResolverPayload,
 ): ResolverPayload => {
-  const hasPayloadData = variant === 'plot' ? payload.plotValue !== undefined : payload.mapValue !== undefined
+  const hasPayloadData =
+    variant === 'plot' ? payload.plotValue !== undefined : payload.mapValue !== undefined
   if (hasPayloadData || payload.error) return payload
   return {
     ...payload,
