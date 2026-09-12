@@ -33,20 +33,21 @@ export const testClientTaskModelImmediateAndBranchSelection = async () => {
   ]
   let reads = 0
   const model = createClientTaskModel({
-    get: async ({ id }) => {
+    get: ({ id }) => {
       reads++
-      return tasks.find((task) => task.id === id) ?? null
+      return Promise.resolve(tasks.find((task) => task.id === id) ?? null)
     },
-    readRecords: async (request) => ({
-      records: tasks
-        .filter((task) =>
-          request.mode === 'ids'
-            ? request.ids.includes(task.id)
-            : task.parentID === request.parentID,
-        )
-        .map(taskNodeToRecord),
-      next: null,
-    }),
+    readRecords: (request) =>
+      Promise.resolve({
+        records: tasks
+          .filter((task) =>
+            request.mode === 'ids'
+              ? request.ids.includes(task.id)
+              : task.parentID === request.parentID,
+          )
+          .map(taskNodeToRecord),
+        next: null,
+      }),
   })
   tasks.forEach(model.ingest)
   if (
@@ -85,7 +86,7 @@ export const testClientTaskModelProgressiveReadsAndReset = async () => {
         release = resolve
       })
     },
-    readRecords: async () => ({ records: [], next: null }),
+    readRecords: () => Promise.resolve({ records: [], next: null }),
   })
   model.ingest(leaf)
   const loading = model.loadLineage('leaf')
@@ -132,18 +133,21 @@ export const testClientTaskModelKeepsSubtasksAndRejectsMissingExports = async ()
   ]
   let missing = false
   const model = createClientTaskModel({
-    get: async ({ id }) =>
-      missing && id === 'data' ? null : (tasks.find((task) => task.id === id) ?? null),
-    readRecords: async (request) => ({
-      records: tasks
-        .filter((task) =>
-          request.mode === 'ids'
-            ? request.ids.includes(task.id)
-            : task.parentID === request.parentID,
-        )
-        .map(taskNodeToRecord),
-      next: null,
-    }),
+    get: ({ id }) =>
+      Promise.resolve(
+        missing && id === 'data' ? null : (tasks.find((task) => task.id === id) ?? null),
+      ),
+    readRecords: (request) =>
+      Promise.resolve({
+        records: tasks
+          .filter((task) =>
+            request.mode === 'ids'
+              ? request.ids.includes(task.id)
+              : task.parentID === request.parentID,
+          )
+          .map(taskNodeToRecord),
+        next: null,
+      }),
   })
   await model.discover('continue')
   if (!model.selection('continue').some((task) => task.id === 'summary'))
@@ -179,13 +183,13 @@ export const testClientTaskModelResultCache = async () => {
   }
   let reads = 0
   const model = createClientTaskModel({
-    get: async ({ id }) => {
+    get: ({ id }) => {
       reads++
-      return id === result.id ? result : null
+      return Promise.resolve(id === result.id ? result : null)
     },
-    readRecords: async () => {
+    readRecords: () => {
       reads++
-      return { records: [taskNodeToRecord(result)], next: null }
+      return Promise.resolve({ records: [taskNodeToRecord(result)], next: null })
     },
   })
   model.ingest(call)

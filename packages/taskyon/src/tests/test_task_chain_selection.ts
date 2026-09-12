@@ -15,19 +15,11 @@ export const testLineageSelectionUsesRecordsWithoutContent = async () => {
       includeSubtaskResults: 'none',
     },
     {
-      getLinks: async (id) => records.find((record) => record.id === id) ?? null,
-      getTask: async () => {
-        throw new Error('Lineage must not hydrate contents.')
-      },
-      getFlattenedChain: async () => {
-        throw new Error('Lineage must not flatten subtasks.')
-      },
-      searchAllDirectChildren: async () => {
-        throw new Error('Lineage must not load children.')
-      },
-      findSiblingLeafTasks: async () => {
-        throw new Error('Lineage must not load result leaves.')
-      },
+      getLinks: (id) => Promise.resolve(records.find((record) => record.id === id) ?? null),
+      getTask: () => Promise.reject(new Error('Lineage must not hydrate contents.')),
+      getFlattenedChain: () => Promise.reject(new Error('Lineage must not flatten subtasks.')),
+      searchAllDirectChildren: () => Promise.reject(new Error('Lineage must not load children.')),
+      findSiblingLeafTasks: () => Promise.reject(new Error('Lineage must not load result leaves.')),
     },
   )
   assert(selection.taskIds.join(',') === 'root,leaf', 'Expected record-only lineage.')

@@ -26,21 +26,23 @@ export async function loadStaticEmbeddingModelAssets(
     .parse(
       JSON.parse(new TextDecoder().decode(await readAsset(`${baseUrl}/static-embedding.json`))),
     )
-  const buffers = await Promise.all(
-    [manifest.embeddings, manifest.scales].map(async (entry) => {
-      if (!/^[\w.-]+$/.test(entry.file)) throw new Error('Invalid model asset filename')
-      const data = await readAsset(`${baseUrl}/${entry.file}`)
-      const digest = await crypto.subtle.digest('SHA-256', data)
-      const actual = [...new Uint8Array(digest)]
-        .map((value) => value.toString(16).padStart(2, '0'))
-        .join('')
-      if (actual !== entry.sha256.replace(/^sha256:/, '').toLowerCase())
-        throw new Error('Model asset checksum mismatch')
-      return data
-    }),
-  )
-  const embeddings = new Int8Array(buffers[0])
-  const scales = new Float32Array(buffers[1])
+  const loadAsset = async (entry: { file: string; sha256: string }) => {
+    if (!/^[\w.-]+$/.test(entry.file)) throw new Error('Invalid model asset filename')
+    const data = await readAsset(`${baseUrl}/${entry.file}`)
+    const digest = await crypto.subtle.digest('SHA-256', data)
+    const actual = [...new Uint8Array(digest)]
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('')
+    if (actual !== entry.sha256.replace(/^sha256:/, '').toLowerCase())
+      throw new Error('Model asset checksum mismatch')
+    return data
+  }
+  const [embeddingsBuffer, scalesBuffer] = await Promise.all([
+    loadAsset(manifest.embeddings),
+    loadAsset(manifest.scales),
+  ])
+  const embeddings = new Int8Array(embeddingsBuffer)
+  const scales = new Float32Array(scalesBuffer)
   if (
     embeddings.length !== manifest.vocabularySize * manifest.dimensions ||
     scales.length !== manifest.vocabularySize

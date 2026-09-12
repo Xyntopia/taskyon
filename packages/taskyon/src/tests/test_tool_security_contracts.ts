@@ -101,7 +101,7 @@ export async function tool_security_contractsMediatedFetchSupportsHttpAndHttps()
   const mediatedFetch = createMediatedFetch({
     authorize: () => Promise.resolve(true),
     fetch: (input) => {
-      requestedUrls.push(String(input))
+      requestedUrls.push(input instanceof Request ? input.url : input.toString())
       return Promise.resolve(new Response('ok'))
     },
   })

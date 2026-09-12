@@ -7,7 +7,7 @@ import { TaskNodeMeta } from '../types/chatCompletion'
 import type { TaskTreeNode } from '../types/taskNode'
 import {
   TaskContentRecord,
-  TaskNode,
+  type TaskNode,
   TaskNodeRecord,
   type partialTaskDraft,
 } from '../types/taskNode'

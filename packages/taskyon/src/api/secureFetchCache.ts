@@ -48,8 +48,10 @@ export const createStorageClientSecureFetchCache = (
       const stored = parseStoredEntry(value)
       if (!stored || stored.url !== url) return null
       await storage.set({ namespace, id: idFor(url), value: { ...stored, accessedAt: Date.now() } })
-      const { bodyBase64, accessedAt: _accessedAt, ...entry } = stored
-      return { ...entry, body: decode(bodyBase64) }
+      const { bodyBase64, accessedAt, ...entry } = stored
+      void accessedAt
+      const body = decode(bodyBase64)
+      return { ...entry, body }
     },
     set: async (entry) => {
       if (entry.body.byteLength > maxEntryBytes) return

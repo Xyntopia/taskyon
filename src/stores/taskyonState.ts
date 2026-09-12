@@ -112,7 +112,6 @@ import {
   trackShownTaskChainRequest,
 } from 'src/modules/taskyon/taskChainNavigation'
 import { type TyProfile } from 'src/modules/taskyon/types'
-import { asyncComputed } from 'src/modules/vueUtils'
 import { match, P } from 'ts-pattern'
 import { computed, onScopeDispose, onWatcherCleanup, readonly, ref, watch, watchEffect } from 'vue'
 import { useClientConversation } from '@taskyon/ui/modules/useClientConversation'

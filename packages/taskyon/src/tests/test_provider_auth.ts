@@ -177,7 +177,8 @@ export const testOauthSharedAuthorizationAndExchange = async () => {
     verifier: 'synthetic-verifier',
     redirectUri: 'http://localhost:1455/auth/callback',
     fetch: (_url, init) => {
-      const body = new URLSearchParams(String(init?.body))
+      if (typeof init?.body !== 'string') throw new Error('Expected a form-encoded request body')
+      const body = new URLSearchParams(init.body)
       assert(
         body.get('code_verifier') === 'synthetic-verifier',
         'Must exchange the original verifier',

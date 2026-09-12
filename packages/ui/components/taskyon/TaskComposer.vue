@@ -361,7 +361,7 @@ const addNewTask = async (mode: MessageExecutionMode) => {
   try {
     await submitTask(submittedTask, submittedAttachments, mode)
     pendingSubmission.value = undefined
-  } catch (error) {
+  } catch {
     if (clearDraft) {
       if (messageDraft.value === '') messageDraft.value = submittedMessageDraft
       fileAttachments.value = [

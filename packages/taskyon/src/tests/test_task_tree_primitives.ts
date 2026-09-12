@@ -43,9 +43,9 @@ export const testSharedTaskRecordHydration = async () => {
   }
   const record = taskNodeToRecord(task)
   let reads = 0
-  const hydrator = createTaskRecordHydrator(async () => {
+  const hydrator = createTaskRecordHydrator(() => {
     reads++
-    return { id: record.contentRef, content: task.content }
+    return Promise.resolve({ id: record.contentRef, content: task.content })
   }, 2)
   await hydrator.hydrate(record)
   const second = await hydrator.hydrate({ ...record, id: 'another-occurrence' })

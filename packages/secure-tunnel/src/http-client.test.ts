@@ -9,7 +9,7 @@ void test('TLS policy allows only TLS 1.2 and 1.3', () => {
 
 const readerFrom = (chunks: readonly string[]) => {
   const encoded = chunks.map((chunk) => new TextEncoder().encode(chunk))
-  return async () => encoded.shift() ?? null
+  return () => Promise.resolve(encoded.shift() ?? null)
 }
 
 void test('buildHttpRequest uses the effective Host header and closes one-shot tunnels', () => {
