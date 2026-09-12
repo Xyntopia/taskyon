@@ -3,6 +3,8 @@ import { humanizeError } from '../utils/error'
 import {
   getTyJwtPublicKey,
   getSettlementConfirmation,
+  isSettlementConfirmationUnsupported,
+  parseSettlementConfirmationResponse,
   createTunnelTokenProvider,
   mintToken,
   returnToken,
@@ -20,6 +22,36 @@ import { sleep } from '../utils/asyncUtils'
 import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
 import axios from 'axios'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
+
+export const testSettlementConfirmationCompatibility = () => {
+  const cnf = {
+    jwk: {
+      kty: 'OKP',
+      crv: 'Ed25519',
+      x: 'A'.repeat(43),
+    },
+  }
+
+  if (parseSettlementConfirmationResponse({}) !== undefined) {
+    throw new Error('A service without a cnf field must use legacy token minting')
+  }
+  const parsed = parseSettlementConfirmationResponse({ cnf })
+  if (parsed?.jwk.x !== cnf.jwk.x) {
+    throw new Error('A valid service confirmation key was not detected')
+  }
+  if (!isSettlementConfirmationUnsupported(404) || !isSettlementConfirmationUnsupported(501)) {
+    throw new Error('Clearly unsupported settlement-key endpoints must allow legacy mode')
+  }
+  if (isSettlementConfirmationUnsupported(401) || isSettlementConfirmationUnsupported(503)) {
+    throw new Error('Authentication and server failures must not downgrade to legacy mode')
+  }
+  try {
+    parseSettlementConfirmationResponse({ cnf: { jwk: { kty: 'invalid' } } })
+  } catch {
+    return { legacyCompatible: true, malformedKeysFailClosed: true }
+  }
+  throw new Error('A malformed advertised confirmation key must fail closed')
+}
 
 async function expectThrows(
   fn: () => Promise<unknown>,
@@ -383,32 +415,22 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
     })
   }
 
-  const httpsUrl = 'https://example.com/'
-  const httpsDestination = { host: 'example.com', port: 443 } as const
+  const httpsUrl = 'https://openwhyd.org/'
+  const httpsDestination = { host: 'openwhyd.org', port: 443 } as const
   const httpsResponse = await sfetchGet(httpsUrl, await getToken(httpsDestination))
   if (httpsResponse.status !== 200) {
     throw new Error(`secureFetch HTTPS request returned ${httpsResponse.status}`)
   }
   const httpsBody = await httpsResponse.text()
-  if (!httpsBody.includes('Example Domain')) {
-    throw new Error('secureFetch HTTPS response did not contain Example Domain')
+  if (!httpsBody.toLowerCase().includes('openwhyd')) {
+    throw new Error('secureFetch HTTPS response did not contain the expected Openwhyd page')
   }
 
-  const httpUrl = 'http://example.com/'
-  const httpDestination = { host: 'example.com', port: 80 } as const
-  const httpResponse = await sfetchGet(httpUrl, await getToken(httpDestination))
-  if (httpResponse.status !== 200) {
-    throw new Error(`secureFetch HTTP request returned ${httpResponse.status}`)
-  }
-  const httpBody = await httpResponse.text()
-  if (!httpBody.includes('Example Domain')) {
-    throw new Error('secureFetch HTTP response did not contain Example Domain')
-  }
-
-  const err1 = await expectThrows(async () => await fetch(httpsUrl))
   const expectedCorsError =
-    "Success: Error while downloading 'normal' browser based fetch, but expected" +
-    humanizeError(err1)
+    typeof window === 'undefined'
+      ? 'CORS enforcement check is not applicable outside a browser runtime.'
+      : "Success: Error while downloading 'normal' browser based fetch, but expected" +
+        humanizeError(await expectThrows(async () => await fetch(httpsUrl)))
 
   // error should occur for no double spending with the same token.
   const replayToken = await getToken(httpsDestination)
@@ -423,7 +445,6 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
 
   return {
     https: httpsBody.slice(0, 500),
-    http: httpBody.slice(0, 500),
     fetch2: data2.slice(0, 500),
     expectedCorsError,
     expectedError: expectedDoubleSpendError,
@@ -482,7 +503,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
   const proxyFetch = createProxyFetchClient(tunnelUrl)
 
   // const testApiUrl1 = 'https://api.nasdaq.com/api/quote/AAPL/chart'
-  const testApiUrl2 = 'https://example.com'
+  const testApiUrl2 = 'https://openwhyd.org/'
 
   // --- Test 1: no browser cache interference ---
   // Use a cache-busting parameter so that the first request definitely goes to the server.

@@ -60,16 +60,41 @@ export async function mintTokens(
   return response.data.tokens
 }
 
-export async function getSettlementConfirmation(serviceUrl: string): Promise<TokenConfirmation> {
+export function parseSettlementConfirmationResponse(
+  response: unknown,
+): TokenConfirmation | undefined {
+  if (
+    typeof response !== 'object' ||
+    response === null ||
+    !Object.prototype.hasOwnProperty.call(response, 'cnf')
+  ) {
+    return undefined
+  }
+  return ConfirmationSchema.parse(Reflect.get(response, 'cnf'))
+}
+
+export const isSettlementConfirmationUnsupported = (status: number | undefined) =>
+  status === 404 || status === 405 || status === 501
+
+export async function getSettlementConfirmation(
+  serviceUrl: string,
+): Promise<TokenConfirmation | undefined> {
   const url = new URL('/settlement-public-key', serviceUrl)
   if (url.protocol === 'wss:') url.protocol = 'https:'
   if (url.protocol === 'ws:') url.protocol = 'http:'
-  const response = await axios.get<{ cnf: unknown }>(url.toString())
-  return ConfirmationSchema.parse(response.data.cnf)
+  try {
+    const response = await axios.get<unknown>(url.toString())
+    return parseSettlementConfirmationResponse(response.data)
+  } catch (error) {
+    if (axios.isAxiosError(error) && isSettlementConfirmationUnsupported(error.response?.status)) {
+      return undefined
+    }
+    throw error
+  }
 }
 
 export function createSettlementConfirmationLoader(serviceUrl: string) {
-  let pending: Promise<TokenConfirmation> | undefined
+  let pending: Promise<TokenConfirmation | undefined> | undefined
   return {
     get: () => {
       pending ??= getSettlementConfirmation(serviceUrl).catch((error: unknown) => {
@@ -89,12 +114,14 @@ export function createBoundServiceTokenProvider(
   baseUrl: string,
   service: string,
   getAuthToken: () => string | Promise<string>,
+  legacyService = service,
 ) {
   const confirmation = createSettlementConfirmationLoader(serviceUrl)
   return async (claims: JsonObject, refreshInstanceKey = false) => {
     if (refreshInstanceKey) confirmation.clear()
+    const cnf = await confirmation.get()
     const tokens = await mintTokens(baseUrl, await getAuthToken(), [
-      { service, claims, cnf: await confirmation.get() },
+      { service: cnf ? service : legacyService, claims, ...(cnf ? { cnf } : {}) },
     ])
     if (!tokens[0]) throw new Error('Token service returned no service token')
     return tokens[0]
@@ -107,6 +134,7 @@ export function createTunnelTokenProvider(serviceUrl: string, baseUrl: string, a
     baseUrl,
     'web_tunnel',
     () => authToken,
+    'proxy',
   )
   return async (destination: { host: string; port: 80 | 443 }, refreshInstanceKey = false) => {
     return await getToken({ destination }, refreshInstanceKey)
