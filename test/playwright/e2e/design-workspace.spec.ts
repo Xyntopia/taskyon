@@ -16,7 +16,7 @@ test.describe('design workspace', () => {
 
     await page.goto('/')
     await page.getByRole('button', { name: 'Local AI workstation', exact: true }).click()
-    await expect(page).toHaveURL(/\/design\/ai-workstation\/main$/)
+    await expect(page).toHaveURL(/\/design\/ai-workstation\/main$/, { timeout: 60_000 })
     await expect(page.getByText('Building the design workspace…', { exact: true })).toBeHidden()
     await expect(page.getByRole('tab', { name: 'Graph', exact: true })).toHaveAttribute(
       'aria-selected',

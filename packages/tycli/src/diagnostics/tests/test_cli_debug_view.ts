@@ -1,4 +1,5 @@
 import type { TaskNode } from '@taskyon/taskyon'
+import { stripVTControlCharacters } from 'node:util'
 import { renderTaskProgress, renderWorkerProgress } from '../../cli/taskRenderer'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -34,7 +35,10 @@ const renderFunctionAndWorker = (detailedViewEnabled: boolean) => {
 
   renderTaskProgress(state, task, false)
   renderWorkerProgress(state, { stage: 'processing', task })
-  return { output: lines.join('\n'), debugOutput: debugLines.join('\n') }
+  return {
+    output: stripVTControlCharacters(lines.join('\n')),
+    debugOutput: stripVTControlCharacters(debugLines.join('\n')),
+  }
 }
 
 export const testCliDebugKeepsChatCompactUntilDetailedViewIsRequested = () => {
