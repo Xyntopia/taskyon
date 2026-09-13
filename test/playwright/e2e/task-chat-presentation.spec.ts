@@ -28,6 +28,20 @@ test.describe('task chat presentation', () => {
     expect(copied).not.toContain('collapsed arguments')
   })
 
+  test('shows function declarations and bindings only in dev mode', async ({ page }) => {
+    await page.goto('/task-chat-presentation-test')
+    const declaration = page.locator('[data-task-id="code-declaration"]')
+    const binding = page.locator('[data-task-id="function-binding"]')
+
+    await page.getByRole('button', { name: 'Enable expert mode' }).click()
+    await expect(declaration).toHaveCount(0)
+    await expect(binding).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Enable dev mode' }).click()
+    await expect(declaration).toContainText('internalCodeDeclaration')
+    await expect(binding).toContainText('internalFunctionBinding')
+  })
+
   for (const [viewport, size] of [
     ['desktop', { width: 1280, height: 720 }],
     ['mobile', { width: 390, height: 844 }],

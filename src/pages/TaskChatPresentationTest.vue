@@ -1,6 +1,13 @@
 <template>
   <q-page class="q-pa-md">
-    <TaskChatThread :tasks="tasks" :tools="tools" />
+    <q-btn label="Enable expert mode" @click="expertMode = true" />
+    <q-btn label="Enable dev mode" @click="showAllTasks = true" />
+    <TaskChatThread
+      :tasks="tasks"
+      :tools="tools"
+      :expert-mode="expertMode"
+      :show-all-tasks="showAllTasks"
+    />
     <TaskExecutionProgress :progress="liveProgress" />
     <CopyTaskChatButton data-cy="copy-visible-task-chat" :tasks="visibleTasks" flat dense />
   </q-page>
@@ -13,6 +20,10 @@ import TaskChatThread from '@taskyon/ui/components/taskyon/TaskChatThread.vue'
 import TaskExecutionProgress from '@taskyon/ui/components/taskyon/TaskExecutionProgress.vue'
 import { selectTasksForChatCopy } from '@taskyon/ui/components/taskyon/taskChatVisibility'
 import type { TaskExecutionProgress as TaskExecutionProgressState } from '@taskyon/ui/modules/taskExecutionProgress'
+import { ref } from 'vue'
+
+const expertMode = ref(false)
+const showAllTasks = ref(false)
 
 const tasks: TaskNode[] = [
   {
@@ -55,6 +66,36 @@ const tasks: TaskNode[] = [
     id: 'assistant-message',
     role: 'assistant',
     content: { type: 'message', data: 'Visible assistant message' },
+  },
+  {
+    id: 'code-declaration',
+    role: 'system',
+    content: {
+      type: 'tooldefinition',
+      data: {
+        name: 'internalCodeDeclaration',
+        description: 'Internal code declaration',
+        parameters: { type: 'object' },
+        code: 'return undefined',
+      },
+    },
+  },
+  {
+    id: 'function-binding',
+    role: 'system',
+    content: {
+      type: 'tooldefinition',
+      data: {
+        name: 'internalFunctionBinding',
+        description: 'Internal function binding',
+        implementation: {
+          type: 'binding',
+          target: 'visibleTool',
+          fixedArguments: {},
+          publicArguments: {},
+        },
+      },
+    },
   },
 ]
 
