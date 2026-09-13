@@ -55,8 +55,9 @@
       @scroll="updateAutoScroll"
     >
       <TaskChatThread
-        v-if="selectedThread.length > 0"
+        v-if="selectedThread.length > 0 || visiblePendingTask"
         :tasks="selectedThread"
+        :pending-task="visiblePendingTask"
         :tools="allTools"
         :expert-mode="expertMode"
         :presentation="presentation"
@@ -73,13 +74,13 @@
       </div>
       <TaskExecutionProgress v-if="liveProgress" :progress="liveProgress" />
       <div
-        v-if="selectedThread.length === 0 && status === 'ready'"
+        v-if="selectedThread.length === 0 && !visiblePendingTask && status === 'ready'"
         class="task-chat-window__empty fit column items-center justify-center text-center q-pa-md"
       >
         <div class="text-h6">{{ welcomeMessage }}</div>
       </div>
       <div
-        v-else-if="selectedThread.length === 0"
+        v-else-if="selectedThread.length === 0 && !visiblePendingTask"
         class="fit column items-center justify-center q-gutter-sm"
       >
         <q-spinner v-if="status === 'starting'" color="primary" size="2rem" />
@@ -102,6 +103,7 @@
       :placeholder="resolvedPresentation.composerPlaceholder"
       class="task-chat-window__composer q-pa-sm"
       @created="onTasksCreated"
+      @pending-submission="onPendingSubmission"
     />
   </section>
 </template>
@@ -171,6 +173,15 @@ const conversation = useClientConversation(
   () => selectedTaskId.value,
 )
 const selectedThread = conversation.tasks
+const pendingSubmission = ref<{
+  task: partialTaskDraft
+  conversationId: string | undefined
+}>()
+const visiblePendingTask = computed(() => {
+  const submission = pendingSubmission.value
+  if (!submission || submission.conversationId !== selectedTaskId.value) return undefined
+  return submission.task
+})
 const threadContainer = ref<HTMLElement>()
 const currentTask = computed(
   () => selectedThread.value.find((task) => task.id === selectedTaskId.value) ?? null,
@@ -239,6 +250,11 @@ const onTasksCreated = (taskId: string | undefined) => {
   void props.client?.task.get({ id: taskId }).then((task) => {
     if (task) void conversationHistory.record(task)
   })
+}
+
+const onPendingSubmission = (task: partialTaskDraft | undefined) => {
+  pendingSubmission.value = task ? { task, conversationId: selectedTaskId.value } : undefined
+  void scrollToThreadEnd()
 }
 
 const selectConversation = (taskId: string) => {

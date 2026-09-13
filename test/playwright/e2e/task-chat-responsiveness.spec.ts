@@ -1,19 +1,22 @@
 import { expect, test } from '@playwright/test'
 
 for (const width of [390, 1280]) {
-  test(`pending messages and expandable previews at ${width}px`, async ({ page }) => {
+  test(`submitted messages and expandable previews at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 })
     await page.goto('/task-chat-responsiveness-test')
     const input = page.getByRole('textbox')
     await input.fill('Show my message immediately')
     await input.press('Enter')
-    await expect(page.locator('[data-cy="pending-chat-message"]')).toContainText(
-      'Show my message immediately',
+    const pendingMessage = page.locator(
+      '[data-cy="taskyon-chat-thread"] [data-cy="pending-chat-message"]',
     )
+    await expect(pendingMessage).toContainText('Show my message immediately')
+    await expect(page.locator('.create-tasks [data-cy="pending-chat-message"]')).toHaveCount(0)
+    await expect(page.getByText('Sending…')).toHaveCount(0)
     await expect(page.getByText('Creation is waiting')).toBeVisible()
     await input.fill('I can still type')
     await page.getByRole('button', { name: 'Confirm creation' }).click()
-    await expect(page.locator('[data-cy="pending-chat-message"]')).toHaveCount(0)
+    await expect(pendingMessage).toHaveCount(0)
     await expect(page.locator('[data-cy="taskyon-chat-thread"]')).toContainText(
       'Show my message immediately',
     )

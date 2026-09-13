@@ -92,7 +92,7 @@ import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { humanizeError } from '@taskyon/common/modules/utils/error'
 import { safeYamlDump } from '@taskyon/common/modules/yamlUtils'
 import { taskRefToTaskId } from '@taskyon/taskyon/chat-ui'
-import type { FileAttachment, TaskNode } from '@taskyon/taskyon/api'
+import type { FileAttachment, partialTaskDraft } from '@taskyon/taskyon/api'
 import { computed } from 'vue'
 import type { MarkdownExtension } from '@taskyon/common/modules/markdownUtils '
 import ObjectView from '../varViews/ObjectView.vue'
@@ -103,7 +103,7 @@ import TyMarkdown from '../tyMarkdown.vue'
 
 const props = withDefaults(
   defineProps<{
-    task: TaskNode
+    task: partialTaskDraft
     getFile?: ((attachment: FileAttachment | string) => Promise<File | undefined>) | undefined
     expertMode?: boolean
     markdownEnabled?: boolean

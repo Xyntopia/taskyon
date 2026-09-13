@@ -1,9 +1,5 @@
 <template>
   <div :class="['create-tasks', { 'create-tasks--hero': heroMode }]">
-    <div v-if="pendingSubmission" class="q-pa-sm" role="status" data-cy="pending-chat-message">
-      <div class="text-body1" style="white-space: pre-wrap">{{ pendingSubmission.text }}</div>
-      <span class="text-caption text-grey">{{ pendingSubmission.status }}</span>
-    </div>
     <div v-if="selectedTaskType" class="create-tasks__mode text-caption text-center">
       <InfoDialog
         size="sm"
@@ -267,6 +263,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'created', taskId: string | undefined, taskIds: readonly string[]): void
+  (e: 'pending-submission', task: partialTaskDraft | undefined): void
 }>()
 
 const fileAttachments = defineModel<File[]>('fileAttachments', { default: () => [] })
@@ -341,7 +338,6 @@ const currentNewTask = computed(() => {
 })
 
 const submitting = ref(false)
-const pendingSubmission = ref<{ text: string; status: string }>()
 const addNewTask = async (mode: MessageExecutionMode) => {
   if (submitting.value) return
   submitting.value = true
@@ -349,10 +345,7 @@ const addNewTask = async (mode: MessageExecutionMode) => {
   const submittedMessageDraft = messageDraft.value
   const submittedAttachments = [...fileAttachments.value]
   const clearDraft = submittedTask.role === 'user'
-  pendingSubmission.value = {
-    text: submittedTask.content.type === 'message' ? submittedTask.content.data : 'Tool call',
-    status: 'Sending…',
-  }
+  emit('pending-submission', submittedTask)
   if (clearDraft) {
     messageDraft.value = ''
     fileAttachments.value = []
@@ -360,7 +353,6 @@ const addNewTask = async (mode: MessageExecutionMode) => {
 
   try {
     await submitTask(submittedTask, submittedAttachments, mode)
-    pendingSubmission.value = undefined
   } catch {
     if (clearDraft) {
       if (messageDraft.value === '') messageDraft.value = submittedMessageDraft
@@ -369,11 +361,12 @@ const addNewTask = async (mode: MessageExecutionMode) => {
         ...fileAttachments.value.filter((file) => !submittedAttachments.includes(file)),
       ]
     }
-    pendingSubmission.value = {
-      text: pendingSubmission.value?.text ?? submittedMessageDraft ?? '',
-      status: 'Send not confirmed. Check the conversation before resending.',
-    }
+    $q.notify({
+      type: 'warning',
+      message: 'Send not confirmed. Check the conversation before resending.',
+    })
   } finally {
+    emit('pending-submission', undefined)
     submitting.value = false
   }
 }

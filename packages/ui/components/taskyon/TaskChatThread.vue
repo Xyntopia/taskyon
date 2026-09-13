@@ -15,11 +15,17 @@
         <TaskChatMessage :task="task" :presentation="presentation" />
       </slot>
     </template>
+    <TaskChatMessage
+      v-if="pendingTask"
+      :task="pendingTask"
+      :presentation="presentation"
+      data-cy="pending-chat-message"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { TaskNode, ToolBase, TaskyonClient } from '@taskyon/taskyon/api'
+import type { partialTaskDraft, TaskNode, ToolBase, TaskyonClient } from '@taskyon/taskyon/api'
 import type { TaskChatPresentation } from '@taskyon/ui/modules/taskChatPresentation'
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import TaskToolResultRow from './TaskToolResultRow.vue'
@@ -30,6 +36,7 @@ import { selectTasksVisibleInChat } from './taskChatVisibility'
 const props = withDefaults(
   defineProps<{
     tasks: readonly TaskNode[]
+    pendingTask?: partialTaskDraft | undefined
     client?: TaskyonClient | undefined
     selectedTaskId?: string | undefined
     tools?: Readonly<Record<string, ToolBase>>
@@ -40,6 +47,7 @@ const props = withDefaults(
     presentation?: Partial<TaskChatPresentation>
   }>(),
   {
+    pendingTask: undefined,
     tools: () => ({}),
     reasoning: undefined,
     hiddenTaskIds: () => new Set<string>(),

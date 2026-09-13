@@ -26,7 +26,7 @@ import {
   mdiMessageTextOutline,
   mdiTools,
 } from '@quasar/extras/mdi-v6'
-import type { TaskNode } from '@taskyon/taskyon/api'
+import type { partialTaskDraft } from '@taskyon/taskyon/api'
 import {
   resolveTaskChatPresentation,
   type TaskChatPresentation,
@@ -36,7 +36,7 @@ import TaskContentView from './TaskContentView.vue'
 
 const props = withDefaults(
   defineProps<{
-    task: TaskNode
+    task: partialTaskDraft
     presentation?: Partial<TaskChatPresentation>
   }>(),
   {
