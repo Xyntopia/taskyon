@@ -18,6 +18,16 @@ RUN cargo build \
       --typescript \
       --out-dir pkg
 
+FROM node:22.14.0-alpine AS build-metadata
+ARG COMMIT_HASH=unknown
+ARG PUBLISH_DATE=unknown
+WORKDIR /metadata
+COPY scripts/write-build-metadata.mjs ./
+RUN node write-build-metadata.mjs \
+      build-metadata.json \
+      "${COMMIT_HASH}" \
+      "${PUBLISH_DATE}"
+
 # Stage 1: Build the Quasar application
 FROM node:22.14.0 AS prepare
 # Set up Yarn cache directory
@@ -111,6 +121,11 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # This stable URL changes when a new image is deployed.
+    location = /build-metadata.json {
+        add_header Cache-Control "no-store" always;
+    }
+
     # Optional: Longer caching for versioned static assets
     # location ~* \.\w{8}\.(css|js)$ {
     #     add_header Cache-Control "public, max-age=31536000, immutable" always;
@@ -140,6 +155,7 @@ EOF
 # Production serving stage
 FROM base-nginx AS production
 COPY --from=production-builder /app/dist/spa /usr/share/nginx/html
+COPY --from=build-metadata /metadata/build-metadata.json /usr/share/nginx/html/
 RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
@@ -148,6 +164,7 @@ CMD ["nginx", "-g", "daemon off;"]
 # Debug serving stage
 FROM base-nginx AS debug
 COPY --from=debug-builder /app/dist/spa /usr/share/nginx/html
+COPY --from=build-metadata /metadata/build-metadata.json /usr/share/nginx/html/
 RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
@@ -160,6 +177,7 @@ FROM node:22.10.0-alpine AS ssr-server
 
 # Copy the built files from the server-builder stage
 COPY --from=server-builder /app/dist/ssr /app
+COPY --from=build-metadata /metadata/build-metadata.json /app/www/build-metadata.json
 
 # Install dependencies
 WORKDIR /app
@@ -175,6 +193,7 @@ CMD ["yarn", "start"]
 
 ################# HTTPS serving stage for local/debug
 FROM debug-builder AS https
+COPY --from=build-metadata /metadata/build-metadata.json /app/dist/spa/
 
 STOPSIGNAL SIGTERM
 EXPOSE 9000
@@ -244,6 +263,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ENV HOME="/root"
 
 # Build the Tauri bundle
+COPY --from=build-metadata /metadata/build-metadata.json /app/dist/spa/
 RUN yarn tauri build
 
 # ───────────────────────────────────────────────────────

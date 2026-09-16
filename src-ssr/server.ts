@@ -33,6 +33,11 @@ export const create = defineSsrCreate((/* { ... } */) => {
   // and then launch specifically-targeted attacks
   app.disable('x-powered-by')
 
+  app.use('/build-metadata.json', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store')
+    next()
+  })
+
   // place here any middlewares that
   // absolutely need to run before anything else
   if (process.env.PROD) {

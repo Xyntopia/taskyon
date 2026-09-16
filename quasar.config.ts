@@ -2,7 +2,6 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
 import { defineConfig } from '#q-app/wrappers'
-import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,36 +30,6 @@ function viteStaticCopySandboxArtifacts() {
   })
 }
 
-const here = dirname(fileURLToPath(import.meta.url))
-
-function getGitCommitHash() {
-  try {
-    // Try to fetch commit hash locally
-    // we need to expicitly specify 8 chars, because git default behaves differently on different OS.
-    console.log('detecting current commit hash.')
-    const commitHash = execSync(`git -C ${here} rev-parse --short=8 HEAD`, {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .toString()
-      .trim()
-    console.log('building:', commitHash)
-    return commitHash
-  } catch (err) {
-    console.warn('Unable to fetch Git commit hash locally:', err)
-
-    // Check if we're in GitLab CI
-    if (process.env.CI_COMMIT_SHORT_SHA) {
-      console.log('Using GitLab CI commit hash')
-      return process.env.CI_COMMIT_SHORT_SHA // Fallback to GitLab CI environment variable
-    }
-
-    // Fallback to a default value if no hash is available
-    console.warn('No commit hash available; using default')
-    return 'unknown'
-  }
-}
-
-const commitHash = getGitCommitHash()
 const APPNAME = 'taskyon'
 const DESCRIPTION = 'Taskyon Generative Chat & Agent Hybrid'
 
@@ -238,10 +207,7 @@ export default defineConfig((ctx) => {
       // not sure, if we need this here...
       // we need the as unknown as boolean due to a bug in quasar
       sourcemap: process.env.SOURCEMAP === 'true' ? ('true' as unknown as boolean) : false,
-      env: {
-        PUBLISH_DATE: new Date().toISOString(),
-        COMMIT_HASH: commitHash,
-      },
+      env: {},
       // env: {},
       // rawDefine: {}
       // ignorePublicFolder: true,

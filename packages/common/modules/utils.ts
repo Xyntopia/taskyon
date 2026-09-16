@@ -682,15 +682,9 @@ export function clearCookies() {
   })
 }
 
-export const getEnvironmentInfo = () => {
-  const publishDateUTC =
-    typeof process !== 'undefined' && typeof process.env.PUBLISH_DATE === 'string'
-      ? process.env.PUBLISH_DATE
-      : undefined
-  const commitHash =
-    typeof process !== 'undefined' && typeof process.env.COMMIT_HASH === 'string'
-      ? process.env.COMMIT_HASH
-      : undefined
+export const getEnvironmentInfo = (buildMetadata?: { commit: string; publishDate: string }) => {
+  const publishDateUTC = buildMetadata?.publishDate
+  const commitHash = buildMetadata?.commit
   return {
     publishDate: {
       utc: publishDateUTC ?? 'unknown',

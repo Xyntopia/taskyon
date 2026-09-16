@@ -2,6 +2,8 @@
 set -euo pipefail
 
 GIT_HASH=$(git rev-parse --short HEAD)
+BUILD_COMMIT=$(git rev-parse --verify HEAD)
+PUBLISH_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 DATE_TAG=$(date +'%Y%m%d')
 
 IMAGE_NAME="xyntopia/taskyon-server"
@@ -26,7 +28,11 @@ is_logged_into_docker_hub || {
   exit 1
 }
 
-docker build --target ${BUILD_STAGE} -t ${IMAGE_NAME}:latest .
+docker build \
+  --target "${BUILD_STAGE}" \
+  --build-arg "COMMIT_HASH=${BUILD_COMMIT}" \
+  --build-arg "PUBLISH_DATE=${PUBLISH_DATE}" \
+  -t "${IMAGE_NAME}:latest" .
 
 docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${GIT_HASH}
 docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${DATE_TAG}

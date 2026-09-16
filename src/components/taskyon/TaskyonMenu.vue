@@ -28,13 +28,7 @@
           </q-item-section>
           <q-item-section> Documentation </q-item-section>
         </q-item>
-        <q-item
-          v-ripple
-          clickable
-          exact
-          active-class="text-secondary"
-          @click="showAboutDialog = true"
-        >
+        <q-item v-ripple clickable exact active-class="text-secondary" @click="openAboutDialog">
           <q-item-section avatar>
             <q-icon :name="mdiInformationVariant" />
           </q-item-section>
@@ -60,7 +54,11 @@
       </q-list>
     </q-menu>
   </q-btn>
-  <TaskyonAboutDialog v-model="showAboutDialog" :commit-hash="commitHash" :build-time="buildTime">
+  <TaskyonAboutDialog
+    v-model="showAboutDialog"
+    :commit-hash="buildMetadata.commit"
+    :build-time="buildMetadata.publishDate"
+  >
     <template #actions>
       <q-btn flat color="secondary" to="/diagnostics">
         <div class="q-pr-md">Open Diagnostics</div>
@@ -79,6 +77,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
 import DarkModeButton from '@taskyon/ui/components/DarkModeButton.vue'
 import TaskyonAboutDialog from '@taskyon/ui/components/TaskyonAboutDialog.vue'
+import { loadBuildMetadata, UNKNOWN_BUILD_METADATA } from '@taskyon/common/modules/buildMetadata'
 
 defineProps<{
   btnSize: 'md' | 'sm' | 'xs' | 'lg' | 'xl'
@@ -86,10 +85,25 @@ defineProps<{
 
 const showAboutDialog = ref(false)
 const state = useAppStateStore()
-const commitHash = process.env.COMMIT_HASH
-const buildTime = process.env.PUBLISH_DATE
-if (!commitHash || !buildTime) {
-  throw new Error('Taskyon build metadata is missing.')
+const buildMetadata = ref(UNKNOWN_BUILD_METADATA)
+let buildMetadataLoaded = false
+let pendingBuildMetadata: Promise<void> | undefined
+
+function openAboutDialog() {
+  showAboutDialog.value = true
+  if (buildMetadataLoaded || pendingBuildMetadata) return
+
+  pendingBuildMetadata = loadBuildMetadata(fetch)
+    .then((metadata) => {
+      buildMetadata.value = metadata
+      buildMetadataLoaded = true
+    })
+    .catch((error: unknown) => {
+      console.warn('Unable to load build metadata:', error)
+    })
+    .finally(() => {
+      pendingBuildMetadata = undefined
+    })
 }
 
 function onThemeChanged(newMode: boolean | 'auto') {

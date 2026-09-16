@@ -9,6 +9,16 @@ test.describe('app smoke', () => {
   })
 
   test('about dialog follows the selected color scheme', async ({ page }) => {
+    await page.route('**/build-metadata.json', async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          commit: 'test-commit',
+          publishDate: '2026-09-15T10:00:00.000Z',
+        }),
+      })
+    })
+
     const openAboutDialog = async () => {
       await page.locator('#ty-space-menu').click()
       await page.locator('.q-menu').getByText('About', { exact: true }).click()
@@ -22,6 +32,7 @@ test.describe('app smoke', () => {
     await expect(page.locator('body')).toHaveClass(/body--light/)
     const lightDialog = await openAboutDialog()
     await expect(lightDialog).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await expect(lightDialog.locator('[data-cy="taskyon-build-commit"]')).toHaveText('test-commit')
     await lightDialog.getByLabel('Close About Taskyon').click()
 
     await page.emulateMedia({ colorScheme: 'dark' })

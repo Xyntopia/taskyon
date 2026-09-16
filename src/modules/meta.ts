@@ -45,11 +45,6 @@ export function generateTaskyonMeta(route: RouteLocationNormalizedLoadedGeneric)
         name: 'author',
         content: 'Xyntopia LLC', // Replace with the actual author name
       },
-      publishDate: {
-        name: 'publish_date',
-        content: process.env.PUBLISH_DATE, // This will be set by Webpack
-      },
-
       // Open Graph / Facebook meta tags
       // We are doing this in index.html
       /*ogTitle: {

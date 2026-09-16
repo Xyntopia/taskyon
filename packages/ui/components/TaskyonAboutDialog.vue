@@ -84,7 +84,9 @@ const formattedBuildTime = computed(() => {
   const date = new Date(props.buildTime)
   return Number.isNaN(date.getTime()) ? props.buildTime : date.toLocaleString()
 })
-const environmentInfo = getEnvironmentInfo()
+const environmentInfo = computed(() =>
+  getEnvironmentInfo({ commit: props.commitHash, publishDate: props.buildTime }),
+)
 
 const formatEnvironmentValue = (value: unknown) => {
   if (typeof value === 'string') return value
