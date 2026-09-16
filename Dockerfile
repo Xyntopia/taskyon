@@ -1,6 +1,8 @@
+# syntax=docker/dockerfile:1
+
 # Build browser-compatible Rustls before the Node build. The generated WASM is
 # intentionally not committed.
-FROM rust:bookworm AS https-tunnel-wasm-builder
+FROM docker.io/library/rust:bookworm AS https-tunnel-wasm-builder
 RUN rustup target add wasm32-unknown-unknown && \
     cargo install wasm-bindgen-cli \
       --version 0.2.108 \
@@ -18,7 +20,7 @@ RUN cargo build \
       --typescript \
       --out-dir pkg
 
-FROM node:22.14.0-alpine AS build-metadata
+FROM docker.io/library/node:22.20.0-alpine AS build-metadata
 ARG COMMIT_HASH=unknown
 ARG PUBLISH_DATE=unknown
 WORKDIR /metadata
@@ -29,13 +31,14 @@ RUN node write-build-metadata.mjs \
       "${PUBLISH_DATE}"
 
 # Stage 1: Build the Quasar application
-FROM node:22.14.0 AS prepare
+FROM docker.io/library/node:22.20.0 AS prepare
 # Set up Yarn cache directory
 ENV YARN_CACHE_FOLDER=/tmp/.yarn-cache
 
-# make sure, subsequent installs use corepack properly (e.g. xorrect yarn version)
+# Use the exact Yarn release pinned by the repository.
 ENV COREPACK_ENABLE_STRICT=1
-RUN corepack enable
+ENV COREPACK_DEFAULT_TO_LATEST=0
+RUN corepack enable && corepack prepare yarn@4.16.0 --activate
 
 
 # it looks like after removing quasar postinstall we don't need this anymore??
@@ -53,15 +56,12 @@ RUN corepack enable
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and yarn.lock first to leverage Docker's cache
+# Copy package.json and yarn.lock first to leverage the container build cache
 COPY package.json yarn.lock .yarnrc.yml /app/
 
-# Also copy child packages!
-# COPY --parents packages/*/package.json .
-COPY packages/tyclient/package.json /app/packages/tyclient/
-COPY packages/taskyon/package.json /app/packages/taskyon/
-COPY packages/secure-tunnel/package.json /app/packages/secure-tunnel/
-COPY packages/https_tunnel_wasm/package.json /app/packages/https_tunnel_wasm/
+# Copy all workspace manifests while preserving their relative directories.
+# Yarn needs the complete workspace graph to resolve `workspace:*` references.
+COPY --parents packages/*/package.json ./
 
 RUN ls -a packages/*
 
@@ -78,7 +78,11 @@ COPY --from=https-tunnel-wasm-builder \
 FROM prepare AS production-builder
 
 # this should build the app inside the folder /app/dist/spa
-RUN ls -la && yarn quasar prepare && yarn build
+RUN yarn quasar prepare && \
+  yarn docs:check && \
+  yarn links:check && \
+  yarn pack:tyclient && \
+  yarn quasar build
 
 # ───────────────────────────────────────────────────────
 # build debug build
@@ -90,12 +94,8 @@ RUN ls -la && yarn quasar prepare
 
 RUN ls -la && yarn quasar prepare && yarn quasar build --debug
 
-FROM prepare AS server-builder
-
-RUN ls -la && yarn quasar prepare && yarn quasar build -m ssr #--debug
-
 # Define a common Nginx stage
-FROM nginx AS base-nginx
+FROM docker.io/library/nginx:latest AS base-nginx
 
 # Create custom Nginx configuration
 RUN cat > /etc/nginx/conf.d/template.conf <<'EOF'
@@ -169,28 +169,6 @@ RUN cp /etc/nginx/conf.d/template.conf /etc/nginx/conf.d/default.conf
 EXPOSE 9000
 STOPSIGNAL SIGTERM
 CMD ["nginx-debug", "-g", "daemon off;"]
-
-
-# Stage 3: Serve the SSR application
-FROM node:22.10.0-alpine AS ssr-server
-#FROM node:22.10.0 as ssr-server
-
-# Copy the built files from the server-builder stage
-COPY --from=server-builder /app/dist/ssr /app
-COPY --from=build-metadata /metadata/build-metadata.json /app/www/build-metadata.json
-
-# Install dependencies
-WORKDIR /app
-RUN yarn install --immutable
-ENV SSR_REQUEST_TIMEOUT_MS=0
-ENV SSR_SOCKET_TIMEOUT_MS=0
-
-EXPOSE 3000
-STOPSIGNAL SIGTERM
-# Start the SSR server
-CMD ["yarn", "start"]
-
-
 ################# HTTPS serving stage for local/debug
 FROM debug-builder AS https
 COPY --from=build-metadata /metadata/build-metadata.json /app/dist/spa/
@@ -269,7 +247,7 @@ RUN yarn tauri build
 # ───────────────────────────────────────────────────────
 # Runtime container for headless Tauri mode
 # ───────────────────────────────────────────────────────
-FROM debian:bookworm-slim AS tauri-headless-runtime
+FROM docker.io/library/debian:bookworm-slim AS tauri-headless-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -300,6 +278,6 @@ ENTRYPOINT ["xvfb-run", "-a", "/usr/local/bin/taskyon", "--headless"]
 # Extract Tauri 
 # ───────────────────────────────────────────────────────
 # FROM scratch AS export # we can't do this, because we need the "copy" command
-FROM busybox AS export
+FROM docker.io/library/busybox:latest AS export
 COPY --from=tauri-builder /app/src-tauri/target/release/bundle/ /bundle
 CMD cp -rv /bundle/* /out/

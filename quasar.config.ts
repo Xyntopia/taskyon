@@ -93,7 +93,6 @@ export default defineConfig((ctx) => {
           'eslint',
           '-c ./eslint.config.js',
           '"./src/**/*.{ts,js,mjs,cjs,vue}"',
-          '"./src-ssr/**/*.{ts,js,mjs,cjs,vue}"',
           '"./packages/**/*.{ts,js,mjs,cjs,vue}"',
         ].join(' '),
         useFlatConfig: true,
@@ -368,8 +367,6 @@ export default defineConfig((ctx) => {
             // you need to set `runtimeOnly: false`
             // runtimeOnly: false,
 
-            ssr: ctx.modeName === 'ssr',
-
             // you need to set i18n resource including paths !
             include: [fileURLToPath(new URL('./src/i18n', import.meta.url))],
           },
@@ -436,33 +433,6 @@ export default defineConfig((ctx) => {
     //   electronPreload: 'src-electron/electron-preload'
     //   bexManifestFile: 'src-bex/manifest.json
     // },
-
-    // https://v2.quasar.dev/quasar-cli-vite/developing-ssr/configuring-ssr
-    ssr: {
-      prodPort: 3000, // The default port that the production server should use
-      // (gets superseded if process.env.PORT is specified at runtime)
-
-      middlewares: [
-        'logger',
-        'gdriveProxy',
-        'proxyMiddleware',
-        'render', // keep this as last one
-      ],
-
-      // extendPackageJson (json) {},
-      // extendSSRWebserverConf (esbuildConf) {},
-
-      // manualStoreSerialization: true,
-      // manualStoreSsrContextInjection: true,
-      // manualStoreHydration: true,
-      // manualPostHydrationTrigger: true,
-
-      pwa: false,
-      // pwaOfflineHtmlFilename: 'offline.html', // do NOT use index.html as name!
-
-      // pwaExtendGenerateSWOptions (cfg) {},
-      // pwaExtendInjectManifestOptions (cfg) {}
-    },
 
     // https://v2.quasar.dev/quasar-cli-vite/developing-pwa/configuring-pwa
     pwa: {

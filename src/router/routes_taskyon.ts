@@ -1,7 +1,6 @@
 import { type RouteRecordRaw } from 'vue-router'
 import { mdRoutes } from './routes_default'
 import { defineAsyncComponent } from 'vue'
-import LoadCircle from '@taskyon/ui/components/LoadingCircle.vue'
 import { taskyonMapWidgetRoutePath } from '@taskyon/ui/gis/taskyonMapWidget'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { loadTaskChatPage } from './taskChatLoader'
@@ -395,33 +394,6 @@ export const routes: RouteRecordRaw[] = [
     // we are making sure to only load urls without any extensions here...
     path: '/oauth/return',
     component: () => import('pages/auth/AuthFlow.vue'),
-  },
-  // Always leave this as last one,
-  // but you can also remove it
-  {
-    path: '/:catchAll(.*)*',
-    component: () => import('src/pages/Error404Page.vue'),
-    meta: { title: 'ERROR', description: 'Page does not exist' },
-  },
-]
-
-export const tyServerRoutes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    component: () => import('layouts/ServerControlLayout.vue'),
-    children: [
-      {
-        path: '',
-        //component: defineAsyncComponent(() => import('pages/TaskChat.vue')),
-        component: defineAsyncComponent({
-          loader: () => import('pages/taskyon/ServerControl.vue'),
-          loadingComponent: LoadCircle,
-          delay: 200,
-        }),
-        meta: { title: 'Main', description: 'Taskyon AI Server Control' },
-      },
-      ...universalTyRoutes,
-    ],
   },
   // Always leave this as last one,
   // but you can also remove it

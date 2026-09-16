@@ -94,7 +94,7 @@ should not be kept as documentation snapshots.
   then builds the Quasar app.
 - `yarn build:desktop` exports the containerized desktop build.
 - `yarn tauri:build` uses the local Tauri toolchain.
-- `docker compose up --build` starts the services defined by `docker-compose.yml`.
+- `podman compose up --build` starts the services defined by `docker-compose.yml`.
 - `yarn relay` builds and starts the Taskyon relay.
 
 Builds need enough memory for Quasar and package generation. The Nix shell configures the expected

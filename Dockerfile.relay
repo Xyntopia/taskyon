@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM node:22-slim AS builder
+FROM docker.io/library/node:22-slim AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=$YARN_CACHE_FOLDER \
     yarn workspaces focus @taskyon/relay --production
 
 # ---- runtime ----
-FROM node:22-slim
+FROM docker.io/library/node:22-slim
 WORKDIR /app
 
 # copy relay runtime and focused dependencies

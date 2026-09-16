@@ -13,10 +13,7 @@ const createMemoryStorage = () => {
 }
 
 // Dynamically assign the storage methods
-const storage =
-  process.env.MODE === 'ssr' || typeof localStorage === 'undefined'
-    ? createMemoryStorage()
-    : localStorage
+const storage = typeof localStorage === 'undefined' ? createMemoryStorage() : localStorage
 
 // The cache for storing function call results.
 function saveToLocalStorage<ReturnType>(key: string, cache: Map<string, CacheEntry<ReturnType>>) {
