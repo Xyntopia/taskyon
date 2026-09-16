@@ -1,7 +1,9 @@
+import { storageRecordFilePath } from '@taskyon/taskyon/api'
 import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
 import { createIndexedDbBlobBackend, createIndexedDbRecordBackend } from '../indexedDbStorage'
 import {
   createOpfsBlobStorageBackend,
+  createOpfsStorageRecordFileAdapter,
   createOpfsStorageBackendResolver,
   requestBrowserStoragePersistence,
 } from '../storage'
@@ -34,6 +36,46 @@ export const testOpfsImplementsStorageBackendContract = async () => {
 
 testOpfsImplementsStorageBackendContract.description =
   'Runs the shared record and blob StorageClient contract against browser OPFS.'
+
+export const testOpfsRemovesEmptyRecordFiles = async () => {
+  if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
+    return { skipped: true, reason: 'OPFS is unavailable outside a supporting browser runtime.' }
+  }
+
+  const rootDirectory = `taskyon-opfs-empty-record-${crypto.randomUUID()}`
+  const namespace = 'empty-record-fixture'
+  const path = storageRecordFilePath(namespace, 'empty')
+  const parts = path.split('/')
+  const fileName = parts.at(-1)
+  if (!fileName) throw new Error('Expected a hashed OPFS record filename.')
+  const root = await navigator.storage.getDirectory()
+
+  try {
+    let directory = await root.getDirectoryHandle(rootDirectory, { create: true })
+    for (const part of parts.slice(0, -1)) {
+      directory = await directory.getDirectoryHandle(part, { create: true })
+    }
+    const file = await directory.getFileHandle(fileName, { create: true })
+    const writable = await file.createWritable()
+    await writable.close()
+
+    const adapter = await createOpfsStorageRecordFileAdapter({ rootDirectory })
+    if ((await adapter.read(path)) !== null) {
+      throw new Error('An empty OPFS record file must be treated as missing.')
+    }
+    try {
+      await directory.getFileHandle(fileName, { create: false })
+      throw new Error('An empty OPFS record file must be removed after it is read.')
+    } catch (error) {
+      if (!(error instanceof Error) || error.name !== 'NotFoundError') throw error
+    }
+  } finally {
+    await root.removeEntry(rootDirectory, { recursive: true })
+  }
+}
+
+testOpfsRemovesEmptyRecordFiles.description =
+  'Treats an interrupted empty OPFS record write as a missing record and cleans it up.'
 
 export const testBrowserStorageRemembersRecordAndBlobSelectionsSeparately = () => {
   const values = new Map<string, string>()

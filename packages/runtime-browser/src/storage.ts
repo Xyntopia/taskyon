@@ -106,7 +106,16 @@ const readJsonFile = async (
   try {
     const dir = await getDirectory(root, parts.slice(0, -1), false)
     const file = await dir.getFileHandle(fileName, { create: false })
-    return parseStorageRecordFile(JSON.parse(await (await file.getFile()).text()))
+    const raw = await (await file.getFile()).text()
+    if (raw.trim() === '') {
+      try {
+        await dir.removeEntry(fileName)
+      } catch (error) {
+        if (!(error instanceof Error && error.name === 'NotFoundError')) throw error
+      }
+      return null
+    }
+    return parseStorageRecordFile(JSON.parse(raw))
   } catch (error) {
     if (error instanceof Error && error.name === 'NotFoundError') return null
     throw error

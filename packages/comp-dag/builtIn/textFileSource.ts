@@ -84,32 +84,32 @@ export const readPinnedTextFile = async (
   invocation: InvocationDefinition,
   storage: DagStorageRecords,
 ) => {
-  const node = createTextFileSourceNode(() => {
-    throw new Error('Pinned file bytes are unavailable; explicitly re-import the file.')
-  })
   const path = invocation.variables.path
-  if (
-    invocation.rootNodeId !== node.contentHash ||
-    !invocation.sourceSnapshotId ||
-    path?.kind !== 'constant' ||
-    typeof path.value !== 'string'
-  )
+  if (!invocation.sourceSnapshotId || path?.kind !== 'constant' || typeof path.value !== 'string')
     throw new Error('Expected a pinned text file invocation.')
   const repository = createSourceManifestRepository(storage)
   const snapshot = await repository.getSnapshot(invocation.sourceSnapshotId)
   if (!snapshot) throw new Error('Pinned file source snapshot is unavailable.')
-  const result = await node.call({ path: path.value }).run(
-    { nowUtcMs: 0, log: () => undefined },
-    {
-      storageBackend: createStorageDagBackend(storage),
-      execution: { mode: 'local' },
-      sourceExecution: {
-        repository,
-        snapshot,
-        defaultPolicy: { mode: 'manual' },
-        refreshedAcquisitionKeys: new Set(),
-      },
-    },
+  const paramsHash = canonicalHash({ path: path.value })
+  const acquisitionKey = canonicalHash({
+    kind: 'taskyon.sourceAcquisition.v1',
+    nodeHash: invocation.rootNodeId,
+    paramsHash,
+  })
+  const manifestId = snapshot.manifests[acquisitionKey]
+  if (!manifestId) throw new Error('Pinned file source observation is unavailable.')
+  const manifest = await repository.getManifest(manifestId)
+  if (
+    !manifest ||
+    manifest.nodeHash !== invocation.rootNodeId ||
+    manifest.acquisitionKey !== acquisitionKey ||
+    manifest.paramsHash !== paramsHash
   )
-  return result.value
+    throw new Error('Pinned file source manifest does not match its invocation.')
+  const content = await createStorageDagBackend(storage).readArtifact<unknown>(
+    manifest.artifactHash,
+  )
+  if (canonicalHash(content) !== manifest.artifactHash || typeof content !== 'string')
+    throw new Error('Pinned file source artifact is invalid.')
+  return readTextFile(path.value, () => Promise.resolve(content))
 }

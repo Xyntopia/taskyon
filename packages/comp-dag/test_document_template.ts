@@ -8,6 +8,8 @@ import { createStorageDagBackend } from './storageDagBackend'
 import { ingestTextFile, readPinnedTextFile } from './builtIn/textFileSource'
 import { canonicalHash } from './caching'
 import { createDocumentInvocation } from './documentBuild'
+import { createInvocationDefinition } from './designGraphModel'
+import { createSourceLockManifest, createSourceSnapshot } from './sourceManifest'
 
 export const testDocumentTemplateVegaPlot = async () => {
   const { createVegaDocumentRenderer } = await import('./documentGraphics')
@@ -122,6 +124,51 @@ export const testDocumentTemplateFileSourcePinsBytes = async () => {
   const original = await readPinnedTextFile(pinned, storage)
   if (original !== '# Original' || !pinned.sourceSnapshotId)
     throw new Error('A template invocation must replay pinned bytes after its file changes.')
+  return { success: true }
+}
+
+export const testDocumentTemplateReadsPinnedBytesAcrossNodeBuilds = async () => {
+  const records = new Map<string, unknown>()
+  const storage = {
+    get: (namespace: string, id: string) => Promise.resolve(records.get(`${namespace}/${id}`)),
+    set: (namespace: string, id: string, value: unknown) => {
+      records.set(`${namespace}/${id}`, value)
+      return Promise.resolve()
+    },
+  }
+  const path = 'deliverables/project.md'
+  const original = await ingestTextFile(path, '# Pinned text', storage, 100)
+  const originalSnapshot = records.get(`dag/source-snapshots/${original.sourceSnapshotId}`) as {
+    manifests: Record<string, string>
+  }
+  const originalManifestId = Object.values(originalSnapshot.manifests)[0]!
+  const originalManifest = records.get(`dag/source-manifests/${originalManifestId}`) as {
+    artifactHash: `sha256:${string}`
+  }
+  const nodeHash = canonicalHash('the same text source from another build')
+  const acquisitionKey = canonicalHash({
+    kind: 'taskyon.sourceAcquisition.v1',
+    nodeHash,
+    paramsHash: canonicalHash({ path }),
+  })
+  const manifest = createSourceLockManifest({
+    nodeHash,
+    acquisitionKey,
+    paramsHash: canonicalHash({ path }),
+    artifactHash: originalManifest.artifactHash,
+    createdAtMs: 100,
+  })
+  await storage.set('dag/source-manifests', manifest.id, manifest)
+  const snapshot = createSourceSnapshot({ [acquisitionKey]: manifest.id })
+  await storage.set('dag/source-snapshots', snapshot.id, snapshot)
+  const pinned = createInvocationDefinition({
+    ...original,
+    rootNodeId: nodeHash,
+    sourceSnapshotId: snapshot.id,
+  })
+  if ((await readPinnedTextFile(pinned, storage)) !== '# Pinned text') {
+    throw new Error('Pinned text must remain readable when the source node build identity differs.')
+  }
   return { success: true }
 }
 
