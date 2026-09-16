@@ -42,6 +42,7 @@ import {
   fetchModelsForProvider,
   findCallingToolReference,
   OAUTH_PROVIDERS,
+  parseJwt,
   randomString,
   registerToolRpcTools,
   TaskNode,
@@ -901,9 +902,12 @@ const useApiManagement = (
     // make sure, we update old free keys that are currently in use
     // whne a key is updated, taskyon identifies the old key as a
     // 'custom' key so we need to explicitly update it with the new key.
-    if (currentTyKey && currentTyKey !== freeKey) {
-      if (['W1lIjoidGFza3lvbi5zcGFjZTpmcmVlX2tleV8yMDI1MDgw'].some((n) => currentTyKey.includes(n)))
-        return true
+    if (!currentTyKey || currentTyKey === freeKey) return false
+    try {
+      const name = parseJwt(currentTyKey)?.name
+      return name === 'taskyon.space:free_key_2025080' || name === 'taskyon.space:free_key_20260125'
+    } catch {
+      return false
     }
   }
 

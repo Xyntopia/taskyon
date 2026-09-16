@@ -93,7 +93,7 @@
         "chatCompletion": {
           "provider": "taskyon",
           "name": "taskyon",
-          "model": "google/gemini-2.5-flash-lite",
+          "model": "z-ai/glm-5.3-flash",
           "baseURL": "https://share.taskyon.space",
           "streamSupport": true,
           "defaultHeaders": {

@@ -35,7 +35,7 @@
         "provider": "taskyon",
         "name": "taskyon",
         "baseURL": "https://share.taskyon.space",
-        "model": "google/gemini-2.5-flash-lite",
+        "model": "z-ai/glm-5.3-flash",
         "streamSupport": true,
         "defaultHeaders": {
           "apiKey": "sb_publishable_WrQ1aIRvl9BrMtpMQ9TocQ_JN7I9kJm",

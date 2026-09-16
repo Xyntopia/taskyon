@@ -1439,7 +1439,7 @@ export const testChatCompletionWebSearch = async () => {
         content: { type: 'message', data: 'hi!..   can you please search for what "taskyon" is?' },
       },
       createChatCompletionTask({
-        model: 'google/gemini-2.5-flash-lite',
+        model: 'z-ai/glm-5.3-flash',
         websearch: { enabled: true, max_results: 2 },
       }),
     ],
@@ -1473,7 +1473,7 @@ export const testChatCompletion = async () => {
           },
         },
         createChatCompletionTask({
-          model: 'google/gemini-2.5-flash-lite',
+          model: 'z-ai/glm-5.3-flash',
           appendSystemPrompts: [
             `Please respond with a JSON object matching the provided schema. This is meant as an example!  So you can simply come up with a random user and preferences.`,
           ],
@@ -1574,7 +1574,7 @@ export const testChatCompletionTaskyonProxyMint = async () => {
           },
         },
         createChatCompletionTask({
-          model: 'google/gemini-2.5-flash-lite',
+          model: 'z-ai/glm-5.3-flash',
         }),
       ],
     ]
@@ -1691,7 +1691,7 @@ export const testChatCompletionTaskyonProxyMintCosts = async () => {
           },
         },
         createChatCompletionTask({
-          model: 'google/gemini-2.5-flash-lite',
+          model: 'z-ai/glm-5.3-flash',
         }),
       ],
     ]
@@ -1792,7 +1792,7 @@ export const testChatCompletionTaskyonProxyMetadata = async (ctx?: { tyauth?: st
           },
         },
         createChatCompletionTask({
-          model: 'google/gemini-2.5-flash-lite',
+          model: 'z-ai/glm-5.3-flash',
         }),
       ],
     ]
@@ -1867,7 +1867,7 @@ export const testFileUpload = async () => {
       options: { verbosity: 'high' },
       reasoning_effort: 'low',
       //reasoning_effort: undefined,
-      model: 'google/gemini-2.5-flash-lite',
+      model: 'z-ai/glm-5.3-flash',
       schema: {
         type: 'object',
         properties: {

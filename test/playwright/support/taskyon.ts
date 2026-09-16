@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import type { KeyString } from '@taskyon/taskyon'
 
-export const testModelId = 'google/gemini-2.5-flash-lite'
+export const testModelId = 'z-ai/glm-5.3-flash'
 
 const modelSelectLabel = 'Select LLM Model for answering/solving the task.'
 const onlineEnvFileName = 'playwright.env.json'

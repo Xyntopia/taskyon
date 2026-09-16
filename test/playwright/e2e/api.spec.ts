@@ -15,10 +15,10 @@ import {
 const onlineEnv = readOnlineEnv(process.cwd())
 const visionModelId = 'openai/gpt-4.1-mini'
 const freeTaskyonModelIds = new Set([
-  'google/gemini-2.5-flash-lite',
-  'openai/gpt-5-nano',
-  'openai/gpt-oss-120b',
-  'mistralai/devstral-2512',
+  'z-ai/glm-5.3-flash',
+  'qwen/qwen3.8-flash',
+  'deepseek/deepseek-v4-flash-0731',
+  'openai/gpt-5.6-luna',
 ])
 
 const enableExpertMode = async (page: Page) => {
