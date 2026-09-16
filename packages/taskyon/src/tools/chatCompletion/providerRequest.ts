@@ -6,6 +6,7 @@ import type {
   ChatCompletionProviderSettings,
   ProviderRequestTrace,
 } from '../../types/chatCompletion'
+import { resolveProviderNetworkTransport } from '../../types/chatCompletion'
 import { createChatCompletionRecordingFetch } from '../chatCompletionTrace'
 
 const collectSystemInstructions = (messages: ModelMessage[]) => {
@@ -178,6 +179,7 @@ export const buildChatProviderRequest = async (input: {
   toolChoice?: ToolChoice<ToolSet>
   providerRequest?: ProviderRequestTrace
   promptCacheRootId?: string
+  fetch?: typeof fetch
 }): Promise<Parameters<typeof streamText>[0]> => {
   console.log('Creating chat completion request', {
     webSearch: input.webSearch,
@@ -188,9 +190,12 @@ export const buildChatProviderRequest = async (input: {
   let model
   let requestMessages = input.messages
   const overrideOptions: Record<string, unknown> = {}
+  const networkTransport = resolveProviderNetworkTransport(input.api, input.fetch !== undefined)
+  const transportFetch = networkTransport === 'wss' ? input.fetch : undefined
   const recordingFetch = input.providerRequest
-    ? createChatCompletionRecordingFetch(input.providerRequest, fetch)
+    ? createChatCompletionRecordingFetch(input.providerRequest, transportFetch ?? fetch)
     : undefined
+  const providerFetch = recordingFetch ?? transportFetch
   const requestHeaders = input.api.provider === 'taskyon' ? undefined : input.api.defaultHeaders
 
   switch (input.api.provider) {
@@ -200,7 +205,7 @@ export const buildChatProviderRequest = async (input: {
       const openai = createOpenAI({
         apiKey: input.apiKey,
         ...(requestHeaders ? { headers: requestHeaders } : {}),
-        ...(recordingFetch ? { fetch: recordingFetch } : {}),
+        ...(providerFetch ? { fetch: providerFetch } : {}),
         ...(input.api.provider === 'chatgpt-codex' ? { baseURL: input.api.baseURL } : {}),
       })
       model = openai(input.selectedModel)
@@ -266,11 +271,11 @@ export const buildChatProviderRequest = async (input: {
     case 'openrouter.ai': {
       const { createOpenRouter } = await import('@openrouter/ai-sdk-provider')
       const stripUserAgentFetch: typeof fetch = (requestInput, init) => {
-        if (!init?.headers) return (recordingFetch ?? fetch)(requestInput, init)
+        if (!init?.headers) return (providerFetch ?? fetch)(requestInput, init)
         const headers = new Headers(init.headers)
         headers.delete('user-agent')
         headers.delete('User-Agent')
-        return (recordingFetch ?? fetch)(requestInput, { ...init, headers })
+        return (providerFetch ?? fetch)(requestInput, { ...init, headers })
       }
       const openrouter = createOpenRouter({
         apiKey: input.apiKey,
@@ -312,7 +317,7 @@ export const buildChatProviderRequest = async (input: {
         baseURL: input.api.baseURL + input.api.routes.chatCompletion,
         name: input.api.name,
         ...(requestHeaders ? { headers: requestHeaders } : {}),
-        ...(recordingFetch ? { fetch: recordingFetch } : {}),
+        ...(providerFetch ? { fetch: providerFetch } : {}),
       })
       model = openai(input.selectedModel)
     }

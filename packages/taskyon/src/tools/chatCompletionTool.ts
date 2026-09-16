@@ -125,6 +125,7 @@ export function createChatCompletionTool(
     listToolDefinitions: () => Promise<Record<string, ToolBase>>
     resolveToolDefinition?: (name: string, revision?: ContentHash) => Promise<ToolBase | undefined>
     metaUpsert: TyTaskManager['metaUpsert']
+    fetch?: typeof fetch
   },
 ) {
   const providerConnection = resolveChatCompletionConnection(connection)
@@ -450,6 +451,7 @@ export function createChatCompletionTool(
         ...(normalizedToolChoice ? { toolChoice: normalizedToolChoice } : {}),
         ...(taskChain[0]?.id ? { promptCacheRootId: taskChain[0].id } : {}),
         providerRequest,
+        ...(capabilities.fetch ? { fetch: capabilities.fetch } : {}),
       })
       const traceEnabled = trace?.enabled === true
 

@@ -1,7 +1,9 @@
 export function joinUrl(base: string, route: string): string {
-  // ensure base has trailing slash for correct relative resolution
-  if (!base.endsWith('/')) base += '/'
-  return new URL(route, base).toString()
+  if (/^https?:\/\//i.test(route)) return route
+  // Provider routes are relative to the configured base path, including leading-slash routes.
+  const left = base.replace(/\/+$/, '')
+  const right = route.replace(/^\/+/, '')
+  return `${left}/${right}`
 }
 
 export async function urlToFile(url: string, filename?: string): Promise<File> {

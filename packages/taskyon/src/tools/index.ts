@@ -42,6 +42,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
   prepareGraphRepository?: () => Promise<void>
   pythonTool?: InternalTool | null
   workspaceOperations?: WorkspaceOperations
+  chatCompletionFetch?: typeof fetch
 }): TyCoreToolSetup => ({
   baseTools: [
     ...(options?.workspaceOperations
@@ -81,6 +82,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
         resolveToolDefinition: async (name, revision) =>
           (await toolManager.resolveTool(name, revision)).tool,
         metaUpsert: taskManager.metaUpsert,
+        ...(options?.chatCompletionFetch ? { fetch: options.chatCompletionFetch } : {}),
       })
     const chatCompletion = createChatCompletion(toolchainConfig)
 

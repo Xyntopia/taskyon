@@ -1,4 +1,5 @@
 import {
+  CODEX_MODELS_CLIENT_VERSION,
   TOKEN_SERVICE_BASE_URL,
   chatCompletionProviderSettings,
   isTaskyonKey,
@@ -9,14 +10,7 @@ import {
 } from '@taskyon/taskyon'
 import { asyncTimeLruCache } from '@taskyon/taskyon/utils/caching'
 import { updateToolchainConfigValue } from '../../../taskyon/src/types/profiles'
-import {
-  isReasoningEffort,
-  type CliApiConfig,
-  type LlmModel,
-  type ReasoningEffort,
-} from './types'
-
-const CODEX_MODELS_CLIENT_VERSION = '0.144.5'
+import { isReasoningEffort, type CliApiConfig, type LlmModel, type ReasoningEffort } from './types'
 
 export type CliLlmState = {
   settings: llmSettings
@@ -79,11 +73,9 @@ export const setProviderModel = (llmState: CliLlmState, provider: string, model:
   }
 }
 
-export const getSelectedReasoningEffort = (
-  llmState: CliLlmState,
-): ReasoningEffort | undefined => {
-  const value = getSelectedToolchainConfig(llmState)[llmState.settings.entryFunction]
-    ?.reasoning_effort
+export const getSelectedReasoningEffort = (llmState: CliLlmState): ReasoningEffort | undefined => {
+  const value =
+    getSelectedToolchainConfig(llmState)[llmState.settings.entryFunction]?.reasoning_effort
   return isReasoningEffort(value) ? value : undefined
 }
 

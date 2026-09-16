@@ -56,6 +56,10 @@ import {
 import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
 import { createHttpProxyFetch } from '@taskyon/common/modules/webFetching/index'
+import {
+  resolveSandboxFetchTransport,
+  type FetchWithPolicy,
+} from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { createCachedSecureFetch } from '@taskyon/secure-tunnel'
 import { createBoundServiceTokenProvider } from '@taskyon/taskyon/taskyon-space-api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '@taskyon/taskyon/token-service-types'
@@ -79,8 +83,11 @@ import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationMani
 import {
   clearBrowserDesignGraphGitRepositories,
   createTaskyonBrowserCoreRuntime,
+  createTaskyonProviderFetchWithTokenGetter,
   initCryptoSessionFromBrowser,
+  isHostedBrowserProviderRuntime,
   persistBrowserCryptoSession,
+  type TaskyonDirectFallbackRequest,
 } from '@taskyon/runtime-browser'
 import {
   createOpfsBlobStorageBackend,
@@ -198,11 +205,13 @@ export function asyncProxy<T extends object>(initializer: () => Promise<T>): Asy
 async function updateLlmModels(
   provider: Parameters<typeof fetchModelsForProvider>[0],
   getApiKey: (name: string) => Promise<string | null>,
+  providerFetch?: typeof fetch,
 ) {
   console.log('downloading models...')
   return await fetchModelsForProvider(provider, getApiKey, {
     useTokenServiceForOpenrouter: true,
     useTokenServiceForTaskyon: true,
+    ...(providerFetch ? { fetch: providerFetch } : {}),
   })
 }
 
@@ -689,8 +698,7 @@ export const authorizeBrowserPopup = ({
   target: 'custom-html' | `origin:${string}`
 }) => getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'popup', target } })
 
-export function createBrowserProxyFetch(
-  storageClient: TaskyonStorageClient,
+function createBrowserHttpProxyFetch(
   proxyUrl: string,
   getTaskyonFetchCredential: () => Promise<string>,
 ) {
@@ -710,8 +718,38 @@ export function createBrowserProxyFetch(
       )
     },
   })
-  return createCachedSecureFetch(proxyFetch, createStorageClientSecureFetchCache(storageClient))
+  return proxyFetch
 }
+
+export function createBrowserProxyFetch(
+  storageClient: TaskyonStorageClient,
+  proxyUrl: string,
+  getTaskyonFetchCredential: () => Promise<string>,
+) {
+  return createCachedSecureFetch(
+    createBrowserHttpProxyFetch(proxyUrl, getTaskyonFetchCredential),
+    createStorageClientSecureFetchCache(storageClient),
+  )
+}
+
+const approveBrowserDirectFallback = (request: TaskyonDirectFallbackRequest) =>
+  new Promise<boolean>((resolve) => {
+    let settled = false
+    const finish = (approved: boolean) => {
+      if (settled) return
+      settled = true
+      resolve(approved)
+    }
+    Dialog.create({
+      title: 'Secure tunnel unavailable',
+      message: `The secure WSS tunnel failed before sending data to ${request.origin}. Retry this ${request.requestKind.replaceAll('-', ' ')} request directly? The provider will see your network connection and may receive the webpage origin.`,
+      ok: { label: 'Retry directly', color: 'warning' },
+      cancel: { label: 'Keep private', color: 'primary', flat: true },
+      persistent: true,
+    })
+      .onOk(() => finish(true))
+      .onDismiss(() => finish(false))
+  })
 
 function resolveTaskyonKey(args: {
   iframeToken?: KeyString | undefined
@@ -738,6 +776,7 @@ const useApiManagement = (
   stateRefs: ReturnType<typeof useAppStateStore>,
   taskyon: Thunk<Promise<Taskyon>>,
   host: TaskyonHostClient,
+  providerFetch?: typeof fetch,
 ) => {
   const llmModelsInternal = ref<Record<string, ModelCard>>({})
   // we need this in order to reactivly see if something changed..
@@ -774,8 +813,10 @@ const useApiManagement = (
     console.log('Update model list!')
     const provider = selectedProviderProfile.value
     return provider
-      ? await updateLlmModels(provider, (name) =>
-          Promise.resolve((availableKeys.value[name] as KeyString | undefined) ?? null),
+      ? await updateLlmModels(
+          provider,
+          (name) => Promise.resolve((availableKeys.value[name] as KeyString | undefined) ?? null),
+          providerFetch,
         )
       : {}
   })
@@ -1344,6 +1385,24 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         credential: stateRefs.effectiveTaskyonCredential,
       }),
     )
+  const hostedProviderRuntime =
+    process.env.CLIENT &&
+    isHostedBrowserProviderRuntime({ hostname: window.location.hostname, isTauri: isTauri() })
+  const createHostedProviderFetch = (requestKind: TaskyonDirectFallbackRequest['requestKind']) =>
+    hostedProviderRuntime
+      ? createTaskyonProviderFetchWithTokenGetter(
+          {
+            kind: 'secure-wss',
+            tunnelUrl: stateRefs.appConfiguration.sandboxFetchWssUrl,
+            tokenServiceBaseUrl: TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
+          },
+          () => getTaskyonFetchCredential(),
+          { requestKind, approveDirectFallback: approveBrowserDirectFallback },
+        )
+      : undefined
+  const providerChatFetch = createHostedProviderFetch('chat-completion')
+  const providerModelFetch = createHostedProviderFetch('model-discovery')
+  const providerOauthFetch = createHostedProviderFetch('oauth')
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({
       ...stateRefs.llmSettings,
@@ -1358,15 +1417,40 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         unavailableToolNames: getBrowserUnavailableToolNames(),
         storageClient,
         workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
+        ...(providerChatFetch ? { chatCompletionFetch: providerChatFetch } : {}),
       }),
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
-    createFetchWithPolicy: (storageClient) =>
-      createBrowserProxyFetch(
-        storageClient,
-        stateRefs.appConfiguration.sandboxFetchProxyUrl,
-        getTaskyonFetchCredential,
-      ),
-    fetchPolicy: { policy: 'proxy' },
+    createFetchWithPolicy: (storageClient) => {
+      const proxyUrl = stateRefs.appConfiguration.sandboxFetchProxyUrl
+      const proxyFetch = createBrowserHttpProxyFetch(proxyUrl, getTaskyonFetchCredential)
+      const wssFetch = createTaskyonProviderFetchWithTokenGetter(
+        {
+          kind: 'secure-wss',
+          tunnelUrl: stateRefs.appConfiguration.sandboxFetchWssUrl,
+          tokenServiceBaseUrl: TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
+        },
+        () => getTaskyonFetchCredential(),
+        {
+          requestKind: 'sandbox-fetch',
+          approveDirectFallback: approveBrowserDirectFallback,
+        },
+      )
+      const directFetch = globalThis.fetch.bind(globalThis)
+      const fetchWithPolicy: FetchWithPolicy = async (input, init, options = {}) => {
+        const transport = resolveSandboxFetchTransport(
+          stateRefs.appConfiguration.sandboxFetchTransport,
+          options.policy ?? 'default',
+        )
+        if (transport === 'direct') return await directFetch(input, init)
+        if (transport === 'wss') return await wssFetch(input, init)
+        return await proxyFetch(input, init, options)
+      }
+      return createCachedSecureFetch(
+        fetchWithPolicy,
+        createStorageClientSecureFetchCache(storageClient),
+      )
+    },
+    fetchPolicy: { policy: 'default' },
     authorizePopup: authorizeBrowserPopup,
     storageNamespacePrefix,
     storage: {
@@ -1513,7 +1597,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     await (await uiToolRpcHost).register()
   }
 
-  const apiKeyManagement = useApiManagement(stateRefs, () => taskyon, runtime.host)
+  const apiKeyManagement = useApiManagement(
+    stateRefs,
+    () => taskyon,
+    runtime.host,
+    providerModelFetch,
+  )
   getTaskyonFetchCredential = () =>
     Promise.resolve(
       apiKeyManagement.getTaskyonKeyString() ??
@@ -1946,6 +2035,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     getDeviceId,
     taskyon,
     taskyonClient,
+    providerNetworkFetch: providerOauthFetch,
     taskTemplateRenderer,
     documentationBases,
     documentationReady,

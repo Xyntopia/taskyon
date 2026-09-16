@@ -196,7 +196,7 @@
           #cargo-deny
           #cargo-edit
           #cargo-watch
-          #llvmPackages.bintools
+          lld # linker for https_tunnel_wasm
           #rustup
           #rust-analyzer
           #rust-src

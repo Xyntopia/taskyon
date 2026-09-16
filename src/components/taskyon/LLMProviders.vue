@@ -117,6 +117,40 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
           </div>
         </q-card-section>
 
+        <q-separator />
+        <q-card-section>
+          <div class="text-subtitle2">Provider network transport</div>
+          <div class="text-caption q-mb-sm">
+            Deployed webpages use the secure WSS tunnel by default. Local, private-network, Tauri,
+            Node, and Taskyon service endpoints stay direct.
+          </div>
+          <q-list separator>
+            <q-item
+              v-for="{ profileName, api } in providerProfileEntries"
+              :key="`transport:${profileName}`"
+            >
+              <q-item-section>
+                <q-item-label>{{ api.name }}</q-item-label>
+                <q-item-label v-if="isProviderNetworkDirectOnly(api)" caption>
+                  Direct transport is required for this endpoint.
+                </q-item-label>
+              </q-item-section>
+              <q-item-section side class="provider-transport-select">
+                <q-select
+                  :model-value="providerTransportValue(api)"
+                  :options="providerNetworkTransportOptions"
+                  :disable="isProviderNetworkDirectOnly(api)"
+                  emit-value
+                  map-options
+                  outlined
+                  dense
+                  @update:model-value="(value) => setProviderNetworkTransport(profileName, value)"
+                />
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-card-section>
+
         <q-expansion-item
           v-if="expertModeOn"
           class="q-pa-sm"
@@ -266,9 +300,16 @@ import {
   chatCompletionToolName,
   getProviderOauthConfig,
   hasProviderOauthConfig,
+  isProviderNetworkDirectOnly,
+  PROVIDER_NETWORK_TRANSPORTS,
+  resolveProviderNetworkTransport,
   resolveProviderAccessToken,
 } from '@taskyon/taskyon'
-import type { ChatCompletionProviderSettings, KeyString } from '@taskyon/taskyon'
+import type {
+  ChatCompletionProviderSettings,
+  KeyString,
+  ProviderNetworkTransport,
+} from '@taskyon/taskyon'
 import {
   createPersistentOauthTokenGetter,
   loginWithProviderOauth,
@@ -306,6 +347,22 @@ const oauthProviders = computed(() =>
   providerProfileEntries.value.filter(({ api }) => !!getProviderOauthConfig(api)),
 )
 
+const providerNetworkTransportOptions = PROVIDER_NETWORK_TRANSPORTS.map((value) => ({
+  label: value === 'auto' ? 'Automatic' : value === 'wss' ? 'Secure WSS' : 'Direct',
+  value,
+}))
+const providerTransportValue = (provider: ChatCompletionProviderSettings) =>
+  isProviderNetworkDirectOnly(provider) ? 'direct' : provider.networkTransport
+const setProviderNetworkTransport = (
+  profileName: string,
+  networkTransport: ProviderNetworkTransport | null,
+) => {
+  if (!networkTransport) return
+  const profile = state.toolchainProfiles.profiles[profileName]
+  if (!profile?.chatCompletion) return
+  profile.chatCompletion = { ...profile.chatCompletion, networkTransport }
+}
+
 const providerHasOauth = (api: ChatCompletionProviderSettings) => hasProviderOauthConfig(api)
 const providerIsAvailable = (profileName: string) =>
   tystate.availableProviders.includes(profileName)
@@ -335,7 +392,13 @@ const loginProviderWithOauth = async (
       setSecret: async (name, data) =>
         await ty.setSecret(OAUTH_CREDENTIALS_SECRET_PREFIX, name, data as KeyString),
     })
-    const creds = await loginWithProviderOauth(providerName, provider, getToken)
+    const providerFetch =
+      tystate.providerNetworkFetch && resolveProviderNetworkTransport(provider, true) === 'wss'
+        ? tystate.providerNetworkFetch
+        : undefined
+    const creds = await loginWithProviderOauth(providerName, provider, getToken, {
+      ...(providerFetch ? { fetch: providerFetch } : {}),
+    })
     const providerAccessToken = await resolveProviderAccessToken(creds, provider)
     await tystate.setProviderApiKey(providerName, providerAccessToken as KeyString, 'persist')
     if (selectProvider) activateProvider(profileName)

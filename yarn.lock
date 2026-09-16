@@ -4695,6 +4695,7 @@ __metadata:
     "@isomorphic-git/lightning-fs": "npm:^4.6.3"
     "@taskyon/common": "workspace:*"
     "@taskyon/comp-dag": "workspace:*"
+    "@taskyon/secure-tunnel": "workspace:*"
     "@taskyon/taskyon": "workspace:*"
     buffer: "npm:^6.0.3"
     esbuild-wasm: "npm:0.28.1"

@@ -58,7 +58,9 @@ when that exact path exists in the profile; otherwise the setting is written to 
 
 Each provider profile owns its `chatCompletion` provider configuration: the stable
 `provider` secret ID, display `name`, selected `model`, `baseURL`, streaming support, routes,
-optional static non-secret headers, and optional OAuth metadata. Service-specific attribution
+`networkTransport`, optional static non-secret headers, and optional OAuth metadata. Automatic
+transport uses an injected WSS fetch when the host supplies one; explicit WSS fails closed when the
+host does not. Taskyon-owned and local/private endpoints remain direct. Service-specific attribution
 headers such as `HTTP-Referer` and `X-Title` belong in the profiles for providers that use them.
 Switching profiles restores that profile's selected model. There is no separate `defaultModel`
 fallback.

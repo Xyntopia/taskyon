@@ -1,4 +1,5 @@
 import { fetchProviderModels } from '../cli/models'
+import { CODEX_MODELS_CLIENT_VERSION } from '@taskyon/taskyon'
 
 const assert = (condition: unknown, message: string) => {
   if (!condition) throw new Error(message)
@@ -29,6 +30,7 @@ export const testProviderModelDiscoveryCachesNormallyAndRefreshesOnDemand = asyn
       baseURL: 'https://models.test/codex',
       model: 'gpt-current-1',
       streamSupport: true,
+      networkTransport: 'auto' as const,
       routes: { models: '/models', chatCompletion: '/responses' },
     }
     const first = await fetchProviderModels('chatgpt-codex', api, 'token')
@@ -57,7 +59,9 @@ export const testProviderModelDiscoveryCachesNormallyAndRefreshesOnDemand = asyn
       'Expected an explicit refresh to use a cache-busting request URL.',
     )
     assert(
-      requestedUrls.every((url) => new URL(url).searchParams.get('client_version') === '0.144.5'),
+      requestedUrls.every(
+        (url) => new URL(url).searchParams.get('client_version') === CODEX_MODELS_CLIENT_VERSION,
+      ),
       'Expected Codex model discovery to use the current Codex client version.',
     )
   } finally {

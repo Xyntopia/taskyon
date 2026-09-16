@@ -1,7 +1,9 @@
 export * from '@taskyon/runtime-browser'
+export { TASKYON_WSS_PROXY_URL } from '@taskyon/taskyon'
 
 export {
   CODEX_PROVIDER_NAME,
+  PROVIDER_NETWORK_TRANSPORTS,
   getCodexAccountIdFromCredentials,
   getCodexAuthClaims,
   fetchModelsForProvider,
@@ -10,17 +12,21 @@ export {
   getProviderOauthCredentialsKey,
   OAuthCredentials,
   resolveCodexOauthSession,
+  resolveProviderNetworkTransport,
+  isProviderNetworkDirectOnly,
   resolveProviderAccessToken,
 } from '@taskyon/taskyon'
+export type { ProviderNetworkTransport } from '@taskyon/taskyon'
 
 export {
   canUseTauriHttpPlugin,
   createEncryptedOauthSecretStore,
   createPersistentOauthTokenGetter,
+  authenticateWithDeviceCode,
   loginWithProviderOauth,
   tauriHttpFetch,
 } from '@taskyon/taskyon/browser'
-export type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
+export type { AuthenticationOptions, DeviceCodePrompt, TokenGetter } from '@taskyon/taskyon/browser'
 
 export {
   createChatCompletionTask,

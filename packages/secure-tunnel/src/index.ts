@@ -1,5 +1,6 @@
-export { createSecureFetch, secureFetch } from './secure-fetch'
+export { createSecureFetch, secureFetch, SecureFetchError } from './secure-fetch'
 export type {
+  SecureFetchFailurePhase,
   SecureFetchOptions,
   SecureFetchResponse,
   TunnelDestination,

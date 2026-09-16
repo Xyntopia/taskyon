@@ -11,6 +11,11 @@
         <q-route-tab to="/settings/profile" label="Profile & Backup" name="profile" />
         <q-route-tab to="/settings/secrets" label="Secrets" name="secrets" />
         <q-route-tab
+          to="/settings/sandbox-network"
+          label="Sandbox Network"
+          name="sandbox-network"
+        />
+        <q-route-tab
           v-if="state.appConfiguration.expertMode || selectedTab == 'agent config'"
           to="/settings/agent config"
           label="AI Configuration"
@@ -45,6 +50,15 @@
             title="Taskyon Password Manager"
             style="max-width: 600px"
           />
+        </q-tab-panel>
+        <q-tab-panel name="sandbox-network" :class="tabPanelClass">
+          <div class="column q-gutter-md fit" style="max-width: 900px">
+            <SandboxFetchSettings
+              v-model:transport="state.appConfiguration.sandboxFetchTransport"
+              v-model:wss-url="state.appConfiguration.sandboxFetchWssUrl"
+              v-model:http-proxy-url="state.appConfiguration.sandboxFetchProxyUrl"
+            />
+          </div>
         </q-tab-panel>
         <q-tab-panel name="agent config" :class="tabPanelClass">
           <div class="column q-gutter-md fit" style="max-width: 900px">
@@ -166,9 +180,9 @@
         <q-tab-panel name="app config" :class="tabPanelClass">
           <div>All of the app configurations</div>
           <ObjectView
-            v-model="state.appConfiguration"
+            v-model="appConfigurationModel"
             :schema="
-              convertZodToJsonSchemaCached(TyProfile.shape.appConfiguration, {
+              convertZodToJsonSchemaCached(appConfigurationWithoutSandboxFetch, {
                 unrepresentable: 'any',
               })
             "
@@ -198,6 +212,7 @@
 <script setup lang="ts">
 import type { JSONSchema7 } from 'json-schema'
 import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
+import SandboxFetchSettings from '@taskyon/ui/components/SandboxFetchSettings.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import { getPmtilesStorageCacheDebugSnapshot } from '@taskyon/ui/gis/pmtilesStorageCache'
 import {
@@ -219,6 +234,23 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const appConfigurationWithoutSandboxFetch = TyProfile.shape.appConfiguration.omit({
+  sandboxFetchTransport: true,
+  sandboxFetchWssUrl: true,
+  sandboxFetchProxyUrl: true,
+})
+const appConfigurationModel = computed<Record<string, unknown>>({
+  get: () =>
+    Object.fromEntries(
+      Object.entries(state.appConfiguration).filter(
+        ([key]) =>
+          !['sandboxFetchTransport', 'sandboxFetchWssUrl', 'sandboxFetchProxyUrl'].includes(key),
+      ),
+    ),
+  set: (nextValue) => {
+    Object.assign(state.appConfiguration, nextValue)
+  },
+})
 
 const tabPanelClass = 'column items-center'
 

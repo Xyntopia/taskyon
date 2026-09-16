@@ -12,11 +12,45 @@ import {
   setTaskyonProviderCredential,
 } from '@taskyon/taskyon/api'
 import { createEncryptedOauthSecretStore } from '@taskyon/taskyon/browser'
+import { createStream } from '@taskyon/common/modules/frpBus'
 import { createTaskyonBrowserCoreRuntime } from '../index'
+import { forwardStreamToMessagePort } from '../streamBridge'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(message)
 }
+
+export const testBrowserRuntimeForwardsStreamEvents = async () => {
+  const { stream, emit } = createStream<number>()
+  const { port1, port2 } = new MessageChannel()
+  const received: number[] = []
+  const firstEvent = new Promise<number>((resolve) => {
+    port1.addEventListener('message', (event: MessageEvent<number>) => {
+      received.push(event.data)
+      resolve(event.data)
+    })
+    port1.start()
+  })
+  let stopForwarding: (() => void) | undefined
+
+  try {
+    stopForwarding = forwardStreamToMessagePort(stream, port2)
+    emit(42)
+    assert((await firstEvent) === 42, 'Expected the stream event to reach the browser port.')
+    stopForwarding()
+    emit(43)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert(received.length === 1, 'Expected stream forwarding to stop after cleanup.')
+  } finally {
+    stopForwarding?.()
+    port1.close()
+    port2.close()
+  }
+  return { success: true }
+}
+
+testBrowserRuntimeForwardsStreamEvents.description =
+  'Forwards live runtime stream events through a browser MessagePort and cleans up safely.'
 
 export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () => {
   const cryptoSession = await createCryptoSession()

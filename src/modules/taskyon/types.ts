@@ -1,4 +1,9 @@
 import { llmSettings, partialTaskDraft, ToolchainProfiles } from '@taskyon/taskyon/api'
+import { TASKYON_WSS_PROXY_URL } from '@taskyon/taskyon/token-service-types'
+import {
+  DEFAULT_SANDBOX_FETCH_TRANSPORT,
+  SANDBOX_FETCH_TRANSPORTS,
+} from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { z } from 'zod'
 
 export const taskTemplateTypes = {
@@ -120,9 +125,21 @@ export const appConfiguration = z.object({
     title: 'PMTiles Cache Size',
     description: 'Maximum persisted range-cache size per PMTiles archive in megabytes.',
   }),
+  sandboxFetchTransport: z
+    .enum(SANDBOX_FETCH_TRANSPORTS)
+    .default(DEFAULT_SANDBOX_FETCH_TRANSPORT)
+    .meta({
+      title: 'Sandbox Fetch Transport',
+      description:
+        'Host transport for sandbox network requests. Secure WSS is the default; HTTP is an explicit legacy fallback and direct bypasses mediation.',
+    }),
+  sandboxFetchWssUrl: z.string().url().default(TASKYON_WSS_PROXY_URL).meta({
+    title: 'Sandbox WSS Tunnel',
+    description: 'Authenticated WSS tunnel used for the secure sandbox fetch transport.',
+  }),
   sandboxFetchProxyUrl: z.string().url().default('https://share.taskyon.space/proxy').meta({
-    title: 'Sandbox Fetch Proxy',
-    description: 'HTTP proxy endpoint used by browser tools for cross-origin HTTP and HTTPS.',
+    title: 'Legacy HTTP Sandbox Proxy',
+    description: 'Explicit fallback HTTP proxy endpoint; it is not used by the default transport.',
   }),
   guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',
@@ -142,7 +159,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(34).meta({
+  version: z.literal(36).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),

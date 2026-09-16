@@ -29,6 +29,7 @@ export {
 export { createExternalToolContext, registerToolRpcTools } from './core/toolRpc'
 export { isTaskyonKey } from './core/tyCrypto'
 export { TOKEN_SERVICE_BASE_URL } from './taskyon.space/tokenservice.types'
+export { CODEX_MODELS_CLIENT_VERSION } from './llm/codexModels'
 export { createStandardEntryNodeTool } from './tools/entryNode'
 export { AI_PROVIDER_KEY_STORE_NAME } from './utils/providerAuth'
 export { createCapabilityPolicy } from './security/capabilityPolicy'

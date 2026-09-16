@@ -14,7 +14,9 @@ import {
   type llmSettings,
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
-import { MessageChannelBridge } from '@taskyon/common/modules/frpBusWeb'
+import type { StreamSubscription } from '@taskyon/common/modules/frpBus'
+import { createPortFromMessagePort, MessageChannelBridge } from '@taskyon/common/modules/frpBusWeb'
+import type { ChatCompletionStreamEvent, TyTaskStreamData } from '@taskyon/taskyon'
 import {
   createExternalToolContext,
   registerToolRpcTools,
@@ -23,11 +25,15 @@ import {
 import { startBrowserStorageService, type BrowserRuntimeStorageService } from './storage'
 import type { TaskyonCoreRuntimeStage } from './core'
 import type { TaskyonBrowserWorkerInitMessage, TaskyonBrowserWorkerMessage } from './workerProtocol'
+import type { TaskyonBrowserProviderTransport, TaskyonDirectFallbackRequest } from './providerFetch'
+import { startTaskyonDirectFallbackHost } from './directFallbackProtocol'
 
 export type TaskyonBrowserRuntimeOptions = {
   llmSettings: llmSettings
   entryNode?: partialTaskDraft
   toolchainConfig?: Record<string, FunctionArguments>
+  providerTransport?: TaskyonBrowserProviderTransport
+  approveDirectFallback?: (request: TaskyonDirectFallbackRequest) => Promise<boolean>
   tools?: InternalTool[]
   createTools?: (
     services: TaskyonBrowserRuntimeServices,
@@ -53,6 +59,8 @@ export type TaskyonBrowserRuntime = {
   host: ReturnType<typeof createTaskyonHostClient>
   storageClient: ReturnType<typeof createStorageClient>
   port: Port<TaskyonMessageType, TaskyonMessageType>
+  chatCompletionStream: StreamSubscription<ChatCompletionStreamEvent>
+  workerStream: StreamSubscription<TyTaskStreamData>
   stop: (reason?: string) => void
 }
 
@@ -84,9 +92,22 @@ export const createTaskyonBrowserRuntime = async (
   const coreChannel = new MessageChannel()
   const hostChannel = new MessageChannel()
   const storageChannel = new MessageChannel()
+  const chatCompletionChannel = new MessageChannel()
+  const workerStreamChannel = new MessageChannel()
+  const directFallbackChannel = options.approveDirectFallback ? new MessageChannel() : undefined
+  const stopDirectFallbackHost =
+    directFallbackChannel && options.approveDirectFallback
+      ? startTaskyonDirectFallbackHost(directFallbackChannel.port1, options.approveDirectFallback)
+      : undefined
   const coreBridge = MessageChannelBridge(runtimePort.y, coreChannel.port1)
   const hostBridge = MessageChannelBridge(hostPort.y, hostChannel.port1)
   const storageBridge = MessageChannelBridge(storagePort.x, storageChannel.port1)
+  const chatCompletionStreamPort = createPortFromMessagePort<never, ChatCompletionStreamEvent>(
+    chatCompletionChannel.port1,
+  )
+  const workerStreamPort = createPortFromMessagePort<never, TyTaskStreamData>(
+    workerStreamChannel.port1,
+  )
   const worker = options.createWorker ? options.createWorker() : createDefaultWorker()
   let resolveWorkerInitialization: () => void = () => {}
   let rejectWorkerInitialization: (reason: Error) => void = () => {}
@@ -117,15 +138,26 @@ export const createTaskyonBrowserRuntime = async (
     corePort: coreChannel.port2,
     hostPort: hostChannel.port2,
     storagePort: storageChannel.port2,
+    chatCompletionStreamPort: chatCompletionChannel.port2,
+    workerStreamPort: workerStreamChannel.port2,
     llmSettings: options.llmSettings,
     ...(options.entryNode ? { entryNode: options.entryNode } : {}),
     toolchainConfig: options.toolchainConfig ?? {},
+    ...(options.providerTransport ? { providerTransport: options.providerTransport } : {}),
+    ...(directFallbackChannel ? { directFallbackPort: directFallbackChannel.port2 } : {}),
     storageNamespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     ...(options.storageSessionId ? { storageSessionId: options.storageSessionId } : {}),
     ...(options.persistCryptoSession ? { persistCryptoSession: true } : {}),
     ...(options.cryptoNamespace ? { cryptoNamespace: options.cryptoNamespace } : {}),
   }
-  worker.postMessage(initMessage, [coreChannel.port2, storageChannel.port2, hostChannel.port2])
+  worker.postMessage(initMessage, [
+    coreChannel.port2,
+    storageChannel.port2,
+    hostChannel.port2,
+    chatCompletionChannel.port2,
+    workerStreamChannel.port2,
+    ...(directFallbackChannel ? [directFallbackChannel.port2] : []),
+  ])
 
   let toolExecutor: Awaited<ReturnType<typeof registerToolRpcTools>> | undefined
   const readinessTimeoutMs = options.readinessTimeoutMs ?? 30_000
@@ -169,6 +201,9 @@ export const createTaskyonBrowserRuntime = async (
     coreBridge.destroy()
     hostBridge.destroy()
     storageBridge.destroy()
+    chatCompletionStreamPort.destroy()
+    workerStreamPort.destroy()
+    stopDirectFallbackHost?.()
     if (typeof storageStop === 'function') storageStop()
     worker.terminate()
     throw new Error(`Taskyon browser worker failed during "${workerStage}".`, { cause: error })
@@ -181,12 +216,17 @@ export const createTaskyonBrowserRuntime = async (
     host: hostClient,
     storageClient,
     port: runtimePort.x,
+    chatCompletionStream: chatCompletionStreamPort.port.receive,
+    workerStream: workerStreamPort.port.receive,
     stop: (reason = 'stopping Taskyon browser runtime') => {
       taskyonClient.dispose()
       toolExecutor.destroy()
       coreBridge.destroy()
       hostBridge.destroy()
       storageBridge.destroy()
+      chatCompletionStreamPort.destroy()
+      workerStreamPort.destroy()
+      stopDirectFallbackHost?.()
       if (typeof storageStop === 'function') storageStop()
       worker.terminate()
       void reason
@@ -233,3 +273,10 @@ export {
 export type { BrowserRuntimeStorageService, OpfsStorageOptions } from './storage'
 export { createBrowserDagRunCodeCompiler } from './dagRunCodeCompiler'
 export { createBrowserStoredGraphNodeLoader } from './storedGraphNodeLoader'
+export {
+  createTaskyonProviderFetch,
+  createTaskyonProviderFetchWithTokenGetter,
+  isHostedBrowserProviderRuntime,
+  sanitizeProviderRequestHeaders,
+} from './providerFetch'
+export type { TaskyonBrowserProviderTransport, TaskyonDirectFallbackRequest } from './providerFetch'

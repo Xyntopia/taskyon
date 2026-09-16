@@ -8,6 +8,22 @@ export type FetchAuthorization = (capability: FetchCapability) => Promise<boolea
 
 export type SandboxFetchPolicy = 'default' | 'direct' | 'proxy'
 
+export const SANDBOX_FETCH_TRANSPORTS = ['wss', 'http', 'direct'] as const
+export type SandboxFetchTransport = (typeof SANDBOX_FETCH_TRANSPORTS)[number]
+export const DEFAULT_SANDBOX_FETCH_TRANSPORT: SandboxFetchTransport = 'wss'
+export const SANDBOX_FETCH_TRANSPORT_OPTIONS = [
+  { label: 'Secure WSS tunnel (recommended)', value: 'wss' },
+  { label: 'Legacy HTTP proxy', value: 'http' },
+  { label: 'Direct host fetch', value: 'direct' },
+] as const satisfies ReadonlyArray<{ label: string; value: SandboxFetchTransport }>
+
+export function resolveSandboxFetchTransport(
+  configured: SandboxFetchTransport,
+  policy: SandboxFetchPolicy,
+): SandboxFetchTransport {
+  return policy === 'direct' ? 'direct' : configured
+}
+
 export type SandboxProxyFetchOptions = {
   cacheBust?: boolean | undefined
   stripHeaders?: boolean | undefined

@@ -24,6 +24,7 @@
     "@isomorphic-git/lightning-fs": "^4.6.3",
     "@taskyon/common": "workspace:*",
     "@taskyon/comp-dag": "workspace:*",
+    "@taskyon/secure-tunnel": "workspace:*",
     "@taskyon/taskyon": "workspace:*",
     "buffer": "^6.0.3",
     "esbuild-wasm": "0.28.1",

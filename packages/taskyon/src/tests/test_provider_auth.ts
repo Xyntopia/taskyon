@@ -7,7 +7,7 @@ import {
   createOauthAuthorizationUrl,
 } from '../utils/oauth'
 import { getProviderOauthConfig } from '../utils/providerAuth'
-import { usePersistentOauth } from '../utils/oauthUi'
+import { authenticateWithDeviceCode, usePersistentOauth } from '../utils/oauthUi'
 
 export const testOauthExpiredSessionRequiresNewAuthentication = async () => {
   const expired = OAuthCredentials.parse({
@@ -48,6 +48,54 @@ export const testOauthExpiredSessionRequiresNewAuthentication = async () => {
     'Expired credentials must not survive a failed or unavailable refresh',
   )
 }
+
+export const testOauthRefreshUsesHostSelectedFetch = async () => {
+  const expired = OAuthCredentials.parse({
+    type: 'oauth-credentials',
+    access_token: 'synthetic-expired',
+    refresh_token: 'synthetic-refresh',
+    service: 'https://provider.example/token',
+    created_at: 1,
+    expires_in: 1,
+  })
+  const requestedUrls: string[] = []
+  const getToken = usePersistentOauth({
+    getSecret: () => Promise.resolve(JSON.stringify(expired)),
+    setSecret: () => Promise.resolve(),
+  })
+  const credentials = await getToken(
+    'llm:chatgpt-codex',
+    {
+      oauthURL: 'https://provider.example/oauth/authorize',
+      clientId: 'synthetic-client',
+      scope: 'openid',
+      tokenUrl: 'https://provider.example/token',
+    },
+    undefined,
+    {
+      fetch: (input) => {
+        requestedUrls.push(
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+        )
+        return Promise.resolve(
+          Response.json({
+            access_token: 'synthetic-refreshed',
+            refresh_token: 'synthetic-refresh',
+            expires_in: 3600,
+          }),
+        )
+      },
+    },
+  )
+  assert(
+    requestedUrls[0] === 'https://provider.example/token',
+    'OAuth refresh must use the host-selected fetch transport',
+  )
+  assert(credentials.access_token === 'synthetic-refreshed', 'Expected refreshed credentials')
+}
+
+testOauthRefreshUsesHostSelectedFetch.description =
+  'Routes cached OAuth token refreshes through the host-selected fetch transport.'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(message)
@@ -224,4 +272,63 @@ export const testOauthExchangeDoesNotExposeProviderBodies = async () => {
       'Neither failed exchanges nor malformed success bodies may expose provider response content',
     )
   }
+}
+
+export const testCodexDeviceCodeFlow = async () => {
+  let pollCount = 0
+  let prompt: { verificationUrl: string; userCode: string } | undefined
+  const credentials = await authenticateWithDeviceCode(
+    {
+      oauthURL: 'https://auth.example/oauth/authorize',
+      clientId: 'synthetic-client',
+      scope: 'openid profile offline_access',
+      tokenUrl: 'https://auth.example/oauth/token',
+    },
+    undefined,
+    1_000,
+    {
+      onDeviceCode: (value) => {
+        prompt = value
+      },
+    },
+    async (url, init) => {
+      const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+      if (requestUrl.endsWith('/api/accounts/deviceauth/usercode')) {
+        return Response.json({
+          device_auth_id: 'device-id',
+          user_code: 'ABCD-EFGH',
+          interval: '0.001',
+        })
+      }
+      if (requestUrl.endsWith('/api/accounts/deviceauth/token')) {
+        pollCount += 1
+        if (pollCount === 1) return new Response('', { status: 403 })
+        return Response.json({
+          authorization_code: 'authorization-code',
+          code_verifier: 'verifier',
+        })
+      }
+      if (requestUrl.endsWith('/oauth/token')) {
+        if (typeof init?.body !== 'string') throw new Error('Expected a form-encoded token request')
+        const body = new URLSearchParams(init.body)
+        assert(
+          body.get('redirect_uri') === 'https://auth.example/deviceauth/callback',
+          'Device flow must use the provider callback URI for token exchange',
+        )
+        return Response.json({
+          access_token: 'synthetic-access',
+          refresh_token: 'synthetic-refresh',
+          expires_in: 3600,
+        })
+      }
+      throw new Error(`Unexpected device OAuth request: ${requestUrl}`)
+    },
+  )
+  assert(
+    prompt?.verificationUrl === 'https://auth.example/codex/device' &&
+      prompt.userCode === 'ABCD-EFGH',
+    'Device flow must expose the provider URL and one-time code to the host UI',
+  )
+  assert(pollCount === 2, 'Device flow must poll until authorization completes')
+  assert(credentials.access_token === 'synthetic-access', 'Expected device OAuth credentials')
 }

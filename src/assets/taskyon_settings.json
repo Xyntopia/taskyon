@@ -1,5 +1,5 @@
 {
-  "version": 34,
+  "version": 36,
   "appConfiguration": {
     "darkTheme": "auto",
     "appConfigurationUrl": "/taskyon_settings.json",
@@ -9,6 +9,8 @@
     "gdriveDir": "taskyon",
     "useEnterToSend": "auto",
     "taskSearchVectorizer": "static-multilingual",
+    "sandboxFetchTransport": "wss",
+    "sandboxFetchWssUrl": "wss://share.taskyon.space/ws-proxy/",
     "sandboxFetchProxyUrl": "https://share.taskyon.space/proxy",
     "pmtilesCacheMaxSizeMb": 1024,
     "guiMode": "auto",
@@ -92,6 +94,7 @@
       "taskyon": {
         "chatCompletion": {
           "provider": "taskyon",
+          "networkTransport": "auto",
           "name": "taskyon",
           "model": "z-ai/glm-5.3-flash",
           "baseURL": "https://share.taskyon.space",
@@ -110,6 +113,7 @@
       "huggingface.co": {
         "chatCompletion": {
           "provider": "huggingface.co",
+          "networkTransport": "auto",
           "name": "huggingface.co",
           "model": "meta-llama/llama-3.3-70b-instruct",
           "baseURL": "https://router.huggingface.co",
@@ -123,6 +127,7 @@
       "openai": {
         "chatCompletion": {
           "provider": "openai",
+          "networkTransport": "auto",
           "name": "openai",
           "model": "gpt-5.1",
           "baseURL": "https://api.openai.com",
@@ -136,6 +141,7 @@
       "chatgpt-codex": {
         "chatCompletion": {
           "provider": "chatgpt-codex",
+          "networkTransport": "auto",
           "name": "chatgpt-codex",
           "model": "gpt-5.4",
           "baseURL": "https://chatgpt.com/backend-api/codex",
@@ -162,6 +168,7 @@
       "openrouter.ai": {
         "chatCompletion": {
           "provider": "openrouter.ai",
+          "networkTransport": "auto",
           "name": "openrouter.ai",
           "model": "google/gemini-2.5-flash-lite",
           "baseURL": "https://openrouter.ai",
@@ -179,6 +186,7 @@
       "local": {
         "chatCompletion": {
           "provider": "local",
+          "networkTransport": "auto",
           "name": "local LLM server",
           "model": "qwen3-4b",
           "baseURL": "http://localhost:8080",

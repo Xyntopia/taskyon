@@ -27,6 +27,35 @@ export interface SecureFetchOptions extends Omit<RequestInit, 'body' | 'headers'
 
 export type SecureFetchResponse = Response
 
+export type SecureFetchFailurePhase = 'token' | 'connect' | 'send' | 'response'
+
+export class SecureFetchError extends Error {
+  readonly phase: SecureFetchFailurePhase
+  readonly requestSent: boolean
+
+  constructor(
+    phase: SecureFetchFailurePhase,
+    requestSent: boolean,
+    message: string,
+    cause: unknown,
+  ) {
+    super(message, { cause })
+    this.name = 'SecureFetchError'
+    this.phase = phase
+    this.requestSent = requestSent
+  }
+}
+
+const secureFetchError = (phase: SecureFetchFailurePhase, requestSent: boolean, error: unknown) =>
+  error instanceof SecureFetchError
+    ? error
+    : new SecureFetchError(
+        phase,
+        requestSent,
+        error instanceof Error ? error.message : String(error),
+        error,
+      )
+
 const FORBIDDEN_HEADERS = new Set([
   'connection',
   'content-length',
@@ -66,9 +95,9 @@ const fetchOnce = async (url: URL, options: SecureFetchOptions, token: string) =
   const tunnelUrl = options.tunnelUrl
   if (!tunnelUrl) throw new Error('tunnelUrl is required in SecureFetchOptions')
   const destination = destinationFrom(url)
-  const connection =
+  const connection = await (
     url.protocol === 'https:'
-      ? await openTlsConnection(
+      ? openTlsConnection(
           tunnelUrl,
           destination.host,
           destination.port,
@@ -77,22 +106,28 @@ const fetchOnce = async (url: URL, options: SecureFetchOptions, token: string) =
           options.onTlsHandshake,
           options.tlsClientFactory,
         )
-      : await openWebSocketConnection(
+      : openWebSocketConnection(
           tunnelUrl,
           destination.host,
           destination.port,
           token,
           options.webSocket,
         )
+  ).catch((error: unknown) => {
+    throw secureFetchError('connect', false, error)
+  })
   const close = () => connection.close()
   options.signal?.addEventListener('abort', close, { once: true })
   let handedOff = false
+  let requestSent = false
+  let requestWriteCompleted = false
   const finish = () => {
     options.signal?.removeEventListener('abort', close)
     connection.close()
   }
   try {
     options.signal?.throwIfAborted()
+    requestSent = true
     await connection.write(
       buildHttpRequest(
         options.method ?? 'GET',
@@ -101,6 +136,7 @@ const fetchOnce = async (url: URL, options: SecureFetchOptions, token: string) =
         options.body,
       ),
     )
+    requestWriteCompleted = true
     const response = await parseHttpResponseStream(() => connection.read(), finish)
     const hasBody =
       options.method?.toUpperCase() !== 'HEAD' && ![204, 205, 304].includes(response.status)
@@ -111,6 +147,8 @@ const fetchOnce = async (url: URL, options: SecureFetchOptions, token: string) =
       statusText: response.statusText,
       headers: response.headers,
     })
+  } catch (error) {
+    throw secureFetchError(requestWriteCompleted ? 'response' : 'send', requestSent, error)
   } finally {
     if (!handedOff) finish()
   }
@@ -121,29 +159,51 @@ export async function secureFetch(
   options: SecureFetchOptions = {},
 ): Promise<SecureFetchResponse> {
   let url = new URL(input)
+  let sentAnyRequest = false
   const redirect = options.redirect ?? 'follow'
   let requestOptions = options
   for (let count = 0; count <= 10; count++) {
     options.signal?.throwIfAborted()
     const destination = destinationFrom(url)
-    const token = options.getTunnelToken
-      ? await options.getTunnelToken(destination)
-      : options.tunnelToken
-    if (!token) throw new Error('tunnelToken or getTunnelToken is required')
+    const token = await (
+      options.getTunnelToken
+        ? options.getTunnelToken(destination)
+        : Promise.resolve(options.tunnelToken)
+    ).catch((error: unknown) => {
+      throw secureFetchError('token', sentAnyRequest, error)
+    })
+    if (!token) {
+      throw new SecureFetchError(
+        'token',
+        sentAnyRequest,
+        'tunnelToken or getTunnelToken is required',
+        undefined,
+      )
+    }
     const response = await fetchOnce(url, { ...requestOptions, redirect: 'manual' }, token).catch(
       async (error: unknown) => {
         // This rejection happens before the proxy opens any target socket.
+        const cause = error instanceof SecureFetchError ? error.cause : error
         if (
-          !(error instanceof WsProxyCloseError) ||
-          error.code !== WsProxyCloseCode.AuthFailed ||
-          error.reason !== 'instance_key_mismatch' ||
+          !(cause instanceof WsProxyCloseError) ||
+          cause.code !== WsProxyCloseCode.AuthFailed ||
+          cause.reason !== 'instance_key_mismatch' ||
           !options.getTunnelToken
-        )
+        ) {
+          if (sentAnyRequest && error instanceof SecureFetchError && !error.requestSent) {
+            throw new SecureFetchError(error.phase, true, error.message, error)
+          }
           throw error
-        const refreshed = await options.getTunnelToken(destination, true)
-        return fetchOnce(url, { ...requestOptions, redirect: 'manual' }, refreshed)
+        }
+        const refreshed = await options
+          .getTunnelToken(destination, true)
+          .catch((refreshError: unknown) => {
+            throw secureFetchError('token', sentAnyRequest, refreshError)
+          })
+        return await fetchOnce(url, { ...requestOptions, redirect: 'manual' }, refreshed)
       },
     )
+    sentAnyRequest = true
     if (![301, 302, 303, 307, 308].includes(response.status)) return response
     if (redirect === 'manual') return response
     if (redirect === 'error') throw new Error(`Redirect received from ${url.href}`)

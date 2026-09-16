@@ -12,6 +12,21 @@ so switching back to a provider restores the model last chosen for that profile.
 add an OpenAI-compatible provider by adding a named profile with a complete `chatCompletion`
 configuration under **Edit provider profiles**.
 
+## Network transport
+
+Each provider profile has a **Network transport** setting:
+
+- **Automatic** uses the host-provided secure WSS tunnel for third-party providers in a hosted
+  browser, and direct access when no tunnel is available.
+- **Secure WSS** requires a host-provided tunnel and fails closed if it is unavailable.
+- **Direct** connects from the current runtime without the tunnel.
+
+Taskyon-owned services, local providers, loopback addresses, and private-network endpoints always
+stay direct. The tunnel applies consistently to chat completion and model discovery; an embedding
+host can also use it for programmatic OAuth requests. Interactive authorization pages still open
+directly because the user must visit them. A host may ask for explicit consent to retry directly
+only when tunnel setup failed before a provider request may have been sent.
+
 Taskyon is provider-flexible, not capability-identical. The `chatCompletion` gateway normalizes
 provider access, while tool calling, structured output, web search, vision, token accounting, and
 reasoning options remain model-specific.

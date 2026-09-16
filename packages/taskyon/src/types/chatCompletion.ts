@@ -279,6 +279,9 @@ export const providerEndpointConfig = z
   })
 export type ProviderEndpointConfig = z.infer<typeof providerEndpointConfig>
 
+export const PROVIDER_NETWORK_TRANSPORTS = ['auto', 'wss', 'direct'] as const
+export type ProviderNetworkTransport = (typeof PROVIDER_NETWORK_TRANSPORTS)[number]
+
 export const chatCompletionProviderSettings = providerEndpointConfig
   .extend({
     provider: z.string().meta({
@@ -286,6 +289,10 @@ export const chatCompletionProviderSettings = providerEndpointConfig
     }),
     model: z.string().meta({
       description: 'The model selected for this provider profile.',
+    }),
+    networkTransport: z.enum(PROVIDER_NETWORK_TRANSPORTS).default('auto').meta({
+      description:
+        'Host network policy for this provider. Auto uses WSS on hosted webpages and direct fetch in local runtimes.',
     }),
   })
   .meta({
@@ -301,3 +308,60 @@ export const chatCompletionConnectionSettings = chatCompletionProviderSettings
   })
 export const resolveChatCompletionConnection = (settings: unknown) =>
   chatCompletionConnectionSettings.parse(settings)
+
+const PRIVATE_PROVIDER_HOSTS = [
+  /^10\./,
+  /^127\./,
+  /^169\.254\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^0\./,
+]
+
+const isPrivateProviderIpv4 = (hostname: string) =>
+  PRIVATE_PROVIDER_HOSTS.some((pattern) => pattern.test(hostname))
+
+const isLocalProviderHostname = (hostname: string) => {
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '')
+  const mappedIpv4 = normalized.startsWith('::ffff:') ? normalized.slice(7) : undefined
+  return (
+    normalized === 'localhost' ||
+    normalized.endsWith('.localhost') ||
+    normalized.endsWith('.local') ||
+    normalized === '::1' ||
+    normalized === '::' ||
+    /^fe[89ab][0-9a-f]:/.test(normalized) ||
+    /^f[cd][0-9a-f]{2}:/.test(normalized) ||
+    isPrivateProviderIpv4(normalized) ||
+    (mappedIpv4 !== undefined && isPrivateProviderIpv4(mappedIpv4))
+  )
+}
+
+export const isProviderNetworkDirectOnly = (provider: ChatCompletionProviderSettings): boolean => {
+  let hostname = ''
+  try {
+    hostname = new URL(provider.baseURL).hostname
+  } catch {
+    // The provider request boundary reports malformed URLs with its normal validation error.
+  }
+  return (
+    provider.provider === 'taskyon' ||
+    provider.provider === 'local' ||
+    isLocalProviderHostname(hostname)
+  )
+}
+
+export const resolveProviderNetworkTransport = (
+  provider: ChatCompletionProviderSettings,
+  wssAvailable: boolean,
+): Exclude<ProviderNetworkTransport, 'auto'> => {
+  if (isProviderNetworkDirectOnly(provider)) return 'direct'
+  if (provider.networkTransport === 'direct') return 'direct'
+  if (provider.networkTransport === 'wss' && !wssAvailable) {
+    throw new Error(`WSS transport is required for provider "${provider.name}" but is unavailable.`)
+  }
+  return wssAvailable ? 'wss' : 'direct'
+}

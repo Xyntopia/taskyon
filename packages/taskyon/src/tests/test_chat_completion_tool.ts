@@ -13,9 +13,15 @@ import {
   buildChatProviderRequest,
   normalizeNativeStructuredOutputSchema,
 } from '../tools/chatCompletion/providerRequest'
+import { CODEX_MODELS_CLIENT_VERSION, fetchModelsForProvider } from '../llm/modelDiscovery'
 import { interpretAssistantMessage } from '../tools/chatCompletion/response'
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
-import { resolveChatCompletionConnection, type ProviderRequestTrace } from '../types/chatCompletion'
+import {
+  resolveChatCompletionConnection,
+  resolveProviderNetworkTransport,
+  type ChatCompletionProviderSettings,
+  type ProviderRequestTrace,
+} from '../types/chatCompletion'
 import { getTaskyonCosts } from '../taskyon.space/taskyon.space_api'
 import { taskPlanner } from '../tools/TaskPlannerTool'
 import { jsonSchema, streamText } from 'ai'
@@ -26,6 +32,84 @@ import type { ToolBase } from '../types/tools'
 function assert(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
+
+const providerSettings = (
+  provider: string,
+  baseURL: string,
+  networkTransport: 'auto' | 'direct' | 'wss' = 'auto',
+): ChatCompletionProviderSettings => ({
+  provider,
+  name: provider,
+  model: 'test-model',
+  baseURL,
+  streamSupport: true,
+  networkTransport,
+  routes: { chatCompletion: '/chat/completions', models: '/models' },
+})
+
+export const testProviderNetworkTransportKeepsOwnedAndLocalEndpointsDirect = () => {
+  for (const provider of [
+    providerSettings('taskyon', 'https://share.taskyon.space'),
+    providerSettings('local', 'https://remote-looking.example'),
+    providerSettings('custom', 'http://localhost:8080'),
+    providerSettings('custom', 'http://192.168.1.20:8080'),
+  ]) {
+    assert(
+      resolveProviderNetworkTransport(provider, true) === 'direct',
+      `Expected ${provider.provider} at ${provider.baseURL} to stay direct`,
+    )
+  }
+  for (const provider of [
+    providerSettings('custom', 'https://fc-models.example'),
+    providerSettings('custom', 'http://[::ffff:8.8.8.8]'),
+  ]) {
+    assert(
+      resolveProviderNetworkTransport(provider, true) === 'wss',
+      `Expected public host ${provider.baseURL} to remain eligible for WSS`,
+    )
+  }
+  return { success: true }
+}
+
+testProviderNetworkTransportKeepsOwnedAndLocalEndpointsDirect.description =
+  'Keeps Taskyon-owned, local-provider, loopback, and private-network AI endpoints direct.'
+
+export const testProviderNetworkTransportResolvesHostedDefaultsAndOverrides = () => {
+  assert(
+    resolveProviderNetworkTransport(providerSettings('openai', 'https://api.openai.com'), true) ===
+      'wss',
+    'Expected hosted auto transport to use WSS when the host supplies it',
+  )
+  assert(
+    resolveProviderNetworkTransport(providerSettings('openai', 'https://api.openai.com'), false) ===
+      'direct',
+    'Expected local auto transport to use direct fetch when WSS is unavailable',
+  )
+  assert(
+    resolveProviderNetworkTransport(
+      providerSettings('openai', 'https://api.openai.com', 'direct'),
+      true,
+    ) === 'direct',
+    'Expected an explicit direct override to bypass WSS',
+  )
+  let unavailableError = ''
+  try {
+    resolveProviderNetworkTransport(
+      providerSettings('openai', 'https://api.openai.com', 'wss'),
+      false,
+    )
+  } catch (error) {
+    unavailableError = error instanceof Error ? error.message : String(error)
+  }
+  assert(
+    unavailableError.includes('WSS'),
+    'Expected an explicit WSS override to fail when the host has no WSS transport',
+  )
+  return { success: true }
+}
+
+testProviderNetworkTransportResolvesHostedDefaultsAndOverrides.description =
+  'Resolves per-profile AI transport defaults without silently bypassing an explicit WSS policy.'
 
 export const testNativeStructuredOutputSchemaAddsClosedObjectBoundaries = () => {
   const schema: JSONSchema7 = {
@@ -877,6 +961,7 @@ export const testChatCompletionOpenAIWebSearchIsAvailableWithoutBeingForced = as
       model: 'gpt-5.6-luna',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
+      networkTransport: 'auto',
       routes: { chatCompletion: '/responses', models: '/models' },
     },
     apiKey: 'diagnostic-key',
@@ -903,6 +988,7 @@ export const testChatCompletionOpenAIWebSearchCanBeRequired = async () => {
       model: 'gpt-5.6-luna',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
+      networkTransport: 'auto',
       routes: { chatCompletion: '/responses', models: '/models' },
     },
     apiKey: 'diagnostic-key',
@@ -935,6 +1021,7 @@ export const testChatCompletionOpenRouterWebSearchIsAProviderTool = async () => 
       model: 'openai/gpt-5.6',
       baseURL: 'https://example.test',
       streamSupport: true,
+      networkTransport: 'auto',
       routes: { chatCompletion: '/chat/completions', models: '/models' },
     },
     apiKey: 'diagnostic-key',
@@ -969,6 +1056,7 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
       model: 'gpt-5.6-luna',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
+      networkTransport: 'auto',
       routes: {
         chatCompletion: '/responses',
         models: '/models',
@@ -997,6 +1085,161 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
   return { success: true }
 }
 
+export const testChatCompletionCodexUsesInjectedProviderFetch = async () => {
+  const originalFetch = globalThis.fetch
+  let injectedCalls = 0
+  globalThis.fetch = () =>
+    Promise.reject(new Error('The Codex request unexpectedly used the global fetch.'))
+  const providerFetch: typeof fetch = async (_input, _init) => {
+    injectedCalls += 1
+    return new Response('data: [DONE]\n\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+  }
+
+  try {
+    const request = await buildChatProviderRequest({
+      messages: [{ role: 'user', content: 'Hello.' }],
+      tools: {},
+      selectedModel: 'gpt-5.6-luna',
+      api: {
+        provider: 'chatgpt-codex',
+        name: 'chatgpt-codex',
+        model: 'gpt-5.6-luna',
+        baseURL: 'https://example.test/v1',
+        streamSupport: true,
+        networkTransport: 'auto',
+        routes: { chatCompletion: '/responses', models: '/models' },
+      },
+      apiKey: 'diagnostic-key',
+      fetch: providerFetch,
+    })
+    await streamText(request).text
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert(injectedCalls === 1, 'Expected Codex to use the injected provider fetch exactly once')
+  return { success: true }
+}
+
+testChatCompletionCodexUsesInjectedProviderFetch.description =
+  'Uses the host-provided fetch transport for Codex requests.'
+
+export const testChatCompletionRemoteCompatibleProviderUsesInjectedFetchButLocalDoesNot =
+  async () => {
+    const originalFetch = globalThis.fetch
+    let directCalls = 0
+    let injectedCalls = 0
+    const response = () =>
+      new Response(
+        'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      )
+    globalThis.fetch = () => {
+      directCalls += 1
+      return Promise.resolve(response())
+    }
+    const providerFetch: typeof fetch = () => {
+      injectedCalls += 1
+      return Promise.resolve(response())
+    }
+
+    try {
+      for (const api of [
+        providerSettings('openai', 'https://api.openai.example'),
+        providerSettings('openrouter.ai', 'https://openrouter.example'),
+        providerSettings('custom-remote', 'https://compatible.example'),
+        providerSettings('local', 'http://localhost:8080'),
+      ]) {
+        const request = await buildChatProviderRequest({
+          messages: [{ role: 'user', content: 'Hello.' }],
+          tools: {},
+          selectedModel: 'test-model',
+          api,
+          apiKey: 'diagnostic-key',
+          fetch: providerFetch,
+        })
+        await streamText(request).text
+      }
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+
+    assert(injectedCalls === 3, 'Expected every third-party provider adapter to use WSS fetch')
+    assert(directCalls === 1, 'Expected the local provider to use direct fetch')
+    return { success: true }
+  }
+
+testChatCompletionRemoteCompatibleProviderUsesInjectedFetchButLocalDoesNot.description =
+  'Routes every third-party AI adapter through the host transport while keeping local AI direct.'
+
+export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
+  const originalFetch = globalThis.fetch
+  let injectedCalls = 0
+  let requestedUrl = ''
+  let requestedHeaders: HeadersInit | undefined
+  globalThis.fetch = () =>
+    Promise.reject(new Error('The Codex model request unexpectedly used the global fetch.'))
+  const providerFetch: typeof fetch = async (input, init) => {
+    injectedCalls += 1
+    requestedUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    requestedHeaders = init?.headers
+    return new Response(
+      JSON.stringify({
+        models: [
+          { slug: 'synthetic-codex-model', input_modalities: ['text', 'image'] },
+          { slug: 'synthetic-codex-mini' },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      },
+    )
+  }
+
+  try {
+    const models = await fetchModelsForProvider(
+      {
+        provider: 'chatgpt-codex',
+        name: 'chatgpt-codex',
+        model: 'synthetic-codex-model',
+        baseURL: 'https://example.test/v1',
+        streamSupport: true,
+        networkTransport: 'auto',
+        routes: { chatCompletion: '/responses', models: '/models' },
+      },
+      async () => 'diagnostic-key',
+      { fetch: providerFetch },
+    )
+    assert(models['synthetic-codex-model'] !== undefined, 'Expected the injected model response')
+    assert(models['synthetic-codex-mini'] !== undefined, 'Expected every Codex model response')
+    assert(
+      models['synthetic-codex-model']?.owned_by === 'openai',
+      'Expected Codex model metadata to be normalized',
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert(injectedCalls === 1, 'Expected model discovery to use the injected fetch exactly once')
+  assert(
+    requestedUrl === `https://example.test/v1/models?client_version=${CODEX_MODELS_CLIENT_VERSION}`,
+    'Expected model discovery to preserve the provider base path',
+  )
+  const headers = new Headers(requestedHeaders)
+  assert(
+    headers.get('Cache-Control') === 'no-cache',
+    'Expected Codex model discovery to revalidate',
+  )
+  return { success: true }
+}
+
+testCodexModelDiscoveryUsesInjectedProviderFetch.description =
+  'Uses the host-provided fetch transport for Codex model discovery.'
+
 export const testChatCompletionCacheKeyAndBreakpointsFollowTaskTree = async () => {
   const build = (root: string, finalPrompt: string) =>
     buildChatProviderRequest({
@@ -1016,6 +1259,7 @@ export const testChatCompletionCacheKeyAndBreakpointsFollowTaskTree = async () =
         model: 'gpt-5.6-luna',
         baseURL: 'https://example.test/v1',
         streamSupport: true,
+        networkTransport: 'auto',
         routes: { chatCompletion: '/responses', models: '/models' },
       },
       apiKey: 'diagnostic-key',
@@ -1063,6 +1307,7 @@ export const testChatCompletionCacheKeyFitsOpenAiProviderLimit = async () => {
       model: 'gpt-5.1',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
+      networkTransport: 'auto',
       routes: { chatCompletion: '/responses', models: '/models' },
     },
     apiKey: 'diagnostic-key',
@@ -1142,6 +1387,7 @@ export const testProviderRequestsApplyProfileHeaders = async () => {
           model: 'test-model',
           baseURL: 'https://provider.example',
           streamSupport: true,
+          networkTransport: 'auto',
           defaultHeaders: { 'X-Profile-Header': provider },
           routes: {
             chatCompletion: '/v1/',
@@ -1163,6 +1409,7 @@ export const testProviderRequestsApplyProfileHeaders = async () => {
         model: 'test-model',
         baseURL: 'https://provider.example',
         streamSupport: true,
+        networkTransport: 'auto',
         routes: {
           chatCompletion: '/v1/',
           models: '/v1/models',

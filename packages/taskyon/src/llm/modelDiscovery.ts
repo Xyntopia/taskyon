@@ -1,11 +1,18 @@
-import type { ChatCompletionProviderSettings } from '../types/chatCompletion'
-import { availableModels } from './chat'
+import {
+  resolveProviderNetworkTransport,
+  type ChatCompletionProviderSettings,
+} from '../types/chatCompletion'
+import { availableModels, fetchAvailableModels } from './chat'
+import { CODEX_MODELS_CLIENT_VERSION } from './codexModels'
 import { TASKYON_MODEL_CATALOG_URL, TOKEN_SERVICE_BASE_URL } from '../taskyon.space/endpoints'
 import { joinUrl } from '../utils/httpUtils'
+
+export { CODEX_MODELS_CLIENT_VERSION } from './codexModels'
 
 type ModelDiscoveryOptions = {
   useTokenServiceForOpenrouter?: boolean
   useTokenServiceForTaskyon?: boolean
+  fetch?: typeof fetch
 }
 
 const resolveModelEndpoint = (
@@ -46,15 +53,27 @@ export async function fetchModelsForProvider(
   let modelsUrl: string
   try {
     modelsUrl = resolveModelEndpoint(api, options)
+    if (api.provider === 'chatgpt-codex') {
+      const url = new URL(modelsUrl)
+      url.searchParams.set('client_version', CODEX_MODELS_CLIENT_VERSION)
+      modelsUrl = url.toString()
+    }
   } catch (err) {
     console.warn('Invalid model URL', err)
     return {}
   }
 
   const key = await resolveModelApiKey(api, getApiKey, options)
-  const headers = modelsUrl.startsWith(TOKEN_SERVICE_BASE_URL) ? {} : (api.defaultHeaders ?? {})
+  const headers = {
+    ...(modelsUrl.startsWith(TOKEN_SERVICE_BASE_URL) ? {} : (api.defaultHeaders ?? {})),
+    ...(api.provider === 'chatgpt-codex' ? { 'Cache-Control': 'no-cache' } : {}),
+  }
+  const networkTransport = resolveProviderNetworkTransport(api, options.fetch !== undefined)
+  const providerFetch = networkTransport === 'wss' ? options.fetch : undefined
   try {
-    return await availableModels(modelsUrl, key, headers)
+    return providerFetch
+      ? await fetchAvailableModels(modelsUrl, key, headers, false, providerFetch)
+      : await availableModels(modelsUrl, key, headers)
   } catch {
     console.log("couldn't download models from", modelsUrl)
     return {}

@@ -730,4 +730,5 @@ testTokenMintSecurity.requiresAuth = true
 testTokenReturnAfterJwtExpButBeforeOms.requiresAuth = true
 testTokenReturnAfterOms.requiresAuth = true
 testSecureFetch.requiresAuth = true
+testSecureFetch.timeoutMs = 60_000
 testTyProxy.requiresAuth = true

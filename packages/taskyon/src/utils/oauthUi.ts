@@ -1,4 +1,5 @@
 //https://console.cloud.google.com/auth/clients/14927198496-jaadcashh91s9gue7uicf3datk79tohc.apps.googleusercontent.com?project=xyntopia-gdrive
+import z from 'zod'
 import {
   generatePKCE,
   isTokenExpired,
@@ -13,13 +14,197 @@ const getDefaultRedirectUri = () => `${window.location.origin}/oauth/return`
 
 // Configurable timeout for OAuth operations
 const OAUTH_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+const DEVICE_CODE_TIMEOUT_MS = 15 * 60 * 1000
 const POPUP_CHECK_INTERVAL_MS = 1000 // Check if popup is closed every second
+const DEVICE_CODE_POLL_INTERVAL_MS = 5_000
+
+export type DeviceCodePrompt = {
+  verificationUrl: string
+  userCode: string
+  expiresInSeconds: number
+}
 
 export interface AuthenticationOptions {
   /** Force the user to re-authenticate, even if they have an active session */
   forceReauth?: boolean
   /** Prompt the user to select an account, even if they only have one */
   forceAccountSelection?: boolean
+  /** Use a provider-supported device-code flow instead of a browser callback. */
+  flow?: 'popup' | 'device-code'
+  /** Notify the host when the user code is ready to enter. */
+  onDeviceCode?: (prompt: DeviceCodePrompt) => void
+  /** Host-selected fetch for programmatic OAuth requests. Browser navigation remains direct. */
+  fetch?: typeof fetch
+}
+
+const waitForDeviceCodeDelay = (delayMs: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort)
+      resolve()
+    }, delayMs)
+    const abort = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      reject(new OAuthError('OAuth operation was aborted', 'ABORTED'))
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+  })
+
+const readDeviceCodeResponse = (value: unknown) => {
+  const parsed = z
+    .object({
+      device_auth_id: z.string().min(1),
+      user_code: z.string().min(1),
+      interval: z.union([z.string(), z.number()]).optional(),
+    })
+    .safeParse(value)
+  if (!parsed.success) {
+    throw new OAuthError('Device authorization returned an invalid response', 'INVALID_RESPONSE')
+  }
+  const intervalSeconds = Number(parsed.data.interval ?? DEVICE_CODE_POLL_INTERVAL_MS / 1000)
+  return {
+    deviceAuthId: parsed.data.device_auth_id,
+    userCode: parsed.data.user_code,
+    intervalMs: Number.isFinite(intervalSeconds)
+      ? Math.max(intervalSeconds * 1000, 10)
+      : DEVICE_CODE_POLL_INTERVAL_MS,
+  }
+}
+
+const readDeviceTokenResponse = async (response: Response) => {
+  const parsed = z
+    .object({
+      authorization_code: z.string().min(1),
+      code_verifier: z.string().min(1),
+    })
+    .safeParse(await response.json().catch(() => null))
+  if (!parsed.success) {
+    throw new OAuthError(
+      'Device authorization returned an invalid token response',
+      'INVALID_RESPONSE',
+    )
+  }
+  return parsed.data
+}
+
+const requestDeviceCode = async (url: string, clientId: string, fetcher: typeof fetch) => {
+  let response: Response
+  try {
+    response = await fetcher(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId }),
+    })
+  } catch {
+    throw new OAuthError('Device authorization could not reach the provider', 'NETWORK_ERROR')
+  }
+  if (!response.ok) {
+    throw new OAuthError(`Device authorization failed (HTTP ${response.status})`, 'NETWORK_ERROR')
+  }
+  return readDeviceCodeResponse(await response.json().catch(() => null))
+}
+
+const pollDeviceAuthorization = async ({
+  url,
+  deviceAuthId,
+  userCode,
+  intervalMs,
+  timeoutMs,
+  signal,
+  fetcher,
+}: {
+  url: string
+  deviceAuthId: string
+  userCode: string
+  intervalMs: number
+  timeoutMs: number
+  signal: AbortSignal | undefined
+  fetcher: typeof fetch
+}) => {
+  const deadline = Date.now() + timeoutMs
+  while (true) {
+    if (signal?.aborted) throw new OAuthError('OAuth operation was aborted', 'ABORTED')
+    let response: Response
+    try {
+      response = await fetcher(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_auth_id: deviceAuthId, user_code: userCode }),
+      })
+    } catch {
+      throw new OAuthError('Device authorization could not reach the provider', 'NETWORK_ERROR')
+    }
+    if (response.ok) return await readDeviceTokenResponse(response)
+    if (response.status !== 403 && response.status !== 404) {
+      throw new OAuthError(`Device authorization failed (HTTP ${response.status})`, 'NETWORK_ERROR')
+    }
+    const remainingMs = deadline - Date.now()
+    if (remainingMs <= 0) {
+      throw new OAuthError(`Device authorization timed out after ${timeoutMs}ms`, 'TIMEOUT')
+    }
+    await waitForDeviceCodeDelay(Math.min(intervalMs, remainingMs), signal)
+  }
+}
+
+export async function authenticateWithDeviceCode(
+  params: {
+    oauthURL: string
+    clientId: string
+    scope: string
+    tokenUrl?: string
+  },
+  signal?: AbortSignal,
+  timeoutMs = DEVICE_CODE_TIMEOUT_MS,
+  options: AuthenticationOptions = {},
+  fetcher: typeof fetch = fetch,
+): Promise<OAuthCredentials> {
+  if (!params.tokenUrl) {
+    throw new OAuthError('Device authorization requires a token URL', 'INVALID_RESPONSE')
+  }
+  let issuer: URL
+  let tokenUrl: URL
+  try {
+    issuer = new URL(params.oauthURL)
+    tokenUrl = new URL(params.tokenUrl)
+  } catch {
+    throw new OAuthError('Device authorization URLs are invalid', 'INVALID_RESPONSE')
+  }
+  if (issuer.protocol !== 'https:' || tokenUrl.protocol !== 'https:') {
+    throw new OAuthError('Device authorization requires HTTPS', 'INVALID_RESPONSE')
+  }
+  if (issuer.origin !== tokenUrl.origin) {
+    throw new OAuthError('Device authorization URLs must share an issuer', 'INVALID_RESPONSE')
+  }
+  if (signal?.aborted) throw new OAuthError('OAuth operation was aborted', 'ABORTED')
+
+  const device = await requestDeviceCode(
+    new URL('/api/accounts/deviceauth/usercode', issuer).href,
+    params.clientId,
+    fetcher,
+  )
+  options.onDeviceCode?.({
+    verificationUrl: new URL('/codex/device', issuer).href,
+    userCode: device.userCode,
+    expiresInSeconds: Math.ceil(timeoutMs / 1000),
+  })
+  const authorization = await pollDeviceAuthorization({
+    url: new URL('/api/accounts/deviceauth/token', issuer).href,
+    deviceAuthId: device.deviceAuthId,
+    userCode: device.userCode,
+    intervalMs: device.intervalMs,
+    timeoutMs,
+    signal,
+    fetcher,
+  })
+  return await exchangeOauthCode({
+    tokenUrl: tokenUrl.href,
+    clientId: params.clientId,
+    code: authorization.authorization_code,
+    verifier: authorization.code_verifier,
+    redirectUri: new URL('/deviceauth/callback', issuer).href,
+    fetch: fetcher,
+  })
 }
 
 export async function authenticateWithPopup(
@@ -35,6 +220,15 @@ export async function authenticateWithPopup(
   timeoutMs: number = OAUTH_TIMEOUT_MS,
   options: AuthenticationOptions = {},
 ): Promise<OAuthCredentials> {
+  if (options.flow === 'device-code') {
+    return await authenticateWithDeviceCode(
+      params,
+      signal,
+      timeoutMs,
+      options,
+      options.fetch ?? fetch,
+    )
+  }
   const {
     oauthURL,
     clientId,
@@ -161,6 +355,7 @@ export async function authenticateWithPopup(
       code: qparams.code,
       tokenUrl,
       redirectUri: effectiveRedirectUri,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
     })
     return creds
   } catch (error) {
@@ -338,6 +533,7 @@ export const usePersistentOauth = (
           const refreshed = await useRefreshTokenIfExpired(cached, {
             clientId: params.clientId,
             tokenUrl: params.tokenUrl,
+            ...(options.fetch ? { fetch: options.fetch } : {}),
           })
           cached = refreshed
           if (refreshed) {
@@ -350,7 +546,8 @@ export const usePersistentOauth = (
       if (cached) return cached
 
       // Need to authenticate
-      const creds = await authenticate(params, signal, OAUTH_TIMEOUT_MS, options)
+      const timeoutMs = options.flow === 'device-code' ? DEVICE_CODE_TIMEOUT_MS : OAUTH_TIMEOUT_MS
+      const creds = await authenticate(params, signal, timeoutMs, options)
       await saveCredentials(provider, creds)
       return creds
     } catch (error) {

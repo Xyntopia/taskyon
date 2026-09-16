@@ -2,11 +2,72 @@ import type { Model } from 'openai/resources/models.mjs'
 import { asyncTimeLruCache } from '../utils/caching'
 // TODO: can we use this:  https://github.com/rexxars/eventsource-parser?
 
-const availableModelsTmp = async (
+const readStringProperty = (value: unknown, property: string): string | undefined => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const propertyValue = Reflect.get(value, property)
+  return typeof propertyValue === 'string' ? propertyValue : undefined
+}
+
+const readNumberProperty = (value: unknown, property: string): number | undefined => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const propertyValue = Reflect.get(value, property)
+  return typeof propertyValue === 'number' ? propertyValue : undefined
+}
+
+const normalizeModel = (value: unknown): Model | undefined => {
+  const id = readStringProperty(value, 'id')
+  if (!id) return undefined
+  return {
+    id,
+    created: readNumberProperty(value, 'created') ?? 0,
+    object: 'model',
+    owned_by: readStringProperty(value, 'owned_by') ?? 'unknown',
+  }
+}
+
+const normalizeCodexModel = (value: unknown): Model | undefined => {
+  const slug = readStringProperty(value, 'slug')
+  if (!slug) return undefined
+  return {
+    id: slug,
+    created: 0,
+    object: 'model',
+    owned_by: 'openai',
+  }
+}
+
+const normalizeModels = (
+  values: unknown[],
+  normalize: (value: unknown) => Model | undefined,
+): Model[] =>
+  values.flatMap((value) => {
+    const model = normalize(value)
+    return model ? [model] : []
+  })
+
+const readModelList = (value: unknown): Model[] => {
+  if (Array.isArray(value)) {
+    const models = normalizeModels(value, normalizeModel)
+    return models.length > 0 ? models : normalizeModels(value, normalizeCodexModel)
+  }
+  if (typeof value !== 'object' || value === null) return []
+
+  const data = Reflect.get(value, 'data')
+  if (Array.isArray(data)) {
+    const models = normalizeModels(data, normalizeModel)
+    if (models.length > 0) return models
+  }
+
+  const models = Reflect.get(value, 'models')
+  return Array.isArray(models) ? normalizeModels(models, normalizeCodexModel) : []
+}
+
+export const fetchAvailableModels = async (
   modelsUrl: string,
   apiKey: string,
   headers: Record<string, string>,
   invalidateCache = false,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<Record<string, Model>> => {
   try {
     // Construct the URL with an optional cache-busting query parameter
@@ -14,7 +75,7 @@ const availableModelsTmp = async (
 
     console.log('downloading model list')
     // Setting up the Fetch request
-    const response = await fetch(url, {
+    const response = await fetchImpl(url, {
       method: 'GET',
       headers: {
         ...headers,
@@ -27,9 +88,9 @@ const availableModelsTmp = async (
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
-    // Parse the JSON response
-    const raw = (await response.json()) as { data?: Array<Model> } | Array<Model>
-    const data = 'data' in raw && raw.data[0]?.id ? raw.data : (raw as Array<Model>)
+    // Parse the JSON response. Codex returns `{ models: [{ slug }] }`, while
+    // OpenAI-compatible providers generally return `{ data: [{ id }] }`.
+    const data = readModelList(await response.json())
 
     // Return the list of models directly
     const models = data.reduce<Record<string, Model>>((acc, m) => {
@@ -48,4 +109,4 @@ export const availableModels = asyncTimeLruCache(
   60 * 60 * 1000, //1h
   true, // use localStorage for persistence
   'modelCache', // save it here..
-)(availableModelsTmp)
+)(fetchAvailableModels)
