@@ -101,8 +101,6 @@ const formatEnvironmentValue = (value: unknown) => {
   width: min(680px, calc(100vw - 32px));
   max-width: 680px;
   max-height: min(820px, calc(100vh - 32px));
-  color: var(--primary-text-color, inherit);
-  background: var(--card-background-color, var(--q-dark-page));
   overflow: auto;
 }
 

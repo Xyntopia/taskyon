@@ -8,6 +8,29 @@ test.describe('app smoke', () => {
     await expect(page).toHaveTitle(/Taskyon/)
   })
 
+  test('about dialog follows the selected color scheme', async ({ page }) => {
+    const openAboutDialog = async () => {
+      await page.locator('#ty-space-menu').click()
+      await page.locator('.q-menu').getByText('About', { exact: true }).click()
+      const dialog = page.locator('[data-cy="taskyon-about"]')
+      await expect(dialog).toBeVisible()
+      return dialog
+    }
+
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.goto('/')
+    await expect(page.locator('body')).toHaveClass(/body--light/)
+    const lightDialog = await openAboutDialog()
+    await expect(lightDialog).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await lightDialog.getByLabel('Close About Taskyon').click()
+
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await page.reload()
+    await expect(page.locator('body')).toHaveClass(/body--dark/)
+    const darkDialog = await openAboutDialog()
+    await expect(darkDialog).toHaveCSS('background-color', 'rgb(13, 17, 23)')
+  })
+
   test('clears the message composer immediately after submission', async ({ page }) => {
     await page.goto('/')
     await waitForTaskyonSession(page)
