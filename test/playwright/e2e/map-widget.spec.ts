@@ -1,7 +1,7 @@
 import { expect, type FrameLocator, type Locator, type Page, test } from '@playwright/test'
 import { join } from 'node:path'
 
-import { dataCy, waitForTaskyonSession } from '../support/taskyon'
+import { dataCy } from '../support/taskyon'
 
 const mapWidgetScreenshotPath = join(
   process.cwd(),
@@ -112,9 +112,11 @@ const openToolSelector = async (page: Page) => {
 
 const selectOverpassMapTool = async (page: Page) => {
   const menu = await openToolSelector(page)
-  await menu.getByRole('combobox').fill('overpassMapTool')
   const option = page.getByRole('option', { name: 'overpassMapTool', exact: true })
-  await expect(option).toBeVisible()
+  await expect(async () => {
+    await menu.getByRole('combobox').fill('overpassMapTool')
+    await expect(option).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 30_000 })
   await option.click()
   await expect(page.locator('.create-tasks__mode')).toContainText('overpassMapTool')
 }
@@ -142,7 +144,6 @@ const runOverpassToolFromVisibleForm = async (
   args: { overpassQuery: string } | { query: string },
 ) => {
   await page.getByLabel('go to chat').click()
-  await waitForTaskyonSession(page)
   await expect(dataCy(page, 'tool-btn')).toBeVisible()
   await selectOverpassMapTool(page)
 

@@ -1,14 +1,18 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 9000)
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `https://127.0.0.1:${port}`
+const localProduction = process.env.PLAYWRIGHT_LOCAL_PRODUCTION === '1'
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ?? `${localProduction ? 'http' : 'https'}://127.0.0.1:${port}`
 const browserName = process.env.PLAYWRIGHT_BROWSER === 'firefox' ? 'firefox' : 'chromium'
 const desktopDevice =
   browserName === 'firefox' ? devices['Desktop Firefox'] : devices['Desktop Chrome']
 const startServer = process.env.PLAYWRIGHT_SKIP_WEB_SERVER !== '1'
 const webServer = startServer
   ? {
-      command: `COREPACK_HOME=/tmp/corepack TASKYON_FAST_DEV_BUILD=1 yarn dev --hostname 127.0.0.1 --port ${port}`,
+      command: localProduction
+        ? `yarn serve:spa dist/spa ${port} 127.0.0.1`
+        : `COREPACK_HOME=/tmp/corepack TASKYON_FAST_DEV_BUILD=1 yarn dev --hostname 127.0.0.1 --port ${port}`,
       url: baseURL,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,

@@ -40,6 +40,20 @@ are added.
 - Mock optional external services at the network boundary. Deterministic tests must not require
   optional local environment files.
 
+## Production-Build E2E Coverage
+
+- Playwright specs and their support code must run unchanged against a production build and the
+  development server. Do not depend on `process.env.DEV`-gated UI, debug panels, test globals, or
+  any other scaffolding a production build omits.
+- Wait on the user-visible outcome the test is about: rendered DOM, settings that survive reload,
+  persisted drafts, chat and tool results, and account, credit, or session UI. Do not use internal
+  store values such as session status or initialization flags as readiness gates.
+- When a behavior has no production-visible readiness signal, assert the behavior's observable
+  result rather than adding one. Production code and markup are not extended only to make tests
+  observable; missing user-facing status is fixed as a product change with its own coverage.
+- Development-only hooks remain useful for local debugging, but a test that requires them does
+  not count as coverage for the deployed application.
+
 ## Model And External-Service Tests
 
 - Diagnostics involving an LLM use the active runtime/profile settings or explicit harness

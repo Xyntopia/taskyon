@@ -3,17 +3,45 @@ import { expect, test } from '@playwright/test'
 import {
   closeAiSettings,
   dataCy,
+  expectTaskyonReady,
   expectSettingsToggle,
   selectLlmModel,
   setSettingsToggle,
   testModelId,
-  waitForTaskyonSession,
 } from '../support/taskyon'
+
+test('selects a free model from the nested picker and retains it after reload', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expectTaskyonReady(page)
+  await dataCy(page, 'model-id').click()
+  const currentModel = await dataCy(page, 'model-select').inputValue()
+  await dataCy(page, 'model-select').click()
+  await dataCy(page, 'model-select').fill('')
+
+  const nextModel = currentModel === testModelId ? 'qwen/qwen3.8-flash' : testModelId
+  const option = page.locator(
+    `.model-select-popup:visible [data-cy="model-option"][data-model-id="${nextModel}"]`,
+  )
+  await expect(option).toBeVisible()
+  await option.click()
+  await expect(dataCy(page, 'model-id')).toContainText(nextModel)
+  await expect(dataCy(page, 'model-selection')).toBeHidden()
+
+  await dataCy(page, 'model-id').click()
+  await expect(dataCy(page, 'model-selection')).toBeVisible()
+  await page.locator('.create-tasks textarea').click()
+  await expect(dataCy(page, 'model-selection')).toBeHidden()
+
+  await page.reload()
+  await expect(dataCy(page, 'model-id')).toContainText(nextModel)
+})
 
 test.describe('Taskyon settings and tools', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
   })
 
   test('opens quick settings and persists expert tool controls after reload', async ({ page }) => {

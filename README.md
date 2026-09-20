@@ -141,7 +141,8 @@ Common commands:
 
 - `yarn dev` starts the development app.
 - `yarn build` creates a production build.
-- `yarn test:e2e` runs the Playwright browser E2E suite.
+- `yarn test:e2e` runs the Playwright browser E2E suite against local development.
+- `yarn test:e2e:production` builds and tests the local production SPA.
 - `yarn lint` runs typechecking and ESLint.
 - `yarn format:file <path...>` formats specific files.
 

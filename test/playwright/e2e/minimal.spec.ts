@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { waitForTaskyonSession } from '../support/taskyon'
+import { expectTaskyonReady } from '../support/taskyon'
 
 test.describe('app smoke', () => {
   test('loads Taskyon', async ({ page }) => {
@@ -9,16 +9,6 @@ test.describe('app smoke', () => {
   })
 
   test('about dialog follows the selected color scheme', async ({ page }) => {
-    await page.route('**/build-metadata.json', async (route) => {
-      await route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          commit: 'test-commit',
-          publishDate: '2026-09-15T10:00:00.000Z',
-        }),
-      })
-    })
-
     const openAboutDialog = async () => {
       await page.locator('#ty-space-menu').click()
       await page.locator('.q-menu').getByText('About', { exact: true }).click()
@@ -32,7 +22,6 @@ test.describe('app smoke', () => {
     await expect(page.locator('body')).toHaveClass(/body--light/)
     const lightDialog = await openAboutDialog()
     await expect(lightDialog).toHaveCSS('background-color', 'rgb(255, 255, 255)')
-    await expect(lightDialog.locator('[data-cy="taskyon-build-commit"]')).toHaveText('test-commit')
     await lightDialog.getByLabel('Close About Taskyon').click()
 
     await page.emulateMedia({ colorScheme: 'dark' })
@@ -42,9 +31,41 @@ test.describe('app smoke', () => {
     await expect(darkDialog).toHaveCSS('background-color', 'rgb(13, 17, 23)')
   })
 
+  test('about dialog displays the published build metadata', async ({ page, request }) => {
+    test.skip(
+      process.env.PLAYWRIGHT_EXPECT_BUILD_METADATA !== '1',
+      'requires a production build with published metadata',
+    )
+
+    const metadataResponse = await request.get('/build-metadata.json')
+    expect(metadataResponse.ok()).toBe(true)
+    expect(metadataResponse.headers()['content-type']).toMatch(/application\/json/)
+
+    const metadata = await metadataResponse.json()
+    expect(metadata.commit).toMatch(/^[0-9a-f]{40}$/i)
+    expect(metadata.publishDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/)
+    expect(Number.isNaN(Date.parse(metadata.publishDate))).toBe(false)
+
+    await page.goto('/')
+    await page.locator('#ty-space-menu').click()
+    await page.locator('.q-menu').getByText('About', { exact: true }).click()
+
+    const dialog = page.locator('[data-cy="taskyon-about"]')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('[data-cy="taskyon-build-commit"]')).toHaveText(metadata.commit)
+
+    const buildTime = dialog.locator('[data-cy="taskyon-build-time"]')
+    await expect(buildTime).not.toHaveText(/unknown/i)
+    const expectedBuildTime = await page.evaluate(
+      (publishDate) => new Date(publishDate).toLocaleString(),
+      metadata.publishDate,
+    )
+    await expect(buildTime).toHaveText(expectedBuildTime)
+  })
+
   test('clears the message composer immediately after submission', async ({ page }) => {
     await page.goto('/')
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
 
     const composer = page.getByPlaceholder('Describe what you want to build')
     await composer.fill('Clear this draft after submission')

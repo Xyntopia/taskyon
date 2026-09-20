@@ -93,17 +93,6 @@ export const closeAiSettings = async (page: Page) => {
   await expect(dataCyMenu(page, 'ai-settings')).toBeHidden()
 }
 
-export const waitForTaskyonSession = async (page: Page) => {
-  const sidebarButton = page.getByRole('button', { name: 'Open Sidebar' })
-  await sidebarButton.click()
-  const sessionStatus = page.locator('.chat-sidebar__dev')
-  await expect(sessionStatus).toBeVisible()
-  await expect(sessionStatus).not.toContainText('session: N/A')
-  await expect(sessionStatus).toContainText('status: ready')
-  await page.locator('.q-drawer__backdrop').click()
-  await expect(sessionStatus).toBeHidden()
-}
-
 const modelField = (page: Page): Locator =>
   dataCy(page, 'model-selection').locator('.q-field').filter({ hasText: modelSelectLabel })
 

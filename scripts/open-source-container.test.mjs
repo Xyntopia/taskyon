@@ -40,6 +40,8 @@ void test('public container commands consistently use Podman and the SPA target'
   assert.match(buildScript, /IMAGE_NAME="xyntopia\/taskyon"/)
   assert.match(buildScript, /BUILD_STAGE="production"/)
   assert.match(buildScript, /podman build/)
+  assert.doesNotMatch(buildScript, /podman (?:login|push)/)
+  assert.match(buildScript, /podman save .*GIT_HASH/)
   assert.doesNotMatch(buildScript, /\bdocker (?:build|tag|push)\b/)
   assert.match(relayScript, /podman build/)
   assert.doesNotMatch(relayScript, /\bdocker (?:build|tag|push)\b/)

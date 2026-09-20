@@ -3,10 +3,10 @@ import { expect, test } from '@playwright/test'
 import {
   addAiServices,
   dataCy,
+  expectTaskyonReady,
   readOnlineEnv,
   selectLlmModel,
   testModelId,
-  waitForTaskyonSession,
   writeMessage,
 } from '../support/taskyon'
 
@@ -23,13 +23,13 @@ test.describe('diagnostics page', () => {
 
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
 
     await addAiServices(page, onlineEnv)
 
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
     await selectLlmModel(page, 'openai', 'gpt-5.1')
     await page.goto('/diagnostics')
 
@@ -68,10 +68,10 @@ test.describe('diagnostics page', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
     await selectLlmModel(page, 'taskyon', testModelId)
 
     const assistantMessages = page.locator('.assistant.message')
@@ -140,7 +140,7 @@ test.describe('diagnostics page', () => {
 
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
 
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()

@@ -92,10 +92,12 @@
     "test:build-metadata": "node --import ./packages/tycli/src/register.ts --experimental-strip-types --test packages/common/modules/buildMetadata.test.ts scripts/write-build-metadata.test.mjs",
     "test:container-config": "node --test scripts/open-source-container.test.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:production": "yarn build:app && node scripts/write-build-metadata.mjs dist/spa/build-metadata.json \"$(git rev-parse --verify HEAD)\" \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\" && PLAYWRIGHT_EXPECT_BUILD_METADATA=1 PLAYWRIGHT_LOCAL_PRODUCTION=1 PLAYWRIGHT_PORT=4000 playwright test",
     "test:e2e:online": "PLAYWRIGHT_REQUIRE_ONLINE=1 playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:discover": "playwright test --list",
-    "test:e2e:ui": "yarn test:e2e:discover && playwright test --ui"
+    "test:e2e:ui": "yarn test:e2e:discover && playwright test --ui",
+    "serve:spa": "node scripts/serve-spa.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.88",

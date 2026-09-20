@@ -5,10 +5,10 @@ import {
   addAiServices,
   checkLastMessage,
   dataCy,
+  expectTaskyonReady,
   readOnlineEnv,
   selectLlmModel,
   setSettingsToggle,
-  waitForTaskyonSession,
   writeMessage,
 } from '../support/taskyon'
 
@@ -58,7 +58,7 @@ test.describe('Taskyon API', () => {
 
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
 
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()
@@ -89,7 +89,7 @@ test.describe('Taskyon API', () => {
 
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
 
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()
@@ -105,7 +105,7 @@ test.describe('Taskyon API', () => {
     await expect(dataCy(page, 'model-id')).toContainText(unlockedModelId)
 
     await page.reload()
-    await waitForTaskyonSession(page)
+    await expectTaskyonReady(page)
     await expect(dataCy(page, 'model-id')).toContainText(unlockedModelId)
 
     await dataCy(page, 'model-id').click()
