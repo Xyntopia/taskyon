@@ -7,6 +7,8 @@
     flat
     maximized
     data-cy-menu="model-selection"
+    :persistent="modelPickerOpen || providerPickerOpen"
+    @update:model-value="onOuterMenuVisibility"
   >
     <template #btnContent>
       <q-icon :name="matSmartToy" />
@@ -23,6 +25,7 @@
             v-model="selectedProviderProfile"
             more-settings
             :options="tystate.availableProviders"
+            @popup-visibility-changed="(open: boolean) => (providerPickerOpen = open)"
           />
         </div>
         <q-separator />
@@ -50,6 +53,7 @@
           :select-api="state.appConfiguration.expertMode"
           :model-options="Object.values(tystate.llmModels)"
           :allowed-models="tystate.tyKeyAllowedModels"
+          @picker-visibility-changed="(open: boolean) => (modelPickerOpen = open)"
           @update-bot-name="
             (bot) => {
               tystate.updateModelAndApi(bot)
@@ -81,12 +85,21 @@ import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import ResponsiveMenuDialogBtn from '@taskyon/ui/components/ResponsiveMenuDialogBtn.vue'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import ApiSelect from './ApiSelect.vue'
 import ModelSelection from './ModelSelection.vue'
 
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const modelPickerOpen = ref(false)
+const providerPickerOpen = ref(false)
+
+function onOuterMenuVisibility(open: boolean) {
+  if (!open) {
+    modelPickerOpen.value = false
+    providerPickerOpen.value = false
+  }
+}
 
 const selectedProviderProfile = computed({
   get: () => state.selectedToolchainProfile ?? null,

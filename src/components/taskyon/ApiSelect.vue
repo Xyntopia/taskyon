@@ -11,6 +11,8 @@
       dense
       label="Provider"
       :options="options"
+      @popup-show="emit('popupVisibilityChanged', true)"
+      @popup-hide="emit('popupVisibilityChanged', false)"
     >
       <template #option="{ itemProps, opt }">
         <q-item v-bind="itemProps" data-cy="provider-option" :data-provider="opt">
@@ -37,6 +39,10 @@
 import { matElectricalServices, matSettings } from '@quasar/extras/material-icons'
 
 const model = defineModel<string | null>()
+
+const emit = defineEmits<{
+  popupVisibilityChanged: [open: boolean]
+}>()
 
 defineProps<{
   moreSettings?: boolean

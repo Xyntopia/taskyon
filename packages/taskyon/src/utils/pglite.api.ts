@@ -11,6 +11,8 @@ export type TyPGDB =
 
 const pgInstances = new Map<string, TyPGDB>()
 const memoryPgInstances = new Map<string, TyPGDB>()
+const pendingPgInstances = new Map<string, Promise<TyPGDB>>()
+const pendingMemoryPgInstances = new Map<string, Promise<TyPGDB>>()
 let nodeDataDirResolver: ((name: string) => string) | null = null
 const TASKYON_DATABASE = 'template1'
 
@@ -23,9 +25,13 @@ export function configureNodePgLiteDataDir(resolver?: (name: string) => string) 
 }
 
 export async function closeDatabases(): Promise<void> {
+  const pendingDatabases = [...pendingPgInstances.values(), ...pendingMemoryPgInstances.values()]
+  await Promise.allSettled(pendingDatabases)
   const databases = [...pgInstances.values(), ...memoryPgInstances.values()]
   pgInstances.clear()
   memoryPgInstances.clear()
+  pendingPgInstances.clear()
+  pendingMemoryPgInstances.clear()
   await Promise.all(databases.map(async (database) => await database.close()))
 }
 
@@ -69,34 +75,56 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
     existingDb.name = name
     return existingDb
   }
-  console.log('get database', name)
-  const newInstance: TyPGDB = useNodePgLite()
-    ? ((await PGlite.create({
-        dataDir: getNodeDataDir(name),
-        database: TASKYON_DATABASE,
-        extensions: {
-          vector,
-        },
-      })) as TyPGDB)
-    : await createBrowserPGlite(name)
-  pgInstances.set(name, newInstance)
-  newInstance.name = name
-  return newInstance
+  // Share the in-flight creation so concurrent callers do not spawn competing workers.
+  const pendingDb = pendingPgInstances.get(name)
+  if (pendingDb) return await pendingDb
+
+  const creation = (async () => {
+    console.log('get database', name)
+    const newInstance: TyPGDB = useNodePgLite()
+      ? ((await PGlite.create({
+          dataDir: getNodeDataDir(name),
+          database: TASKYON_DATABASE,
+          extensions: {
+            vector,
+          },
+        })) as TyPGDB)
+      : await createBrowserPGlite(name)
+    pgInstances.set(name, newInstance)
+    newInstance.name = name
+    return newInstance
+  })()
+  pendingPgInstances.set(name, creation)
+  try {
+    return await creation
+  } finally {
+    pendingPgInstances.delete(name)
+  }
 }
 
 export const getInMemoryDatabase = async (name: string): Promise<TyPGDB> => {
   const existingDb = memoryPgInstances.get(name)
   if (existingDb) return existingDb
+  const pendingDb = pendingMemoryPgInstances.get(name)
+  if (pendingDb) return await pendingDb
 
-  const database: TyPGDB = await PGlite.create({
-    dataDir: 'memory://',
-    extensions: {
-      vector,
-    },
-  })
-  database.name = name
-  memoryPgInstances.set(name, database)
-  return database
+  const creation = (async () => {
+    const database: TyPGDB = await PGlite.create({
+      dataDir: 'memory://',
+      extensions: {
+        vector,
+      },
+    })
+    database.name = name
+    memoryPgInstances.set(name, database)
+    return database
+  })()
+  pendingMemoryPgInstances.set(name, creation)
+  try {
+    return await creation
+  } finally {
+    pendingMemoryPgInstances.delete(name)
+  }
 }
 
 export const createPgLiteDatabase = async (dataDir: string): Promise<TyPGDB> =>

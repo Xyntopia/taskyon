@@ -21,6 +21,8 @@
         v-bind="$attrs"
         :display-value="selectedModel || ''"
         @update:model-value="onModelSelect"
+        @popup-show="emit('pickerVisibilityChanged', true)"
+        @popup-hide="emit('pickerVisibilityChanged', false)"
         @filter="
           (val: string, update: updateCallBack, abort: () => void) =>
             filterModels(val, update, abort, computedModelOptions)
@@ -79,6 +81,7 @@ const selectedProfile = defineModel<string | null>('selectedProfile', {
 const showVisionModels = ref(false)
 
 const emit = defineEmits<{
+  pickerVisibilityChanged: [open: boolean]
   updateBotName: [
     {
       newName: string

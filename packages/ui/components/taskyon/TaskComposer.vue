@@ -21,7 +21,7 @@
         v-if="!selectedTaskType"
         v-model="messageDraft"
         :debounce="0"
-        :send-disabled="submitting"
+        :send-disabled="submitting || sessionSwitching"
         :class="['text-body1 ty-msg-edit', $q.dark.isActive ? 'text-white' : 'text-primary']"
         :use-enter-to-send="useEnterToSend"
         :show-web-search="showWebSearch"
@@ -191,7 +191,7 @@
       >
         <q-btn
           class="create-tasks__execute-button"
-          :disable="submitting"
+          :disable="submitting || sessionSwitching"
           flat
           :icon-right="matSend"
           @click="addNewTask('message')"
@@ -241,6 +241,7 @@ const props = withDefaults(
     minMode?: boolean
     expertMode?: boolean
     heroMode?: boolean
+    sessionSwitching?: boolean
     useEnterToSend?: UseEnterToSendMode
     showWebSearch?: boolean
     placeholder?: string
@@ -254,6 +255,7 @@ const props = withDefaults(
     minMode: false,
     expertMode: false,
     heroMode: false,
+    sessionSwitching: false,
     useEnterToSend: 'auto',
     showWebSearch: false,
     placeholder: 'Type your message...',

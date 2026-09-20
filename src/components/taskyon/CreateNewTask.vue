@@ -12,6 +12,7 @@
     :min-mode="props.minMode"
     :expert-mode="props.expertMode"
     :hero-mode="props.heroMode"
+    :session-switching="sessionSwitching"
     :use-enter-to-send="state.appConfiguration.useEnterToSend"
     :show-web-search="state.appConfiguration.webSearchButton"
     :navigate-to-task="navigateToTask"
@@ -80,6 +81,7 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const taskyonClient = tystate.taskyonClient
 const { navigateToTask } = useTaskNavigation()
+const sessionSwitching = computed(() => state.taskyonSessionStatus === 'switching-session')
 const selectedTaskType = computed(() =>
   state.createTaskType.type === 'functioncall' ? state.createTaskType.name : undefined,
 )

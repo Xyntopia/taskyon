@@ -1,5 +1,5 @@
 import { LeaderChangedError } from '@electric-sql/pglite/worker'
-import { initializePGliteWorker } from '../utils/pglite.api'
+import { getInMemoryDatabase, initializePGliteWorker } from '../utils/pglite.api'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -54,3 +54,16 @@ export async function pglite_workerDoesNotRetryUnrelatedFailures() {
 
 pglite_workerDoesNotRetryUnrelatedFailures.description =
   'PGlite startup retries only leader-election interruptions and preserves unrelated database failures.'
+
+export async function pglite_workerSharesConcurrentDatabaseInitialization() {
+  const databaseName = `concurrent-memory-${Date.now()}`
+  const [first, second] = await Promise.all([
+    getInMemoryDatabase(databaseName),
+    getInMemoryDatabase(databaseName),
+  ])
+
+  assert(first === second, 'Concurrent callers must receive the same PGlite instance')
+}
+
+pglite_workerSharesConcurrentDatabaseInitialization.description =
+  'Concurrent PGlite callers share one in-flight database initialization and instance.'

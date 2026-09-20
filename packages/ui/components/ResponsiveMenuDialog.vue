@@ -4,6 +4,7 @@
     v-if="!$q.platform.is.mobile"
     v-model="open"
     :auto-close="autoClose"
+    :persistent="persistent"
     :data-cy="dataCy"
     :separate-close-popup="false"
     :target="target"
@@ -19,6 +20,7 @@
     transition-show="slide-up"
     transition-hide="slide-down"
     :auto-close="autoClose"
+    :persistent="persistent"
     :maximized="maximized"
     position="bottom"
   >
@@ -39,6 +41,7 @@ defineProps<{
   maximized?: QDialog['maximized']
   dataCy?: string | undefined
   autoClose?: QMenu['autoClose']
+  persistent?: QMenu['persistent']
   target?: QMenu['target']
   contextMenu?: QMenu['contextMenu']
 }>()

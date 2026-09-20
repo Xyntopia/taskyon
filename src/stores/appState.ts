@@ -785,6 +785,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // our sessions only get saved once we have a legitimate session key!
   const setSessionId = (newId: string) => {
     if (newId === sessionId.value) return
+    const previousProfile = activeProfileNameRef.value
     sessionId.value = newId
     const profileToLoad =
       profileMode === 'explicit'
@@ -813,6 +814,19 @@ export const useAppStateStore = defineStore('ui-state', () => {
     })
     // re-load state with new profile!
     applyStoredProfile(profileToLoad)
+    // Until the first session resolves, the app edits a placeholder profile. Persist the live
+    // state into the resolved anonymous session profile so changes made in that window are not
+    // discarded when the placeholder is abandoned. Authenticated sessions must not inherit the
+    // placeholder state.
+    if (
+      profileMode === 'session-driven' &&
+      previousProfile === defaultProfileName &&
+      profileToLoad !== defaultProfileName &&
+      bindingKey.value === null &&
+      !getTaskyonUiProfile(profileToLoad)
+    ) {
+      setTaskyonUiProfile(profileToLoad, { ...stateRefs })
+    }
   }
 
   const setTaskyonAuthLoading = (loading: boolean) => {

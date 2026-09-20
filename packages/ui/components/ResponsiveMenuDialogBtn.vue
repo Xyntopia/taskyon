@@ -11,6 +11,7 @@
       :maximized="maximized"
       :data-cy="dataCyMenu"
       :auto-close="autoClose"
+      :persistent="persistent"
     >
       <template #default="{ close: innerClose }">
         <slot :close="innerClose" />
@@ -29,6 +30,7 @@ defineProps<{
   maximized?: QDialog['maximized']
   dataCyMenu?: string
   autoClose?: QMenu['autoClose']
+  persistent?: QMenu['persistent']
 }>()
 
 const open = defineModel<boolean>({ default: false })
