@@ -1,15 +1,13 @@
 {
-  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "target": "esnext",
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "verbatimModuleSyntax": false,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
     "skipLibCheck": true,
     "preserveSymlinks": true,
-    "baseUrl": ".",
-    "rootDirs": ["./"],
-    "lib": ["esnext", "dom", "dom.iterable", "dom.asynciterable"],
-    "types": []
-  }
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "tsup.config.ts"]
 }

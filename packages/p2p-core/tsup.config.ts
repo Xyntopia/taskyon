@@ -11,6 +11,7 @@ export default defineConfig({
     p2pBus: 'src/p2pBus.ts',
     p2pManager: 'src/p2pManager.ts',
     stream: 'src/stream.ts',
+    messagePort: 'src/messagePort.ts',
     testNetworks: 'src/testNetworks.ts',
   },
   format: ['esm', 'cjs'],

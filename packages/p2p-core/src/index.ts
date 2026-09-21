@@ -7,6 +7,7 @@ export * from './browser'
 export * from './node'
 export * from './relay'
 export * from './stream'
+export * from './messagePort'
 export * from './topic-router'
 
 export type { Libp2p } from 'libp2p'

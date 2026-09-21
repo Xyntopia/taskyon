@@ -4,13 +4,16 @@ import type { Uint8ArrayList } from 'uint8arraylist'
 
 type StreamChunk = Uint8Array | Uint8ArrayList
 
+export type Libp2pStreamLike = AsyncIterable<StreamChunk> &
+  Pick<Stream, 'send' | 'onDrain' | 'close'>
+
 export type Libp2pStreamDuplex = Duplex<
   AsyncIterable<StreamChunk>,
   Source<StreamChunk>,
   Promise<void>
 >
 
-export function streamToDuplex(stream: Stream): Libp2pStreamDuplex {
+export function streamToDuplex(stream: Libp2pStreamLike): Libp2pStreamDuplex {
   return {
     source: stream,
     sink: async (source) => {

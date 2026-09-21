@@ -50,6 +50,11 @@
       "import": "./dist/stream.js",
       "require": "./dist/stream.cjs"
     },
+    "./messagePort": {
+      "types": "./dist/messagePort.d.ts",
+      "import": "./dist/messagePort.js",
+      "require": "./dist/messagePort.cjs"
+    },
     "./testNetworks": {
       "types": "./dist/testNetworks.d.ts",
       "import": "./dist/testNetworks.js",
@@ -62,6 +67,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsup",
+    "test": "tsx --test 'src/**/*.test.ts'",
     "prepack": "yarn build"
   },
   "dependencies": {
@@ -90,7 +96,9 @@
     "weald": "^1.1.0"
   },
   "devDependencies": {
+    "@types/node": "^22.13.0",
     "tsup": "^8.5.0",
+    "tsx": "4.20.6",
     "typescript": "^5.9.2"
   },
   "license": "MIT"
