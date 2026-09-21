@@ -26,6 +26,7 @@
     "@quasar/extras": "^1.17.0",
     "@taskyon/common": "workspace:*",
     "@taskyon/comp-dag": "workspace:*",
+    "@taskyon/maplibre": "workspace:*",
     "@taskyon/taskyon": "workspace:*",
     "@taskyon/tyclient": "workspace:*",
     "codemirror": "^6.0.1",

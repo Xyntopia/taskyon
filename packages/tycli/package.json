@@ -34,6 +34,7 @@
   "dependencies": {
     "@taskyon/common": "workspace:*",
     "@taskyon/comp-dag": "workspace:*",
+    "@taskyon/maplibre": "workspace:*",
     "@taskyon/modelica": "workspace:*",
     "@taskyon/taskyon": "workspace:*",
     "@taskyon/tyclient": "workspace:*",

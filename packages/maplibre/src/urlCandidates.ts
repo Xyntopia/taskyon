@@ -1,5 +1,5 @@
 export interface PmtilesUrlCandidateOptions {
-  suffixes?: string[]
+  readonly suffixes?: readonly string[]
 }
 
 export const buildPmtilesUrlCandidates = (
@@ -12,11 +12,10 @@ export const buildPmtilesUrlCandidates = (
   const candidates = new Set<string>([trimmed])
   if (!trimmed.endsWith('.pmtiles')) {
     candidates.add(`${trimmed}.pmtiles`)
-    ;(options.suffixes ?? []).forEach((suffix) => {
+    options.suffixes?.forEach((suffix) => {
       const normalized = suffix.trim().replace(/^\/+/, '')
       if (normalized) candidates.add(`${trimmed}/${normalized}`)
     })
   }
-
   return [...candidates]
 }

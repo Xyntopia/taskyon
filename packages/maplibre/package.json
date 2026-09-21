@@ -1,0 +1,41 @@
+{
+  "name": "@taskyon/maplibre",
+  "version": "0.1.0",
+  "description": "Taskyon MapLibre and PMTiles components for browser applications",
+  "type": "module",
+  "sideEffects": [
+    "./dist/style.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && vue-tsc -p tsconfig.build.json",
+    "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@types/geojson": "^7946.0.16",
+    "maplibre-gl": "^5.23.0",
+    "pmtiles": "^4.4.1"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.22"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "^0.8.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.3.6",
+    "vue": "^3.5.22",
+    "vue-tsc": "^3.0.7"
+  },
+  "license": "MIT"
+}

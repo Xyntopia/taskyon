@@ -32,15 +32,15 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import {
   addPmtilesRasterLayer,
   addPmtilesVectorLayer,
-  addRasterFallbackBaseLayer,
+  createTaskyonPmtilesRuntime,
   defaultWorldPmtilesUrl,
-  setupTaskyonMapLibreWorker,
-  setupTaskyonPmtilesProtocol,
   type TaskyonPmtilesRasterLayerSpec,
   type TaskyonPmtilesVectorLayerSpec,
-} from '../gis/maplibrePmtiles'
+} from '@taskyon/maplibre'
 import { onBeforeUnmount, onMounted, ref, useSlots } from 'vue'
 import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
+import { createPmtilesStorageSource } from '../gis/pmtilesStorageCache'
+import { addRasterFallbackBaseLayer } from '../gis/mapRasterFallback'
 
 const PARCELS_PM_URL =
   'https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:parcels-temp/parcels.pmtiles'
@@ -99,6 +99,7 @@ const mapEl = ref<HTMLDivElement | null>(null)
 const map = ref<unknown>(null)
 const mapInitError = ref<string | null>(null)
 const slots = useSlots()
+const pmtilesRuntime = createTaskyonPmtilesRuntime()
 let resizeBurstTimers: ReturnType<typeof setTimeout>[] = []
 
 const getMapInstance = (): maplibregl.Map | null => map.value as maplibregl.Map | null
@@ -224,9 +225,10 @@ const getDefaultPmtilesLayers = (): TaskyonPmtilesVectorLayerSpec[] => {
 const addConfiguredPmtilesLayers = async () => {
   const m = getMapInstance()
   if (!m) return
+  const sourceFactory = (url: string) => createPmtilesStorageSource(props.storageClient, url)
   for (const layer of props.pmtilesRasterLayers) {
     try {
-      await addPmtilesRasterLayer(m, layer, props.storageClient)
+      await addPmtilesRasterLayer(pmtilesRuntime, m, layer, sourceFactory)
     } catch (error) {
       console.warn(`${logPrefix} optional PMTiles raster layer unavailable`, {
         layerId: layer.id,
@@ -238,7 +240,7 @@ const addConfiguredPmtilesLayers = async () => {
 
   const vectorLayers = [...getDefaultPmtilesLayers(), ...props.pmtilesVectorLayers]
   for (const layer of vectorLayers) {
-    await addPmtilesVectorLayer(m, layer, props.storageClient)
+    await addPmtilesVectorLayer(pmtilesRuntime, m, layer, sourceFactory)
   }
 }
 
@@ -268,8 +270,7 @@ const createMap = () => {
     return
   }
 
-  setupTaskyonMapLibreWorker()
-  setupTaskyonPmtilesProtocol()
+  pmtilesRuntime.setup()
 
   try {
     map.value = new maplibregl.Map({
@@ -321,6 +322,7 @@ const destroyMap = () => {
     m.remove()
     map.value = null
   }
+  pmtilesRuntime.dispose()
 }
 
 const zoomTo = (lat: number, lng: number, zoom?: number) => {

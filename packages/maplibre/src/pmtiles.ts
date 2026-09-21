@@ -1,17 +1,11 @@
-import { buildPmtilesUrlCandidates } from '@taskyon/common/modules/pmtilesUtils'
-import { createPmtilesStorageSource } from './pmtilesStorageCache'
-import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import type { Map as MapLibreMap } from 'maplibre-gl'
 import maplibregl from 'maplibre-gl'
 import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-csp-worker.js?url'
-import { PMTiles, Protocol } from 'pmtiles'
-import { defaultWorldPmtilesUrl } from './mapSources'
+import { PMTiles, Protocol, type Source } from 'pmtiles'
+import { buildPmtilesUrlCandidates } from './urlCandidates.js'
 
-const protocol = new Protocol()
-let protocolRegistered = false
-let workerRegistered = false
-
-export { defaultWorldPmtilesUrl }
+export const defaultWorldPmtilesUrl =
+  'https://eu2.contabostorage.com/af09f5440e00407ca6d2d275a4a4dc89:protomaps/world.pmtiles'
 
 interface TaskyonPmtilesSourceSpec {
   id: string
@@ -53,16 +47,36 @@ interface LoadedPmtilesSource {
   header: unknown
 }
 
-export const setupTaskyonMapLibreWorker = (): void => {
-  if (workerRegistered) return
-  maplibregl.setWorkerUrl(mapLibreWorkerUrl)
-  workerRegistered = true
+export type PmtilesSourceFactory = (url: string) => Source | string
+
+export interface TaskyonPmtilesRuntime {
+  setup: () => void
+  dispose: () => void
+  register: (source: Source | string) => PMTiles
 }
 
-export const setupTaskyonPmtilesProtocol = (): void => {
-  if (protocolRegistered) return
-  maplibregl.addProtocol('pmtiles', protocol.tile)
-  protocolRegistered = true
+export const createTaskyonPmtilesRuntime = (): TaskyonPmtilesRuntime => {
+  const protocol = new Protocol()
+  let installed = false
+
+  return {
+    setup: () => {
+      if (installed) return
+      maplibregl.setWorkerUrl(mapLibreWorkerUrl)
+      maplibregl.addProtocol('pmtiles', protocol.tile)
+      installed = true
+    },
+    dispose: () => {
+      if (!installed) return
+      maplibregl.removeProtocol('pmtiles')
+      installed = false
+    },
+    register: (source) => {
+      const pmtiles = new PMTiles(source)
+      protocol.add(pmtiles)
+      return pmtiles
+    },
+  }
 }
 
 export const parsePmtilesVectorLayerNames = (metadata: unknown): string[] => {
@@ -87,39 +101,15 @@ export const parsePmtilesBounds = (
 ): [number, number, number, number] | null =>
   parseBoundsFromMetadata(metadata) ?? parseBoundsFromHeader(header)
 
-export const addRasterFallbackBaseLayer = (map: MapLibreMap): void => {
-  const sourceId = 'fallback_osm_raster'
-  const layerId = 'fallback_osm_raster_layer'
-
-  if (!map.getSource(sourceId)) {
-    map.addSource(sourceId, {
-      type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
-    })
-  }
-
-  if (!map.getLayer(layerId)) {
-    map.addLayer({
-      id: layerId,
-      type: 'raster',
-      source: sourceId,
-      paint: {
-        'raster-opacity': 0.85,
-      },
-    })
-  }
-}
-
 export const addPmtilesVectorLayer = async (
+  runtime: TaskyonPmtilesRuntime,
   map: MapLibreMap,
   spec: TaskyonPmtilesVectorLayerSpec,
-  storageClient?: TaskyonStorageClient,
+  sourceFactory?: PmtilesSourceFactory,
 ): Promise<void> => {
   if (map.getSource(spec.id)) return
 
-  const loaded = await loadPmtilesSource(spec, storageClient)
+  const loaded = await loadPmtilesSource(runtime, spec, sourceFactory)
   const sourceLayers = parsePmtilesVectorLayerNames(loaded.metadata)
   const bounds = parsePmtilesBounds(loaded.metadata, loaded.header)
 
@@ -152,13 +142,14 @@ export const addPmtilesVectorLayer = async (
 }
 
 export const addPmtilesRasterLayer = async (
+  runtime: TaskyonPmtilesRuntime,
   map: MapLibreMap,
   spec: TaskyonPmtilesRasterLayerSpec,
-  storageClient?: TaskyonStorageClient,
+  sourceFactory?: PmtilesSourceFactory,
 ): Promise<void> => {
   if (map.getSource(spec.id)) return
 
-  const loaded = await loadPmtilesSource(spec, storageClient)
+  const loaded = await loadPmtilesSource(runtime, spec, sourceFactory)
   map.addSource(spec.id, {
     type: 'raster-dem',
     url: `pmtiles://${loaded.resolvedUrl}`,
@@ -220,26 +211,21 @@ const parseBoundsFromHeader = (header: unknown): [number, number, number, number
 }
 
 const loadPmtilesSource = async (
+  runtime: TaskyonPmtilesRuntime,
   spec: TaskyonPmtilesSourceSpec,
-  storageClient?: TaskyonStorageClient,
+  sourceFactory?: PmtilesSourceFactory,
 ): Promise<LoadedPmtilesSource> => {
   let lastError: unknown = null
   const candidateOptions = spec.suffixes ? { suffixes: spec.suffixes } : {}
 
   for (const candidate of buildPmtilesUrlCandidates(spec.url, candidateOptions)) {
     try {
-      const pmtiles = new PMTiles(createPmtilesStorageSource(storageClient, candidate))
-      protocol.add(pmtiles)
+      const pmtiles = runtime.register(sourceFactory?.(candidate) ?? candidate)
       const header = await pmtiles.getHeader()
       const metadata = await pmtiles.getMetadata()
       return { resolvedUrl: candidate, metadata, header }
     } catch (error) {
       lastError = error
-      console.warn('[maplibrePmtiles] PMTiles candidate failed', {
-        sourceId: spec.id,
-        candidate,
-        error,
-      })
     }
   }
 

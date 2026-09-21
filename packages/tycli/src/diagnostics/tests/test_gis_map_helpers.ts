@@ -1,4 +1,4 @@
-import { buildPmtilesUrlCandidates } from '@taskyon/common/modules/pmtilesUtils'
+import { buildPmtilesUrlCandidates } from '@taskyon/maplibre'
 import { buildDataAndMapTasks, buildMapToolDataResult } from '@taskyon/ui/gis/mapToolShared'
 import { parseTaskyonMapWidgetState } from '@taskyon/ui/gis/taskyonMapWidget'
 import { taskResult } from '@taskyon/taskyon/api'

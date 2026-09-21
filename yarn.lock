@@ -4593,6 +4593,24 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@taskyon/maplibre@workspace:*, @taskyon/maplibre@workspace:packages/maplibre":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/maplibre@workspace:packages/maplibre"
+  dependencies:
+    "@types/geojson": "npm:^7946.0.16"
+    "@vitejs/plugin-vue": "npm:^6.0.1"
+    "@vue/tsconfig": "npm:^0.8.1"
+    maplibre-gl: "npm:^5.23.0"
+    pmtiles: "npm:^4.4.1"
+    typescript: "npm:^5.9.2"
+    vite: "npm:^7.3.6"
+    vue: "npm:^3.5.22"
+    vue-tsc: "npm:^3.0.7"
+  peerDependencies:
+    vue: ^3.5.22
+  languageName: unknown
+  linkType: soft
+
 "@taskyon/modelica@workspace:*, @taskyon/modelica@workspace:packages/modelica":
   version: 0.0.0-use.local
   resolution: "@taskyon/modelica@workspace:packages/modelica"
@@ -4798,6 +4816,7 @@ __metadata:
     "@taskyon/common": "workspace:*"
     "@taskyon/comp-dag": "workspace:*"
     "@taskyon/https-tunnel-wasm": "workspace:*"
+    "@taskyon/maplibre": "workspace:*"
     "@taskyon/modelica": "workspace:*"
     "@taskyon/secure-tunnel": "workspace:*"
     "@taskyon/taskyon": "workspace:*"
@@ -4850,6 +4869,7 @@ __metadata:
     "@quasar/extras": "npm:^1.17.0"
     "@taskyon/common": "workspace:*"
     "@taskyon/comp-dag": "workspace:*"
+    "@taskyon/maplibre": "workspace:*"
     "@taskyon/taskyon": "workspace:*"
     "@taskyon/tyclient": "workspace:*"
     "@types/geojson": "npm:^7946.0.16"
@@ -6649,6 +6669,21 @@ __metadata:
     js-beautify: "npm:^1.14.9"
     vue-component-type-helpers: "npm:^2.0.0"
   checksum: 10c0/37fa46cb6b98f90affb2faf5aa41422617bbd23ff35bc714d08035334e593ae31d18757d5ae688f778dd8b4c28de431601c0b9b7ca17fc1b55f1401a5577375e
+  languageName: node
+  linkType: hard
+
+"@vue/tsconfig@npm:^0.8.1":
+  version: 0.8.1
+  resolution: "@vue/tsconfig@npm:0.8.1"
+  peerDependencies:
+    typescript: 5.x
+    vue: ^3.4.0
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+    vue:
+      optional: true
+  checksum: 10c0/f4e37182dc2560ce2c78e66fbf837000dba5460c12913ef37f5d54b6c0da518df1118fcc1968ff51d9541287a9d9d105fb17072b0dbb095919cfb50d1fe67a78
   languageName: node
   linkType: hard
 
@@ -17423,6 +17458,7 @@ __metadata:
     "@supabase/supabase-js": "npm:^2.39.0"
     "@taskyon/common": "workspace:*"
     "@taskyon/comp-dag": "workspace:*"
+    "@taskyon/maplibre": "workspace:*"
     "@taskyon/modelica": "workspace:*"
     "@taskyon/p2p-core": "workspace:*"
     "@taskyon/runtime-browser": "workspace:*"

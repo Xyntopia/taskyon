@@ -33,7 +33,7 @@ import {
 } from '@taskyon/taskyon/api'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
-import { buildPmtilesUrlCandidates } from '@taskyon/common/modules/pmtilesUtils'
+import { buildPmtilesUrlCandidates } from '@taskyon/maplibre'
 import { parseTaskyonMapWidgetState } from '@taskyon/ui/gis/taskyonMapWidget'
 import {
   createTaskExecutionProgressState,

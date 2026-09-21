@@ -1,5 +1,5 @@
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
-import { defaultWorldPmtilesUrl } from './mapSources'
+import { defaultWorldPmtilesUrl } from '@taskyon/maplibre'
 
 export interface MapSearchLocation {
   name: string
