@@ -12,6 +12,7 @@
     "@mdit/plugin-katex": "^0.24.1",
     "@noble/hashes": "^2.0.1",
     "@resvg/resvg-wasm": "^2.6.2",
+    "@taskyon/protocol": "workspace:*",
     "@vueuse/core": "^14.2.1",
     "axios": "^1.11.0",
     "dompurify": "^3.4.8",

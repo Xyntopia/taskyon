@@ -1,0 +1,49 @@
+{
+  "name": "@taskyon/protocol",
+  "version": "0.1.0",
+  "description": "Transport-neutral typed protocols and ports for Taskyon services",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
+    },
+    "./remote-error": {
+      "types": "./dist/remoteError.d.ts",
+      "import": "./dist/remoteError.js"
+    },
+    "./request-lifecycle": {
+      "types": "./dist/requestLifecycle.d.ts",
+      "import": "./dist/requestLifecycle.js"
+    },
+    "./sensor": {
+      "types": "./dist/sensor.d.ts",
+      "import": "./dist/sensor.js"
+    },
+    "./transport": {
+      "types": "./dist/transport.d.ts",
+      "import": "./dist/transport.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "node --experimental-strip-types --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2"
+  },
+  "license": "MIT"
+}

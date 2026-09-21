@@ -4535,6 +4535,7 @@ __metadata:
     "@mdit/plugin-katex": "npm:^0.24.1"
     "@noble/hashes": "npm:^2.0.1"
     "@resvg/resvg-wasm": "npm:^2.6.2"
+    "@taskyon/protocol": "workspace:*"
     "@types/geojson": "npm:^7946.0.16"
     "@vueuse/core": "npm:^14.2.1"
     axios: "npm:^1.11.0"
@@ -4636,14 +4637,25 @@ __metadata:
     "@libp2p/webtransport": "npm:^6.0.14"
     "@multiformats/multiaddr": "npm:^13.0.1"
     "@multiformats/multiaddr-matcher": "npm:^3.0.1"
-    "@taskyon/common": "workspace:*"
+    "@taskyon/protocol": "workspace:*"
     it-length-prefixed-stream: "npm:^2.0.3"
     it-stream-types: "npm:^2.0.4"
     libp2p: "npm:^3.1.5"
     multiformats: "npm:^13.4.0"
     tsup: "npm:^8.5.0"
+    typescript: "npm:^5.9.2"
     uint8arraylist: "npm:^3.0.2"
     weald: "npm:^1.1.0"
+  languageName: unknown
+  linkType: soft
+
+"@taskyon/protocol@workspace:*, @taskyon/protocol@workspace:packages/protocol":
+  version: 0.0.0-use.local
+  resolution: "@taskyon/protocol@workspace:packages/protocol"
+  dependencies:
+    tsup: "npm:^8.5.0"
+    typescript: "npm:^5.9.2"
+    zod: "npm:^4.1.8"
   languageName: unknown
   linkType: soft
 

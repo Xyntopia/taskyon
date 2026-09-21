@@ -1,4 +1,4 @@
-import { createDuplexChannel, type Port, type Unsubscribe } from '@taskyon/common/modules/frpBus'
+import { createDuplexChannel, type Port, type Unsubscribe } from '@taskyon/protocol'
 import {
   createP2pManager,
   type CreateP2pManagerOptions,

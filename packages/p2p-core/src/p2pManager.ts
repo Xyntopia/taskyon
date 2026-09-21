@@ -13,7 +13,7 @@ import {
   SUBNETWORK_PEER_DISCOVERY_EVENT,
 } from './constants'
 import { deriveDiscoveryTokens, deriveSubnetworkMessageTopic } from './discovery'
-import { createStream, type Stream, type Unsubscribe } from '@taskyon/common/modules/frpBus'
+import { createStream, type Stream, type Unsubscribe } from '@taskyon/protocol'
 import {
   headlessBrowserDiscoveryTestNetwork,
   p2pTestNetworks,

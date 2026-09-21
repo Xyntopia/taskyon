@@ -11,6 +11,7 @@
     "packages/common",
     "packages/comp-dag",
     "packages/browser-sdk",
+    "packages/protocol",
     "packages/modelica",
     "packages/p2p-core",
     "packages/relay",
