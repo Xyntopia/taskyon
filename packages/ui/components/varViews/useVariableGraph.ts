@@ -18,6 +18,11 @@ export const getByPath =
       obj,
     )
 
+export const getIconAtPath = (icons: iconMap, path: readonly string[]): string | undefined => {
+  const icon = getByPath(path)(icons)
+  return typeof icon === 'string' ? icon : undefined
+}
+
 export type VariableKind =
   | 'object'
   | 'array'
@@ -425,7 +430,7 @@ const buildVariableNodes = (
       ...(effectiveSubschema ? { schema: effectiveSubschema } : {}),
     }
 
-    const icon = getByPath(newPath)(options.icons) as string | undefined
+    const icon = getIconAtPath(options.icons, newPath)
     if (icon) base.icon = icon
     if (effectiveSubschema?.icon) base.icon = effectiveSubschema.icon
     if (effectiveSubschema?.offIcon) base.offIcon = effectiveSubschema.offIcon

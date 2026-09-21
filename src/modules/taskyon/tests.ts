@@ -34,6 +34,7 @@ import {
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
 import { getDatabase } from '@taskyon/taskyon/db'
 import { buildPmtilesUrlCandidates } from '@taskyon/maplibre'
+import { getIconAtPath } from '@taskyon/ui/components/varViews/useVariableGraph'
 import { parseTaskyonMapWidgetState } from '@taskyon/ui/gis/taskyonMapWidget'
 import {
   createTaskExecutionProgressState,
@@ -213,6 +214,21 @@ export const testRankingUsesInjectedPythonRunner = async () => {
 
 testRankingUsesInjectedPythonRunner.description =
   'Runs ranking training and inference through an injected Python capability and validates persisted state.'
+
+export const testVariableGraphIgnoresNestedIconMaps = () => {
+  const icons = { websearch: { enabled: 'leaf-icon' } }
+  assert(
+    getIconAtPath(icons, ['websearch']) === undefined,
+    'Expected a nested icon map not to be passed to QIcon',
+  )
+  assert(
+    getIconAtPath(icons, ['websearch', 'enabled']) === 'leaf-icon',
+    'Expected a leaf icon to resolve from a nested icon map',
+  )
+}
+
+testVariableGraphIgnoresNestedIconMaps.description =
+  'Keeps nested icon maps out of QIcon while resolving leaf icons for variable fields.'
 
 const getCurrentProfileSettingsForDiagnostics = (): TaskyonProfileSettings => {
   const snapshot = state.getProfileSnapshot().sections

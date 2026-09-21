@@ -63,27 +63,23 @@
             </div>
 
             <div class="text-subtitle1">Base settings</div>
-            <template
-              v-for="{ key, value } in getToolchainEntries(state.toolchainProfiles.base)"
-              :key="`base:${key}`"
-            >
-              <div class="text-subtitle2">{{ key }}</div>
-              <ObjectView
-                :enable-expert-mode="state.appConfiguration.expertMode"
-                :model-value="value"
-                :schema="tystate.allTools[key]?.parameters"
-                class="fit"
-                copy-object-btn
-                show-missing-mode-select
-                :show-header-row="state.appConfiguration.expertMode"
-                :icons="getToolchainIcons(key)"
-                missing-mode="hide"
-                copy-btn
-                @update:model-value="
-                  (nextVal) => applyToolchainUpdate(state.toolchainProfiles.base, key, nextVal)
-                "
-              />
-            </template>
+            <ObjectView
+              view-mode="tree"
+              :default-expanded-depth="0"
+              :enable-expert-mode="state.appConfiguration.expertMode"
+              :model-value="state.toolchainProfiles.base"
+              :schema="toolchainSchema"
+              class="fit"
+              copy-object-btn
+              show-missing-mode-select
+              :show-header-row="state.appConfiguration.expertMode"
+              :icons="toolchainIcons"
+              missing-mode="hide"
+              copy-btn
+              @update:model-value="
+                (nextValue) => applyToolchainSettingsUpdate(state.toolchainProfiles.base, nextValue)
+              "
+            />
 
             <q-separator />
             <div class="row items-start q-gutter-sm">
@@ -130,33 +126,28 @@
                 <div class="text-caption">
                   Only explicit overrides are stored here. Deleting an override uses the base value.
                 </div>
-                <template
-                  v-for="{ key, value } in getProfileToolchainEntries(profileName)"
-                  :key="`${profileName}:${key}`"
-                >
-                  <div class="text-subtitle2">{{ key }}</div>
-                  <ObjectView
-                    :enable-expert-mode="state.appConfiguration.expertMode"
-                    :model-value="value"
-                    :schema="tystate.allTools[key]?.parameters"
-                    class="fit"
-                    copy-object-btn
-                    show-missing-mode-select
-                    :show-header-row="state.appConfiguration.expertMode"
-                    :icons="getToolchainIcons(key)"
-                    missing-mode="placeholders"
-                    allow-object-structure-editing
-                    copy-btn
-                    @update:model-value="
-                      (nextVal) =>
-                        applyToolchainUpdate(
-                          state.toolchainProfiles.profiles[profileName]!,
-                          key,
-                          nextVal,
-                        )
-                    "
-                  />
-                </template>
+                <ObjectView
+                  view-mode="tree"
+                  :default-expanded-depth="0"
+                  :enable-expert-mode="state.appConfiguration.expertMode"
+                  :model-value="state.toolchainProfiles.profiles[profileName]!"
+                  :schema="toolchainSchema"
+                  class="fit"
+                  copy-object-btn
+                  show-missing-mode-select
+                  :show-header-row="state.appConfiguration.expertMode"
+                  :icons="toolchainIcons"
+                  missing-mode="placeholders"
+                  allow-object-structure-editing
+                  copy-btn
+                  @update:model-value="
+                    (nextValue) =>
+                      applyToolchainSettingsUpdate(
+                        state.toolchainProfiles.profiles[profileName]!,
+                        nextValue,
+                      )
+                  "
+                />
               </div>
             </q-expansion-item>
           </div>
@@ -205,6 +196,7 @@
 </template>
 
 <script setup lang="ts">
+import type { JSONSchema7 } from 'json-schema'
 import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import { getPmtilesStorageCacheDebugSnapshot } from '@taskyon/ui/gis/pmtilesStorageCache'
@@ -247,16 +239,24 @@ const canCreateToolchainProfile = computed(
   () => !!newToolchainProfileName.value.trim() && !newToolchainProfileError.value,
 )
 
-const getToolchainEntries = (config: Record<string, Record<string, unknown>>) =>
-  Object.keys(config)
-    .sort()
-    .map((key) => ({ key, value: config[key]! }))
+const toolchainSettingKeys = computed(() => {
+  const keys = new Set(Object.keys(tystate.allTools))
+  Object.keys(state.toolchainProfiles.base).forEach((key) => keys.add(key))
+  Object.values(state.toolchainProfiles.profiles).forEach((profile) => {
+    Object.keys(profile).forEach((key) => keys.add(key))
+  })
+  return [...keys].sort()
+})
 
-const getProfileToolchainEntries = (profileName: string) => {
-  const profile = state.toolchainProfiles.profiles[profileName]!
-  const keys = new Set([...Object.keys(state.toolchainProfiles.base), ...Object.keys(profile)])
-  return [...keys].sort().map((key) => ({ key, value: profile[key] ?? {} }))
-}
+const toolchainSchema = computed<JSONSchema7>(() => ({
+  type: 'object',
+  properties: Object.fromEntries(
+    toolchainSettingKeys.value.flatMap((key) => {
+      const parameters = tystate.allTools[key]?.parameters
+      return [[key, parameters ?? { type: 'object' }]]
+    }),
+  ),
+}))
 
 const selectToolchainProfile = (profileName: string | null) => {
   state.setSelectedToolchainProfile(profileName ?? undefined)
@@ -286,14 +286,35 @@ const getToolchainIcons = (key: string): iconMap => {
   return {}
 }
 
-const applyToolchainUpdate = (
+const toolchainIcons = computed<iconMap>(() =>
+  Object.fromEntries(toolchainSettingKeys.value.map((key) => [key, getToolchainIcons(key)])),
+)
+
+const parseToolchainSettings = (
+  nextValue: unknown,
+): Record<string, Record<string, unknown>> | undefined => {
+  if (nextValue === null || typeof nextValue !== 'object' || Array.isArray(nextValue)) return
+
+  const parsedSettings: Record<string, Record<string, unknown>> = {}
+  for (const [key, value] of Object.entries(nextValue)) {
+    const parsed = FunctionArgumentsSchema.safeParse(value)
+    if (!parsed.success) return
+    parsedSettings[key] = parsed.data
+  }
+  return parsedSettings
+}
+
+const applyToolchainSettingsUpdate = (
   config: Record<string, Record<string, unknown>>,
-  key: string,
   nextValue: unknown,
 ) => {
-  const parsed = FunctionArgumentsSchema.safeParse(nextValue)
-  if (!parsed.success) return
-  config[key] = parsed.data
+  const parsedSettings = parseToolchainSettings(nextValue)
+  if (!parsedSettings) return
+
+  Object.keys(config).forEach((key) => {
+    if (!Object.hasOwn(parsedSettings, key)) delete config[key]
+  })
+  Object.assign(config, parsedSettings)
 }
 
 const llmSettingsModel = computed({
