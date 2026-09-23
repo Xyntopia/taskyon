@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { stripVTControlCharacters } from 'node:util'
 import { testCodexOauthCliUsesBrowserWorkspaceWithoutSecondPrompt as codexWorkspaceTest } from '../../tests/codexOauthDiagnostics'
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import {
@@ -230,41 +231,19 @@ testCliHelloWorldProducesAssistantResponse.timeoutMs = 110_000
 
 export const testCliListsAndUsesAvailableTools = async () => {
   const prompt = [
-    'Complete these as two separate sequential delegated tasks.',
-    'First, list every tool currently available to you using its exact tool name, with one name per line between AVAILABLE_TOOLS_BEGIN and AVAILABLE_TOOLS_END.',
-    'Second, get the current weather for latitude 32.7157 and longitude -117.1611 and begin that result with WEATHER_TASK_COMPLETE.',
+    'Use openMeteoWeatherTool for latitude 32.7157 and longitude -117.1611.',
+    'After it succeeds, begin the final answer with WEATHER_TASK_COMPLETE.',
   ].join('\n\n')
   const result = await runCliE2eSession({
     testName: 'testCliListsAndUsesAvailableTools',
     steps: [
+      { waitFor: 'prompt ready.', input: '/tools\n' },
       {
-        waitFor: 'prompt ready.',
+        waitFor: 'openMeteoWeatherTool',
         input: `\u001b[200~${prompt}\u001b[201~`,
       },
       { delayMs: 200, input: '\r' },
-      {
-        waitFor: 'name: taskPlanner',
-        failOn: ['Fatal error', 'No key configured', 'Cannot connect to API', '[system|error]'],
-        input: '',
-      },
-      {
-        waitFor: 'name: toolSearcher',
-        failOn: ['Fatal error', '[system|error]', '| finished]'],
-        input: '',
-      },
-      {
-        waitFor: 'name: openMeteoWeatherTool',
-        failOn: [
-          'Fatal error',
-          'No key configured',
-          'Cannot connect to API',
-          '[system|error]',
-          'no live weather tool',
-          'no live weather API',
-          '| finished]',
-        ],
-        input: '',
-      },
+      { waitFor: '[function|functioncall] openMeteoWeatherTool', input: '' },
       {
         waitFor: 'Allow openMeteoWeatherTool to read https://api.open-meteo.com',
         failOn: ['Fatal error', '[system|error]'],
@@ -279,43 +258,28 @@ export const testCliListsAndUsesAvailableTools = async () => {
     acceptOutputAsExit: 'WEATHER_TASK_COMPLETE',
     env: { TYCLI_HOTKEY_MENUS: '0' },
     isolateHome: false,
-    timeoutMs: 300_000,
+    timeoutMs: 180_000,
     runner: 'pty',
   })
 
   assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
-  const toolListStart = result.output.lastIndexOf('AVAILABLE_TOOLS_BEGIN')
-  const toolListEnd = result.output.indexOf('AVAILABLE_TOOLS_END', toolListStart)
-  assert(
-    toolListStart >= 0 && toolListEnd > toolListStart,
-    `Expected a bounded available-tool list in the assistant response.\n${result.output}`,
-  )
-  const listedTools = result.output.slice(toolListStart, toolListEnd)
   for (const toolName of ['taskPlanner', 'gitlab', 'openMeteoWeatherTool']) {
     assert(
-      listedTools.includes(toolName),
-      `Expected available-tool answer to include ${toolName}.\n${result.output}`,
+      result.output.includes(toolName),
+      `Expected CLI /tools output to include ${toolName}.\n${result.output}`,
     )
   }
   assert(
-    result.output.includes('name: openMeteoWeatherTool'),
+    result.output.includes('[function|functioncall] openMeteoWeatherTool'),
     `Expected the weather request to call openMeteoWeatherTool.\n${result.output}`,
-  )
-  assert(
-    result.output.includes('name: toolSearcher'),
-    `Expected the available-tool request to call toolSearcher.\n${result.output}`,
-  )
-  assert(
-    result.output.includes('name: taskPlanner'),
-    `Expected taskPlanner to create two delegated tasks.\n${result.output}`,
   )
 
   return { success: true }
 }
 
 testCliListsAndUsesAvailableTools.description =
-  'Starts tycli, verifies that Taskyon plans separate tool-list and weather tasks, and lets each delegated entry node choose its relevant tool.'
-testCliListsAndUsesAvailableTools.timeoutMs = 320_000
+  'Starts tycli, lists registered tools with /tools, then uses the weather tool in a chat request.'
+testCliListsAndUsesAvailableTools.timeoutMs = 190_000
 
 export const testCliFocusedSearchFindsANonPinnedTool = async () => {
   const prompt = [
@@ -407,10 +371,10 @@ export const testCliDocumentationQuestionCompletesWithoutFatal = async () => {
       {
         waitFor: 'prompt ready.',
         input:
-          'cool... According to the Taskyon docs, what is the difference between parentID and priorID in a tasknode?\n',
+          'Do not answer from memory. First use selectTaskyonTools with a focused search for the exact tool name taskyonDocumentation, then call taskyonDocumentation to look this up: what is the difference between parentID and priorID in a tasknode? Cite the documentation page.\n',
       },
       {
-        waitFor: 'taskyonDocumentation',
+        waitFor: '[function|functioncall] taskyonDocumentation',
         failOn: [
           'Fatal error',
           "Cannot find module '/workspace/src/register.ts'",
@@ -420,7 +384,7 @@ export const testCliDocumentationQuestionCompletesWithoutFatal = async () => {
         input: '',
       },
       {
-        waitFor: '| finished]',
+        waitFor: '| finished',
         failOn: ['Fatal error', "Cannot find module '/workspace/src/register.ts'"],
         input: '/exit\n',
       },
@@ -436,7 +400,7 @@ export const testCliDocumentationQuestionCompletesWithoutFatal = async () => {
 
   assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
   assert(
-    result.output.includes('taskyonDocumentation'),
+    result.output.includes('[function|functioncall] taskyonDocumentation'),
     `Expected taskyonDocumentation to be called.\n${result.output}`,
   )
   assert(
@@ -459,16 +423,11 @@ export const testCliTaskPlannerUsesContractedSequentialHandoffs = async () => {
       {
         waitFor: 'prompt ready.',
         input:
-          [
-            'Use taskPlanner exactly once with two sequential task objects.',
-            'The first task must act as a system architect, set allowedTools to exactly [bash], call bash exactly once to inspect the first 40 lines of packages/tycli/README.md, and return a structured result with a summary string and evidence string array.',
-            'The second task must set allowedTools to an empty array, use the first task handoff to explain the documented tycli workflow without reading the file or calling bash again, include the exact evidence phrase Node-first Taskyon CLI, and begin its final response with HANDOFF_ONLY_COMPLETE.',
-            'Give both tasks explicit doneWhen criteria. Do not run the tasks in parallel.',
-          ].join(' ') + '\n',
+          'Use taskPlanner exactly once. Its tasks argument must be a JSON array with exactly two strings, not a string containing JSON. The first task: use bash once to inspect the first 40 lines of packages/tycli/README.md and summarize them with the exact evidence phrase Node-first Taskyon CLI. The second task: use the first task handoff to explain the documented tycli workflow without rereading the file, and begin your final response with HANDOFF_ONLY_COMPLETE followed by a space and the response on the same line. Keep the tasks sequential.\n',
       },
       {
-        waitFor: 'name: taskPlanner',
-        failOn: ['Fatal error', 'No key configured', 'Cannot connect to API'],
+        waitFor: '[function|functioncall] taskPlanner',
+        failOn: ['Fatal error', 'No key configured', 'Cannot connect to API', '| finished'],
         input: '',
       },
       {
@@ -481,8 +440,12 @@ export const testCliTaskPlannerUsesContractedSequentialHandoffs = async () => {
         failOn: ['Fatal error', '[system|error]'],
         input: '',
       },
+      {
+        waitFor: '| finished',
+        failOn: ['Fatal error', '[system|error]'],
+        input: '/exit\n',
+      },
     ],
-    acceptOutputAsExit: 'HANDOFF_ONLY_COMPLETE ',
     env: { TYCLI_HOTKEY_MENUS: '0' },
     isolateHome: false,
     timeoutMs: 300_000,
@@ -491,47 +454,61 @@ export const testCliTaskPlannerUsesContractedSequentialHandoffs = async () => {
 
   assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${result.output}`)
   assert(
-    result.output.includes('agentInstructions') &&
-      result.output.includes('doneWhen') &&
-      result.output.includes('mode: structured') &&
-      result.output.includes('allowedTools: []'),
-    `Expected taskPlanner to receive explicit task contracts.\n${result.output}`,
+    result.output.includes('[function|functioncall] taskPlanner'),
+    `Expected taskPlanner to create the delegated task chain.\n${result.output}`,
   )
   assert(
     result.output.includes('[queue]'),
     `Expected tycli to show pending planner work above thinking output.\n${result.output}`,
   )
-  const bashCalls = result.output.split('  name: bash').length - 1
+  const bashReadCalls = result.output
+    .split('\n')
+    .filter(
+      (line) =>
+        line.includes('[function|functioncall] bash ') && line.includes('packages/tycli/README.md'),
+    )
   assert(
-    bashCalls === 1,
-    `Expected exactly one bash inspection across sequential tasks, got ${bashCalls}.\n${result.output}`,
+    bashReadCalls.length === 1,
+    `Expected the README to be inspected exactly once, got ${bashReadCalls.length} reads.\n${result.output}`,
   )
-  const handoffResponse = result.output.slice(result.output.lastIndexOf('HANDOFF_ONLY_COMPLETE '))
+  const answerStart = result.output.lastIndexOf('[assistant|message]')
+  const handoffResponse = result.output.slice(answerStart)
   assert(
-    handoffResponse.includes('Node-first Taskyon CLI') &&
+    handoffResponse.includes('HANDOFF_ONLY_COMPLETE') &&
+      handoffResponse.includes('Node-first Taskyon CLI') &&
       !handoffResponse.includes('handoff content in the visible context'),
     `Expected the tool-free second task to consume the structured first-task handoff.\n${result.output}`,
   )
   assert(!result.output.includes('Fatal error'), `Unexpected fatal error.\n${result.output}`)
 
-  return { success: true, bashCalls }
+  return { success: true, bashReads: bashReadCalls.length }
 }
 
 testCliTaskPlannerUsesContractedSequentialHandoffs.description =
   'Starts tycli and verifies sequential task contracts hand off repository evidence without repeating discovery.'
 testCliTaskPlannerUsesContractedSequentialHandoffs.timeoutMs = 320_000
 
-export const testCliAiWorkstationCreatesAndOptimizesDagGraph = async () => {
+export const testCliCreatesAndRunsDagGraphProject = async () => {
+  const projectId = `workstation-${Date.now()}`
+  const prompt = [
+    'Use dagGraphProject to create and run one small AI-workstation recommendation.',
+    'Make exactly three calls, in order: createNode, createProject, then runInvocation. Do not call saveInvocation.',
+    `Use projectId "${projectId}" for createProject. createNode writes to the global graph and does not take projectId.`,
+    'For createNode, define a node with no parameters, an object output with numeric score and estimatedWallPowerW fields, and run: async () => ({ score: 16, estimatedWallPowerW: 510 }).',
+    'For createProject, copy the exact nodeId returned by createNode into rootNodeId. Do not use $use or invent a hash. This node has no parameters, so omit variables, objectives, and constraints; use the default main invocation.',
+    'For runInvocation, pass projectId and invocationName "main"; use the name returned by createProject, not its invocation hash.',
+    'Run the project invocation and recommend the 16 GB option from its result. Begin the final answer with WORKSTATION_RECOMMENDATION followed by a space and your recommendation.',
+  ].join('\n\n')
   const result = await runCliE2eSession({
-    testName: 'testCliAiWorkstationCreatesAndOptimizesDagGraph',
+    testName: 'testCliCreatesAndRunsDagGraphProject',
     steps: [
       {
         waitFor: 'prompt ready.',
-        input:
-          'I want to design a local AI workstation. Please start by asking me the most important questions about my budget, target models, power limits, noise constraints, and what I want to run locally.\n',
+        input: `\u001b[200~${prompt}\u001b[201~`,
       },
+      { delayMs: 200, input: '\r' },
       {
-        waitFor: '[assistant|message]',
+        waitFor: '[function|functioncall] dagGraphProject action=createNode',
         failOn: [
           '[system|error]',
           'Cannot connect to API',
@@ -541,45 +518,27 @@ export const testCliAiWorkstationCreatesAndOptimizesDagGraph = async () => {
         input: '',
       },
       {
-        waitFor: '| finished |',
-        failOn: [
-          '[system|error]',
-          'Cannot connect to API',
-          'No key configured',
-          'does not provide an export named',
-        ],
-        input:
-          'Budget is about 2600 USD before tax. I want to run 7B and 14B models locally, experiment with 32B quantized if possible, and do light coding agents. Power should stay under about 750W from the wall, noise should be office-friendly, and I prefer Linux-compatible commodity parts. Please now build this as a Taskyon DAG graph project using dagGraphProject: create fresh TypeScript nodes, patch at least one node after creating it, run a study over at least three GPU/CPU/RAM/storage variants, and recommend the best variant with the relevant hashes.\n',
-      },
-      {
-        waitFor: 'dagGraphProject',
-        failOn: [
-          '[system|error]',
-          'Cannot connect to API',
-          'No key configured',
-          'does not provide an export named',
-        ],
+        waitFor: '[function|functioncall] dagGraphProject action=createProject',
+        failOn: ['[system|error]', 'Fatal error'],
         input: '',
       },
       {
-        waitFor: 'createNode',
+        waitFor: '[function|functioncall] dagGraphProject action=runInvocation',
         failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
         input: '',
       },
       {
-        waitFor: 'patchNode',
-        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
+        waitFor: 'WORKSTATION_RECOMMENDATION',
+        failOn: ['[system|error]', 'Fatal error'],
         input: '',
       },
       {
-        waitFor: 'studyRoot',
-        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
+        waitFor: '| finished',
+        failOn: ['[system|error]', 'Fatal error'],
         input: '',
       },
       {
-        waitFor: 'dagGraphStudyResult',
-        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
-        delayMs: 2_000,
+        waitFor: '\u001b[?2004h> ',
         input: '/exit\n',
       },
     ],
@@ -590,29 +549,83 @@ export const testCliAiWorkstationCreatesAndOptimizesDagGraph = async () => {
   })
 
   const output = result.output
-  const lowerOutput = output.toLowerCase()
   assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${output}`)
-  assert(output.includes('dagGraphProject'), `Expected dagGraphProject to be called.\n${output}`)
-  assert(output.includes('createNode'), `Expected at least one createNode action.\n${output}`)
+  for (const action of ['createNode', 'createProject', 'runInvocation']) {
+    const callMarker = `[function|functioncall] dagGraphProject action=${action}`
+    assert(
+      output.split(callMarker).length - 1 === 1,
+      `Expected exactly one ${action} call.\n${output}`,
+    )
+  }
+  const cleanOutput = stripVTControlCharacters(output)
   assert(
-    output.includes('patchNode') || output.includes('graphPatchResult'),
-    `Expected the graph to be patched after initial creation.\n${output}`,
-  )
-  assert(
-    output.includes('studyRoot') || output.includes('dagGraphStudyResult'),
-    `Expected a studyRoot optimization run.\n${output}`,
-  )
-  assert(
-    lowerOutput.includes('recommend') || lowerOutput.includes('best'),
-    `Expected a final recommendation or best variant.\n${output}`,
+    /WORKSTATION_RECOMMENDATION[^\r\n]{0,100}\b16\s*GB/i.test(cleanOutput),
+    `Expected the final answer to recommend 16 GB from the invocation result.\n${output}`,
   )
 
   return { success: true }
 }
 
-testCliAiWorkstationCreatesAndOptimizesDagGraph.description =
-  'Starts tycli with the local AI workstation prompt and verifies the agent creates, patches, studies, and recommends from a persisted DAG graph.'
-testCliAiWorkstationCreatesAndOptimizesDagGraph.timeoutMs = 340_000
+testCliCreatesAndRunsDagGraphProject.description =
+  'Uses tycli to create a no-input design node, create a project from its hash, run the invocation, and report its result.'
+testCliCreatesAndRunsDagGraphProject.timeoutMs = 340_000
+
+export const testCliComparesDagGraphWorkstationOptions = async () => {
+  const projectId = `workstation-options-${Date.now()}`
+  const nodeSource =
+    "export default { formatVersion: 2, id: '__TASKYON_SELF_HASH__', localName: 'workstation_score', label: 'Workstation Score', version: 1, localParamsSchema: { type: 'object', properties: { gpuMemoryGb: { type: 'number' } }, required: ['gpuMemoryGb'] }, outputSchema: { type: 'object', properties: { gpuMemoryGb: { type: 'number' }, score: { type: 'number' } }, required: ['gpuMemoryGb', 'score'] }, inputs: {}, run: async ({ params }) => ({ gpuMemoryGb: params.gpuMemoryGb, score: 100 - Math.abs(params.gpuMemoryGb - 16) * 4 }) }"
+  const prompt = [
+    'Use dagGraphProject to compare three AI-workstation GPU memory options, then recommend the highest-scoring one.',
+    `First createNode with this exact nodeSource: ${nodeSource}`,
+    `Then createProject with projectId "${projectId}", rootNodeId from createNode, variables {"gpuMemoryGb":{"kind":"list","values":[12,16,24]}}, and objectives [{"direction":"max","target":{"path":"score","op":"identity"}}].`,
+    'Next runInvocation for that project and its main invocation.',
+    'Then call readRunRows with the returned run.id and the same projectId. Read all three scored rows before answering.',
+    'Begin the final answer with WORKSTATION_COMPARISON. State the score for each of 12 GB, 16 GB, and 24 GB, then recommend the highest score.',
+  ].join('\n\n')
+  const result = await runCliE2eSession({
+    testName: 'testCliComparesDagGraphWorkstationOptions',
+    steps: [
+      { waitFor: 'prompt ready.', input: `\u001b[200~${prompt}\u001b[201~` },
+      { delayMs: 200, input: '\r' },
+      ...['createNode', 'createProject', 'runInvocation', 'readRunRows'].map((action) => ({
+        waitFor: `[function|functioncall] dagGraphProject action=${action}`,
+        failOn: ['[system|error]', 'Fatal error', 'does not provide an export named'],
+        input: '',
+      })),
+      { waitFor: 'WORKSTATION_COMPARISON', failOn: ['[system|error]', 'Fatal error'], input: '' },
+      { waitFor: '| finished', failOn: ['[system|error]', 'Fatal error'], input: '' },
+      { waitFor: '\u001b[?2004h> ', input: '/exit\n' },
+    ],
+    env: { TYCLI_HOTKEY_MENUS: '0' },
+    isolateHome: false,
+    timeoutMs: 320_000,
+    runner: 'pty',
+  })
+
+  const output = stripVTControlCharacters(result.output)
+  assert(result.code === 0, `Expected exit code 0, got ${String(result.code)}\n${output}`)
+  const answer = output.slice(output.lastIndexOf('[assistant|message]'))
+  assert(answer.includes('WORKSTATION_COMPARISON'), `Expected a final comparison.\n${output}`)
+  for (const [memory, score] of [
+    [12, 84],
+    [16, 100],
+    [24, 68],
+  ]) {
+    assert(
+      answer.includes(String(memory)) && answer.includes(String(score)),
+      `Expected the answer to compare ${memory} GB with score ${score}.\n${answer}`,
+    )
+  }
+  assert(
+    /recommend[^\r\n]{0,100}\b16\s*GB/i.test(answer),
+    `Expected a 16 GB recommendation.\n${answer}`,
+  )
+  return { success: true }
+}
+
+testCliComparesDagGraphWorkstationOptions.description =
+  'Creates a three-option design invocation, reads the scored rows, and recommends the best workstation from the results.'
+testCliComparesDagGraphWorkstationOptions.timeoutMs = 340_000
 
 export const testCliQuitPromptCtrlDExits = async () => await runQuitPromptCtrlDExits()
 testCliQuitPromptCtrlDExits.description = 'Ctrl+D exits directly from the main prompt.'

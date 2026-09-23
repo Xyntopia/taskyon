@@ -29,10 +29,10 @@
     "packages/ui"
   ],
   "scripts": {
-    "build": "yarn docs:check && yarn links:check && yarn build:app-dependencies && yarn pack:tyclient && yarn build:tls-wasm && yarn run quasar build",
+    "build": "yarn docs:check && yarn links:check && yarn build:app-dependencies && yarn pack:tyclient && yarn build:tls-wasm && yarn lint && TASKYON_BUILD_CHECKS_COMPLETED=1 yarn run quasar build",
     "build:app-dependencies": "yarn workspace @taskyon/protocol build && yarn workspace @taskyon/p2p-core build && yarn workspace @taskyon/maplibre build",
     "build:tls-wasm": "yarn workspace @taskyon/https-tunnel-wasm build",
-    "build:app": "yarn build:app-dependencies && yarn build:tls-wasm && yarn run quasar build",
+    "build:app": "yarn build:app-dependencies && yarn build:tls-wasm && yarn lint && TASKYON_BUILD_CHECKS_COMPLETED=1 yarn run quasar build",
     "build:app:diagnostics": "yarn build:app-dependencies && yarn build:tls-wasm && TASKYON_FAST_DEV_BUILD=1 yarn run quasar build --debug",
     "build:desktop": "podman build --file Dockerfile --target export --output type=local,dest=./dist-desktop .",
     "build:tauri:headless": "podman build --file Dockerfile --target tauri-headless-runtime -t xyntopia/taskyon-headless .",
@@ -218,7 +218,8 @@
     "@codemirror/language": "6.11.3",
     "@types/express": "4.17.23",
     "@types/express-serve-static-core": "4.19.6",
-    "axios": "^1.15.0"
+    "axios": "^1.15.0",
+    "zod": "4.4.3"
   },
   "browserslist": [
     "last 4 Chrome versions",

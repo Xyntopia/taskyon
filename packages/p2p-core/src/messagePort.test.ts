@@ -48,13 +48,16 @@ function createStreamPair(): [Libp2pStreamLike, Libp2pStreamLike] {
       outgoing.push(bytes.subarray())
       return true
     },
-    onDrain: async () => undefined,
-    close: async () => outgoing.close(),
+    onDrain: () => Promise.resolve(),
+    close: () => {
+      outgoing.close()
+      return Promise.resolve()
+    },
   })
   return [endpoint(incomingA, incomingB), endpoint(incomingB, incomingA)]
 }
 
-test('carries typed messages in both directions and reports local closure', async () => {
+void test('carries typed messages in both directions and reports local closure', async () => {
   const [streamA, streamB] = createStreamPair()
   const a = createLibp2pMessagePort(streamA, textCodec, {
     maxMessageBytes: 64,
@@ -77,7 +80,7 @@ test('carries typed messages in both directions and reports local closure', asyn
   assert.deepEqual(await b.closed, { reason: 'remote' })
 })
 
-test('fails closed when a received frame exceeds its configured limit', async () => {
+void test('fails closed when a received frame exceeds its configured limit', async () => {
   const [streamA, streamB] = createStreamPair()
   const a = createLibp2pMessagePort(streamA, textCodec, {
     maxMessageBytes: 64,
@@ -94,7 +97,7 @@ test('fails closed when a received frame exceeds its configured limit', async ()
   await a.close()
 })
 
-test('closes instead of growing an unbounded outgoing queue', async () => {
+void test('closes instead of growing an unbounded outgoing queue', async () => {
   const [streamA] = createStreamPair()
   let releaseWrite: (() => void) | undefined
   const blocked: Libp2pStreamLike = {

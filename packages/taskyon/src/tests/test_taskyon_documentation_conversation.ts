@@ -40,7 +40,7 @@ const entryNodeToolName = 'entryNode'
 const taskyonDocsQuestions = [
   {
     question:
-      'According to the Taskyon docs, what is the difference between parentID and priorID in a task tree?',
+      'Use taskyonDocumentation to look this up in the Taskyon docs: what is the difference between parentID and priorID in a task tree?',
     expected: ['parentID', 'priorID', 'parent', 'previous'],
   },
   {
@@ -117,6 +117,7 @@ export const testTaskyonCliConversationUsesDocumentationTool = async (
     {
       chatCompletion: runtimeConfig.providerSettings,
       entryNode: {
+        ...(runtimeConfig.entryNodeSettings ?? {}),
         use_baseprompt: true,
         use_multimodal: true,
         max_error_retries: 3,

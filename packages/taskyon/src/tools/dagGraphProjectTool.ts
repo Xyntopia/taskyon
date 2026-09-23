@@ -26,7 +26,12 @@ import {
   createDagInvocationEvaluators,
   executeInvocation,
 } from '@taskyon/comp-dag/invocationExecution'
+import {
+  iterateInvocationRowRange,
+  type InvocationRowStorageClient,
+} from '@taskyon/comp-dag/storageInvocationRows'
 import type { JSONSchema7 } from 'json-schema'
+import type { JSONSchema } from 'json-schema-to-ts'
 import z from 'zod'
 import {
   objectiveSchema,
@@ -49,6 +54,7 @@ type GraphProjectAction =
   | 'createProject'
   | 'saveInvocation'
   | 'runInvocation'
+  | 'readRunRows'
   | 'inspectProject'
 
 type DagGraphProjectToolArgs = {
@@ -59,6 +65,9 @@ type DagGraphProjectToolArgs = {
   nodeSource?: string
   rootNodeId?: Hash
   invocationId?: Hash
+  runId?: Hash
+  startRow?: number
+  limit?: number
   variables?: Record<string, VariableSpec>
   inputs?: Record<string, OptimizationInputSpec>
   objectives?: Objective[]
@@ -83,7 +92,9 @@ const requireInvocationFields = (args: DagGraphProjectToolArgs) => {
 }
 
 export const createDagGraphProjectTool = (
-  storageClient: DesignGraphStorageClient & InvocationArtifactStorageClient,
+  storageClient: DesignGraphStorageClient &
+    InvocationArtifactStorageClient &
+    InvocationRowStorageClient,
   prepareRepository?: () => Promise<void>,
 ) => {
   const store = createStorageDesignGraphObjectStore(storageClient)
@@ -96,7 +107,7 @@ export const createDagGraphProjectTool = (
       override: ({ jsonSchema }) => {
         delete jsonSchema.default
       },
-    }) as JSONSchema7
+    }) as JSONSchema7 & JSONSchema
   const variableSpecJsonSchema = toToolInputSchema(variableSpecSchema)
   const optimizationInputJsonSchema = toToolInputSchema(optimizationInputSpecSchema)
   const objectiveJsonSchema = toToolInputSchema(objectiveSchema)
@@ -115,7 +126,7 @@ export const createDagGraphProjectTool = (
     name: 'dagGraphProject',
     description: 'Create nodes and manage immutable design-graph projects and invocation runs.',
     longDescription:
-      'Create and run a computational design. createNode writes to the global graph and needs no projectId. For a new project, pass its returned nodeId as createProject.rootNodeId, then run the project with the invocationName returned by createProject (default: main). runInvocation takes the name, not the invocation hash.',
+      'Create and run a computational design. createNode writes to the global graph and needs no projectId. For a new project, pass its returned nodeId as createProject.rootNodeId, then run the project with the invocationName returned by createProject (default: main). runInvocation takes the name, not the invocation hash. Use readRunRows with the returned run.id to inspect scored results before recommending a candidate.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -128,6 +139,7 @@ export const createDagGraphProjectTool = (
             'createProject',
             'saveInvocation',
             'runInvocation',
+            'readRunRows',
             'inspectProject',
           ] as GraphProjectAction[],
           description:
@@ -165,6 +177,21 @@ export const createDagGraphProjectTool = (
           type: 'string',
           description:
             'For createProject or saveInvocation, reuse this exact existing invocation instead of reconstructing its parameters. Do not combine with definition fields such as rootNodeId or variables.',
+        },
+        runId: {
+          type: 'string',
+          description: 'Run ID returned by runInvocation; required when reading its rows.',
+        },
+        startRow: {
+          type: 'integer',
+          minimum: 0,
+          description: 'First result row to read; defaults to zero.',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 25,
+          description: 'Maximum result rows to read in one call; defaults to 10.',
         },
         variables: {
           type: 'object',
@@ -234,11 +261,15 @@ export const createDagGraphProjectTool = (
           required: ['action', 'projectId'],
         },
         {
+          properties: { action: { const: 'readRunRows' } },
+          required: ['action', 'projectId', 'runId'],
+        },
+        {
           properties: { action: { const: 'inspectProject' } },
           required: ['action', 'projectId'],
         },
       ],
-    } as const,
+    } as JSONSchema7 & JSONSchema,
     function: async (rawArgs: DagGraphProjectToolArgs) => {
       await prepareRepository?.()
       const requested = rawArgs.projectId?.trim()
@@ -379,6 +410,45 @@ export const createDagGraphProjectTool = (
           },
         })
         return { type: 'designInvocationRun' as const, projectId, invocationName, ...result }
+      }
+
+      if (rawArgs.action === 'readRunRows') {
+        if (!rawArgs.runId) throw new Error('readRunRows requires runId.')
+        const startRow = rawArgs.startRow ?? 0
+        const limit = rawArgs.limit ?? 10
+        if (!Number.isInteger(startRow) || startRow < 0) {
+          throw new Error('startRow must be a nonnegative integer.')
+        }
+        if (!Number.isInteger(limit) || limit < 1 || limit > 25) {
+          throw new Error('limit must be an integer from 1 to 25.')
+        }
+        const invocationId = project.invocations[invocationName]
+        if (!invocationId) throw new Error(`Project invocation not found: ${invocationName}`)
+        const run = await repository.getRun(invocationId, rawArgs.runId)
+        const rowsArtifact = run.artifacts.rows
+        const rowIndexArtifact = run.artifacts.rowIndex
+        if (!rowsArtifact || !rowIndexArtifact) {
+          throw new Error('Invocation run has no readable row artifacts.')
+        }
+        const rows = []
+        for await (const row of iterateInvocationRowRange({
+          storage: storageClient,
+          rows: rowsArtifact,
+          rowIndex: rowIndexArtifact,
+          startRow,
+          limit: limit + 1,
+        })) {
+          rows.push(row)
+        }
+        return {
+          type: 'designInvocationRows' as const,
+          projectId,
+          invocationName,
+          runId: run.id,
+          startRow,
+          rows: rows.slice(0, limit),
+          hasMore: rows.length > limit,
+        }
       }
 
       if (rawArgs.action === 'inspectProject') {

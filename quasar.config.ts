@@ -86,6 +86,7 @@ export default defineConfig((ctx) => {
     process.env.TAURI_ENV_PLATFORM || process.env.TAURI_ENV_TARGET_TRIPLE,
   )
   const fastDevBuild = process.env.TASKYON_FAST_DEV_BUILD === '1'
+  const buildChecksCompleted = ctx.prod && process.env.TASKYON_BUILD_CHECKS_COMPLETED === '1'
   const devCorsProxyPort = Number(process.env.TASKYON_CORS_PROXY_PORT ?? 9001)
   if (!Number.isInteger(devCorsProxyPort) || devCorsProxyPort < 1 || devCorsProxyPort > 65535) {
     throw new Error('TASKYON_CORS_PROXY_PORT must be an integer between 1 and 65535.')
@@ -117,6 +118,8 @@ export default defineConfig((ctx) => {
   const typecheckExclude = [
     './../dist',
     './../node_modules',
+    './../packages/*/dist',
+    './../packages/*/pkg',
     './../src-capacitor',
     './../src-cordova',
     './../quasar.config.*.temporary.compiled*',
@@ -387,7 +390,7 @@ export default defineConfig((ctx) => {
           },
         ],
 
-        ...(ctx.prod && !fastDevBuild ? [checkerPlugin] : []),
+        ...(ctx.prod && !fastDevBuild && !buildChecksCompleted ? [checkerPlugin] : []),
         ...(devCorsProxy
           ? [
               {

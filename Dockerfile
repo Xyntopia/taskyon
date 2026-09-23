@@ -78,11 +78,13 @@ COPY --from=https-tunnel-wasm-builder \
 FROM prepare AS production-builder
 
 # this should build the app inside the folder /app/dist/spa
-RUN yarn quasar prepare && \
+RUN yarn build:app-dependencies && \
+  yarn quasar prepare && \
   yarn docs:check && \
   yarn links:check && \
   yarn pack:tyclient && \
-  yarn quasar build
+  yarn lint && \
+  TASKYON_BUILD_CHECKS_COMPLETED=1 yarn quasar build
 
 # ───────────────────────────────────────────────────────
 # build debug build
@@ -90,9 +92,10 @@ RUN yarn quasar prepare && \
 
 FROM prepare AS debug-builder
 
-RUN ls -la && yarn quasar prepare
+RUN yarn build:app-dependencies && yarn quasar prepare
 
-RUN ls -la && yarn quasar prepare && yarn quasar build --debug
+RUN yarn lint && \
+  TASKYON_BUILD_CHECKS_COMPLETED=1 yarn quasar build --debug
 
 # Define a common Nginx stage
 FROM docker.io/library/nginx:latest AS base-nginx

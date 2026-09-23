@@ -79,6 +79,23 @@ const createMemoryStorage = () => {
         const data = blobs(namespace).get(id)
         return Promise.resolve(data ? { id, size: data.byteLength } : null)
       },
+      readBlobRange: ({
+        namespace,
+        id,
+        offset,
+        length,
+      }: {
+        namespace: string
+        id: string
+        offset: number
+        length: number
+      }) => {
+        const blob = blobs(namespace).get(id)
+        if (!blob) throw new Error('Missing synthetic invocation artifact.')
+        const data = blob.slice(offset, offset + length)
+        const nextOffset = offset + data.byteLength
+        return Promise.resolve({ data, nextOffset, eof: nextOffset >= blob.byteLength })
+      },
       beginBlobWrite: ({ id }: { id: string }) => {
         const writeId = `write-${id}`
         writes.set(writeId, new Uint8Array())
@@ -226,6 +243,18 @@ export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
       !createNodeRule.required?.includes('projectId'),
     'Expected global node creation to require source but not a project identifier.',
   )
+  const readRowsRule = (parameters as JSONSchema7).anyOf?.find((rule) => {
+    if (!rule || typeof rule !== 'object') return false
+    const actionSchema = rule.properties?.action
+    return typeof actionSchema === 'object' && actionSchema.const === 'readRunRows'
+  })
+  assert(
+    readRowsRule &&
+      typeof readRowsRule === 'object' &&
+      readRowsRule.required?.includes('projectId') &&
+      readRowsRule.required.includes('runId'),
+    'Expected row reading to require a project and returned run ID.',
+  )
   return { success: true }
 }
 
@@ -274,7 +303,8 @@ export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async
       'requirements.model': { kind: 'constant', value: 'llama-3.1-8b' },
     },
     inputs: exampleInvocation.inputs,
-    policy: { accuracy: 'exact', budget: { maxRows: 2 } },
+    objectives: [{ direction: 'max', target: { path: 'recommendation.score', op: 'identity' } }],
+    policy: { accuracy: 'exact', budget: { maxRows: 3 } },
   })
   assert(created.type === 'designProjectCreated', 'Expected project creation result.')
   assert(
@@ -306,6 +336,61 @@ export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async
   assert(
     run.run.status === 'completed',
     `Expected the invocation to complete: ${run.run.error ?? run.run.status}`,
+  )
+  const firstPage = await tool.function({
+    action: 'readRunRows',
+    projectId: 'ai-workstation',
+    runId: run.run.id,
+    limit: 2,
+  })
+  assert(firstPage.type === 'designInvocationRows', 'Expected readable invocation rows.')
+  assert(firstPage.rows.length === 2 && firstPage.hasMore, 'Expected a bounded first page.')
+  const secondPage = await tool.function({
+    action: 'readRunRows',
+    projectId: 'ai-workstation',
+    runId: run.run.id,
+    startRow: 2,
+    limit: 2,
+  })
+  assert(secondPage.type === 'designInvocationRows', 'Expected a second row page.')
+  assert(secondPage.rows.length === 1 && !secondPage.hasMore, 'Expected the final row only.')
+  const options = [...firstPage.rows, ...secondPage.rows]
+  const scores = options.map((row) => row.objectives['objective-0'])
+  assert(new Set(scores).size > 1, 'Expected distinct candidate scores to compare.')
+  assert(
+    scores.every((score) => typeof score === 'number'),
+    'Expected numeric objectives.',
+  )
+  let oversizedRead: unknown
+  try {
+    await tool.function({
+      action: 'readRunRows',
+      projectId: 'ai-workstation',
+      runId: run.run.id,
+      limit: 100,
+    })
+  } catch (error) {
+    oversizedRead = error
+  }
+  assert(oversizedRead instanceof Error, 'Expected oversized row pages to be rejected.')
+  await tool.function({
+    action: 'createProject',
+    projectId: 'other-project',
+    rootNodeId: example.rootHash,
+  })
+  let foreignProjectRead: unknown
+  try {
+    await tool.function({
+      action: 'readRunRows',
+      projectId: 'other-project',
+      runId: run.run.id,
+    })
+  } catch (error) {
+    foreignProjectRead = error
+  }
+  assert(
+    foreignProjectRead instanceof Error,
+    'Expected rows to be scoped to the project invocation.',
   )
   assert(
     storage.rowsByNamespace.get('design-graph/v2')?.has('refs/projects/ai-workstation.json'),

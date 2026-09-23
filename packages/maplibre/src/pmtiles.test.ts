@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { buildPmtilesUrlCandidates } from './urlCandidates.ts'
 
-test('builds deterministic PMTiles candidates without third-party fallbacks', () => {
+void test('builds deterministic PMTiles candidates without third-party fallbacks', () => {
   assert.deepEqual(buildPmtilesUrlCandidates('https://maps.example/world.pmtiles'), [
     'https://maps.example/world.pmtiles',
   ])

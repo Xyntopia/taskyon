@@ -69,6 +69,10 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testSecureFetchRustTlsThroughLocalRelay: {
     requiresNetwork: true,
   },
+  testEntryNodeRecoversFromPythonExecutionFailure: {
+    requiresNetwork: true,
+    modelBased: true,
+  },
   testEntryNodeRecoversFromMalformedPythonToolCall: {
     requiresNetwork: true,
     modelBased: true,
@@ -116,7 +120,12 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
     requiresLargeTokens: true,
     modelBased: true,
   },
-  testCliAiWorkstationCreatesAndOptimizesDagGraph: {
+  testCliCreatesAndRunsDagGraphProject: {
+    requiresNetwork: true,
+    requiresLargeTokens: true,
+    modelBased: true,
+  },
+  testCliComparesDagGraphWorkstationOptions: {
     requiresNetwork: true,
     requiresLargeTokens: true,
     modelBased: true,

@@ -90,18 +90,20 @@ should not be kept as documentation snapshots.
 
 ## Builds and runtime targets
 
-- `yarn build` validates documentation and application links, regenerates the published client, and
-  then builds the Quasar app.
+- `yarn build` validates documentation and application links, builds generated workspace packages,
+  regenerates the published client, and builds the Quasar app. `yarn build:app` builds the workspace
+  packages and tunnel WASM, then runs type checking, ESLint, and Playwright test discovery before
+  bundling. The container build runs these checks in the same order.
 - `yarn build:desktop` exports the containerized desktop build.
 - `yarn tauri:build` uses the local Tauri toolchain.
 - `podman compose up --build` starts the services defined by `docker-compose.yml`.
 - `yarn relay` builds and starts the Taskyon relay.
 
 Builds need enough memory for Quasar and package generation. The Nix shell configures the expected
-Node heap; outside it, set `NODE_OPTIONS=--max-old-space-size=8192` when required.
-Keep the protocol package's Zod range aligned with the app's range. Resolving two different Zod
-versions in the Vue type-check graph can greatly increase `vue-tsc` memory use. Run
-`vue-tsc --noEmit` separately from a production bundle when investigating memory pressure.
+Node heap; outside it, set `NODE_OPTIONS=--max-old-space-size=8192` when required. Keep the
+protocol package and app on one resolved Zod version because schema types cross that boundary;
+two versions can greatly increase `vue-tsc` memory use. Run `vue-tsc --noEmit` separately from a
+production bundle when investigating memory pressure.
 
 ## Branches and contributions
 

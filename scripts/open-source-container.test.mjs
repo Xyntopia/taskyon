@@ -22,9 +22,22 @@ void test('the open-source container builds the SPA and desktop targets without 
   assert.ok(productionBuilder)
   assert.match(productionBuilder, /yarn docs:check/)
   assert.match(productionBuilder, /yarn links:check/)
+  assert.match(productionBuilder, /yarn build:app-dependencies[\s\S]*yarn pack:tyclient/)
   assert.match(productionBuilder, /yarn pack:tyclient/)
-  assert.match(productionBuilder, /yarn quasar build/)
-  assert.doesNotMatch(productionBuilder, /\byarn build\b/)
+  assert.match(
+    productionBuilder,
+    /yarn lint[\s\S]*TASKYON_BUILD_CHECKS_COMPLETED=1 yarn quasar build/,
+  )
+  assert.doesNotMatch(productionBuilder, /\byarn build(?:\s|$)/)
+  const debugBuilder = dockerfile.match(
+    /FROM prepare AS debug-builder([\s\S]*?)FROM docker.io\/library\/nginx/,
+  )?.[1]
+  assert.ok(debugBuilder)
+  assert.match(debugBuilder, /yarn build:app-dependencies[\s\S]*yarn lint/)
+  assert.match(
+    debugBuilder,
+    /yarn lint[\s\S]*TASKYON_BUILD_CHECKS_COMPLETED=1 yarn quasar build --debug/,
+  )
   assert.doesNotMatch(router, /createMemoryHistory|tyServerRoutes|MODE === 'ssr'/)
   assert.doesNotMatch(caching, /MODE === 'ssr'/)
 
@@ -47,5 +60,13 @@ void test('public container commands consistently use Podman and the SPA target'
   assert.doesNotMatch(relayScript, /\bdocker (?:build|tag|push)\b/)
   assert.match(packageJson.scripts['build:desktop'], /^podman build /)
   assert.match(packageJson.scripts['build:tauri:headless'], /^podman build /)
+  assert.match(
+    packageJson.scripts['build:app'],
+    /yarn build:app-dependencies[\s\S]*yarn lint && TASKYON_BUILD_CHECKS_COMPLETED=1 yarn run quasar build/,
+  )
+  assert.match(
+    packageJson.scripts.build,
+    /yarn build:app-dependencies[\s\S]*yarn pack:tyclient[\s\S]*yarn lint && TASKYON_BUILD_CHECKS_COMPLETED=1 yarn run quasar build/,
+  )
   assert.doesNotMatch(compose, /taskyon-server|target:\s*ssr-server/)
 })

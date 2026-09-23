@@ -281,7 +281,10 @@ export const testRemoteFunctionRegistrationFollowsSessionSwitch = async () => {
     const result = await processTasksDetailed(ty.port)(
       [[toolCall({ name: 'sessionEcho', arguments: { message } })]],
       'toolresult',
-      { timeoutMs: 10_000 },
+      {
+        timeoutMs: 10_000,
+        interruptOnSettle: (reason) => ty.cancelCurrentRun(reason),
+      },
     )
     if (result.status !== 'matched' || result.result.content.type !== 'toolresult') {
       throw new Error(`expected sessionEcho tool result, got ${result.status}`)

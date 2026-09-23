@@ -323,10 +323,10 @@ export const runVerifiedWorkflow = async (
       completionMetas,
     }
   } finally {
-    cleanup()
     try {
       await ty.dispose('ideal workflow diagnostic complete')
     } finally {
+      cleanup()
       await database.close()
     }
   }
