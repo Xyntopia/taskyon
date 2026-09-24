@@ -20,6 +20,22 @@ export const testFocusedToolSearchMatchesCamelCaseNames = () => {
   assert(matches[0]?.name === 'exportCalendar', 'Expected name words to match focused searches')
 }
 
+export const testFocusedToolSearchMatchesCamelCaseQuery = () => {
+  const matches = rankToolDefinitions(
+    [
+      {
+        name: 'taskPlanner',
+        description: 'Create sequential task handoffs.',
+        parameters: { type: 'object', properties: {} },
+      },
+    ],
+    'taskPlanner',
+    5,
+    { minimumMatchedTerms: 2, exactTermMatches: true },
+  )
+  assert(matches[0]?.name === 'taskPlanner', 'Expected camel-case query words to match the tool')
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
@@ -34,14 +50,79 @@ export const testToolSearcherIsInternalOnly = () => {
     'Expected toolSearcher hidden from LLM context',
   )
   assert(
-    toolSearcher.renderOptions?.hideVector === true,
+    toolSearcher.renderOptions?.hideToolSearch === true,
     'Expected toolSearcher excluded from the searchable tool catalog',
+  )
+  assert(
+    toolSearcher.renderOptions?.hideVector === true &&
+      toolSearcher.renderOptions.hideVectorResult === true,
+    'Expected toolSearcher calls and results excluded from conversation search',
   )
   assert(
     resolveAgentToolCatalog({ toolSearcher }).length === 0,
     'Expected toolSearcher not to select itself as an agent tool',
   )
 }
+
+export const testToolSearchVisibilityIsIndependentOfTaskIndexing = () => {
+  const definitions = {
+    discoverable: {
+      name: 'discoverable',
+      description: 'Useful tool excluded from task-history vectors.',
+      parameters: { type: 'object' as const },
+      renderOptions: { hideVector: true, hideToolSearch: false },
+    },
+    internal: {
+      name: 'internal',
+      description: 'Internal tool whose calls remain indexable.',
+      parameters: { type: 'object' as const },
+      renderOptions: { hideToolSearch: true },
+    },
+    legacy: {
+      name: 'legacy',
+      description: 'Existing tool hidden by the former hideVector catalog rule.',
+      parameters: { type: 'object' as const },
+      renderOptions: { hideVector: true },
+    },
+  }
+  const catalog = resolveAgentToolCatalog(definitions).map((entry) => entry.name)
+  assert(catalog.includes('discoverable'), 'Expected explicit tool-search visibility to win')
+  assert(!catalog.includes('internal'), 'Expected internal tool excluded from catalog')
+  assert(!catalog.includes('legacy'), 'Expected legacy hidden catalog behavior to remain')
+}
+
+testToolSearchVisibilityIsIndependentOfTaskIndexing.description =
+  'Separates tool discovery from task indexing while preserving legacy saved-tool visibility.'
+
+export const testToolSearcherExactNameRespectsCatalogVisibility = async () => {
+  const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
+  await toolManager.addDefaultTools([
+    {
+      name: 'hiddenTool',
+      description: 'Internal helper.',
+      parameters: { type: 'object', properties: {} },
+      renderOptions: { hideToolSearch: true },
+    },
+  ])
+  const searcher = createToolSearcher(toolManager)
+  const context: toolContext = {
+    getExecutionTaskChain: () => Promise.resolve([]),
+    createSubtasksResult: (tasks) => createSubtasksResult(tasks),
+    getSecret: () => Promise.resolve(null),
+    setSecret: () => Promise.resolve(),
+    stopSignal: new AbortController().signal,
+    toolId: 'exact-name-catalog-test',
+  }
+  const result = await searcher.function?.({ toolName: 'hiddenTool', analyze: true }, context)
+  assert(result && typeof result === 'object', 'Expected a search result')
+  assert(
+    !('Here is the requested tool definition' in result),
+    'Expected exact-name lookup to respect catalog visibility',
+  )
+}
+
+testToolSearcherExactNameRespectsCatalogVisibility.description =
+  'Keeps hidden tool definitions out of exact-name catalog lookup.'
 
 testToolSearcherIsInternalOnly.description =
   'Keeps the broad registered searcher internal while EntryNode exposes its narrow scoped binding.'

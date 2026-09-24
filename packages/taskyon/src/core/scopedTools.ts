@@ -1,10 +1,16 @@
 import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
-import type { TaskNode, ScopedToolDefinition, partialTaskDraft } from '../types/taskNode'
+import {
+  assertDistinctBindingName,
+  type TaskNode,
+  type ScopedToolDefinition,
+  type partialTaskDraft,
+} from '../types/taskNode'
 import type { InternalTool } from '../types/toolApi'
 import { toolCall } from '../types/toolApi'
-import { ContentHash, type ToolBase, type ToolIdentity } from '../types/tools'
+import { ContentHash, FunctionArguments, type ToolBase, type ToolIdentity } from '../types/tools'
 import { taskContentHash } from './createTasks'
 import type { ToolManager } from './toolManager'
+import { deepEqual } from 'fast-equals'
 import Ajv from 'ajv'
 import type { InvocationRevisionResolver } from './toolSettings'
 
@@ -95,6 +101,17 @@ export const findScopedToolDefinition = (taskChain: readonly TaskNode[], name: s
   }
 }
 
+export const isPinnedBindingTargetCall = (
+  definition: ScopedToolDefinition | undefined,
+  name: string,
+  revision?: ContentHash,
+) =>
+  !!definition &&
+  !!revision &&
+  'implementation' in definition &&
+  definition.implementation.target === name &&
+  definition.implementation.targetRevision === revision
+
 export const scopedToolIdentity = (definitionTask: TaskNode, name: string): ToolIdentity => ({
   publisherId: 'task-tree',
   name,
@@ -124,12 +141,43 @@ export const validateToolArguments = (
   }
 }
 
+export const validateBindingTargetArguments = (
+  definition: ScopedToolDefinition,
+  target: InternalTool,
+  args: unknown,
+) => {
+  if (!('implementation' in definition)) {
+    throw new Error(`Scoped tool "${definition.name}" is not a binding.`)
+  }
+  const values = FunctionArguments.parse(args)
+  const { fixedArguments, publicArguments } = definition.implementation
+  const allowedArguments = new Set([
+    ...Object.keys(fixedArguments),
+    ...Object.keys(publicArguments),
+  ])
+  const unexpectedArgument = Object.keys(values).find((name) => !allowedArguments.has(name))
+  if (unexpectedArgument) {
+    throw new Error(`Binding target call includes non-public argument "${unexpectedArgument}".`)
+  }
+  for (const [name, value] of Object.entries(fixedArguments)) {
+    if (!Object.hasOwn(values, name) || !deepEqual(values[name], value)) {
+      throw new Error(`Binding target call changed fixed argument "${name}".`)
+    }
+  }
+
+  const publicValues = Object.fromEntries(
+    Object.entries(values).filter(([name]) => Object.hasOwn(publicArguments, name)),
+  )
+  validateToolArguments(definition.name, deriveBindingParameters(definition, target), publicValues)
+}
+
 const prepareBindingDraft = async (
   task: partialTaskDraft,
   toolManager: ToolManager,
 ): Promise<partialTaskDraft> => {
   if (task.content.type !== 'tooldefinition' || !('implementation' in task.content.data))
     return task
+  assertDistinctBindingName(task.content.data)
   const implementation = task.content.data.implementation
   const target = await toolManager.resolveTool(implementation.target, implementation.targetRevision)
   if (!target.tool || !target.identity) {
@@ -156,13 +204,14 @@ const prepareFunctionCallDraft = async (
   if (task.content.type !== 'functioncall') return task
   const call = task.content.data
   const scoped = findScopedToolDefinition(lineage, call.name)
-  const revisions = scoped
-    ? { toolRevision: scopedToolIdentity(scoped.definitionTask, call.name).revision }
-    : await resolveInvocationRevisions({
-        name: call.name,
-        ...(call.toolRevision ? { toolRevision: call.toolRevision } : {}),
-        ...(call.settingsRevision ? { settingsRevision: call.settingsRevision } : {}),
-      })
+  const revisions =
+    scoped && !isPinnedBindingTargetCall(scoped.tool, call.name, call.toolRevision)
+      ? { toolRevision: scopedToolIdentity(scoped.definitionTask, call.name).revision }
+      : await resolveInvocationRevisions({
+          name: call.name,
+          ...(call.toolRevision ? { toolRevision: call.toolRevision } : {}),
+          ...(call.settingsRevision ? { settingsRevision: call.settingsRevision } : {}),
+        })
   if (!revisions) {
     throw new Error(`Cannot compile unresolved tool call: ${call.name}.`)
   }

@@ -50,7 +50,13 @@ export const createOAuthTool = (
     description: 'Reuse or obtain an OAuth access token for the calling tool.',
     longDescription:
       'This hidden browser workflow checks the calling tool’s secret namespace first. When no token is available it renders an explicit login action, opens the provider authorization page, validates the resumed flow, exchanges the authorization response, and stores the token for the caller.',
-    renderOptions: { hideChat: true, hideInput: true },
+    renderOptions: {
+      hideChat: true,
+      hideInput: true,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+    },
     parameters: {
       type: 'object',
       properties: {

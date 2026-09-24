@@ -107,7 +107,7 @@ export const quasarDialogTool = createClientTool({
     'This browser-host capability pauses the workflow for explicit user interaction and returns a structured ok, cancel, or dismiss outcome. It should be used only when the task genuinely requires a user decision or input.',
 
   parameters: simpleDialogSchema,
-  renderOptions: { hideChat: false, hideLlm: false },
+  renderOptions: { hideChat: false, hideLlm: false, hideVector: true, hideToolSearch: false },
 
   async function(opts): Promise<DialogResult> {
     /* ----- 1. destructure + runtime guard -------------------------- */
@@ -186,7 +186,7 @@ export const clarificationQuestionsTool = createClientTool({
   description: clarificationToolDescription,
   longDescription: clarificationToolLongDescription,
   parameters: clarificationToolParameters,
-  renderOptions: { hideChat: false, hideLlm: false },
+  renderOptions: { hideChat: false, hideLlm: false, hideVector: true, hideToolSearch: false },
   async function(rawArgs): Promise<ClarificationResult | { cancelled: true }> {
     const request = ClarificationRequest.parse(rawArgs)
     return await new Promise((resolve) => {

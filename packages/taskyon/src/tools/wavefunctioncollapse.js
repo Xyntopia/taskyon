@@ -10,6 +10,9 @@ export const wfcGenerator = createTool({
   renderOptions: {
     hideChat: false,
     hideLlm: false,
+    hideVector: true,
+    hideVectorResult: true,
+    hideToolSearch: false,
   },
   parameters: {
     type: 'object',

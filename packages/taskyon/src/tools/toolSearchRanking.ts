@@ -37,12 +37,14 @@ const isSearchStopWord = (term: string) =>
     term,
   )
 
+const splitSearchText = (value: string) =>
+  value.split(/[^\p{L}\p{N}]+|(?<=[\p{Ll}\p{N}])(?=\p{Lu})/u).filter(Boolean)
+
 const normalizeTerms = (query: string) => [
   ...new Set(
-    query
-      .toLocaleLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((term) => term.length > 0 && !isSearchStopWord(term)),
+    splitSearchText(query)
+      .map((term) => term.toLocaleLowerCase())
+      .filter((term) => !isSearchStopWord(term)),
   ),
 ]
 
@@ -51,10 +53,9 @@ const normalizeSearchToken = (term: string) =>
 
 const hasExactSearchTerm = (value: string, term: string) => {
   const normalizedTerm = normalizeSearchToken(term)
-  const tokens = value
-    .split(/[^\p{L}\p{N}]+|(?<=[\p{Ll}\p{N}])(?=\p{Lu})/u)
-    .filter(Boolean)
-    .map((token) => normalizeSearchToken(token.toLocaleLowerCase()))
+  const tokens = splitSearchText(value).map((token) =>
+    normalizeSearchToken(token.toLocaleLowerCase()),
+  )
   return tokens.includes(normalizedTerm)
 }
 

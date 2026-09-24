@@ -202,6 +202,9 @@ const clock = createTool({
   renderOptions: {
     hideChat: false,
     hideLlm: false,
+    hideVector: true,
+    hideVectorResult: true,
+    hideToolSearch: false,
   },
   parameters: {
     type: 'object',
@@ -233,6 +236,8 @@ const location = createTool({
   renderOptions: {
     hideChat: false,
     hideLlm: false,
+    hideVector: true,
+    hideToolSearch: false,
   },
   parameters: {
     type: 'object',

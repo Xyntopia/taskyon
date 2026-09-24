@@ -30,6 +30,23 @@ export function tool_managerRevisionIdentityIsCanonical() {
 tool_managerRevisionIdentityIsCanonical.description =
   'Tool revisions use domain-separated canonical SHA-256 rather than task timestamps or function serialization.'
 
+export async function testToolManagerPersistsIndependentSearchAndVectorSettings() {
+  const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
+  await toolManager.installTool({
+    name: 'searchableWithoutTaskVectors',
+    description: 'A searchable tool with repetitive calls and results.',
+    parameters: { type: 'object', properties: {} },
+    renderOptions: { hideToolSearch: false, hideVector: true, hideVectorResult: true },
+  })
+  const { tool } = await toolManager.resolveTool('searchableWithoutTaskVectors')
+  assert(tool?.renderOptions?.hideToolSearch === false, 'Expected catalog setting preserved')
+  assert(tool.renderOptions.hideVector === true, 'Expected call-index setting preserved')
+  assert(tool.renderOptions.hideVectorResult === true, 'Expected result-index setting preserved')
+}
+
+testToolManagerPersistsIndependentSearchAndVectorSettings.description =
+  'Persists independent catalog, call-index, and result-index settings in tool manifests.'
+
 export async function tool_managerPinsImmutableRevisions() {
   const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
   const first = await toolManager.installManifest({

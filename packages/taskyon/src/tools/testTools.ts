@@ -3,6 +3,7 @@ import { createTool } from '../types/toolApi'
 
 const testSecretStore = createTool({
   name: 'testSecretStore',
+  renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: true },
   description: 'Development-only check that writes and reads a Taskyon secret value.',
   longDescription:
     'This diagnostic capability mutates the current secret store and returns the round-tripped value. It is intended for runtime verification, not ordinary secret management.',
@@ -65,6 +66,7 @@ const testSecretStore = createTool({
  */
 export const postMessageTester = createTool({
   name: 'postMessageTester',
+  renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: true },
   description: 'Development-only interactive check for Taskyon UI messages and continuation tasks.',
   longDescription:
     'The first call renders a button and schedules a visible continuation; the second waits for the matching host interaction and returns its payload. It is a MessageChannel diagnostic, not a general UI tool.',

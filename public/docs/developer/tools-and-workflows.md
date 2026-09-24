@@ -2,6 +2,19 @@
 
 Keep a tool's name, description, parameter schema, render options, and function together.
 
+Tool discovery and conversation search use separate render options. `hideToolSearch: true`
+removes a tool from agent catalog searches without preventing an explicitly selected call.
+`hideVector: true` excludes its function-call tasks from Task Manager's derived search index;
+`hideVectorResult: true` also excludes its tool-result tasks. Use the result option only when
+every result is low-value for finding a past conversation. Assistant messages and other content
+tasks remain searchable independently. Existing tools that omit `hideToolSearch` retain the old
+catalog behavior when `hideVector` is true; set `hideToolSearch: false` to make such a tool
+discoverable.
+
+Changing these options does not remove vectors already indexed. To apply new indexing rules to
+past conversations, use Task Manager's reset-index control, then its update-index control. The
+index is rebuilt from saved tasks; conversation records are not changed.
+
 ```ts
 import { createTool, toolCall } from '@taskyon/taskyon/api'
 
@@ -127,11 +140,14 @@ bind({
 
 The public argument entries refine the target's existing JSON Schema rather than replacing its
 types, so `{}` selects the owning target parameter without copying its schema into the binding.
-Fixed arguments cannot also be public. Binding definitions must not copy target settings; core
-compiles the generated target call with an
-immutable tool revision and an opaque per-tool settings revision. Defaults and settings are applied
-only during execution, so settings values are not exposed in the task tree. Repeated definition
-occurrences remain in the call stack while equal definition content shares storage. Definition
+The binding's name must differ from its target's name. A scoped definition hides a registry tool
+with the same name from the model's callable list, so reusing the target's name would hide that
+target. New bindings are rejected when their names match; existing saved task trees retain their
+pinned target calls. Fixed arguments cannot also be public. Binding definitions must not copy
+target settings; core compiles the generated target call with an immutable tool revision and an
+opaque per-tool settings revision. Defaults and settings are applied only during execution, so
+settings values are not exposed in the task tree. Repeated definition occurrences remain in the
+call stack while equal definition content shares storage. Definition
 tasks do not become model messages or ordinary copied chat content.
 
 ## Internal and client tools

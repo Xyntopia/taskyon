@@ -1336,7 +1336,7 @@ function createCliClarificationTool(
     description: clarificationToolDescription,
     longDescription: clarificationToolLongDescription,
     parameters: clarificationToolParameters,
-    renderOptions: { hideChat: false, hideLlm: false },
+    renderOptions: { hideChat: false, hideLlm: false, hideVector: true, hideToolSearch: false },
     async function(rawArgs) {
       return await withCliMenuInteraction(async () => {
         const rl = getReadline()

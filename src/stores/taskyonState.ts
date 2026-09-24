@@ -497,6 +497,7 @@ export function defineTyGuiTools(
       longDescription:
         'Profile changes apply through the same validated browser store used by the settings UI and may optionally be persisted. Resets restore bundled defaults. The capability can also expose the current execution task chain, but never reads or mutates secrets or signature material.',
       name: 'manageTaskyonProfile',
+      renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: true },
       parameters: {
         type: 'object',
         properties: {

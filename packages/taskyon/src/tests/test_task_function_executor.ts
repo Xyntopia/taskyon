@@ -7,6 +7,7 @@ import {
 import { scopedToolIdentity } from '../core/scopedTools'
 import type { partialTaskDraft } from '../types/taskNode'
 import type { TaskNode } from '../types/taskNode'
+import type { InternalTool } from '../types/toolApi'
 import { resolvePreviousSiblingResultTask } from '../core/taskChainSelection'
 import {
   compileTaskyonFunctionArguments,
@@ -84,44 +85,67 @@ testTaskFunctionExecutorResolvesRevisionPinnedScopedCaller.description =
 
 export async function testTaskFunctionExecutorRunsPinnedSameNameBindingTarget() {
   const targetRevision = `sha256:${'a'.repeat(43)}` as const
-  const taskChain = await forgeTaskChain([
-    [
-      {
-        role: 'system',
-        content: {
-          type: 'tooldefinition',
-          data: {
-            name: 'toolSearcher',
-            description: 'Narrow public tool search.',
-            implementation: {
-              type: 'binding',
-              target: 'toolSearcher',
-              targetRevision,
-              fixedArguments: { analyze: true },
-              publicArguments: { query: {}, limit: {} },
-            },
-          },
+  const bindingDefinition = {
+    role: 'system',
+    content: {
+      type: 'tooldefinition',
+      data: {
+        name: 'toolSearcher',
+        description: 'Narrow public tool search.',
+        implementation: {
+          type: 'binding',
+          target: 'toolSearcher',
+          targetRevision,
+          fixedArguments: { analyze: true },
+          publicArguments: { query: {}, limit: {} },
         },
       },
-      {
-        role: 'function',
-        content: {
-          type: 'functioncall',
-          data: {
-            name: 'toolSearcher',
-            toolRevision: targetRevision,
-            arguments: { query: 'weather', analyze: true },
-          },
+    },
+  } satisfies partialTaskDraft
+  const targetCall = (analyze: boolean) =>
+    ({
+      role: 'function',
+      content: {
+        type: 'functioncall',
+        data: {
+          name: 'toolSearcher',
+          toolRevision: targetRevision,
+          arguments: { query: 'weather', analyze },
         },
       },
-    ],
-  ])
+    }) satisfies partialTaskDraft
+  const taskChain = await forgeTaskChain([[bindingDefinition, targetCall(true)]])
+  const wrongFixedArgumentChain = await forgeTaskChain([[bindingDefinition, targetCall(false)]])
   const call = taskChain[1]
+  const wrongFixedArgumentCall = wrongFixedArgumentChain[1]
   assert(call?.content.type === 'functioncall', 'Expected the delegated target call')
-  const tasks = new Map(taskChain.map((task) => [task.id, task]))
-  const resolved = await createInvocationToolResolver({
+  assert(
+    wrongFixedArgumentCall?.content.type === 'functioncall',
+    'Expected the second delegated target call',
+  )
+  const taskChains = [taskChain, wrongFixedArgumentChain]
+  const tasks = new Map(
+    taskChains.flatMap((chain) => chain.map((task) => [task.id, task] as const)),
+  )
+  const lineages = new Map(
+    taskChains.flatMap((chain) => chain.map((task) => [task.id, chain] as const)),
+  )
+  const targetTool = {
+    name: 'toolSearcher',
+    description: 'Registered full catalog search.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        limit: { type: 'integer' },
+        analyze: { type: 'boolean' },
+      },
+    },
+    function: () => undefined,
+  } satisfies InternalTool
+  const resolveInvocationTool = createInvocationToolResolver({
     getExecutionTask: (id) => Promise.resolve(tasks.get(id) ?? null),
-    getTaskLineage: () => Promise.resolve(taskChain),
+    getTaskLineage: (id) => Promise.resolve(lineages.get(id) ?? []),
     resolveRegisteredTool: (_name, revision) =>
       Promise.resolve({
         identity: {
@@ -129,21 +153,44 @@ export async function testTaskFunctionExecutorRunsPinnedSameNameBindingTarget() 
           name: 'toolSearcher',
           revision: revision ?? targetRevision,
         },
-        tool: {
-          name: 'toolSearcher',
-          description: 'Registered full catalog search.',
-          parameters: { type: 'object', properties: {} },
-          function: () => undefined,
-        },
+        tool: targetTool,
       }),
-  })('toolSearcher', { taskId: call.id, toolRevision: targetRevision })
+  })
+  const resolved = await resolveInvocationTool('toolSearcher', {
+    taskId: call.id,
+    toolRevision: targetRevision,
+  })
 
   assert(resolved.source === 'registry', 'Expected the pinned binding target from the registry')
   assert(resolved.identity?.revision === targetRevision, 'Expected the exact target revision')
+
+  let rejectedFixedArgumentOverride = false
+  try {
+    await resolveInvocationTool('toolSearcher', {
+      taskId: wrongFixedArgumentCall.id,
+      toolRevision: targetRevision,
+    })
+  } catch (error) {
+    rejectedFixedArgumentOverride =
+      error instanceof Error && error.message.includes('changed fixed argument "analyze"')
+  }
+  assert(rejectedFixedArgumentOverride, 'A pinned target call must not change fixed arguments')
+
+  let rejectedMismatchedRevision = false
+  try {
+    await resolveInvocationTool('toolSearcher', {
+      taskId: call.id,
+      toolRevision: `sha256:${'b'.repeat(43)}`,
+    })
+  } catch (error) {
+    rejectedMismatchedRevision =
+      error instanceof Error && error.message.includes('Scoped tool revision mismatch')
+  }
+  assert(rejectedMismatchedRevision, 'A different revision must not bypass the scoped binding')
 }
 
 testTaskFunctionExecutorRunsPinnedSameNameBindingTarget.description =
-  'Executes a pinned registered target when a narrow scoped binding intentionally shares its name.'
+  'Executes a pinned registered target for historical task trees with same-name bindings.'
 
 export async function testTaskFunctionExecutorAppliesOnlyPinnedSettings() {
   const toolRevision = `sha256:${'c'.repeat(43)}` as const

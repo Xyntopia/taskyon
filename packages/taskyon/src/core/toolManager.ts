@@ -69,6 +69,12 @@ function createManifest(tool: InternalTool): ToolManifest {
         ...(toolBase.renderOptions.hideVector === undefined
           ? {}
           : { hideVector: toolBase.renderOptions.hideVector }),
+        ...(toolBase.renderOptions.hideVectorResult === undefined
+          ? {}
+          : { hideVectorResult: toolBase.renderOptions.hideVectorResult }),
+        ...(toolBase.renderOptions.hideToolSearch === undefined
+          ? {}
+          : { hideToolSearch: toolBase.renderOptions.hideToolSearch }),
       }
     : undefined
   const execution = tool.code

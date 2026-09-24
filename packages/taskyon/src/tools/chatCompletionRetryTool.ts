@@ -139,7 +139,13 @@ export const createChatCompletionRetryDelayTool = (dependencies?: {
       'Wait visibly before Taskyon retries a transiently failed chat completion. This tool is scheduled automatically.',
     longDescription:
       'This hidden workflow capability preserves retry state in visible tasks, reports a countdown through progress events, respects cancellation, and then replays the most recent failed chat-completion arguments. Agents should not select it directly.',
-    renderOptions: { hideChat: false, hideLlm: true, hideVector: true },
+    renderOptions: {
+      hideChat: false,
+      hideLlm: true,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+    },
     parameters: {
       type: 'object',
       additionalProperties: false,

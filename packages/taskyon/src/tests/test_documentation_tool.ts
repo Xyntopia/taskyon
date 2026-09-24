@@ -1,4 +1,5 @@
 import { taskyonDocumentationTool } from '../tools/documentationTool'
+import { resolveAgentToolCatalog } from '../tools/toolTools'
 import {
   createDocumentationIndexClientTool,
   loadDocumentationDocumentsFromManifest,
@@ -128,6 +129,15 @@ export const testDocumentationManifestMaterializesEachSourceOnce = async () => {
 
 export const testTaskyonDocumentationLoadsDocumentsWithoutIndexConsent = async () => {
   const tool = taskyonDocumentationTool
+  assert(
+    tool.renderOptions?.hideVector === true && tool.renderOptions.hideToolSearch === false,
+    'Expected documentation wrapper discoverable without indexing its call tasks',
+  )
+  const catalog = resolveAgentToolCatalog({ [tool.name]: tool })
+  assert(
+    catalog.some((entry) => entry.name === tool.name),
+    'Expected the user-facing Taskyon documentation tool to be discoverable by EntryNode.',
+  )
   const result = await tool.function?.({ query: 'How do Taskyon tools work?' }, createTestContext())
 
   assert(result && typeof result === 'object', 'Expected task result object')

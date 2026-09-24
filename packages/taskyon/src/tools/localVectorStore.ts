@@ -9,6 +9,7 @@ import type { TyPGDB } from '../utils/pglite.api'
 export const localVectorStore = (db: TyPGDB) =>
   createTool({
     name: 'localVectorStore',
+    renderOptions: { hideVector: true, hideToolSearch: false },
     description: 'Store text in the local vector index or retrieve semantically similar text.',
     longDescription:
       'Saved text is content-addressed and embedded in Taskyon’s local database. Labels can partition retrieval without changing the stored text. This is persistent semantic memory, not a source of external facts.',

@@ -10,6 +10,7 @@ import {
   selectSiblingTaskChain,
   selectTaskQueueBranches,
 } from '../core/taskQueueSelection'
+import { resolveAgentToolCatalog } from '../tools/toolTools'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -336,6 +337,17 @@ export const testTaskPlannerReturnsOnlyDelegatedBranches = async () => {
   assert(
     taskPlanner.renderOptions?.hideLlm === true,
     'Expected taskPlanner orchestration calls to stay out of later LLM context',
+  )
+  assert(
+    taskPlanner.renderOptions?.hideVector === true &&
+      taskPlanner.renderOptions.hideToolSearch === false,
+    'Expected taskPlanner discoverable without indexing its repetitive call tasks',
+  )
+  assert(
+    resolveAgentToolCatalog({ [taskPlanner.name]: taskPlanner }).some(
+      (tool) => tool.name === taskPlanner.name,
+    ),
+    'Expected the multi-phase TaskPlanner capability to be discoverable by EntryNode.',
   )
   const tasksDescription = taskPlanner.parameters.properties.tasks.description
   assert(

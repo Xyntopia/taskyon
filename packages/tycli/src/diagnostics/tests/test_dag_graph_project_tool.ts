@@ -8,6 +8,8 @@ import {
 } from '@taskyon/comp-dag/designGraphRepository'
 import { createAiWorkstationExample } from '@taskyon/taskyon'
 import { createDagGraphProjectTool } from '@taskyon/taskyon/tools/dagGraphProjectTool'
+import { augmentToolSchemaForTaskyonVariables } from '@taskyon/taskyon/tools/chatCompletion/context'
+import type { JSONSchema7 } from 'json-schema'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -125,6 +127,108 @@ const createMemoryStorage = () => {
   }
 }
 
+export const testDagGraphProjectAcceptsItsDocumentedNodeExample = async () => {
+  const storage = createMemoryStorage()
+  const tool = createDagGraphProjectTool(storage.client)
+  const nodeSourceSchema = tool.parameters.properties?.nodeSource
+  assert(
+    nodeSourceSchema && typeof nodeSourceSchema === 'object',
+    'Expected dagGraphProject to document the nodeSource parameter.',
+  )
+  const nodeSource = nodeSourceSchema.examples?.[0]
+  assert(typeof nodeSource === 'string', 'Expected a runnable nodeSource example.')
+
+  const result = await tool.function({
+    action: 'createNode',
+    nodeSource,
+  })
+  assert(result.type === 'dagGraphNodeCreated', 'Expected the documented node to be accepted.')
+  return { success: true }
+}
+
+export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
+  const storage = createMemoryStorage()
+  const parameters = augmentToolSchemaForTaskyonVariables(
+    createDagGraphProjectTool(storage.client).parameters as JSONSchema7,
+  )
+  const actionSchema = parameters.properties?.action as JSONSchema7 | undefined
+  assert(
+    actionSchema?.description?.includes('returned nodeId as rootNodeId') &&
+      actionSchema.description.includes('invocation hash'),
+    'Expected the action schema to explain the node-to-project-to-run handoff.',
+  )
+  assert(
+    !(parameters.required ?? []).includes('projectId'),
+    'Expected projectId not to be globally required for global node creation.',
+  )
+  const variablesSchema = parameters.properties?.variables as JSONSchema7 | undefined
+  const variableSpecSchema = variablesSchema?.additionalProperties
+  assert(
+    JSON.stringify(variablesSchema?.examples?.[0]) ===
+      JSON.stringify({ gpuMemoryGb: { kind: 'list', values: [12, 16, 24] } }),
+    'Expected variables to provide a concrete object example for model calls.',
+  )
+  assert(
+    typeof variableSpecSchema === 'object' && Array.isArray(variableSpecSchema.anyOf),
+    'Expected variables to expose the supported variable-spec variants.',
+  )
+  assert(
+    !JSON.stringify(variableSpecSchema).includes('"default"'),
+    'Expected tool-call variable schemas not to advertise defaults inside unions.',
+  )
+
+  const objectivesSchema = parameters.properties?.objectives as JSONSchema7 | undefined
+  const objectiveSchema = objectivesSchema?.items
+  assert(
+    typeof objectiveSchema === 'object' &&
+      Array.isArray(objectiveSchema.required) &&
+      objectiveSchema.required.includes('target'),
+    'Expected objectives to require the target structure used by invocation execution.',
+  )
+  const rootNodeIdSchema = parameters.properties?.rootNodeId
+  assert(
+    typeof rootNodeIdSchema === 'object' &&
+      rootNodeIdSchema.description?.includes('nodeId returned by createNode') &&
+      rootNodeIdSchema.description.includes('do not include a separate nodeId'),
+    'Expected rootNodeId to explain how the createNode result is passed to createProject.',
+  )
+  assert(parameters.properties?.$use, 'Expected the Taskyon variable mapping to be available.')
+  const createProjectRule = (parameters as JSONSchema7).anyOf?.find((rule) => {
+    if (!rule || typeof rule !== 'object') return false
+    const actionSchema = rule.properties?.action
+    return typeof actionSchema === 'object' && actionSchema.const === 'createProject'
+  })
+  assert(
+    createProjectRule &&
+      typeof createProjectRule === 'object' &&
+      createProjectRule.required?.includes('projectId') &&
+      createProjectRule.anyOf?.some(
+        (requirement) =>
+          requirement &&
+          typeof requirement === 'object' &&
+          requirement.required?.includes('rootNodeId'),
+      ) &&
+      createProjectRule.anyOf?.some(
+        (requirement) =>
+          requirement && typeof requirement === 'object' && requirement.required?.includes('$use'),
+      ),
+    'Expected createProject to require a root or accept its Taskyon $use mapping.',
+  )
+  const createNodeRule = (parameters as JSONSchema7).anyOf?.find((rule) => {
+    if (!rule || typeof rule !== 'object') return false
+    const actionSchema = rule.properties?.action
+    return typeof actionSchema === 'object' && actionSchema.const === 'createNode'
+  })
+  assert(
+    createNodeRule &&
+      typeof createNodeRule === 'object' &&
+      createNodeRule.required?.includes('nodeSource') &&
+      !createNodeRule.required?.includes('projectId'),
+    'Expected global node creation to require source but not a project identifier.',
+  )
+  return { success: true }
+}
+
 export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async () => {
   const storage = createMemoryStorage()
   const repositoryUrl = new URL(
@@ -173,6 +277,10 @@ export const testDagGraphProjectToolUsesUnifiedProjectAndInvocationModel = async
     policy: { accuracy: 'exact', budget: { maxRows: 2 } },
   })
   assert(created.type === 'designProjectCreated', 'Expected project creation result.')
+  assert(
+    created.invocationName === 'main',
+    'Expected project creation to return the name used to run its invocation.',
+  )
 
   const designRepository = createDesignGraphRepository(
     createStorageDesignGraphObjectStore(storage.client),

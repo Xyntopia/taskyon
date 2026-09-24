@@ -7,7 +7,9 @@ import { materializeTaskyonFunctionArguments } from './taskVariables'
 import {
   compileScopedToolDefinition,
   findScopedToolDefinition,
+  isPinnedBindingTargetCall,
   scopedToolIdentity,
+  validateBindingTargetArguments,
   validateToolArguments,
 } from './scopedTools'
 import { createWithDefaults } from './tools'
@@ -33,7 +35,9 @@ export const createInvocationToolResolver = (dependencies: {
   getTaskLineage: (taskId: string) => Promise<TaskNode[]>
   resolveRegisteredTool: ToolManager['resolveTool']
 }) => {
-  const resolveScopedInvocationTool = async (name: string, taskId: string) => {
+  const resolveInvocationFromLineage = async (name: string, call: InvocationCall) => {
+    const taskId = call.taskId
+    if (!taskId) return undefined
     const executionTask = await dependencies.getExecutionTask(taskId)
     if (
       executionTask?.content.type !== 'functioncall' ||
@@ -44,27 +48,34 @@ export const createInvocationToolResolver = (dependencies: {
     const taskChain = await dependencies.getTaskLineage(taskId)
     const scoped = findScopedToolDefinition(taskChain, name)
     if (!scoped) return undefined
+
+    const identity = scopedToolIdentity(scoped.definitionTask, scoped.tool.name)
+    if (isPinnedBindingTargetCall(scoped.tool, name, call.toolRevision)) {
+      const registered = await dependencies.resolveRegisteredTool(name, call.toolRevision)
+      if (registered.tool) {
+        validateBindingTargetArguments(
+          scoped.tool,
+          registered.tool,
+          executionTask.content.data.arguments,
+        )
+      }
+      return { source: 'registry' as const, ...registered }
+    }
+
+    if (call.toolRevision && call.toolRevision !== identity.revision) {
+      throw new Error(`Scoped tool revision mismatch for ${name}.`)
+    }
     const compiled = await compileScopedToolDefinition(
       scoped.tool,
       dependencies.resolveRegisteredTool,
     )
-    return { ...scoped, tool: compiled.tool }
+    return { source: 'task-tree' as const, ...scoped, tool: compiled.tool, identity }
   }
 
   return async (name: string, call?: InvocationCall) => {
     if (call?.taskId) {
-      const scoped = await resolveScopedInvocationTool(name, call.taskId)
-      if (scoped) {
-        const identity = scopedToolIdentity(scoped.definitionTask, scoped.tool.name)
-        if (call.toolRevision && call.toolRevision !== identity.revision) {
-          throw new Error(`Scoped tool revision mismatch for ${name}.`)
-        }
-        return {
-          source: 'task-tree' as const,
-          ...scoped,
-          identity,
-        }
-      }
+      const resolved = await resolveInvocationFromLineage(name, call)
+      if (resolved) return resolved
     }
 
     const registered = await dependencies.resolveRegisteredTool(name, call?.toolRevision)

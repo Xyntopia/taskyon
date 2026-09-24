@@ -26,11 +26,17 @@ import {
   createDagInvocationEvaluators,
   executeInvocation,
 } from '@taskyon/comp-dag/invocationExecution'
-import type {
-  Objective,
-  OptimizationCaptureSpec,
-  OptimizationInputSpec,
-  VariableSpec,
+import type { JSONSchema7 } from 'json-schema'
+import z from 'zod'
+import {
+  objectiveSchema,
+  optimizationCaptureSpecSchema,
+  optimizationInputSpecSchema,
+  variableSpecSchema,
+  type Objective,
+  type OptimizationCaptureSpec,
+  type OptimizationInputSpec,
+  type VariableSpec,
 } from '@taskyon/comp-dag/optimization'
 import { createStorageDagBackend } from '@taskyon/comp-dag/storageDagBackend'
 import {
@@ -47,7 +53,7 @@ type GraphProjectAction =
 
 type DagGraphProjectToolArgs = {
   action: GraphProjectAction
-  projectId: string
+  projectId?: string
   displayName?: string
   invocationName?: string
   nodeSource?: string
@@ -82,6 +88,19 @@ export const createDagGraphProjectTool = (
 ) => {
   const store = createStorageDesignGraphObjectStore(storageClient)
   const repository = createDesignGraphRepository(store)
+  const toToolInputSchema = (schema: z.ZodType) =>
+    z.toJSONSchema(schema, {
+      target: 'draft-7',
+      io: 'input',
+      unrepresentable: 'any',
+      override: ({ jsonSchema }) => {
+        delete jsonSchema.default
+      },
+    }) as JSONSchema7
+  const variableSpecJsonSchema = toToolInputSchema(variableSpecSchema)
+  const optimizationInputJsonSchema = toToolInputSchema(optimizationInputSpecSchema)
+  const objectiveJsonSchema = toToolInputSchema(objectiveSchema)
+  const captureJsonSchema = toToolInputSchema(optimizationCaptureSpecSchema)
   const dagBackend = createStorageDagBackend({
     get: async (namespace, id) => (await storageClient.get({ namespace, id })).value,
     set: async (namespace, id, value) => {
@@ -95,11 +114,12 @@ export const createDagGraphProjectTool = (
   return createTool({
     name: 'dagGraphProject',
     description: 'Create nodes and manage immutable design-graph projects and invocation runs.',
-    longDescription: `Use this for reproducible design, exploration, and optimization work. The global graph contains immutable TypeScript node objects; projects reference that shared graph rather than copying it. A stable project ref advances explicitly to immutable project revisions, which name immutable invocation definitions. Running an invocation evaluates its exact computational root, streams rows into content-addressed artifacts, and records one terminal invocation run. Every write returns the hashes needed for later calls.`,
+    longDescription:
+      'Create and run a computational design. createNode writes to the global graph and needs no projectId. For a new project, pass its returned nodeId as createProject.rootNodeId, then run the project with the invocationName returned by createProject (default: main). runInvocation takes the name, not the invocation hash.',
     parameters: {
       type: 'object',
       additionalProperties: false,
-      required: ['action', 'projectId'] as string[],
+      required: ['action'] as string[],
       properties: {
         action: {
           type: 'string',
@@ -111,12 +131,12 @@ export const createDagGraphProjectTool = (
             'inspectProject',
           ] as GraphProjectAction[],
           description:
-            'Operation to perform: add a global graph node, create a project, save a new invocation revision, run a named invocation, or inspect a project.',
+            'Operation to perform. For a new node-based project: createNode → createProject with its returned nodeId as rootNodeId → runInvocation with the returned invocationName. runInvocation takes the name, not the invocation hash.',
         },
         projectId: {
           type: 'string',
           description:
-            'Stable project identifier or full projects/ ref. Nested refs such as projects/templates/example are preserved; unsafe path segments are rejected.',
+            'Required for project actions. Optional for createNode because graph nodes are global. Nested refs such as projects/templates/example are preserved; unsafe path segments are rejected.',
         },
         displayName: {
           type: 'string',
@@ -125,20 +145,21 @@ export const createDagGraphProjectTool = (
         invocationName: {
           type: 'string',
           default: 'main',
-          description: 'Project-local name of the invocation to create, replace, run, or inspect.',
+          description:
+            'Project-local invocation name to create, replace, run, or inspect. Use the name returned by createProject or saveInvocation; this is a name, not an invocation hash.',
         },
         nodeSource: {
           type: 'string',
           description:
-            "Full standalone TypeScript source for createNode. Export one default formatVersion 2 object with id '__TASKYON_SELF_HASH__', localName, label, version, localParamsSchema, outputSchema, optional hashed inputs, and an async run({ params, use }) function. Do not import application types.",
+            "Full standalone TypeScript source for createNode. Its only export must be a direct object literal written as `export default { ... }` (no parentheses, named variable, `as` assertion, or `satisfies` wrapper). Set formatVersion to 2 and include id '__TASKYON_SELF_HASH__', localName, label, version, localParamsSchema, outputSchema, optional hashed inputs, and a `run` property whose value is an async arrow function. Do not import application types.",
           examples: [
-            "export default { formatVersion: 2, id: '__TASKYON_SELF_HASH__', localName: 'score', label: 'Score', version: 1, localParamsSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] }, outputSchema: { type: 'number' }, inputs: {}, async run({ params }) { return params.value } }",
+            "export default { formatVersion: 2, id: '__TASKYON_SELF_HASH__', localName: 'score', label: 'Score', version: 1, localParamsSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] }, outputSchema: { type: 'number' }, inputs: {}, run: async ({ params }) => params.value }",
           ] as string[],
         },
         rootNodeId: {
           type: 'string',
           description:
-            'Content hash of the exact computational root for createProject or saveInvocation.',
+            'Content hash of the exact computational root for createProject or saveInvocation. For createProject, use the nodeId returned by createNode as this value; do not include a separate nodeId argument.',
         },
         invocationId: {
           type: 'string',
@@ -147,18 +168,21 @@ export const createDagGraphProjectTool = (
         },
         variables: {
           type: 'object',
-          additionalProperties: true,
-          description: 'Invocation parameter constants, ranges, sets, and other variable domains.',
+          additionalProperties: variableSpecJsonSchema,
+          description:
+            'Map each node parameter to a variable spec, such as {"kind":"list","values":[12,16,24]} or {"kind":"constant","value":750}.',
+          examples: [{ gpuMemoryGb: { kind: 'list', values: [12, 16, 24] } }],
         },
         inputs: {
           type: 'object',
-          additionalProperties: true,
+          additionalProperties: optimizationInputJsonSchema,
           description: 'Invocation domains and strategies assigned to named computational inputs.',
         },
         objectives: {
           type: 'array',
-          items: { type: 'object', additionalProperties: true },
-          description: 'Optimization objectives; omit them for design or exploration invocations.',
+          items: objectiveJsonSchema,
+          description:
+            'Optimization objectives use direction "min" or "max" and a target object such as {"path":"score","op":"identity"}. Omit for exploration.',
         },
         constraints: {
           type: 'array',
@@ -167,7 +191,7 @@ export const createDagGraphProjectTool = (
         },
         capture: {
           type: 'array',
-          items: { type: 'object', additionalProperties: true },
+          items: captureJsonSchema,
           description: 'Output paths to retain for each streamed invocation row.',
         },
         policy: {
@@ -182,29 +206,49 @@ export const createDagGraphProjectTool = (
             'Expected current project revision used for conflict-safe saveInvocation advancement.',
         },
       },
+      anyOf: [
+        {
+          properties: { action: { const: 'createNode' } },
+          required: ['action', 'nodeSource'],
+        },
+        {
+          properties: { action: { const: 'createProject' } },
+          required: ['action', 'projectId'],
+          anyOf: [
+            { required: ['rootNodeId'] },
+            { required: ['invocationId'] },
+            { required: ['$use'] },
+          ],
+        },
+        {
+          properties: { action: { const: 'saveInvocation' } },
+          required: ['action', 'projectId'],
+          anyOf: [
+            { required: ['rootNodeId'] },
+            { required: ['invocationId'] },
+            { required: ['$use'] },
+          ],
+        },
+        {
+          properties: { action: { const: 'runInvocation' } },
+          required: ['action', 'projectId'],
+        },
+        {
+          properties: { action: { const: 'inspectProject' } },
+          required: ['action', 'projectId'],
+        },
+      ],
     } as const,
     function: async (rawArgs: DagGraphProjectToolArgs) => {
       await prepareRepository?.()
-      const requested = rawArgs.projectId.trim()
-      const projectRef = normalizeRefName(
-        requested.startsWith('projects/') ? requested : `projects/${requested}`,
-        'projects/',
-      )
-      const projectId = projectRef.slice('projects/'.length)
-      const invocationName = rawArgs.invocationName?.trim() || 'main'
-      if (
-        rawArgs.invocationId &&
-        [
-          rawArgs.rootNodeId,
-          rawArgs.variables,
-          rawArgs.inputs,
-          rawArgs.objectives,
-          rawArgs.constraints,
-          rawArgs.capture,
-          rawArgs.policy,
-        ].some((value) => value !== undefined)
-      )
-        throw new Error('Choose an existing invocationId or a new definition, not both.')
+      const requested = rawArgs.projectId?.trim()
+      const projectRef = requested
+        ? normalizeRefName(
+            requested.startsWith('projects/') ? requested : `projects/${requested}`,
+            'projects/',
+          )
+        : undefined
+      const projectId = projectRef?.slice('projects/'.length)
 
       if (rawArgs.action === 'createNode') {
         if (!rawArgs.nodeSource) throw new Error('createNode requires nodeSource.')
@@ -226,12 +270,28 @@ export const createDagGraphProjectTool = (
         })
         return {
           type: 'dagGraphNodeCreated' as const,
-          projectId,
+          ...(projectId ? { projectId } : {}),
           nodeId: saved.hash,
           localName: saved.node.localName,
           graphRevisionId: revision.id,
         }
       }
+
+      if (!projectRef || !projectId) throw new Error(`${rawArgs.action} requires a projectId.`)
+      const invocationName = rawArgs.invocationName?.trim() || 'main'
+      if (
+        rawArgs.invocationId &&
+        [
+          rawArgs.rootNodeId,
+          rawArgs.variables,
+          rawArgs.inputs,
+          rawArgs.objectives,
+          rawArgs.constraints,
+          rawArgs.capture,
+          rawArgs.policy,
+        ].some((value) => value !== undefined)
+      )
+        throw new Error('Choose an existing invocationId or a new definition, not both.')
 
       if (rawArgs.action === 'createProject') {
         const invocation = rawArgs.invocationId
@@ -250,7 +310,13 @@ export const createDagGraphProjectTool = (
           revisionId: revision.id,
           expected: null,
         })
-        return { type: 'designProjectCreated' as const, projectId, revision, invocation }
+        return {
+          type: 'designProjectCreated' as const,
+          projectId,
+          invocationName,
+          revision,
+          invocation,
+        }
       }
 
       const ref = await repository.getProjectRef(projectRef)
@@ -274,7 +340,13 @@ export const createDagGraphProjectTool = (
           revisionId: revision.id,
           expected: rawArgs.expectedProjectRevisionId ?? project.id,
         })
-        return { type: 'designInvocationSaved' as const, projectId, revision, invocation }
+        return {
+          type: 'designInvocationSaved' as const,
+          projectId,
+          invocationName,
+          revision,
+          invocation,
+        }
       }
 
       if (rawArgs.action === 'runInvocation') {

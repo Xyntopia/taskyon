@@ -9,6 +9,8 @@ const openMeteoWeatherTool = createTool({
   renderOptions: {
     hideChat: false,
     hideLlm: false,
+    hideVector: true,
+    hideToolSearch: false,
   },
   parameters: {
     type: 'object',
@@ -75,6 +77,9 @@ const animatedClockTool = createTool({
   renderOptions: {
     hideChat: false,
     hideLlm: false,
+    hideVector: true,
+    hideVectorResult: true,
+    hideToolSearch: false,
   },
   parameters: {
     type: 'object',

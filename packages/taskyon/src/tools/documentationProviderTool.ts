@@ -237,7 +237,13 @@ export const createDocumentationIndexClientTool = (
     description: 'Register, list, retrieve, and search manifest-based documentation.',
     longDescription:
       'Generic documentation-base tool using runtime manifests and plain-text or regular-expression search. Registration returns the Taskyon URL where the resulting documentation can be viewed.',
-    renderOptions: { hideChat: false, hideLlm: false, hideVector: true },
+    renderOptions: {
+      hideChat: false,
+      hideLlm: false,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+    },
     parameters: {
       type: 'object',
       required: ['action'],

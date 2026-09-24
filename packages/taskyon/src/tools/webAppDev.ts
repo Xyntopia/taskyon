@@ -18,6 +18,7 @@ function createPopupShell(html: string) {
 
 export const createNewWindowTool = createTool({
   name: 'newWindowOpener',
+  renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: false },
   description: 'Open approved custom HTML or an HTTPS URL in a separate browser window.',
   longDescription: `Popup creation requires host authorization. Custom HTML is wrapped in a restricted
 sandbox, external navigation is limited to HTTPS, and an optional ID lets later window-management
@@ -128,6 +129,7 @@ calls reference the opened window.`,
 // Window manager tool for handling previously opened windows
 export const windowManagerTool = createTool({
   name: 'windowManager',
+  renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: false },
   description: 'List, focus, or close windows previously opened with a Taskyon window ID.',
   longDescription:
     'This tool only manages windows tracked by the current Taskyon browser session; it cannot enumerate or control arbitrary browser windows.',
@@ -292,6 +294,7 @@ export const windowManagerTool = createTool({
 
 export const createWaitForMessageTool = createTool({
   name: 'waitForPostMessage',
+  renderOptions: { hideVector: true, hideToolSearch: false },
   description:
     'Wait for a matching message from a Taskyon-managed popup and return its structured payload.',
   longDescription:

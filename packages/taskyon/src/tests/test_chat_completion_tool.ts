@@ -467,7 +467,7 @@ export const testHiddenScopedSelectorDoesNotRenderMissingToolResponse = async ()
     content: {
       type: 'tooldefinition',
       data: {
-        name: 'toolSearcher',
+        name: 'scopedToolSearcher',
         description: 'Select relevant tools.',
         renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
         implementation: {
@@ -488,7 +488,7 @@ export const testHiddenScopedSelectorDoesNotRenderMissingToolResponse = async ()
     parentID: scopedSelector.id,
     content: {
       type: 'functioncall',
-      data: { name: 'toolSearcher', arguments: { query: 'workspace exploration' } },
+      data: { name: 'scopedToolSearcher', arguments: { query: 'workspace exploration' } },
     },
   })
   const definitions = await resolveToolDefinitionsForTaskChain([scopedSelector, selectorCall], {
@@ -505,8 +505,12 @@ export const testHiddenScopedSelectorDoesNotRenderMissingToolResponse = async ()
     },
   })
   assert(
-    definitions.toolSearcher?.renderOptions?.hideLlm === true,
+    definitions.scopedToolSearcher?.renderOptions?.hideLlm === true,
     'Expected scoped selector render options to survive binding resolution',
+  )
+  assert(
+    definitions.toolSearcher?.description === 'Search tools.',
+    'Expected the original registered tool to remain available under its own name',
   )
   const messages = await convertTaskNodesToOpenAIChat(
     [scopedSelector, selectorCall],

@@ -1,7 +1,7 @@
 import type { PartialDeep } from 'type-fest'
 import { taskStorageTables, taskManagerStorageNamespace } from '../api/taskRecordReader'
 import { createTaskRecordHydrator } from '../utils/taskRecords'
-import { addTaskRelation, removeTaskRelation } from '../utils/taskTree'
+import { addTaskRelation, removeTaskRelation, walkTaskLineage } from '../utils/taskTree'
 import z from 'zod'
 import { TaskNodeMeta } from '../types/chatCompletion'
 import type { TaskTreeNode } from '../types/taskNode'
@@ -11,7 +11,6 @@ import {
   TaskNodeRecord,
   type partialTaskDraft,
 } from '../types/taskNode'
-import type { InternalTool } from '../types/toolApi'
 import {
   createProtocolStorageCrudWrapper,
   createStorageProtocolServer,
@@ -35,6 +34,7 @@ import {
 } from '../utils/crudWrapper'
 import type { TyPGDB } from '../utils/pglite.api'
 import { createTaskNode, ensureValidTaskId, taskContentHash, taskNodeToRecord } from './createTasks'
+import { findScopedToolDefinition } from './scopedTools'
 import { addMarkdownTaskChain, parseYamlTaskDocument } from './markdownTaskIO'
 import { createTaskCostService } from './taskCost'
 import {
@@ -228,25 +228,53 @@ export async function findRootTask(taskId: string, getTask: TyTaskManager['getTa
   return currentTaskID // Return null if the loop exits without finding a root task
 }
 
+export async function shouldSkipTaskVectorIndex(
+  task: TaskNode,
+  getTask: (taskId: string) => Promise<TaskNode | null>,
+  resolveTool: ToolManager['resolveTool'],
+) {
+  if (task.content.type === 'return') return task.content.data === 'assistant answered'
+
+  const call =
+    task.content.type === 'functioncall'
+      ? task
+      : task.content.type === 'toolresult' && task.parentID
+        ? await getTask(task.parentID)
+        : null
+  if (call?.content.type !== 'functioncall') return false
+
+  const name = call.content.data.name
+  const revision = call.content.data.toolRevision
+  const { tool: invokedTool } = await resolveTool(name, revision)
+  let renderOptions = invokedTool?.renderOptions
+  if (invokedTool && revision) {
+    const { tool: currentTool } = await resolveTool(name)
+    renderOptions = currentTool?.renderOptions ?? renderOptions
+  }
+  if (!invokedTool) {
+    const lineage: TaskNode[] = []
+    const walk = walkTaskLineage(call.id)
+    let step = walk.next()
+    while (!step.done) {
+      const ancestor = await getTask(step.value)
+      if (ancestor) lineage.unshift(ancestor)
+      step = walk.next(ancestor)
+    }
+    renderOptions = findScopedToolDefinition(lineage, name)?.tool.renderOptions
+  }
+  return task.content.type === 'functioncall'
+    ? renderOptions?.hideVector === true
+    : renderOptions?.hideVectorResult === true
+}
+
 async function useTaskVectors(
   db: TyPGDB,
   getAllTaskIds: () => Promise<(string | number)[]>,
   getTask: (taskId: string) => Promise<TaskNode | null>,
-  getToolDefinition: (name: string) => Promise<{ tool?: InternalTool }>,
+  resolveTool: ToolManager['resolveTool'],
   vectorizer: 'static-multilingual' | 'transformer-minilm',
 ) {
   const vecDb = await createVectorStore<TaskNode>(db, 'tyTaskVectors', { vectorizer })
-
-  async function shouldSkipVectorIndex(task: TaskNode) {
-    if (task.content.type === 'return') {
-      return task.content.data === 'assistant answered'
-    }
-
-    if (task.content.type !== 'functioncall') return false
-
-    const { tool } = await getToolDefinition(task.content.data.name)
-    return tool?.renderOptions?.hideVector === true
-  }
 
   async function syncVectorIndexWithTasks(progressCallback: (done: number, total: number) => void) {
     let counter = 0
@@ -276,7 +304,7 @@ async function useTaskVectors(
     const existingVector = await vecDb.get(task.id)
     if (existingVector) {
       console.log('vector already exists!', task.id)
-    } else if (await shouldSkipVectorIndex(task)) {
+    } else if (await shouldSkipTaskVectorIndex(task, getTask, resolveTool)) {
       console.log('skip indexing of task', task.id)
     } else {
       console.log('create vector...', task.id)

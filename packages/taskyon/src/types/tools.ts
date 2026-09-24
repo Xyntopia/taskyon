@@ -95,8 +95,14 @@ export const ToolBase = z.object({
       hideVector: z
         .boolean()
         .describe(
-          'Whether the tool should be embedded and searchable by vector search. Only relevant if you are using vector search in your task chains.',
+          'Exclude function calls to this tool from the rebuildable task-history vector index.',
         ),
+      hideVectorResult: z
+        .boolean()
+        .describe('Exclude results of this tool from the rebuildable task-history vector index.'),
+      hideToolSearch: z
+        .boolean()
+        .describe('Exclude this tool from agent catalog listing and search, not from execution.'),
     })
     .partial()
     .optional(),

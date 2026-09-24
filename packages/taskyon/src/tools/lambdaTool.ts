@@ -1,6 +1,7 @@
 import { createChatCompletionTask } from '../api'
 import type { ChatCompletionArgs } from './chatCompletionTool'
 import {
+  assertDistinctBindingName,
   ScopedToolDefinition,
   type BindingImplementation,
   type partialTaskDraft,
@@ -35,13 +36,14 @@ const rejectOwnedChatArguments = (args: LambdaChatCompletionArgs) => {
   }
 }
 
-export const toolDefinitionTask = (definition: ScopedToolDefinitionType): partialTaskDraft => ({
-  role: 'system',
-  content: {
-    type: 'tooldefinition',
-    data: ScopedToolDefinition.parse(definition),
-  },
-})
+export const toolDefinitionTask = (definition: ScopedToolDefinitionType): partialTaskDraft => {
+  const parsed = ScopedToolDefinition.parse(definition)
+  assertDistinctBindingName(parsed)
+  return {
+    role: 'system',
+    content: { type: 'tooldefinition', data: parsed },
+  }
+}
 
 export const lambda = (
   definition: ScopedToolDefinitionType,

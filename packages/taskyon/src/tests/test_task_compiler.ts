@@ -267,6 +267,45 @@ export async function testTaskCompilerUsesDraftRootLinksWhenNoLinksAreSupplied()
 testTaskCompilerUsesDraftRootLinksWhenNoLinksAreSupplied.description =
   'Uses a draft chain root link to continue and compile against an existing conversation lineage.'
 
+export async function testTaskCompilerRejectsSameNameBindingDraft() {
+  const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
+  let rejected = false
+  try {
+    await compileTaskChain(
+      [
+        {
+          role: 'system',
+          content: {
+            type: 'tooldefinition',
+            data: {
+              name: 'toolSearcher',
+              description: 'Narrow tool search.',
+              implementation: {
+                type: 'binding',
+                target: 'toolSearcher',
+                fixedArguments: {},
+                publicArguments: { query: {} },
+              },
+            },
+          },
+        },
+      ],
+      {
+        lineage: [],
+        toolManager,
+        resolveInvocationRevisions: () =>
+          Promise.resolve({ toolRevision: `sha256:${'a'.repeat(43)}` }),
+      },
+    )
+  } catch (error) {
+    rejected = error instanceof Error && error.message.includes('must differ from its target')
+  }
+  assert(rejected, 'Direct binding drafts must not bypass the distinct-name rule')
+}
+
+testTaskCompilerRejectsSameNameBindingDraft.description =
+  'Rejects a same-name binding supplied directly as a task draft.'
+
 export async function testTaskCompilerHonorsPinnedRevisionThroughSameNameBinding() {
   const toolManager = createToolManager(createMapCrudWrapper<ToolStorageRecord>(new Map()))
   const targetRevision = `sha256:${'a'.repeat(43)}` as const
@@ -317,4 +356,4 @@ export async function testTaskCompilerHonorsPinnedRevisionThroughSameNameBinding
 }
 
 testTaskCompilerHonorsPinnedRevisionThroughSameNameBinding.description =
-  'Allows a narrow scoped binding to delegate to a pinned registered tool with the same public name.'
+  'Preserves pinned target routing for historical task trees with same-name bindings.'

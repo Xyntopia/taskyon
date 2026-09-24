@@ -67,7 +67,7 @@ export const createDocumentationSearchTool = (options: DocumentationSearchToolOp
     longDescription:
       `Thin wrapper around the generic documentationIndex tool for the ${options.productName} documentation base. ` +
       'It retrieves plain-text matches and answers with links to the corresponding documentation pages.',
-    renderOptions: { hideChat: false, hideLlm: false, hideVector: true },
+    renderOptions: { hideChat: false, hideLlm: false, hideVector: true, hideToolSearch: false },
     parameters: {
       type: 'object',
       required: ['query'],

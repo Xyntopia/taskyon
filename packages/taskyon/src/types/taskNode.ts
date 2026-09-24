@@ -85,6 +85,12 @@ export const ScopedToolDefinition = z
   .describe('A sandboxed or declarative tool definition scoped to following lineage tasks.')
 export type ScopedToolDefinition = z.infer<typeof ScopedToolDefinition>
 
+export const assertDistinctBindingName = (definition: ScopedToolDefinition) => {
+  if ('implementation' in definition && definition.name === definition.implementation.target) {
+    throw new Error(`Binding name "${definition.name}" must differ from its target.`)
+  }
+}
+
 const ToolDefinition = z.object({
   type: z.literal('tooldefinition').describe('Identifies a Taskyon tool definition.'),
   data: ScopedToolDefinition.describe('Sandboxed tool definition made available by this task.'),

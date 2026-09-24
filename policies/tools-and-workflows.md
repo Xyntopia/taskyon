@@ -107,7 +107,8 @@ or tool-visible capabilities.
   `function` implementations remain privileged application code and must not cross this boundary.
 - A binding pins its registry target revision, fixes private arguments, and exposes a derived
   subset of the target schema. It may refine public descriptions and constraints, but it must not
-  expose a fixed argument again.
+  expose a fixed argument again. New bindings must use a different name from their registry target
+  because a scoped definition shadows the registered tool with the same name.
 - Compile a binding's generated target call with an immutable target `toolRevision` and, when that
   target has configuration, an opaque per-tool `settingsRevision`. Do not copy settings values into
   the task or expose them to the calling tool.

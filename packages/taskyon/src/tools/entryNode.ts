@@ -353,7 +353,13 @@ const createToolSelectorBinding = (entryNodeName: string) => {
   const [definition] = bind({
     name: ENTRY_NODE_SELECTION_TOOL_NAME,
     description: 'Search the full tool catalog when the current callable tools are insufficient.',
-    renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
+    renderOptions: {
+      hideChat: true,
+      hideLlm: true,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+    },
     target: entryNodeName,
     fixedArguments: { requireToolCall: true },
     publicArguments: { toolSearch: {} },
@@ -467,7 +473,13 @@ const createEntryNodeToolSearchTasks = (
   const [definition] = bind({
     name: ENTRY_NODE_TOOL_SEARCH_BINDING_NAME,
     description: 'Search the available tool catalog for the current EntryNode request.',
-    renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
+    renderOptions: {
+      hideChat: true,
+      hideLlm: true,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+    },
     target: 'toolSearcher',
     fixedArguments: { analyze: false, focused: mode === 'focused' },
     publicArguments: { query: {}, limit: {} },
@@ -896,7 +908,14 @@ export const createStandardEntryNodeTool = (options: StandardEntryNodeOptions) =
       },
       required: ['prompt_templates'],
     } as const satisfies JSONSchema7,
-    renderOptions: { hideChat: true, hideLlm: true, hideVector: true, ...config.renderOptions },
+    renderOptions: {
+      hideChat: true,
+      hideLlm: true,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+      ...config.renderOptions,
+    },
     function: async (args: EntryNodeArgs = {}, context) => {
       const runtime = await createEntryNodeRuntimeState(config, args, context)
       const promptAugmentations = resolveEntryNodePromptAugmentations(runtime.promptContext)

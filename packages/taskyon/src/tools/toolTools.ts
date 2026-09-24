@@ -46,7 +46,11 @@ export const resolveAgentToolCatalog = (
       (tool) =>
         !INTERNAL_AGENT_TOOL_NAMES.has(tool.name) &&
         !unavailableToolNames.has(tool.name) &&
-        tool.renderOptions?.hideVector !== true,
+        tool.renderOptions?.hideToolSearch !== true &&
+        !(
+          tool.renderOptions?.hideToolSearch === undefined &&
+          tool.renderOptions?.hideVector === true
+        ),
     )
     .map(({ name, description, source }) => ({
       name,
@@ -213,7 +217,13 @@ export const createToolSearcher = (
     description:
       'Search the available tool catalog, list tool names, or retrieve one complete tool definition.',
     longDescription: `Catalog searches return concise metadata, including projected DAG-node tools. Exact-name lookup returns the stored definition and source code when code is available; trusted internal implementations may not expose useful source. Results normally re-enter the conversation for interpretation, while authoring workflows can request a raw handoff.`,
-    renderOptions: { hideChat: true, hideLlm: true, hideVector: true },
+    renderOptions: {
+      hideChat: true,
+      hideLlm: true,
+      hideVector: true,
+      hideVectorResult: true,
+      hideToolSearch: true,
+    },
     parameters: {
       type: 'object',
       properties: {
@@ -270,7 +280,11 @@ export const createToolSearcher = (
       const toolList = resolveToolCatalog(searchableTools)
 
       let result: unknown
-      if (toolName && normalizedTools[toolName.toLowerCase()]) {
+      if (
+        toolName &&
+        normalizedTools[toolName.toLowerCase()] &&
+        toolList.some((tool) => tool.name.toLowerCase() === toolName.toLowerCase())
+      ) {
         result = {
           'Here is the requested tool definition': normalizedTools[toolName.toLowerCase()],
         }
@@ -320,6 +334,7 @@ export const createToolSearcher = (
 export const createAddNewTool = (toolManager: ToolManager) =>
   createTool({
     name: 'addNewTool',
+    renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: true },
     description:
       'Validate and register a complete Taskyon tool definition already present in context; use toolCreationWizard when authoring or examples are still needed.',
     longDescription: `Registration validates the complete definition, stores an immutable revision, and updates the active name binding. Existing active names are protected from accidental replacement and require explicit approval. This tool does not author, research, or test the definition it receives.`,
@@ -377,6 +392,7 @@ const findInheritedSystemPrompts = (taskChain: readonly TaskNode[]) =>
   }, undefined)
 
 export const toolCreationWizard = createTool({
+  renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: false },
   parameters: {
     type: 'object',
     properties: {},
@@ -574,6 +590,7 @@ async function mcpRpcRequest(
 export const createMcpToolImporter = (toolManager: ToolManager) =>
   createTool({
     name: 'importMcpTools',
+    renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: false },
     description:
       'Fetch tools from an MCP server and register them as Taskyon tools so they can be used in chat.',
     longDescription: `The importer performs the MCP initialize and tools/list handshake through Taskyon's mediated network capability, maps each selected MCP schema into a Taskyon definition, and installs immutable local registry revisions. Imported calls still depend on the external MCP service boundary.`,

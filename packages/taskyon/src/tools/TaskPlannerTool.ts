@@ -256,6 +256,7 @@ export const taskSearcher = (taskManager: TyTaskManager) =>
   createTool({
     name: 'taskSearcher',
     description: 'Semantically search persisted Taskyon tasks, optionally filtered by task type.',
+    renderOptions: { hideVector: true, hideVectorResult: true, hideToolSearch: false },
     longDescription:
       'Search uses the task index and returns matching task records plus a task-manager URL for inspecting the same query. It reads existing task history and does not modify task state.',
     parameters: {
@@ -350,7 +351,7 @@ Plan through the requested deliverable, preserve exact user-supplied identities,
       ),
     )
   },
-  renderOptions: { hideLlm: true, hideVector: true },
+  renderOptions: { hideLlm: true, hideVector: true, hideToolSearch: false },
 })
 
 export const taskOrganizationTools = [taskPlanner]

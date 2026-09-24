@@ -171,6 +171,24 @@ export const testBindKeepsFixedAndPublicArgumentsSeparate = () => {
 testBindKeepsFixedAndPublicArgumentsSeparate.description =
   'Keeps fixed binding arguments separate from the public provider-facing parameters.'
 
+export const testBindRejectsItsTargetName = () => {
+  let rejected = false
+  try {
+    bind({
+      name: 'toolSearcher',
+      description: 'Narrow tool search.',
+      target: 'toolSearcher',
+      publicArguments: { query: {} },
+    })
+  } catch (error) {
+    rejected = error instanceof Error && error.message.includes('must differ from its target')
+  }
+  assert(rejected, 'A new binding must use a different name from its target')
+}
+
+testBindRejectsItsTargetName.description =
+  'Rejects new bindings that would hide their registry target under the same name.'
+
 export const testDeclarativeBindingCompilesToValidatedTargetCall = async () => {
   const definition = requireScopedDefinition(
     bind({
