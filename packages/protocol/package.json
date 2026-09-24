@@ -39,7 +39,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "4.1.8"
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "tsup": "^8.5.0",

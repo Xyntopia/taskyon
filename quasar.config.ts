@@ -162,6 +162,7 @@ export default defineConfig((ctx) => {
         strict: true,
         vueShim: true,
         extendTsConfig(ts) {
+          ts.include = ['./**/*.d.ts', './../src/**/*', './../test/playwright/**/*.ts']
           ts.exclude = Array.from(new Set([...(ts.exclude ?? []), ...typecheckExclude]))
 
           delete ts.compilerOptions?.paths['app']
@@ -372,7 +373,7 @@ export default defineConfig((ctx) => {
           },
         ],
 
-        ...(fastDevBuild ? [] : [checkerPlugin]),
+        ...(ctx.prod && !fastDevBuild ? [checkerPlugin] : []),
       ],
 
       //  optimizeDeps: {

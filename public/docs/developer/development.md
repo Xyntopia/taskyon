@@ -99,6 +99,9 @@ should not be kept as documentation snapshots.
 
 Builds need enough memory for Quasar and package generation. The Nix shell configures the expected
 Node heap; outside it, set `NODE_OPTIONS=--max-old-space-size=8192` when required.
+Keep the protocol package's Zod range aligned with the app's range. Resolving two different Zod
+versions in the Vue type-check graph can greatly increase `vue-tsc` memory use. Run
+`vue-tsc --noEmit` separately from a production bundle when investigating memory pressure.
 
 ## Branches and contributions
 
