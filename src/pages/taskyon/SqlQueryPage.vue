@@ -1,13 +1,12 @@
 <!-- SqlQueryPage.vue -->
 <template>
   <q-page class="row">
-    <SplitTaskyonView
+    <SplitTaskyonDirectView
       :configuration="configuration"
       :tools="tools"
       name="sql"
       profile-name="sql_query_page"
       :binding-key="state.bindingKey"
-      missing-binding-key-policy="noBindingKey"
       persist
     >
       <!-- SQL Card -->
@@ -83,14 +82,14 @@
           </div>
         </q-card-section>
       </q-card>
-    </SplitTaskyonView>
+    </SplitTaskyonDirectView>
   </q-page>
 </template>
 
 <script setup lang="ts">
 import { matArrowDropDown, matContentCopy } from '@quasar/extras/material-icons'
 import { createChatCompletionTask, createClientTool } from '@taskyon/tyclient'
-import SplitTaskyonView from '@taskyon/ui/components/SplitTaskyonView.vue'
+import SplitTaskyonDirectView from 'src/components/taskyon/SplitTaskyonDirectView.vue'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import type { TyPGDB } from '@taskyon/taskyon/db'
 import { getDatabase } from '@taskyon/taskyon/db'

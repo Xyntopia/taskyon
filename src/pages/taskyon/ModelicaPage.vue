@@ -13,9 +13,17 @@
           class="col"
           :storage-client="tystate.storageClient"
           :taskyon-signature-or-key="taskyonSignatureOrKey"
-          :binding-key="appState.bindingKey"
           :taskyon-configuration="taskyonConfiguration"
-        />
+        >
+          <template #assistant="{ tools, configuration }">
+            <DirectTaskyonAgent
+              :tools="tools"
+              :configuration="configuration"
+              profile-name="modelica_edit_page"
+              :binding-key="appState.bindingKey"
+            />
+          </template>
+        </ModelicaEditor>
       </FixedHeightPage>
     </q-page-container>
   </q-layout>
@@ -25,6 +33,7 @@
 import { matRocketLaunch } from '@quasar/extras/material-icons'
 import type { partialTyConfiguration } from '@taskyon/tyclient'
 import ModelicaEditor from '@taskyon/modelica/ModelicaEditor.vue'
+import DirectTaskyonAgent from 'src/components/taskyon/DirectTaskyonAgent.vue'
 import TaskyonHeader from 'src/components/taskyon/TaskyonHeader.vue'
 import FixedHeightPage from 'src/pages/FixedHeightPage.vue'
 import { useAppStateStore } from 'src/stores/appState'

@@ -2,13 +2,12 @@
 <!-- CodingPage.vue -->
 <template>
   <q-page class="row">
-    <SplitTaskyonView
+    <SplitTaskyonDirectView
       :configuration="configuration"
       :tools="tools"
       :name="tystate.usingFreeTaskyonKey ? 'codingpage_free' : 'codingpage'"
       profile-name="coding_page"
       :binding-key="state.bindingKey"
-      missing-binding-key-policy="noBindingKey"
       persist
     >
       <!-- Document Editor Card -->
@@ -204,7 +203,7 @@
           </div>
         </q-card>
       </div>
-    </SplitTaskyonView>
+    </SplitTaskyonDirectView>
 
     <q-dialog v-model="isCreateFileDialogOpen">
       <q-card style="min-width: 300px">
@@ -302,7 +301,7 @@ import { applyLinePatches } from '@taskyon/taskyon/tools/filePatching'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import CodeEditor from '@taskyon/ui/components/CodeEditor.vue'
 import FileDropzone from '@taskyon/ui/components/FileDropzone.vue'
-import SplitTaskyonView from '@taskyon/ui/components/SplitTaskyonView.vue'
+import SplitTaskyonDirectView from 'src/components/taskyon/SplitTaskyonDirectView.vue'
 import type { partialTyConfiguration } from '@taskyon/tyclient'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'

@@ -630,16 +630,7 @@
     </template>
 
     <template #assistant>
-      <TaskyonIframe
-        :url="props.taskyonUrl"
-        :tools="tools"
-        :configuration="configuration"
-        profile-name="modelica_edit_page"
-        :binding-key="props.bindingKey"
-        missing-binding-key-policy="noBindingKey"
-        name="modelica-chat"
-        :persist="true"
-      />
+      <slot name="assistant" :tools="tools" :configuration="configuration" />
     </template>
   </DockView>
 
@@ -721,7 +712,6 @@ import { Dialog, Notify } from 'quasar'
 import CodeEditor from '@taskyon/ui/components/CodeEditor.vue'
 import type { DockNode } from '@taskyon/ui/components/dockLayout'
 import DockView from '@taskyon/ui/components/DockView.vue'
-import TaskyonIframe from '@taskyon/ui/components/TaskyonIframe.vue'
 import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
 import {
   DEFAULT_MSL_ZIP_URL,
@@ -797,14 +787,10 @@ const props = withDefaults(
   defineProps<{
     storageClient: TaskyonStorageClient
     taskyonSignatureOrKey?: string | null
-    taskyonUrl?: string
-    bindingKey?: CryptoKey | string | null
     taskyonConfiguration?: partialTyConfiguration | null
   }>(),
   {
     taskyonSignatureOrKey: null,
-    taskyonUrl: 'https://taskyon.space',
-    bindingKey: null,
     taskyonConfiguration: null,
   },
 )

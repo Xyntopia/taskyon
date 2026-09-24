@@ -51,6 +51,7 @@ import {
   createStorageClientSecureFetchCache,
   setTaskyonProviderCredential,
   type TaskyonHostClient,
+  type TaskyonStorageClient,
 } from '@taskyon/taskyon/api'
 import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
@@ -395,7 +396,7 @@ function connectGdriveSync(
   }
 }
 
-function defineTyGuiTools(
+export function defineTyGuiTools(
   stateRefs: ReturnType<typeof useAppStateStore>,
   ty: Taskyon,
   taskyonClient: ReturnType<typeof createTaskyonClient>,
@@ -550,7 +551,7 @@ const getBrowserUnavailableToolNames = () =>
       : ['tauriBashTool', 'tauriExploreWorkspace', 'tauriHttpWebReader', 'tauriPatchWorkspace'],
   )
 
-function createTrustedUiToolContext(
+export function createTrustedUiToolContext(
   ty: Taskyon,
   taskyonClient: TaskyonClient,
 ): ToolRpcCreateContext {
@@ -671,7 +672,7 @@ function getBrowserCapabilityPolicy() {
   return browserCapabilityPolicy
 }
 
-const authorizeBrowserSandboxFetch = ({
+export const authorizeBrowserSandboxFetch = ({
   tool,
   capability,
 }: {
@@ -680,13 +681,37 @@ const authorizeBrowserSandboxFetch = ({
 }) =>
   getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'fetch', ...capability } })
 
-const authorizeBrowserPopup = ({
+export const authorizeBrowserPopup = ({
   tool,
   target,
 }: {
   tool: ToolIdentity
   target: 'custom-html' | `origin:${string}`
 }) => getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'popup', target } })
+
+export function createBrowserProxyFetch(
+  storageClient: TaskyonStorageClient,
+  proxyUrl: string,
+  getTaskyonFetchCredential: () => Promise<string>,
+) {
+  const getProxyToken = createBoundServiceTokenProvider(
+    proxyUrl,
+    TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
+    'proxy',
+    getTaskyonFetchCredential,
+  )
+  const proxyFetch = createHttpProxyFetch({
+    proxyUrl,
+    getToken: async (target, refreshInstanceKey = false) => {
+      const port = Number(target.port || (target.protocol === 'http:' ? 80 : 443))
+      return await getProxyToken(
+        { destination: { host: target.hostname, port } },
+        refreshInstanceKey,
+      )
+    },
+  })
+  return createCachedSecureFetch(proxyFetch, createStorageClientSecureFetchCache(storageClient))
+}
 
 function resolveTaskyonKey(args: {
   iframeToken?: KeyString | undefined
@@ -1335,26 +1360,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
       }),
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
-    createFetchWithPolicy: (storageClient) => {
-      const proxyUrl = stateRefs.appConfiguration.sandboxFetchProxyUrl
-      const getProxyToken = createBoundServiceTokenProvider(
-        proxyUrl,
-        TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
-        'proxy',
-        () => getTaskyonFetchCredential(),
-      )
-      const proxyFetch = createHttpProxyFetch({
-        proxyUrl,
-        getToken: async (target, refreshInstanceKey = false) => {
-          const port = Number(target.port || (target.protocol === 'http:' ? 80 : 443))
-          return await getProxyToken(
-            { destination: { host: target.hostname, port } },
-            refreshInstanceKey,
-          )
-        },
-      })
-      return createCachedSecureFetch(proxyFetch, createStorageClientSecureFetchCache(storageClient))
-    },
+    createFetchWithPolicy: (storageClient) =>
+      createBrowserProxyFetch(
+        storageClient,
+        stateRefs.appConfiguration.sandboxFetchProxyUrl,
+        getTaskyonFetchCredential,
+      ),
     fetchPolicy: { policy: 'proxy' },
     authorizePopup: authorizeBrowserPopup,
     storageNamespacePrefix,

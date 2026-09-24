@@ -1,13 +1,12 @@
 <template>
   <q-page class="design-page column no-wrap">
-    <SplitTaskyonView
+    <SplitTaskyonDirectView
       class="col column"
       :configuration="chatConfiguration"
       :tools="chatTools"
       :name="`design-${projectId}`"
       profile-name="design_workspace"
       :binding-key="state.bindingKey"
-      missing-binding-key-policy="noBindingKey"
       persist
       initial-chat-open
       :chat-size="40"
@@ -112,7 +111,7 @@
           </q-tab-panels>
         </template>
       </section>
-    </SplitTaskyonView>
+    </SplitTaskyonDirectView>
   </q-page>
 </template>
 
@@ -128,7 +127,7 @@ import {
 import DagNodeViewer from '@taskyon/ui/components/DagNodeViewer.vue'
 import DesignGraphGitSyncPane from '@taskyon/ui/components/DesignGraphGitSyncPane.vue'
 import GraphCanvas from '@taskyon/ui/components/GraphCanvas.vue'
-import SplitTaskyonView from '@taskyon/ui/components/SplitTaskyonView.vue'
+import SplitTaskyonDirectView from 'src/components/taskyon/SplitTaskyonDirectView.vue'
 import { syncStateWithStorageClient } from '@taskyon/ui/modules/storageState'
 import {
   synchronizeBrowserDesignGraph,

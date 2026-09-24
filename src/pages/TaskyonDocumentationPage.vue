@@ -1,6 +1,6 @@
 <template>
   <q-page class="documentation-route-page column relative-position">
-    <SplitTaskyonView
+    <SplitTaskyonDirectView
       :configuration="taskyonConfiguration"
       name="taskyon-docs"
       profile-name="taskyon-docs"
@@ -19,12 +19,12 @@
         @select-base="selectBase"
         @registered="(url) => router.push(url)"
       />
-    </SplitTaskyonView>
+    </SplitTaskyonDirectView>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import SplitTaskyonView from '@taskyon/ui/components/SplitTaskyonView.vue'
+import SplitTaskyonDirectView from 'src/components/taskyon/SplitTaskyonDirectView.vue'
 import DocumentationBasePage from '@taskyon/ui/pages/DocumentationBasePage.vue'
 import type { partialTyConfiguration } from '@taskyon/tyclient'
 import { documentationBaseUrl, documentationDocumentUrl } from '@taskyon/ui/modules/documentation'
