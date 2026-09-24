@@ -16,17 +16,14 @@ export type Libp2pMessagePort<TSend, TReceive> = {
   port: Port<TSend, TReceive>
   closed: Promise<Libp2pMessagePortCloseResult>
   close(): Promise<void>
+  closeAfterFlush(): Promise<void>
 }
 
 const toError = (value: unknown): Error =>
   value instanceof Error ? value : new Error('The peer stream failed.')
 
 const isRemoteClose = (value: unknown): boolean => {
-  if (
-    value instanceof Error &&
-    'code' in value &&
-    value.code === 'ERR_UNEXPECTED_EOF'
-  ) {
+  if (value instanceof Error && 'code' in value && value.code === 'ERR_UNEXPECTED_EOF') {
     return true
   }
   const message = toError(value).message.toLowerCase()
@@ -57,6 +54,7 @@ export function createLibp2pMessagePort<TSend, TReceive>(
   let finished = false
   let unsubscribeOutgoing: Unsubscribe = () => undefined
   let resolveClosed: (result: Libp2pMessagePortCloseResult) => void = () => undefined
+  const idleWaiters = new Set<() => void>()
   const closed = new Promise<Libp2pMessagePortCloseResult>((resolve) => {
     resolveClosed = resolve
   })
@@ -66,6 +64,7 @@ export function createLibp2pMessagePort<TSend, TReceive>(
     finished = true
     pending.length = 0
     unsubscribeOutgoing()
+    idleWaiters.forEach((resolve) => resolve())
     resolveClosed(result)
   }
 
@@ -94,7 +93,21 @@ export function createLibp2pMessagePort<TSend, TReceive>(
       if (!finished) fail(error)
     } finally {
       writing = false
+      idleWaiters.forEach((resolve) => resolve())
     }
+  }
+
+  const waitForPendingWrites = (): Promise<void> => {
+    if (!writing && pending.length === 0) return Promise.resolve()
+    return new Promise((resolve) => {
+      const done = () => {
+        clearTimeout(timeout)
+        idleWaiters.delete(done)
+        resolve()
+      }
+      const timeout = setTimeout(done, 5_000)
+      idleWaiters.add(done)
+    })
   }
 
   unsubscribeOutgoing = transportPort.receive((message) => {
@@ -134,6 +147,12 @@ export function createLibp2pMessagePort<TSend, TReceive>(
     port,
     closed,
     close: async () => {
+      if (finished) return
+      finish({ reason: 'local' })
+      await closeStream()
+    },
+    closeAfterFlush: async () => {
+      await waitForPendingWrites()
       if (finished) return
       finish({ reason: 'local' })
       await closeStream()

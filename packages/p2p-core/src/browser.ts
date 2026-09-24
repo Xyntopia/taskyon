@@ -1,7 +1,7 @@
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
-import type { PeerId, Stream } from '@libp2p/interface'
+import type { PeerId, PrivateKey } from '@libp2p/interface'
 import { identify } from '@libp2p/identify'
 import { enable, prefixLogger } from '@libp2p/logger'
 import { ping } from '@libp2p/ping'
@@ -53,7 +53,6 @@ export type BrowserLibp2pNode = Libp2p & {
     pubsub: BrowserPubsubService
     ping: Ping
   }
-  dialProtocol: (peerId: unknown, protocol: string) => Promise<Stream>
   components?: {
     transportManager?: {
       listen: (addrs: Multiaddr[]) => Promise<void>
@@ -266,8 +265,9 @@ export async function startBrowserLibp2p(opts: {
   additionalServices?: Record<string, unknown>
   logNamespaces?: string
   subnetworkSecrets?: DiscoverySecretInput[]
+  privateKey?: PrivateKey
 } = {}): Promise<BrowserLibp2pNode> {
-  const { additionalServices = {}, logNamespaces, subnetworkSecrets = [] } = opts
+  const { additionalServices = {}, logNamespaces, subnetworkSecrets = [], privateKey } = opts
   const namespaces = logNamespaces ?? getStoredBrowserLogNamespaces() ?? DEFAULT_BROWSER_LOG_NAMESPACES
   ensureVisibleBrowserLoggerTransport()
   enable(namespaces)
@@ -278,6 +278,7 @@ export async function startBrowserLibp2p(opts: {
   log('starting libp2p with relayListenAddrs: %o', relayListenAddrs)
 
   const libp2p = (await createLibp2p({
+    privateKey,
     addresses: {
       listen: ['/webrtc', ...relayListenAddrs],
     },

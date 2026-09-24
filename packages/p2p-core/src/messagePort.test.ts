@@ -80,6 +80,23 @@ void test('carries typed messages in both directions and reports local closure',
   assert.deepEqual(await b.closed, { reason: 'remote' })
 })
 
+void test('delivers a terminal message before closing the stream', async () => {
+  const [streamA, streamB] = createStreamPair()
+  const a = createLibp2pMessagePort(streamA, textCodec, {
+    maxMessageBytes: 64,
+    maxPendingMessages: 4,
+  })
+  const b = createLibp2pMessagePort(streamB, textCodec, {
+    maxMessageBytes: 64,
+    maxPendingMessages: 4,
+  })
+  const terminal = b.port.receive.wait({ timeoutMs: 1_000 })
+  a.port.send('revoked')
+  await a.closeAfterFlush()
+  assert.equal(await terminal, 'revoked')
+  assert.deepEqual(await b.closed, { reason: 'remote' })
+})
+
 void test('fails closed when a received frame exceeds its configured limit', async () => {
   const [streamA, streamB] = createStreamPair()
   const a = createLibp2pMessagePort(streamA, textCodec, {
