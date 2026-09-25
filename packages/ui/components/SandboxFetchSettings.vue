@@ -3,8 +3,8 @@
     <q-card-section>
       <div class="text-subtitle1">Sandbox network fetch</div>
       <div class="text-caption">
-        Sandboxed nodes ask the host to avoid browser CORS. Secure WSS is the default; direct fetch
-        and the legacy HTTP proxy are explicit alternatives.
+        Approved tool requests use the host's chosen transport. A custom proxy can also be selected
+        for providers.
       </div>
       <q-select
         v-model="transport"
@@ -26,10 +26,9 @@
         data-cy="sandbox-fetch-wss-url"
       />
       <q-input
-        v-if="transport === 'http'"
-        v-model="httpProxyUrl"
-        label="Legacy Taskyon HTTP proxy URL"
-        hint="Use only when the secure WSS tunnel is unavailable."
+        v-model="customProxyTemplate"
+        label="Custom proxy URL template"
+        hint="Include {url} where the encoded destination should go. Used when selected by a provider or tool."
         outlined
         dense
         data-cy="sandbox-fetch-proxy-url"
@@ -46,5 +45,5 @@ import {
 
 const transport = defineModel<SandboxFetchTransport>('transport', { required: true })
 const wssUrl = defineModel<string>('wssUrl', { required: true })
-const httpProxyUrl = defineModel<string>('httpProxyUrl', { required: true })
+const customProxyTemplate = defineModel<string>('customProxyTemplate', { required: true })
 </script>

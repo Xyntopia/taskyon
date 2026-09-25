@@ -24,6 +24,7 @@ import {
   base64ToPublixX25519,
   cryptoKeyToBase64,
   generateAssymetricKeyDeriver,
+  getToolchainProviderProfiles,
   resolveToolchainConfig,
   sleep,
   updateToolchainConfigValue,
@@ -215,6 +216,19 @@ const reconcileStoredTaskyonState = (
   }
   const toolchainProfiles = TyProfile.shape.toolchainProfiles.safeParse(stored.toolchainProfiles)
   if (toolchainProfiles.success) {
+    const defaultProviders = getToolchainProviderProfiles(defaults.toolchainProfiles)
+    const savedProviders = getToolchainProviderProfiles(toolchainProfiles.data)
+    for (const [profileName, provider] of Object.entries(savedProviders)) {
+      const recommendation = Object.values(defaultProviders).find(
+        (candidate) => candidate.provider === provider.provider,
+      )?.recommendedTransport
+      if (!provider.recommendedTransport && recommendation) {
+        const profile = toolchainProfiles.data.profiles[profileName]
+        if (profile) {
+          profile.chatCompletion = { ...provider, recommendedTransport: recommendation }
+        }
+      }
+    }
     reconciled.toolchainProfiles = toolchainProfiles.data
   }
   if (typeof stored.selectedToolchainProfile === 'string') {

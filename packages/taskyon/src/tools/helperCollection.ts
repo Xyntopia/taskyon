@@ -23,12 +23,15 @@ const jinaMarkdownReader = createTool({
       httpPolicy: politeHttpPolicySchema,
     },
   } as const satisfies JSONSchema7,
-  function: async ({ url, httpPolicy }) => {
+  function: async ({ url, httpPolicy }, ctx) => {
     if (typeof url !== 'string') throw new Error('jinaMarkdownReader requires a string URL.')
+    const hostFetch = ctx.fetch
+    if (!hostFetch) throw new Error('Mediated fetch is unavailable.')
     const response = await politeFetch(
       `https://r.jina.ai/${url}`,
       undefined,
       parsePoliteHttpPolicy(httpPolicy),
+      (input, init) => hostFetch(input, init, { preferProxy: true }),
     )
     return await response.text()
   },
@@ -98,6 +101,8 @@ export const webSearch = createTool({
     },
   } as const satisfies JSONSchema7,
   function: async ({ query, httpPolicy }, ctx) => {
+    const hostFetch = ctx.fetch
+    if (!hostFetch) throw new Error('Mediated fetch is unavailable.')
     // get key from here:  https://jina.ai/api-dashboard/key-manager
     const apiKey = await ctx.getSecret(
       'Search API key',
@@ -127,6 +132,7 @@ export const webSearch = createTool({
           },
         },
         parsePoliteHttpPolicy(httpPolicy),
+        (input, init) => hostFetch(input, init, { preferProxy: true }),
       )
       const body = await response.json()
       if (response.status === 401)

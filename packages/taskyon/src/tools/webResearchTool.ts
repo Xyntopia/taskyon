@@ -13,7 +13,6 @@ import {
   politeHttpPolicySchema,
   waitForPoliteHttpTurn,
 } from '../utils/politeHttp'
-import { canUseTauriHttpPlugin, tauriHttpRequestText } from '../utils/tauriHttpPlugin'
 
 type BrowserMcpImportArgs = {
   serverUrl?: string
@@ -460,15 +459,25 @@ const createMcpRpcPayload = (id: number, method: string, params?: unknown) =>
     ...(params !== undefined ? { params } : {}),
   })
 
-const requestMcpEndpoint = async (url: string, id: number, method: string, params?: unknown) => {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
+const requestMcpEndpoint = async (
+  hostFetch: NonNullable<toolContext['fetch']>,
+  url: string,
+  id: number,
+  method: string,
+  params?: unknown,
+) => {
+  const response = await hostFetch(
+    url,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: createMcpRpcPayload(id, method, params),
     },
-    body: createMcpRpcPayload(id, method, params),
-  })
+    { preferProxy: true },
+  )
 
   const body = (await response.json()) as Record<string, unknown>
   if (!response.ok) {
@@ -480,14 +489,17 @@ const requestMcpEndpoint = async (url: string, id: number, method: string, param
   return body
 }
 
-const checkBrowserMcpEndpoint = async (serverUrl: string) => {
-  await requestMcpEndpoint(serverUrl, 1, 'initialize', {
+const checkBrowserMcpEndpoint = async (
+  hostFetch: NonNullable<toolContext['fetch']>,
+  serverUrl: string,
+) => {
+  await requestMcpEndpoint(hostFetch, serverUrl, 1, 'initialize', {
     protocolVersion: '2024-11-05',
     clientInfo: { name: 'taskyon-browser-access', version: '0.5.3' },
     capabilities: {},
   })
-  await requestMcpEndpoint(serverUrl, 2, 'notifications/initialized')
-  await requestMcpEndpoint(serverUrl, 3, 'tools/list')
+  await requestMcpEndpoint(hostFetch, serverUrl, 2, 'notifications/initialized')
+  await requestMcpEndpoint(hostFetch, serverUrl, 3, 'tools/list')
 }
 
 export const buildEnsureBrowserMcpImportRetryChain = (args: EnsureBrowserMcpToolsArgs) => [
@@ -527,16 +539,14 @@ const requestProxyText = async (
   requestUrl: string,
   headers: Record<string, string>,
   httpPolicy: { minDelayMs?: number } | undefined,
+  hostFetch: NonNullable<toolContext['fetch']>,
 ) => {
-  if (canUseTauriHttpPlugin()) {
-    return await tauriHttpRequestText(requestUrl, {
-      method: 'GET',
-      headers,
-      ...(httpPolicy ? { httpPolicy } : {}),
-    })
-  }
-
-  const response = await politeFetch(requestUrl, { method: 'GET', headers }, httpPolicy)
+  const response = await politeFetch(
+    requestUrl,
+    { method: 'GET', headers },
+    httpPolicy,
+    (input, init) => hostFetch(input, init, { preferProxy: true }),
+  )
   return {
     status: response.status,
     statusText: response.statusText,
@@ -624,8 +634,11 @@ export const ensureBrowserMcpTools = createTool({
       previousCall.content.data.arguments.onboardingToken === onboardingToken &&
       thisMessage?.parentID === previousCall.id
 
+    const hostFetch = ctx.fetch
+    if (!hostFetch) throw new Error('Browser MCP requires mediated host fetch.')
+
     try {
-      await checkBrowserMcpEndpoint(serverUrl)
+      await checkBrowserMcpEndpoint(hostFetch, serverUrl)
       return ctx.createSubtasksResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
     } catch {
       if (isOnboardingReentry) {
@@ -637,7 +650,7 @@ export const ensureBrowserMcpTools = createTool({
           'ensureBrowserMcpTools',
           onboardingToken,
         )
-        await checkBrowserMcpEndpoint(serverUrl)
+        await checkBrowserMcpEndpoint(hostFetch, serverUrl)
         return ctx.createSubtasksResult([[...buildEnsureBrowserMcpImportRetryChain(args)]])
       }
 
@@ -962,10 +975,12 @@ export const proxyWebReader = createTool({
       { ...resolvedArgs, serviceUrl, targetUrlParam: resolvedArgs.targetUrlParam },
       apiKey,
     )
+    if (!ctx.fetch) throw new Error('Mediated fetch is unavailable.')
     const response = await requestProxyText(
       requestUrl,
       buildProxyHeaders(resolvedArgs, apiKey),
       httpPolicy,
+      ctx.fetch,
     )
     if (response.status < 200 || response.status >= 300) {
       throw new Error(

@@ -45,6 +45,7 @@ export const toolContextProtocol = defineFrpServiceProtocol({
     fetch: {
       request: z.object({
         input: z.string(),
+        preferProxy: z.boolean().optional(),
         init: z
           .object({
             method: z.string().optional(),

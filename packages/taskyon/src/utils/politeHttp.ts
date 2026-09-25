@@ -72,8 +72,9 @@ export async function politeFetch(
   input: string | URL,
   init?: RequestInit,
   policy?: PoliteHttpPolicy,
+  hostFetch: typeof fetch = globalThis.fetch,
 ) {
   const url = typeof input === 'string' ? parseHttpUrl(input) : input
   await waitForPoliteHttpTurn(url, policy)
-  return await fetch(url, init)
+  return await hostFetch(url, init)
 }

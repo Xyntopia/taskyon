@@ -1,7 +1,4 @@
-import {
-  resolveProviderNetworkTransport,
-  type ChatCompletionProviderSettings,
-} from '../types/chatCompletion'
+import type { ChatCompletionProviderSettings } from '../types/chatCompletion'
 import { availableModels, fetchAvailableModels } from './chat'
 import { CODEX_MODELS_CLIENT_VERSION } from './codexModels'
 import { TASKYON_MODEL_CATALOG_URL, TOKEN_SERVICE_BASE_URL } from '../taskyon.space/endpoints'
@@ -68,11 +65,9 @@ export async function fetchModelsForProvider(
     ...(modelsUrl.startsWith(TOKEN_SERVICE_BASE_URL) ? {} : (api.defaultHeaders ?? {})),
     ...(api.provider === 'chatgpt-codex' ? { 'Cache-Control': 'no-cache' } : {}),
   }
-  const networkTransport = resolveProviderNetworkTransport(api, options.fetch !== undefined)
-  const providerFetch = networkTransport === 'wss' ? options.fetch : undefined
   try {
-    return providerFetch
-      ? await fetchAvailableModels(modelsUrl, key, headers, false, providerFetch)
+    return options.fetch
+      ? await fetchAvailableModels(modelsUrl, key, headers, false, options.fetch)
       : await availableModels(modelsUrl, key, headers)
   } catch {
     console.log("couldn't download models from", modelsUrl)

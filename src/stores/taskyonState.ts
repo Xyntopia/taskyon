@@ -45,6 +45,7 @@ import {
   parseJwt,
   randomString,
   registerToolRpcTools,
+  resolveChatCompletionConnection,
   TaskNode,
 } from '@taskyon/taskyon'
 import {
@@ -53,19 +54,16 @@ import {
   type TaskyonHostClient,
   type TaskyonStorageClient,
 } from '@taskyon/taskyon/api'
-import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
+import type { ChatCompletionProviderSettings, ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
-import { createHttpProxyFetch } from '@taskyon/common/modules/webFetching/index'
-import {
-  resolveSandboxFetchTransport,
-  type FetchWithPolicy,
-} from '@taskyon/common/modules/webFetching/mediatedFetch'
+import { type FetchWithPolicy } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { createCachedSecureFetch } from '@taskyon/secure-tunnel'
-import { createBoundServiceTokenProvider } from '@taskyon/taskyon/taskyon-space-api'
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '@taskyon/taskyon/token-service-types'
 import {
+  canUseTauriHttpPlugin,
   createPersistentOauthTokenGetter,
   OAUTH_CREDENTIALS_SECRET_PREFIX,
+  tauriHttpFetch,
 } from '@taskyon/taskyon/browser'
 import type { AuthenticationOptions, TokenGetter } from '@taskyon/taskyon/browser'
 import { createOAuthTool } from '@taskyon/taskyon/tools/authTools'
@@ -83,11 +81,15 @@ import { taskyonDocumentationManifest } from '@taskyon/taskyon/documentationMani
 import {
   clearBrowserDesignGraphGitRepositories,
   createTaskyonBrowserCoreRuntime,
+  createHostNetwork,
+  createCustomProxyFetch,
+  resolveToolHostTransport,
   createTaskyonProviderFetchWithTokenGetter,
   initCryptoSessionFromBrowser,
   isHostedBrowserProviderRuntime,
   persistBrowserCryptoSession,
   type TaskyonDirectFallbackRequest,
+  type HostFetchContext,
 } from '@taskyon/runtime-browser'
 import {
   createOpfsBlobStorageBackend,
@@ -633,7 +635,7 @@ function getBrowserCapabilityPolicy() {
               cardClass: 'taskyon-capability-dialog taskyon-capability-dialog--network-access',
               color: 'info' as const,
               title: '🌐 Network access request',
-              message: `${request.tool.name} wants to ${request.capability.access} data from ${request.capability.origin}. This permission does not allow the tool to open a browser window.`,
+              message: `${request.tool.name} wants to ${request.capability.access} data from ${request.capability.origin}.${request.capability.privateTarget ? ' This is a local or private network address and will use direct host fetch.' : request.capability.preferProxy ? ' This tool recommends a proxy if you have configured one.' : ''} This permission does not allow the tool to open a browser window.`,
               onceLabel: 'Allow this network access once',
               sessionLabel: 'Allow network access this session',
               permanentLabel: 'Always allow this network access',
@@ -686,7 +688,12 @@ export const authorizeBrowserSandboxFetch = ({
   capability,
 }: {
   tool: ToolIdentity
-  capability: { origin: string; access: 'read' | 'write' }
+  capability: {
+    origin: string
+    access: 'read' | 'write'
+    preferProxy?: boolean
+    privateTarget?: boolean
+  }
 }) =>
   getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'fetch', ...capability } })
 
@@ -697,59 +704,6 @@ export const authorizeBrowserPopup = ({
   tool: ToolIdentity
   target: 'custom-html' | `origin:${string}`
 }) => getBrowserCapabilityPolicy().authorize({ tool, capability: { action: 'popup', target } })
-
-function createBrowserHttpProxyFetch(
-  proxyUrl: string,
-  getTaskyonFetchCredential: () => Promise<string>,
-) {
-  const getProxyToken = createBoundServiceTokenProvider(
-    proxyUrl,
-    TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
-    'proxy',
-    getTaskyonFetchCredential,
-  )
-  const proxyFetch = createHttpProxyFetch({
-    proxyUrl,
-    getToken: async (target, refreshInstanceKey = false) => {
-      const port = Number(target.port || (target.protocol === 'http:' ? 80 : 443))
-      return await getProxyToken(
-        { destination: { host: target.hostname, port } },
-        refreshInstanceKey,
-      )
-    },
-  })
-  return proxyFetch
-}
-
-export function createBrowserProxyFetch(
-  storageClient: TaskyonStorageClient,
-  proxyUrl: string,
-  getTaskyonFetchCredential: () => Promise<string>,
-) {
-  return createCachedSecureFetch(
-    createBrowserHttpProxyFetch(proxyUrl, getTaskyonFetchCredential),
-    createStorageClientSecureFetchCache(storageClient),
-  )
-}
-
-const approveBrowserDirectFallback = (request: TaskyonDirectFallbackRequest) =>
-  new Promise<boolean>((resolve) => {
-    let settled = false
-    const finish = (approved: boolean) => {
-      if (settled) return
-      settled = true
-      resolve(approved)
-    }
-    Dialog.create({
-      title: 'Secure tunnel unavailable',
-      message: `The secure WSS tunnel failed before sending data to ${request.origin}. Retry this ${request.requestKind.replaceAll('-', ' ')} request directly? The provider will see your network connection and may receive the webpage origin.`,
-      ok: { label: 'Retry directly', color: 'warning' },
-      cancel: { label: 'Keep private', color: 'primary', flat: true },
-      persistent: true,
-    })
-      .onOk(() => finish(true))
-      .onDismiss(() => finish(false))
-  })
 
 function resolveTaskyonKey(args: {
   iframeToken?: KeyString | undefined
@@ -1397,12 +1351,139 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
             tokenServiceBaseUrl: TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
           },
           () => getTaskyonFetchCredential(),
-          { requestKind, approveDirectFallback: approveBrowserDirectFallback },
+          { requestKind },
         )
       : undefined
-  const providerChatFetch = createHostedProviderFetch('chat-completion')
-  const providerModelFetch = createHostedProviderFetch('model-discovery')
-  const providerOauthFetch = createHostedProviderFetch('oauth')
+  const wssChatFetch = createHostedProviderFetch('chat-completion')
+  const wssModelFetch = createHostedProviderFetch('model-discovery')
+  const wssOauthFetch = createHostedProviderFetch('oauth')
+  const directFetch: typeof fetch =
+    process.env.CLIENT && canUseTauriHttpPlugin()
+      ? tauriHttpFetch
+      : globalThis.fetch.bind(globalThis)
+  const providerNetwork = createHostNetwork({
+    directFetch,
+    getWssFetch: (purpose) =>
+      purpose === 'model-discovery'
+        ? wssModelFetch
+        : purpose === 'oauth'
+          ? wssOauthFetch
+          : wssChatFetch,
+    getAppProxyTemplate: () => stateRefs.appConfiguration.customProxyTemplate || undefined,
+    getProviderProxyTemplate: (providerId) =>
+      Object.values(getToolchainProviderProfiles(stateRefs.toolchainProfiles)).find(
+        (provider) => provider.provider === providerId,
+      )?.customProxyTemplate,
+    getProviderSelection: (providerId) =>
+      Object.values(getToolchainProviderProfiles(stateRefs.toolchainProfiles)).find(
+        (provider) =>
+          provider.provider === providerId &&
+          provider.networkTransport &&
+          (provider.networkTransport !== 'auto' || provider.networkTransportConfirmed),
+      )?.networkTransport,
+    chooseProviderSelection: ({ providerId, recommendation }, origin) => {
+      const appProxy = stateRefs.appConfiguration.customProxyTemplate
+      const providerProxy = Object.values(
+        getToolchainProviderProfiles(stateRefs.toolchainProfiles),
+      ).find((provider) => provider.provider === providerId)?.customProxyTemplate
+      const automaticUnavailable = recommendation === 'wss' && !wssChatFetch && !appProxy
+      const automaticLabel = appProxy ? 'custom proxy' : recommendation
+      return new Promise((resolve, reject) => {
+        Dialog.create({
+          title: `Connect to ${providerId}?`,
+          message: `Taskyon wants to contact ${origin}. Choose how this provider should connect. This choice is saved for this browser. A custom proxy receives the request content and provider credentials.${automaticUnavailable ? ' WSS is unavailable in this runtime; choose direct or a configured custom proxy.' : ''}`,
+          options: {
+            type: 'radio',
+            model: automaticUnavailable ? 'direct' : 'auto',
+            items: [
+              ...(automaticUnavailable
+                ? []
+                : [{ label: `Automatic (${automaticLabel})`, value: 'auto' }]),
+              { label: 'Direct', value: 'direct' },
+              ...(wssChatFetch ? [{ label: 'Secure WSS tunnel', value: 'wss' }] : []),
+              ...(appProxy || providerProxy
+                ? [{ label: 'Custom proxy', value: 'custom-proxy' }]
+                : []),
+            ],
+          },
+          ok: { label: 'Connect' },
+          cancel: true,
+          persistent: true,
+        })
+          .onOk((selection: 'auto' | 'direct' | 'wss' | 'custom-proxy') => {
+            for (const profile of Object.values(stateRefs.toolchainProfiles.profiles)) {
+              if (profile.chatCompletion?.provider === providerId) {
+                profile.chatCompletion = {
+                  ...profile.chatCompletion,
+                  networkTransport: selection,
+                  networkTransportConfirmed: true,
+                }
+              }
+            }
+            resolve(selection)
+          })
+          .onDismiss(() => reject(new Error(`Network access to ${origin} was declined.`)))
+      })
+    },
+  })
+  const providerChatFetch = (connection: ReturnType<typeof resolveChatCompletionConnection>) =>
+    providerNetwork.providerFetch({
+      providerId: connection.provider,
+      recommendation: connection.recommendedTransport ?? 'direct',
+    })
+  const providerModelFetch: typeof fetch = (input, init) => {
+    const provider = resolveChatCompletionConnection(
+      stateRefs.effectiveToolchainConfig.chatCompletion,
+    )
+    return providerNetwork.providerFetch({
+      providerId: provider.provider,
+      recommendation: provider.recommendedTransport ?? 'direct',
+      purpose: 'model-discovery',
+    })(input, init)
+  }
+  const providerOauthFetch = (provider: ChatCompletionProviderSettings) =>
+    providerNetwork.providerFetch({
+      providerId: provider.provider,
+      recommendation: provider.recommendedTransport ?? 'direct',
+      purpose: 'oauth',
+    })
+  const sandboxWssFetch = createTaskyonProviderFetchWithTokenGetter(
+    {
+      kind: 'secure-wss',
+      tunnelUrl: stateRefs.appConfiguration.sandboxFetchWssUrl,
+      tokenServiceBaseUrl: TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
+    },
+    () => getTaskyonFetchCredential(),
+    { requestKind: 'sandbox-fetch' },
+  )
+  const hostFetch = {
+    fetch: async (context: HostFetchContext, request: Request): Promise<Response> => {
+      if (context.kind === 'provider') {
+        return await providerNetwork.providerFetch(context)(request)
+      }
+      const customProxy = stateRefs.appConfiguration.customProxyTemplate
+      const transport = resolveToolHostTransport({
+        request,
+        configured: stateRefs.appConfiguration.sandboxFetchTransport,
+        policy: context.options?.policy ?? 'default',
+        ...(context.options?.preferProxy ? { preferProxy: true } : {}),
+        ...(customProxy ? { customProxyTemplate: customProxy } : {}),
+      })
+      if (transport === 'direct') return await directFetch(request)
+      if (transport === 'wss') return await sandboxWssFetch(request)
+      if (customProxy) return await createCustomProxyFetch(customProxy, directFetch)(request)
+      throw new Error('Configure a custom proxy URL before selecting the custom proxy transport.')
+    },
+    authorize: (
+      tool: ToolIdentity,
+      capability: {
+        origin: string
+        access: 'read' | 'write'
+        preferProxy?: boolean
+        privateTarget?: boolean
+      },
+    ) => authorizeBrowserSandboxFetch({ tool, capability }),
+  }
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({
       ...stateRefs.llmSettings,
@@ -1417,40 +1498,19 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         unavailableToolNames: getBrowserUnavailableToolNames(),
         storageClient,
         workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
-        ...(providerChatFetch ? { chatCompletionFetch: providerChatFetch } : {}),
+        chatCompletionFetch: providerChatFetch,
       }),
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
     createFetchWithPolicy: (storageClient) => {
-      const proxyUrl = stateRefs.appConfiguration.sandboxFetchProxyUrl
-      const proxyFetch = createBrowserHttpProxyFetch(proxyUrl, getTaskyonFetchCredential)
-      const wssFetch = createTaskyonProviderFetchWithTokenGetter(
-        {
-          kind: 'secure-wss',
-          tunnelUrl: stateRefs.appConfiguration.sandboxFetchWssUrl,
-          tokenServiceBaseUrl: TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX,
-        },
-        () => getTaskyonFetchCredential(),
-        {
-          requestKind: 'sandbox-fetch',
-          approveDirectFallback: approveBrowserDirectFallback,
-        },
-      )
-      const directFetch = globalThis.fetch.bind(globalThis)
-      const fetchWithPolicy: FetchWithPolicy = async (input, init, options = {}) => {
-        const transport = resolveSandboxFetchTransport(
-          stateRefs.appConfiguration.sandboxFetchTransport,
-          options.policy ?? 'default',
-        )
-        if (transport === 'direct') return await directFetch(input, init)
-        if (transport === 'wss') return await wssFetch(input, init)
-        return await proxyFetch(input, init, options)
-      }
+      const fetchWithPolicy: FetchWithPolicy = (input, init, options) =>
+        hostFetch.fetch({ kind: 'tool', ...(options ? { options } : {}) }, new Request(input, init))
       return createCachedSecureFetch(
         fetchWithPolicy,
         createStorageClientSecureFetchCache(storageClient),
       )
     },
     fetchPolicy: { policy: 'default' },
+    allowPrivateSandboxFetch: true,
     authorizePopup: authorizeBrowserPopup,
     storageNamespacePrefix,
     storage: {
@@ -2036,6 +2096,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskyon,
     taskyonClient,
     providerNetworkFetch: providerOauthFetch,
+    hostFetch,
     taskTemplateRenderer,
     documentationBases,
     documentationReady,

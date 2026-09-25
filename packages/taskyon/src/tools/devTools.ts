@@ -151,9 +151,10 @@ export const getGitlabInfo = createTool({
     }
 
     const headers = { Accept: 'application/json', Authorization: 'Bearer ' + token }
+    if (!ctx.fetch) throw new Error('Mediated fetch is unavailable.')
     const data = {}
     for (const request of requests) {
-      const response = await fetch(gitlabBase + request.path, { headers })
+      const response = await ctx.fetch(gitlabBase + request.path, { headers }, { preferProxy: true })
       if (response.status === 401) {
         return ctx.createSubtasksResult(loginContinuation)
       }

@@ -40,7 +40,6 @@ import { useAppStateStore } from 'src/stores/appState'
 import {
   authorizeBrowserPopup,
   authorizeBrowserSandboxFetch,
-  createBrowserProxyFetch,
   createTrustedUiToolContext,
   defineTyGuiTools,
   useTaskyonStore,
@@ -135,13 +134,13 @@ watch(
         storage: { kind: 'browser' },
         authorizeSandboxFetch: authorizeBrowserSandboxFetch,
         authorizePopup: authorizeBrowserPopup,
-        createFetchWithPolicy: (storageClient) =>
-          createBrowserProxyFetch(
-            storageClient,
-            appState.appConfiguration.sandboxFetchProxyUrl,
-            () => Promise.resolve(taskyonStore.getTaskyonKeyString() ?? ''),
+        createFetchWithPolicy: () => (input, init, options) =>
+          taskyonStore.hostFetch.fetch(
+            { kind: 'tool', ...(options ? { options } : {}) },
+            new Request(input, init),
           ),
-        fetchPolicy: { policy: 'proxy' },
+        fetchPolicy: { policy: 'default' },
+        allowPrivateSandboxFetch: true,
         toolSetup: (storageClient) =>
           createDefaultTaskyonToolSetup({
             storageClient,
@@ -149,6 +148,15 @@ watch(
               storageClient,
               'workspace-files/v1',
             ),
+            chatCompletionFetch: (connection) => (input, init) =>
+              taskyonStore.hostFetch.fetch(
+                {
+                  kind: 'provider',
+                  providerId: connection.provider,
+                  recommendation: connection.recommendedTransport ?? 'direct',
+                },
+                new Request(input, init),
+              ),
           }),
       })
       stopRuntime = () => runtime!.stop('App assistant closed')

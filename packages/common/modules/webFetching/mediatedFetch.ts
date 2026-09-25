@@ -2,18 +2,20 @@ export type FetchCapability = {
   action: 'fetch'
   origin: string
   access: 'read' | 'write'
+  preferProxy?: boolean
+  privateTarget?: boolean
 }
 
 export type FetchAuthorization = (capability: FetchCapability) => Promise<boolean>
 
 export type SandboxFetchPolicy = 'default' | 'direct' | 'proxy'
 
-export const SANDBOX_FETCH_TRANSPORTS = ['wss', 'http', 'direct'] as const
+export const SANDBOX_FETCH_TRANSPORTS = ['wss', 'custom-proxy', 'direct'] as const
 export type SandboxFetchTransport = (typeof SANDBOX_FETCH_TRANSPORTS)[number]
 export const DEFAULT_SANDBOX_FETCH_TRANSPORT: SandboxFetchTransport = 'wss'
 export const SANDBOX_FETCH_TRANSPORT_OPTIONS = [
   { label: 'Secure WSS tunnel (recommended)', value: 'wss' },
-  { label: 'Legacy HTTP proxy', value: 'http' },
+  { label: 'Custom proxy', value: 'custom-proxy' },
   { label: 'Direct host fetch', value: 'direct' },
 ] as const satisfies ReadonlyArray<{ label: string; value: SandboxFetchTransport }>
 
@@ -32,6 +34,7 @@ export type SandboxProxyFetchOptions = {
 export type SandboxFetchOptions = {
   policy?: SandboxFetchPolicy | undefined
   proxy?: SandboxProxyFetchOptions | undefined
+  preferProxy?: boolean | undefined
 }
 
 export type FetchWithPolicy = (
@@ -49,6 +52,11 @@ export function mergeSandboxFetchOptions(
   const proxy = { ...defaults?.proxy, ...requested?.proxy }
   return {
     policy,
+    ...(requested?.preferProxy !== undefined
+      ? { preferProxy: requested.preferProxy }
+      : defaults?.preferProxy !== undefined
+        ? { preferProxy: defaults.preferProxy }
+        : {}),
     ...(defaults?.proxy || requested?.proxy ? { proxy } : {}),
   }
 }
@@ -88,7 +96,15 @@ function isBlockedHostname(hostname: string) {
   return normalized.startsWith('fc') || normalized.startsWith('fd')
 }
 
-export function validateSandboxFetchUrl(input: RequestInfo | URL): URL {
+export function isPrivateSandboxFetchUrl(input: RequestInfo | URL): boolean {
+  const url = new URL(input instanceof Request ? input.url : input)
+  return isBlockedHostname(url.hostname)
+}
+
+export function validateSandboxFetchUrl(
+  input: RequestInfo | URL,
+  allowPrivateTargets = false,
+): URL {
   const url = new URL(input instanceof Request ? input.url : input)
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('Sandbox fetch only permits HTTP and HTTPS URLs')
@@ -96,7 +112,7 @@ export function validateSandboxFetchUrl(input: RequestInfo | URL): URL {
   if (url.username || url.password) {
     throw new Error('Sandbox fetch does not permit credentials in URLs')
   }
-  if (isBlockedHostname(url.hostname)) {
+  if (isBlockedHostname(url.hostname) && !allowPrivateTargets) {
     throw new Error(`Sandbox fetch blocks private or local target: ${url.hostname}`)
   }
   return url
@@ -110,22 +126,25 @@ export function createMediatedFetch(options: {
   maxResponseBytes?: number
   signal?: AbortSignal
   timeoutMs?: number
+  allowPrivateTargets?: boolean
 }) {
   const hostFetch = options.fetch ?? globalThis.fetch
   const maxResponseBytes = options.maxResponseBytes ?? 16 * 1024 * 1024
   const timeoutMs = options.timeoutMs ?? 30_000
-  const authorizationByCapability = new Map<string, Promise<boolean>>()
 
   const mediatedFetch: FetchWithPolicy = async (input, init = {}, requestedOptions) => {
-    const url = validateSandboxFetchUrl(input)
+    const url = validateSandboxFetchUrl(input, options.allowPrivateTargets)
+    const fetchOptions = mergeSandboxFetchOptions(options.fetchPolicy, requestedOptions)
     const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
     const access = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' ? 'read' : 'write'
-    const capabilityKey = `${access}:${url.origin}`
-    const authorization =
-      authorizationByCapability.get(capabilityKey) ??
-      options.authorize({ action: 'fetch', origin: url.origin, access })
-    authorizationByCapability.set(capabilityKey, authorization)
-    if (!(await authorization)) {
+    const authorized = await options.authorize({
+      action: 'fetch',
+      origin: url.origin,
+      access,
+      ...(fetchOptions.preferProxy ? { preferProxy: true } : {}),
+      ...(isPrivateSandboxFetchUrl(url) ? { privateTarget: true } : {}),
+    })
+    if (!authorized) {
       throw new Error(`Sandbox fetch was not authorized for ${url.origin}`)
     }
 
@@ -142,7 +161,6 @@ export function createMediatedFetch(options: {
       redirect: 'manual',
       signal,
     } satisfies RequestInit
-    const fetchOptions = mergeSandboxFetchOptions(options.fetchPolicy, requestedOptions)
     const response = options.fetchWithPolicy
       ? await options.fetchWithPolicy(url, requestInit, fetchOptions)
       : await hostFetch(url, requestInit)

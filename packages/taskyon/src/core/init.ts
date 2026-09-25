@@ -288,6 +288,7 @@ const dynamicContext =
       }) => Promise<boolean>
       fetchWithPolicy?: FetchWithPolicy
       fetchPolicy?: SandboxFetchOptions
+      allowPrivateSandboxFetch?: boolean
       authorizePopup?: (args: {
         tool: ToolIdentity
         target: 'custom-html' | `origin:${string}`
@@ -561,6 +562,7 @@ const dynamicContext =
               signal: stopSignal,
               ...(options.fetchWithPolicy ? { fetchWithPolicy: options.fetchWithPolicy } : {}),
               ...(options.fetchPolicy ? { fetchPolicy: options.fetchPolicy } : {}),
+              ...(options.allowPrivateSandboxFetch ? { allowPrivateTargets: true } : {}),
             }),
             requestPopup: ({ target }) =>
               identity
@@ -738,6 +740,7 @@ export async function tyCore(
     }) => Promise<boolean>
     fetchWithPolicy?: FetchWithPolicy
     fetchPolicy?: SandboxFetchOptions
+    allowPrivateSandboxFetch?: boolean
     authorizePopup?: (args: {
       tool: ToolIdentity
       target: 'custom-html' | `origin:${string}`

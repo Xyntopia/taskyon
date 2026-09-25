@@ -53,7 +53,7 @@ export type toolContext = {
   toolId: string
   reportProgress?: (progress: ToolProgress) => Promise<void>
   waitForInteraction?: (request?: ToolInteractionRequest) => Promise<unknown>
-  fetch?: typeof fetch
+  fetch?: import('@taskyon/common/modules/webFetching/mediatedFetch').FetchWithPolicy
   requestPopup?: (request: { target: 'custom-html' | `origin:${string}` }) => Promise<boolean>
 }
 

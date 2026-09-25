@@ -14,6 +14,7 @@ import type { TaskyonBrowserWorkerInitMessage, TaskyonBrowserWorkerMessage } fro
 import { createTaskyonProviderFetch } from './providerFetch'
 import { forwardStreamToMessagePort } from './streamBridge'
 import { createTaskyonDirectFallbackRequester } from './directFallbackProtocol'
+import { createHostFetchRequester } from './hostFetchBridge'
 
 let stopCurrentRuntime: ((reason: string) => Promise<void>) | undefined
 
@@ -36,6 +37,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
     toolchainConfig = {},
     providerTransport,
     directFallbackPort,
+    hostFetchPort,
     storageNamespacePrefix,
     storageSessionId,
     persistCryptoSession = false,
@@ -47,6 +49,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
     const directFallback = directFallbackPort
       ? createTaskyonDirectFallbackRequester(directFallbackPort)
       : undefined
+    const hostFetch = hostFetchPort ? createHostFetchRequester(hostFetchPort) : undefined
     const providerFetch = providerTransport
       ? createTaskyonProviderFetch(providerTransport, {
           requestKind: 'chat-completion',
@@ -79,10 +82,33 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
         kind: 'client',
         port: storageBridge.x,
       },
+      ...(hostFetch
+        ? {
+            authorizeSandboxFetch: ({ tool, capability }) => hostFetch.authorize(tool, capability),
+            allowPrivateSandboxFetch: true,
+            createFetchWithPolicy: () => (input, init, options) =>
+              hostFetch.fetch({ kind: 'tool', ...(options ? { options } : {}) }, input, init),
+          }
+        : {}),
       toolSetup: (storageClient) =>
         createDefaultTaskyonToolSetup({
           storageClient,
-          ...(providerFetch ? { chatCompletionFetch: providerFetch } : {}),
+          ...(hostFetch
+            ? {
+                chatCompletionFetch: (connection) => (input, init) =>
+                  hostFetch.fetch(
+                    {
+                      kind: 'provider',
+                      providerId: connection.provider,
+                      recommendation: connection.recommendedTransport ?? 'direct',
+                    },
+                    input,
+                    init,
+                  ),
+              }
+            : providerFetch
+              ? { chatCompletionFetch: () => providerFetch }
+              : {}),
         }),
     })
     const taskyon = await runtime.taskyon
@@ -104,6 +130,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
         hostMessageBridge.destroy()
         storageMessageBridge.destroy()
         directFallback?.destroy()
+        hostFetch?.stop()
         chatCompletionStreamPort?.close()
         workerStreamPort?.close()
       }

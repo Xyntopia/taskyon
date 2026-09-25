@@ -18,7 +18,6 @@ import { interpretAssistantMessage } from '../tools/chatCompletion/response'
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import {
   resolveChatCompletionConnection,
-  resolveProviderNetworkTransport,
   type ChatCompletionProviderSettings,
   type ProviderRequestTrace,
 } from '../types/chatCompletion'
@@ -36,7 +35,7 @@ function assert(condition: boolean, message: string): asserts condition {
 const providerSettings = (
   provider: string,
   baseURL: string,
-  networkTransport: 'auto' | 'direct' | 'wss' = 'auto',
+  networkTransport: 'auto' | 'direct' | 'wss' | 'custom-proxy' = 'auto',
 ): ChatCompletionProviderSettings => ({
   provider,
   name: provider,
@@ -44,72 +43,9 @@ const providerSettings = (
   baseURL,
   streamSupport: true,
   networkTransport,
+  recommendedTransport: provider === 'chatgpt-codex' ? 'wss' : 'direct',
   routes: { chatCompletion: '/chat/completions', models: '/models' },
 })
-
-export const testProviderNetworkTransportKeepsOwnedAndLocalEndpointsDirect = () => {
-  for (const provider of [
-    providerSettings('taskyon', 'https://share.taskyon.space'),
-    providerSettings('local', 'https://remote-looking.example'),
-    providerSettings('custom', 'http://localhost:8080'),
-    providerSettings('custom', 'http://192.168.1.20:8080'),
-  ]) {
-    assert(
-      resolveProviderNetworkTransport(provider, true) === 'direct',
-      `Expected ${provider.provider} at ${provider.baseURL} to stay direct`,
-    )
-  }
-  for (const provider of [
-    providerSettings('custom', 'https://fc-models.example'),
-    providerSettings('custom', 'http://[::ffff:8.8.8.8]'),
-  ]) {
-    assert(
-      resolveProviderNetworkTransport(provider, true) === 'wss',
-      `Expected public host ${provider.baseURL} to remain eligible for WSS`,
-    )
-  }
-  return { success: true }
-}
-
-testProviderNetworkTransportKeepsOwnedAndLocalEndpointsDirect.description =
-  'Keeps Taskyon-owned, local-provider, loopback, and private-network AI endpoints direct.'
-
-export const testProviderNetworkTransportResolvesHostedDefaultsAndOverrides = () => {
-  assert(
-    resolveProviderNetworkTransport(providerSettings('openai', 'https://api.openai.com'), true) ===
-      'wss',
-    'Expected hosted auto transport to use WSS when the host supplies it',
-  )
-  assert(
-    resolveProviderNetworkTransport(providerSettings('openai', 'https://api.openai.com'), false) ===
-      'direct',
-    'Expected local auto transport to use direct fetch when WSS is unavailable',
-  )
-  assert(
-    resolveProviderNetworkTransport(
-      providerSettings('openai', 'https://api.openai.com', 'direct'),
-      true,
-    ) === 'direct',
-    'Expected an explicit direct override to bypass WSS',
-  )
-  let unavailableError = ''
-  try {
-    resolveProviderNetworkTransport(
-      providerSettings('openai', 'https://api.openai.com', 'wss'),
-      false,
-    )
-  } catch (error) {
-    unavailableError = error instanceof Error ? error.message : String(error)
-  }
-  assert(
-    unavailableError.includes('WSS'),
-    'Expected an explicit WSS override to fail when the host has no WSS transport',
-  )
-  return { success: true }
-}
-
-testProviderNetworkTransportResolvesHostedDefaultsAndOverrides.description =
-  'Resolves per-profile AI transport defaults without silently bypassing an explicit WSS policy.'
 
 export const testNativeStructuredOutputSchemaAddsClosedObjectBoundaries = () => {
   const schema: JSONSchema7 = {
@@ -1127,53 +1063,52 @@ export const testChatCompletionCodexUsesInjectedProviderFetch = async () => {
 testChatCompletionCodexUsesInjectedProviderFetch.description =
   'Uses the host-provided fetch transport for Codex requests.'
 
-export const testChatCompletionRemoteCompatibleProviderUsesInjectedFetchButLocalDoesNot =
-  async () => {
-    const originalFetch = globalThis.fetch
-    let directCalls = 0
-    let injectedCalls = 0
-    const response = () =>
-      new Response(
-        'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
-        { status: 200, headers: { 'content-type': 'text/event-stream' } },
-      )
-    globalThis.fetch = () => {
-      directCalls += 1
-      return Promise.resolve(response())
-    }
-    const providerFetch: typeof fetch = () => {
-      injectedCalls += 1
-      return Promise.resolve(response())
-    }
-
-    try {
-      for (const api of [
-        providerSettings('openai', 'https://api.openai.example'),
-        providerSettings('openrouter.ai', 'https://openrouter.example'),
-        providerSettings('custom-remote', 'https://compatible.example'),
-        providerSettings('local', 'http://localhost:8080'),
-      ]) {
-        const request = await buildChatProviderRequest({
-          messages: [{ role: 'user', content: 'Hello.' }],
-          tools: {},
-          selectedModel: 'test-model',
-          api,
-          apiKey: 'diagnostic-key',
-          fetch: providerFetch,
-        })
-        await streamText(request).text
-      }
-    } finally {
-      globalThis.fetch = originalFetch
-    }
-
-    assert(injectedCalls === 3, 'Expected every third-party provider adapter to use WSS fetch')
-    assert(directCalls === 1, 'Expected the local provider to use direct fetch')
-    return { success: true }
+export const testChatCompletionEveryProviderUsesInjectedHostFetch = async () => {
+  const originalFetch = globalThis.fetch
+  let directCalls = 0
+  let injectedCalls = 0
+  const response = () =>
+    new Response(
+      'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    )
+  globalThis.fetch = () => {
+    directCalls += 1
+    return Promise.resolve(response())
+  }
+  const providerFetch: typeof fetch = () => {
+    injectedCalls += 1
+    return Promise.resolve(response())
   }
 
-testChatCompletionRemoteCompatibleProviderUsesInjectedFetchButLocalDoesNot.description =
-  'Routes every third-party AI adapter through the host transport while keeping local AI direct.'
+  try {
+    for (const api of [
+      providerSettings('openai', 'https://api.openai.example'),
+      providerSettings('openrouter.ai', 'https://openrouter.example'),
+      providerSettings('custom-remote', 'https://compatible.example'),
+      providerSettings('local', 'http://localhost:8080'),
+    ]) {
+      const request = await buildChatProviderRequest({
+        messages: [{ role: 'user', content: 'Hello.' }],
+        tools: {},
+        selectedModel: 'test-model',
+        api,
+        apiKey: 'diagnostic-key',
+        fetch: providerFetch,
+      })
+      await streamText(request).text
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+
+  assert(injectedCalls === 4, 'Every provider must use the injected host fetch')
+  assert(directCalls === 0, 'Provider code must not bypass the host fetch')
+  return { success: true }
+}
+
+testChatCompletionEveryProviderUsesInjectedHostFetch.description =
+  'Routes every AI adapter, including local providers, through the host transport.'
 
 export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
   const originalFetch = globalThis.fetch

@@ -12,8 +12,6 @@ export {
   getProviderOauthCredentialsKey,
   OAuthCredentials,
   resolveCodexOauthSession,
-  resolveProviderNetworkTransport,
-  isProviderNetworkDirectOnly,
   resolveProviderAccessToken,
 } from '@taskyon/taskyon'
 export type { ProviderNetworkTransport } from '@taskyon/taskyon'

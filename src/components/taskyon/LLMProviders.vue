@@ -121,8 +121,8 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
         <q-card-section>
           <div class="text-subtitle2">Provider network transport</div>
           <div class="text-caption q-mb-sm">
-            Deployed webpages use the secure WSS tunnel by default. Local, private-network, Tauri,
-            Node, and Taskyon service endpoints stay direct.
+            Each provider asks how to connect on first use. Its profile recommends a route; you can
+            change the saved choice here.
           </div>
           <q-list separator>
             <q-item
@@ -131,15 +131,14 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
             >
               <q-item-section>
                 <q-item-label>{{ api.name }}</q-item-label>
-                <q-item-label v-if="isProviderNetworkDirectOnly(api)" caption>
-                  Direct transport is required for this endpoint.
-                </q-item-label>
+                <q-item-label caption
+                  >Recommended: {{ api.recommendedTransport ?? 'direct' }}</q-item-label
+                >
               </q-item-section>
               <q-item-section side class="provider-transport-select">
                 <q-select
                   :model-value="providerTransportValue(api)"
                   :options="providerNetworkTransportOptions"
-                  :disable="isProviderNetworkDirectOnly(api)"
                   emit-value
                   map-options
                   outlined
@@ -300,9 +299,7 @@ import {
   chatCompletionToolName,
   getProviderOauthConfig,
   hasProviderOauthConfig,
-  isProviderNetworkDirectOnly,
   PROVIDER_NETWORK_TRANSPORTS,
-  resolveProviderNetworkTransport,
   resolveProviderAccessToken,
 } from '@taskyon/taskyon'
 import type {
@@ -348,19 +345,33 @@ const oauthProviders = computed(() =>
 )
 
 const providerNetworkTransportOptions = PROVIDER_NETWORK_TRANSPORTS.map((value) => ({
-  label: value === 'auto' ? 'Automatic' : value === 'wss' ? 'Secure WSS' : 'Direct',
+  label:
+    value === 'auto'
+      ? 'Automatic'
+      : value === 'wss'
+        ? 'Secure WSS'
+        : value === 'custom-proxy'
+          ? 'Custom proxy'
+          : 'Direct',
   value,
 }))
 const providerTransportValue = (provider: ChatCompletionProviderSettings) =>
-  isProviderNetworkDirectOnly(provider) ? 'direct' : provider.networkTransport
+  provider.networkTransport ?? 'auto'
 const setProviderNetworkTransport = (
   profileName: string,
   networkTransport: ProviderNetworkTransport | null,
 ) => {
   if (!networkTransport) return
-  const profile = state.toolchainProfiles.profiles[profileName]
-  if (!profile?.chatCompletion) return
-  profile.chatCompletion = { ...profile.chatCompletion, networkTransport }
+  const providerId = state.toolchainProfiles.profiles[profileName]?.chatCompletion?.provider
+  if (typeof providerId !== 'string') return
+  for (const profile of Object.values(state.toolchainProfiles.profiles)) {
+    if (profile.chatCompletion?.provider !== providerId) continue
+    profile.chatCompletion = {
+      ...profile.chatCompletion,
+      networkTransport,
+      networkTransportConfirmed: true,
+    }
+  }
 }
 
 const providerHasOauth = (api: ChatCompletionProviderSettings) => hasProviderOauthConfig(api)
@@ -392,10 +403,7 @@ const loginProviderWithOauth = async (
       setSecret: async (name, data) =>
         await ty.setSecret(OAUTH_CREDENTIALS_SECRET_PREFIX, name, data as KeyString),
     })
-    const providerFetch =
-      tystate.providerNetworkFetch && resolveProviderNetworkTransport(provider, true) === 'wss'
-        ? tystate.providerNetworkFetch
-        : undefined
+    const providerFetch = tystate.providerNetworkFetch(provider)
     const creds = await loginWithProviderOauth(providerName, provider, getToken, {
       ...(providerFetch ? { fetch: providerFetch } : {}),
     })

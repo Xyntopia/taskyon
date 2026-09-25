@@ -74,12 +74,38 @@ export const testCapabilityDecisionsCanBeReset = async () => {
 testCapabilityDecisionsCanBeReset.description =
   'Capability policy reset clears decisions while popup and network permissions remain independent.'
 
-export async function tool_security_contractsMediatedFetchAuthorizesOncePerExecution() {
+export async function tool_security_contractsMediatedFetchReusesSessionApproval() {
+  const storedDecisions = new Map<string, 'allow' | 'deny'>()
+  let promptCount = 0
+  const policy = createCapabilityPolicy({
+    storage: {
+      get: (key) => Promise.resolve(storedDecisions.get(key) ?? null),
+      set: (key, decision) => {
+        storedDecisions.set(key, decision)
+        return Promise.resolve()
+      },
+      delete: (key) => {
+        storedDecisions.delete(key)
+        return Promise.resolve()
+      },
+      clear: () => {
+        storedDecisions.clear()
+        return Promise.resolve()
+      },
+    },
+    prompt: () => {
+      promptCount += 1
+      return Promise.resolve({ decision: 'allow', scope: 'session' })
+    },
+  })
   let authorizationCount = 0
   const mediatedFetch = createMediatedFetch({
-    authorize: () => {
+    authorize: (capability) => {
       authorizationCount += 1
-      return Promise.resolve(true)
+      return policy.authorize({
+        tool: { publisherId: 'test', name: 'gitlabTool', revision: 'sha256:test-revision' },
+        capability,
+      })
     },
     fetch: () => Promise.resolve(new Response('ok')),
   })
@@ -88,13 +114,32 @@ export async function tool_security_contractsMediatedFetchAuthorizesOncePerExecu
   await mediatedFetch('https://gitlab.com/api/v4/issues')
 
   assert(
-    authorizationCount === 1,
-    `Expected one authorization for the tool execution, got ${authorizationCount}`,
+    authorizationCount === 2 && promptCount === 1,
+    `Expected both fetches to check the policy and only one session prompt, got ${authorizationCount} checks and ${promptCount} prompts`,
   )
 }
 
-tool_security_contractsMediatedFetchAuthorizesOncePerExecution.description =
-  'A capability decision covers repeated requests to the same origin during one tool execution.'
+export const testMediatedFetchPassesProxyPreferenceToHost = async () => {
+  let promptedWithPreference = false
+  let routedWithPreference = false
+  const mediatedFetch = createMediatedFetch({
+    authorize: (capability) => {
+      promptedWithPreference = capability.preferProxy === true
+      return Promise.resolve(true)
+    },
+    fetchWithPolicy: (_input, _init, options) => {
+      routedWithPreference = options?.preferProxy === true
+      return Promise.resolve(new Response('ok'))
+    },
+  })
+  await mediatedFetch('https://example.com/page', undefined, { preferProxy: true })
+  assert(promptedWithPreference, 'Tool recommendation must appear in the permission request')
+  assert(routedWithPreference, 'Tool recommendation must reach host routing')
+  return { success: true }
+}
+
+tool_security_contractsMediatedFetchReusesSessionApproval.description =
+  'A session capability decision covers repeated requests to the same origin while each fetch rechecks the policy.'
 
 export async function tool_security_contractsMediatedFetchSupportsHttpAndHttps() {
   const requestedUrls: string[] = []
@@ -148,6 +193,56 @@ export async function tool_security_contractsMediatedFetchBlocksPrivateNetworks(
 
 tool_security_contractsMediatedFetchBlocksPrivateNetworks.description =
   'Sandbox fetch rejects loopback, private, link-local, and metadata targets before authorization or I/O.'
+
+export async function testMediatedFetchRequiresApprovalForPrivateTarget() {
+  let approved = false
+  let calls = 0
+  const mediatedFetch = createMediatedFetch({
+    allowPrivateTargets: true,
+    authorize: (capability) => {
+      assert(capability.origin === 'http://127.0.0.1:3210', 'Approval must name the origin')
+      assert(capability.privateTarget === true, 'Approval must identify a private target')
+      return Promise.resolve(approved)
+    },
+    fetch: () => {
+      calls += 1
+      return Promise.resolve(new Response('ok'))
+    },
+  })
+  await mediatedFetch('http://127.0.0.1:3210/mcp').then(
+    () => {
+      throw new Error('Unapproved private request succeeded')
+    },
+    () => undefined,
+  )
+  assert(calls === 0, 'Denied private target must not reach host fetch')
+  approved = true
+  const permittedFetch = createMediatedFetch({
+    allowPrivateTargets: true,
+    authorize: () => Promise.resolve(approved),
+    fetch: () => {
+      calls += 1
+      return Promise.resolve(new Response('ok'))
+    },
+  })
+  assert((await (await permittedFetch('http://127.0.0.1:3210/mcp')).text()) === 'ok')
+  assert(calls === 1, 'Approved private target must reach host fetch')
+}
+
+export async function testMediatedFetchDoesNotReuseOneTimeApproval() {
+  let approvals = 0
+  const mediatedFetch = createMediatedFetch({
+    allowPrivateTargets: true,
+    authorize: () => {
+      approvals += 1
+      return Promise.resolve(true)
+    },
+    fetch: () => Promise.resolve(new Response('ok')),
+  })
+  await mediatedFetch('http://localhost:4321/one')
+  await mediatedFetch('http://localhost:4321/two')
+  assert(approvals === 2, 'One-time approval must be requested again on the next fetch')
+}
 
 export async function tool_security_contractsMediatedFetchTimesOut() {
   let hostRequestAborted = false
@@ -266,6 +361,33 @@ export async function tool_security_contractsSandboxUsesOnlyMediatedFetch() {
     result.constructorProcessType !== 'object',
     'Sandbox constructors must not recover the Node process object',
   )
+}
+
+export const testSandboxToolForwardsProxyPreference = async () => {
+  const stopController = new AbortController()
+  let preferred = false
+  await executeToolInWorkerSandbox(
+    `async (_params, ctx) => await ctx.fetch('https://example.com/page', {}, { preferProxy: true })`,
+    {
+      params: {},
+      context: {
+        getExecutionTaskChain: () => Promise.resolve([]),
+        createSubtasksResult,
+        getSecret: () => Promise.resolve(null),
+        setSecret: () => Promise.resolve(),
+        stopSignal: stopController.signal,
+        toolId: 'synthetic-proxy-preference',
+        fetch: (_input, _init, options) => {
+          preferred = options?.preferProxy === true
+          return Promise.resolve(new Response('ok'))
+        },
+      },
+    },
+    'proxy-preference.js',
+    stopController.signal,
+  )
+  assert(preferred, 'Sandbox tool fetch preference must reach the host context')
+  return { success: true }
 }
 
 tool_security_contractsSandboxUsesOnlyMediatedFetch.description =

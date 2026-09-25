@@ -27,6 +27,9 @@ import type { TaskyonCoreRuntimeStage } from './core'
 import type { TaskyonBrowserWorkerInitMessage, TaskyonBrowserWorkerMessage } from './workerProtocol'
 import type { TaskyonBrowserProviderTransport, TaskyonDirectFallbackRequest } from './providerFetch'
 import { startTaskyonDirectFallbackHost } from './directFallbackProtocol'
+import { startHostFetchResponder, type HostFetchContext } from './hostFetchBridge'
+import type { FetchCapability } from '@taskyon/common/modules/webFetching/mediatedFetch'
+import type { ToolIdentity } from '@taskyon/taskyon'
 
 export type TaskyonBrowserRuntimeOptions = {
   llmSettings: llmSettings
@@ -34,6 +37,10 @@ export type TaskyonBrowserRuntimeOptions = {
   toolchainConfig?: Record<string, FunctionArguments>
   providerTransport?: TaskyonBrowserProviderTransport
   approveDirectFallback?: (request: TaskyonDirectFallbackRequest) => Promise<boolean>
+  hostFetch?: {
+    fetch: (context: HostFetchContext, request: Request) => Promise<Response>
+    authorize: (tool: ToolIdentity, capability: FetchCapability) => Promise<boolean>
+  }
   tools?: InternalTool[]
   createTools?: (
     services: TaskyonBrowserRuntimeServices,
@@ -95,6 +102,11 @@ export const createTaskyonBrowserRuntime = async (
   const chatCompletionChannel = new MessageChannel()
   const workerStreamChannel = new MessageChannel()
   const directFallbackChannel = options.approveDirectFallback ? new MessageChannel() : undefined
+  const hostFetchChannel = options.hostFetch ? new MessageChannel() : undefined
+  const stopHostFetch =
+    hostFetchChannel && options.hostFetch
+      ? startHostFetchResponder(hostFetchChannel.port1, options.hostFetch)
+      : undefined
   const stopDirectFallbackHost =
     directFallbackChannel && options.approveDirectFallback
       ? startTaskyonDirectFallbackHost(directFallbackChannel.port1, options.approveDirectFallback)
@@ -145,6 +157,7 @@ export const createTaskyonBrowserRuntime = async (
     toolchainConfig: options.toolchainConfig ?? {},
     ...(options.providerTransport ? { providerTransport: options.providerTransport } : {}),
     ...(directFallbackChannel ? { directFallbackPort: directFallbackChannel.port2 } : {}),
+    ...(hostFetchChannel ? { hostFetchPort: hostFetchChannel.port2 } : {}),
     storageNamespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     ...(options.storageSessionId ? { storageSessionId: options.storageSessionId } : {}),
     ...(options.persistCryptoSession ? { persistCryptoSession: true } : {}),
@@ -157,6 +170,7 @@ export const createTaskyonBrowserRuntime = async (
     chatCompletionChannel.port2,
     workerStreamChannel.port2,
     ...(directFallbackChannel ? [directFallbackChannel.port2] : []),
+    ...(hostFetchChannel ? [hostFetchChannel.port2] : []),
   ])
 
   let toolExecutor: Awaited<ReturnType<typeof registerToolRpcTools>> | undefined
@@ -204,6 +218,7 @@ export const createTaskyonBrowserRuntime = async (
     chatCompletionStreamPort.destroy()
     workerStreamPort.destroy()
     stopDirectFallbackHost?.()
+    stopHostFetch?.()
     if (typeof storageStop === 'function') storageStop()
     worker.terminate()
     throw new Error(`Taskyon browser worker failed during "${workerStage}".`, { cause: error })
@@ -227,6 +242,7 @@ export const createTaskyonBrowserRuntime = async (
       chatCompletionStreamPort.destroy()
       workerStreamPort.destroy()
       stopDirectFallbackHost?.()
+      stopHostFetch?.()
       if (typeof storageStop === 'function') storageStop()
       worker.terminate()
       void reason
@@ -280,3 +296,12 @@ export {
   sanitizeProviderRequestHeaders,
 } from './providerFetch'
 export type { TaskyonBrowserProviderTransport, TaskyonDirectFallbackRequest } from './providerFetch'
+export type { HostFetchContext } from './hostFetchBridge'
+export {
+  createCustomProxyFetch,
+  createHostNetwork,
+  resolveToolHostTransport,
+  resolveHostTransport,
+  HOST_NETWORK_TRANSPORTS,
+} from './hostNetwork'
+export type { HostNetworkSelection, HostNetworkTransport, HostProviderNetwork } from './hostNetwork'

@@ -484,6 +484,7 @@ onMounted(async () => {
       ...(apiKey ? { apiKey } : {}),
       storageSessionId: agentSessionId,
       cryptoNamespace: agentSessionId,
+      hostFetch: taskyonStore.hostFetch,
     })
     if (disposed) {
       await runtime.stop('Ranking page closed during initialization')

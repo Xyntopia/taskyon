@@ -126,8 +126,10 @@ export const appConfiguration = z.object({
     description: 'Maximum persisted range-cache size per PMTiles archive in megabytes.',
   }),
   sandboxFetchTransport: z
-    .enum(SANDBOX_FETCH_TRANSPORTS)
-    .default(DEFAULT_SANDBOX_FETCH_TRANSPORT)
+    .preprocess(
+      (value) => (value === 'http' ? 'custom-proxy' : value),
+      z.enum(SANDBOX_FETCH_TRANSPORTS).default(DEFAULT_SANDBOX_FETCH_TRANSPORT),
+    )
     .meta({
       title: 'Sandbox Fetch Transport',
       description:
@@ -137,9 +139,9 @@ export const appConfiguration = z.object({
     title: 'Sandbox WSS Tunnel',
     description: 'Authenticated WSS tunnel used for the secure sandbox fetch transport.',
   }),
-  sandboxFetchProxyUrl: z.string().url().default('https://share.taskyon.space/proxy').meta({
-    title: 'Legacy HTTP Sandbox Proxy',
-    description: 'Explicit fallback HTTP proxy endpoint; it is not used by the default transport.',
+  customProxyTemplate: z.string().default('').meta({
+    title: 'Custom Network Proxy',
+    description: 'Optional app-wide proxy URL containing {url} for the encoded destination.',
   }),
   guiMode: z.enum(['auto', 'iframe', 'default', 'minChat']).default('auto').meta({
     description: 'Sets whether we want to have a minimalist chat or the full app',

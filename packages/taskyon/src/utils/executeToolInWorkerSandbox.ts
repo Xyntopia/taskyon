@@ -212,7 +212,7 @@ function buildToolSandboxCode(userCode: string): string {
           if (!sandboxApi.port) throw new Error('Tool context protocol port is unavailable');
           const protocol = createProtocolClient(sandboxApi.port, 'toolContext', sandboxApi.signal);
           const call = (command, payload = {}) => protocol.call(command, payload);
-          const sandboxFetch = async (input, init = {}) => {
+          const sandboxFetch = async (input, init = {}, options = {}) => {
             const url = input && typeof input === 'object' && 'url' in input
               ? String(input.url)
               : String(input);
@@ -221,7 +221,10 @@ function buildToolSandboxCode(userCode: string): string {
               ...(init.headers === undefined ? {} : { headers: normalizeHeaders(init.headers) }),
               ...(init.body === undefined ? {} : { body: String(init.body) }),
             };
-            return createSandboxResponse(await call('fetch', { input: url, init: requestInit }));
+            return createSandboxResponse(await call('fetch', {
+              input: url, init: requestInit,
+              ...(options.preferProxy === undefined ? {} : { preferProxy: options.preferProxy }),
+            }));
           };
           const ctx = {
             ...(baseContext || {}),
@@ -292,7 +295,7 @@ function buildContextHandlers(
           ...(token === undefined ? {} : { token }),
         })
       },
-      fetch: async ({ input, init }) => {
+      fetch: async ({ input, init, preferProxy }) => {
         const assetBytes = await loadSandboxAssetBytes(input)
         if (assetBytes !== null) {
           return {
@@ -308,11 +311,15 @@ function buildContextHandlers(
           }
         }
         if (!context.fetch) throw new Error('Sandbox fetch capability is unavailable')
-        const response = await context.fetch(input, {
-          ...(init?.method ? { method: init.method } : {}),
-          ...(init?.headers ? { headers: init.headers } : {}),
-          ...(init?.body ? { body: init.body } : {}),
-        })
+        const response = await context.fetch(
+          input,
+          {
+            ...(init?.method ? { method: init.method } : {}),
+            ...(init?.headers ? { headers: init.headers } : {}),
+            ...(init?.body ? { body: init.body } : {}),
+          },
+          preferProxy === undefined ? undefined : { preferProxy },
+        )
         const headers: [string, string][] = []
         response.headers.forEach((value, key) => headers.push([key, value]))
         return {

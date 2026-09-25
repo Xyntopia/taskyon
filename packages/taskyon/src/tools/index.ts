@@ -42,7 +42,9 @@ export const createDefaultTaskyonToolSetup = (options?: {
   prepareGraphRepository?: () => Promise<void>
   pythonTool?: InternalTool | null
   workspaceOperations?: WorkspaceOperations
-  chatCompletionFetch?: typeof fetch
+  chatCompletionFetch?: (
+    connection: ReturnType<typeof resolveChatCompletionConnection>,
+  ) => typeof fetch
 }): TyCoreToolSetup => ({
   baseTools: [
     ...(options?.workspaceOperations
@@ -72,8 +74,9 @@ export const createDefaultTaskyonToolSetup = (options?: {
   ],
   chatCompletionToolName,
   createSessionTools: ({ db, taskManager, toolManager, artifactStore, toolchainConfig }) => {
-    const createChatCompletion = (config: typeof toolchainConfig) =>
-      createChatCompletionTool(resolveChatCompletionConnection(config.chatCompletion), {
+    const createChatCompletion = (config: typeof toolchainConfig) => {
+      const connection = resolveChatCompletionConnection(config.chatCompletion)
+      return createChatCompletionTool(connection, {
         getTaskChain: taskManager.getTaskChain,
         getTaskChainSelection: taskManager.getTaskChainSelection,
         getTask: (id) => taskManager.getTask(id, { contentMode: 'hydrated' }),
@@ -82,8 +85,9 @@ export const createDefaultTaskyonToolSetup = (options?: {
         resolveToolDefinition: async (name, revision) =>
           (await toolManager.resolveTool(name, revision)).tool,
         metaUpsert: taskManager.metaUpsert,
-        ...(options?.chatCompletionFetch ? { fetch: options.chatCompletionFetch } : {}),
+        ...(options?.chatCompletionFetch ? { fetch: options.chatCompletionFetch(connection) } : {}),
       })
+    }
     const chatCompletion = createChatCompletion(toolchainConfig)
 
     return {

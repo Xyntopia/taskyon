@@ -6,7 +6,6 @@ import type {
   ChatCompletionProviderSettings,
   ProviderRequestTrace,
 } from '../../types/chatCompletion'
-import { resolveProviderNetworkTransport } from '../../types/chatCompletion'
 import { createChatCompletionRecordingFetch } from '../chatCompletionTrace'
 
 const collectSystemInstructions = (messages: ModelMessage[]) => {
@@ -190,12 +189,10 @@ export const buildChatProviderRequest = async (input: {
   let model
   let requestMessages = input.messages
   const overrideOptions: Record<string, unknown> = {}
-  const networkTransport = resolveProviderNetworkTransport(input.api, input.fetch !== undefined)
-  const transportFetch = networkTransport === 'wss' ? input.fetch : undefined
   const recordingFetch = input.providerRequest
-    ? createChatCompletionRecordingFetch(input.providerRequest, transportFetch ?? fetch)
+    ? createChatCompletionRecordingFetch(input.providerRequest, input.fetch ?? fetch)
     : undefined
-  const providerFetch = recordingFetch ?? transportFetch
+  const providerFetch = recordingFetch ?? input.fetch
   const requestHeaders = input.api.provider === 'taskyon' ? undefined : input.api.defaultHeaders
 
   switch (input.api.provider) {

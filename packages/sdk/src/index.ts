@@ -1,6 +1,8 @@
 import { canonicalHash, type Sha256Hash } from '@taskyon/common/modules/canonicalHash'
 import type { StreamSubscription } from '@taskyon/common/modules/frpBus'
 import { createTaskyonBrowserCoreRuntime } from '@taskyon/runtime-browser/core'
+import type { HostFetchContext } from '@taskyon/runtime-browser'
+import type { FetchCapability } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { initCryptoSessionFromBrowser } from '@taskyon/runtime-browser/crypto-session'
 import {
   createExternalToolContext,
@@ -14,7 +16,12 @@ import {
   type TaskyonClient,
   type partialTaskDraft,
 } from '@taskyon/taskyon/api'
-import type { ChatCompletionStreamEvent, TyTaskStreamData } from '@taskyon/taskyon'
+import type {
+  ChatCompletionProviderSettings,
+  ChatCompletionStreamEvent,
+  ToolIdentity,
+  TyTaskStreamData,
+} from '@taskyon/taskyon'
 import { createChatCompletionTool, resolveChatCompletionConnection } from '@taskyon/taskyon/chat'
 import type { TyCoreToolSetup } from '@taskyon/taskyon/runtime-core'
 import {
@@ -29,18 +36,7 @@ export type { EntryNodePromptTemplates }
 
 export type TaskyonIntegrationStream<T> = StreamSubscription<T>
 
-export type TaskyonIntegrationProvider = {
-  provider: string
-  name: string
-  model: string
-  baseURL: string
-  streamSupport: boolean
-  defaultHeaders?: Record<string, string>
-  routes: {
-    chatCompletion: string
-    models: string
-  }
-}
+export type TaskyonIntegrationProvider = ChatCompletionProviderSettings
 
 export type TaskyonIntegrationRuntime = {
   client: TaskyonClient
@@ -51,12 +47,15 @@ export type TaskyonIntegrationRuntime = {
   stop: (reason?: string) => Promise<void>
 }
 
-const createIntegrationToolSetup = (): TyCoreToolSetup => ({
+const createIntegrationToolSetup = (hostFetch?: {
+  fetch: (context: HostFetchContext, request: Request) => Promise<Response>
+}): TyCoreToolSetup => ({
   baseTools: [],
   chatCompletionToolName: 'chatCompletion',
   createSessionTools: ({ taskManager, toolManager, artifactStore, toolchainConfig }) => {
-    const createChatCompletion = (config: typeof toolchainConfig) =>
-      createChatCompletionTool(resolveChatCompletionConnection(config.chatCompletion), {
+    const createChatCompletion = (config: typeof toolchainConfig) => {
+      const connection = resolveChatCompletionConnection(config.chatCompletion)
+      return createChatCompletionTool(connection, {
         getTaskChain: taskManager.getTaskChain,
         getTaskChainSelection: taskManager.getTaskChainSelection,
         getTask: (id) => taskManager.getTask(id, { contentMode: 'hydrated' }),
@@ -65,7 +64,21 @@ const createIntegrationToolSetup = (): TyCoreToolSetup => ({
         resolveToolDefinition: async (name, revision) =>
           (await toolManager.resolveTool(name, revision)).tool,
         metaUpsert: taskManager.metaUpsert,
+        ...(hostFetch
+          ? {
+              fetch: (input, init) =>
+                hostFetch.fetch(
+                  {
+                    kind: 'provider',
+                    providerId: connection.provider,
+                    recommendation: connection.recommendedTransport ?? 'direct',
+                  },
+                  new Request(input, init),
+                ),
+            }
+          : {}),
       })
+    }
     const initial = createChatCompletion(toolchainConfig)
     return {
       tools: [initial.chatCompletion],
@@ -94,6 +107,10 @@ export const createTaskyonIntegrationRuntime = async (options: {
   storageSessionId: string
   cryptoNamespace?: string
   maxConcurrency?: number
+  hostFetch?: {
+    fetch: (context: HostFetchContext, request: Request) => Promise<Response>
+    authorize: (tool: ToolIdentity, capability: FetchCapability) => Promise<boolean>
+  }
 }): Promise<TaskyonIntegrationRuntime> => {
   const entryTool = createStandardEntryNodeTool({
     name: options.entry.name,
@@ -102,6 +119,7 @@ export const createTaskyonIntegrationRuntime = async (options: {
     extraContext: () => options.entry.context,
   })
   const entryNode = toolCall({ name: options.entry.name, arguments: {} })
+  const hostFetch = options.hostFetch
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({
       entryFunction: options.entry.name,
@@ -115,7 +133,18 @@ export const createTaskyonIntegrationRuntime = async (options: {
       },
     },
     storageSessionId: options.storageSessionId,
-    toolSetup: createIntegrationToolSetup(),
+    toolSetup: createIntegrationToolSetup(hostFetch),
+    ...(hostFetch
+      ? {
+          allowPrivateSandboxFetch: true,
+          authorizeSandboxFetch: ({ tool, capability }) => hostFetch.authorize(tool, capability),
+          createFetchWithPolicy: () => (input, init, fetchOptions) =>
+            hostFetch.fetch(
+              { kind: 'tool', ...(fetchOptions ? { options: fetchOptions } : {}) },
+              new Request(input, init),
+            ),
+        }
+      : {}),
     cryptoSession: await initCryptoSessionFromBrowser(undefined, true, {
       namespace: options.cryptoNamespace ?? options.storageSessionId,
     }),

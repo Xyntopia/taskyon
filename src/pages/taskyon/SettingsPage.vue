@@ -56,7 +56,7 @@
             <SandboxFetchSettings
               v-model:transport="state.appConfiguration.sandboxFetchTransport"
               v-model:wss-url="state.appConfiguration.sandboxFetchWssUrl"
-              v-model:http-proxy-url="state.appConfiguration.sandboxFetchProxyUrl"
+              v-model:custom-proxy-template="state.appConfiguration.customProxyTemplate"
             />
           </div>
         </q-tab-panel>
@@ -237,14 +237,14 @@ const tystate = useTaskyonStore()
 const appConfigurationWithoutSandboxFetch = TyProfile.shape.appConfiguration.omit({
   sandboxFetchTransport: true,
   sandboxFetchWssUrl: true,
-  sandboxFetchProxyUrl: true,
+  customProxyTemplate: true,
 })
 const appConfigurationModel = computed<Record<string, unknown>>({
   get: () =>
     Object.fromEntries(
       Object.entries(state.appConfiguration).filter(
         ([key]) =>
-          !['sandboxFetchTransport', 'sandboxFetchWssUrl', 'sandboxFetchProxyUrl'].includes(key),
+          !['sandboxFetchTransport', 'sandboxFetchWssUrl', 'customProxyTemplate'].includes(key),
       ),
     ),
   set: (nextValue) => {
