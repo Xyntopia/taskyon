@@ -299,14 +299,14 @@
         <q-separator />
 
         <TaskyonClientPane
+          v-model:selected-task-id="selectedAgentTaskId"
+          v-model:recent-task-ids="recentAgentTaskIds"
           :client="agentRuntime?.client"
           :status="agentStatus"
           :error-message="agentError"
           :entry-node="agentRuntime?.entryNode"
           :chat-completion-stream="agentRuntime?.chatCompletionStream"
           :worker-stream="agentRuntime?.workerStream"
-          v-model:selected-task-id="selectedAgentTaskId"
-          v-model:recent-task-ids="recentAgentTaskIds"
           welcome-message="Ask Taskyon to help with your naming goal."
           min-mode
         />

@@ -57,6 +57,10 @@ const props = withDefaults(
 )
 
 const appState = useAppStateStore()
+const welcomeMessage = computed(() => {
+  const value = props.configuration?.appConfiguration?.welcomeMsg
+  return typeof value === 'string' ? value : undefined
+})
 const taskyonStore = useTaskyonStore()
 const client = shallowRef<TaskyonClient>()
 const allTools = shallowRef<Record<string, ToolBase>>({})
@@ -81,10 +85,6 @@ const entryFunction = computed(() =>
     : appState.llmSettings.entryFunction,
 )
 const entryNode = computed(() => toolCall({ name: entryFunction.value, arguments: {} }))
-const welcomeMessage = computed(() => {
-  const message = props.configuration?.appConfiguration?.welcomeMsg
-  return typeof message === 'string' ? message : undefined
-})
 let generation = 0
 let stopRuntime: (() => Promise<void>) | undefined
 let activeSessionId: string | undefined

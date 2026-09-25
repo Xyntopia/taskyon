@@ -65,10 +65,6 @@ const createProviderFetch = (
   getTunnelToken: TunnelTokenProvider,
   options: TaskyonProviderFetchOptions = {},
 ): typeof fetch => {
-  if (transport.kind !== 'secure-wss') {
-    throw new Error('Unsupported Taskyon provider transport.')
-  }
-
   const secureProviderFetch = createSecureFetch({
     tunnelUrl: transport.tunnelUrl,
     getTunnelToken,
