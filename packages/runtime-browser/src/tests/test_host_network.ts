@@ -46,21 +46,21 @@ export const testHostNetworkPromptsOncePerProvider = async () => {
   let directCalls = 0
   let wssCalls = 0
   const network = createHostNetwork({
-    directFetch: async () => {
+    directFetch: () => {
       directCalls += 1
-      return new Response('direct')
+      return Promise.resolve(new Response('direct'))
     },
-    getWssFetch: () => async () => {
+    getWssFetch: () => () => {
       wssCalls += 1
-      return new Response('wss')
+      return Promise.resolve(new Response('wss'))
     },
     getAppProxyTemplate: () => undefined,
     getProviderProxyTemplate: () => undefined,
     getProviderSelection: () => saved,
-    chooseProviderSelection: async () => {
+    chooseProviderSelection: () => {
       prompts += 1
       saved = 'auto'
-      return saved
+      return Promise.resolve(saved)
     },
   })
   const providerFetch = network.providerFetch({ providerId: 'codex', recommendation: 'wss' })
@@ -107,17 +107,19 @@ export const testHostTransportUsesSavedChoiceAndGlobalProxy = () => {
 
 export const testCustomProxyPreservesProviderRequestAndStream = async () => {
   let forwarded: Request | undefined
-  const fetchImpl: typeof fetch = async (input, init) => {
+  const fetchImpl: typeof fetch = (input, init) => {
     forwarded = new Request(input, init)
-    return new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('data: first\n\n'))
-          controller.enqueue(new TextEncoder().encode('data: second\n\n'))
-          controller.close()
-        },
-      }),
-      { headers: { 'content-type': 'text/event-stream' } },
+    return Promise.resolve(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: first\n\n'))
+            controller.enqueue(new TextEncoder().encode('data: second\n\n'))
+            controller.close()
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' } },
+      ),
     )
   }
   const proxyFetch = createCustomProxyFetch('https://proxy.example/fetch?target={url}', fetchImpl)

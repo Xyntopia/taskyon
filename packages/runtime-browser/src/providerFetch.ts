@@ -66,7 +66,7 @@ const createProviderFetch = (
   options: TaskyonProviderFetchOptions = {},
 ): typeof fetch => {
   if (transport.kind !== 'secure-wss') {
-    throw new Error(`Unsupported Taskyon provider transport: ${transport.kind}`)
+    throw new Error('Unsupported Taskyon provider transport.')
   }
 
   const secureProviderFetch = createSecureFetch({

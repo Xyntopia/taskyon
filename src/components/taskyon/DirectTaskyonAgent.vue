@@ -7,7 +7,7 @@
     :status="status"
     :error-message="errorMessage"
     :all-tools="allTools"
-    :welcome-message="configuration?.appConfiguration?.welcomeMsg as string | undefined"
+    :welcome-message="welcomeMessage"
     :expert-mode="configuration?.appConfiguration?.expertMode === true"
     :chat-completion-stream="chatCompletionStream"
     :worker-stream="workerStream"
@@ -81,6 +81,10 @@ const entryFunction = computed(() =>
     : appState.llmSettings.entryFunction,
 )
 const entryNode = computed(() => toolCall({ name: entryFunction.value, arguments: {} }))
+const welcomeMessage = computed(() => {
+  const message = props.configuration?.appConfiguration?.welcomeMsg
+  return typeof message === 'string' ? message : undefined
+})
 let generation = 0
 let stopRuntime: (() => Promise<void>) | undefined
 let activeSessionId: string | undefined

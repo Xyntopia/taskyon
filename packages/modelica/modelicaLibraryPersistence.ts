@@ -1,8 +1,5 @@
 import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
-import type {
-  LazyModelicaClassTreeNode,
-  LazyModelicaLibraryIndex,
-} from './lazyModelicaLibraryIndex'
+import type { LazyModelicaLibraryIndex } from './lazyModelicaLibraryIndex'
 
 export const MODEL_LIBRARY_ARCHIVE_NAMESPACE = 'modelica/library-archives'
 export const MODEL_LIBRARY_ARCHIVE_METADATA_NAMESPACE = 'modelica/library-archive-metadata'

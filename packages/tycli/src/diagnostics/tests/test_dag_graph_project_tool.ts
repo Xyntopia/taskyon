@@ -9,10 +9,20 @@ import {
 import { createAiWorkstationExample } from '@taskyon/taskyon'
 import { createDagGraphProjectTool } from '@taskyon/taskyon/tools/dagGraphProjectTool'
 import { augmentToolSchemaForTaskyonVariables } from '@taskyon/taskyon/tools/chatCompletion/context'
-import type { JSONSchema7 } from 'json-schema'
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
+}
+
+function assertObjectSchema(
+  schema: JSONSchema7Definition | undefined,
+  message: string,
+): asserts schema is JSONSchema7 {
+  assert(
+    schema !== undefined && schema !== null && typeof schema === 'object' && !Array.isArray(schema),
+    message,
+  )
 }
 
 const createMemoryStorage = () => {
@@ -152,7 +162,9 @@ export const testDagGraphProjectAcceptsItsDocumentedNodeExample = async () => {
     nodeSourceSchema && typeof nodeSourceSchema === 'object',
     'Expected dagGraphProject to document the nodeSource parameter.',
   )
-  const nodeSource = nodeSourceSchema.examples?.[0]
+  const nodeSourceExamples = nodeSourceSchema.examples
+  assert(Array.isArray(nodeSourceExamples), 'Expected nodeSource to provide an example.')
+  const nodeSource = nodeSourceExamples[0]
   assert(typeof nodeSource === 'string', 'Expected a runnable nodeSource example.')
 
   const result = await tool.function({
@@ -168,7 +180,8 @@ export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
   const parameters = augmentToolSchemaForTaskyonVariables(
     createDagGraphProjectTool(storage.client).parameters as JSONSchema7,
   )
-  const actionSchema = parameters.properties?.action as JSONSchema7 | undefined
+  const actionSchema = parameters.properties?.action
+  assertObjectSchema(actionSchema, 'Expected action to have an object schema.')
   assert(
     actionSchema?.description?.includes('returned nodeId as rootNodeId') &&
       actionSchema.description.includes('invocation hash'),
@@ -178,15 +191,21 @@ export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
     !(parameters.required ?? []).includes('projectId'),
     'Expected projectId not to be globally required for global node creation.',
   )
-  const variablesSchema = parameters.properties?.variables as JSONSchema7 | undefined
+  const variablesSchema = parameters.properties?.variables
+  assertObjectSchema(variablesSchema, 'Expected variables to have an object schema.')
   const variableSpecSchema = variablesSchema?.additionalProperties
+  const variableExamples = variablesSchema.examples
+  assert(Array.isArray(variableExamples), 'Expected variables to provide an object example.')
   assert(
-    JSON.stringify(variablesSchema?.examples?.[0]) ===
+    JSON.stringify(variableExamples[0]) ===
       JSON.stringify({ gpuMemoryGb: { kind: 'list', values: [12, 16, 24] } }),
     'Expected variables to provide a concrete object example for model calls.',
   )
   assert(
-    typeof variableSpecSchema === 'object' && Array.isArray(variableSpecSchema.anyOf),
+    variableSpecSchema !== undefined &&
+      typeof variableSpecSchema === 'object' &&
+      !Array.isArray(variableSpecSchema) &&
+      Array.isArray(variableSpecSchema.anyOf),
     'Expected variables to expose the supported variable-spec variants.',
   )
   assert(
@@ -194,8 +213,14 @@ export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
     'Expected tool-call variable schemas not to advertise defaults inside unions.',
   )
 
-  const objectivesSchema = parameters.properties?.objectives as JSONSchema7 | undefined
+  const objectivesSchema = parameters.properties?.objectives
+  assertObjectSchema(objectivesSchema, 'Expected objectives to have an object schema.')
   const objectiveSchema = objectivesSchema?.items
+  assert(
+    objectiveSchema !== undefined && !Array.isArray(objectiveSchema),
+    'Expected objective items to have one object schema.',
+  )
+  assertObjectSchema(objectiveSchema, 'Expected objective items to have an object schema.')
   assert(
     typeof objectiveSchema === 'object' &&
       Array.isArray(objectiveSchema.required) &&
@@ -203,14 +228,14 @@ export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
     'Expected objectives to require the target structure used by invocation execution.',
   )
   const rootNodeIdSchema = parameters.properties?.rootNodeId
+  assertObjectSchema(rootNodeIdSchema, 'Expected rootNodeId to have an object schema.')
   assert(
-    typeof rootNodeIdSchema === 'object' &&
-      rootNodeIdSchema.description?.includes('nodeId returned by createNode') &&
+    rootNodeIdSchema.description?.includes('nodeId returned by createNode') &&
       rootNodeIdSchema.description.includes('do not include a separate nodeId'),
     'Expected rootNodeId to explain how the createNode result is passed to createProject.',
   )
   assert(parameters.properties?.$use, 'Expected the Taskyon variable mapping to be available.')
-  const createProjectRule = (parameters as JSONSchema7).anyOf?.find((rule) => {
+  const createProjectRule = parameters.anyOf?.find((rule) => {
     if (!rule || typeof rule !== 'object') return false
     const actionSchema = rule.properties?.action
     return typeof actionSchema === 'object' && actionSchema.const === 'createProject'
@@ -231,7 +256,7 @@ export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
       ),
     'Expected createProject to require a root or accept its Taskyon $use mapping.',
   )
-  const createNodeRule = (parameters as JSONSchema7).anyOf?.find((rule) => {
+  const createNodeRule = parameters.anyOf?.find((rule) => {
     if (!rule || typeof rule !== 'object') return false
     const actionSchema = rule.properties?.action
     return typeof actionSchema === 'object' && actionSchema.const === 'createNode'
@@ -243,7 +268,7 @@ export const testDagGraphProjectExposesInvocationFieldSchemas = () => {
       !createNodeRule.required?.includes('projectId'),
     'Expected global node creation to require source but not a project identifier.',
   )
-  const readRowsRule = (parameters as JSONSchema7).anyOf?.find((rule) => {
+  const readRowsRule = parameters.anyOf?.find((rule) => {
     if (!rule || typeof rule !== 'object') return false
     const actionSchema = rule.properties?.action
     return typeof actionSchema === 'object' && actionSchema.const === 'readRunRows'

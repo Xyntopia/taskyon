@@ -7,7 +7,7 @@ export const testPoliteFetchUsesInjectedHostFetch = async () => {
     undefined,
     { minDelayMs: 0 },
     (input) => {
-      requested = String(input)
+      requested = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       return Promise.resolve(new Response('mediated'))
     },
   )

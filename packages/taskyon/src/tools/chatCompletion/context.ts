@@ -29,7 +29,7 @@ import { deriveBindingParameters } from '../../core/scopedTools'
 import { convertFileToText } from '../../utils/loadFiles'
 import { isEmpty } from '../../utils/objHelpers'
 
-export const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7) => {
+export const augmentToolSchemaForTaskyonVariables = (schema: JSONSchema7): JSONSchema7 => {
   if (schema.type !== 'object') return schema
 
   return {

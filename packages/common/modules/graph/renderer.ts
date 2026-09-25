@@ -661,7 +661,7 @@ function renderGraph<N, E>(state: GraphControllerState<N, E>, surface: GraphSurf
   updateSurfaceTransforms(surface, state.viewport)
 }
 
-function syncRenderedNodeTransforms<N, E>(
+function syncRenderedNodeTransforms<N>(
   surface: GraphSurface,
   nodeById: Map<string, LayoutNode<N>>,
   activeNodeIds?: ReadonlySet<string>,

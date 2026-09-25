@@ -58,7 +58,19 @@ export async function runCodexOauthTerminalFixture() {
   }
   let pinnedWorkspace = false
   let callback: Promise<void> | undefined
-  process.stdout.write = (chunk, encodingOrCallback, writeDone) => {
+
+  type StdoutWriteCallback = (error?: Error | null) => void
+  function interceptStdoutWrite(chunk: string | Uint8Array, callback?: StdoutWriteCallback): boolean
+  function interceptStdoutWrite(
+    chunk: string | Uint8Array,
+    encoding?: BufferEncoding,
+    callback?: StdoutWriteCallback,
+  ): boolean
+  function interceptStdoutWrite(
+    chunk: string | Uint8Array,
+    encodingOrCallback?: BufferEncoding | StdoutWriteCallback,
+    writeDone?: StdoutWriteCallback,
+  ): boolean {
     const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString()
     const authorization = text.match(/https:\/\/provider\.example\/authorize\?\S+/)?.[0]
     if (!authorization) {
@@ -87,6 +99,7 @@ export async function runCodexOauthTerminalFixture() {
     writeCallback?.(undefined)
     return true
   }
+  process.stdout.write = interceptStdoutWrite
   globalThis.fetch = (url) => {
     const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
     if (requestUrl !== 'https://provider.example/token') {

@@ -1,4 +1,5 @@
 import type { JSONSchema, FromSchema } from 'json-schema-to-ts'
+import type { FetchWithPolicy } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import z from 'zod'
 import type { WithRequired } from '../utils/tsHelpers'
 import { partialTaskDraft, type TaskNode } from './taskNode'
@@ -53,7 +54,7 @@ export type toolContext = {
   toolId: string
   reportProgress?: (progress: ToolProgress) => Promise<void>
   waitForInteraction?: (request?: ToolInteractionRequest) => Promise<unknown>
-  fetch?: import('@taskyon/common/modules/webFetching/mediatedFetch').FetchWithPolicy
+  fetch?: FetchWithPolicy
   requestPopup?: (request: { target: 'custom-html' | `origin:${string}` }) => Promise<boolean>
 }
 

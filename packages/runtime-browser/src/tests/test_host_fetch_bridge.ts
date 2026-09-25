@@ -23,7 +23,7 @@ export const testHostFetchBridgeStreamsProviderResponse = async () => {
         { headers: { 'content-type': 'text/event-stream' } },
       )
     },
-    authorize: async () => true,
+    authorize: () => Promise.resolve(true),
   })
   const requester = createHostFetchRequester(channel.port2)
   try {
@@ -55,7 +55,7 @@ export const testHostFetchBridgeAbortsStreamingRequest = async () => {
   const channel = new MessageChannel()
   let aborted = false
   const stop = startHostFetchResponder(channel.port1, {
-    fetch: async (_context, request) => {
+    fetch: (_context, request) => {
       request.signal.addEventListener(
         'abort',
         () => {
@@ -63,15 +63,17 @@ export const testHostFetchBridgeAbortsStreamingRequest = async () => {
         },
         { once: true },
       )
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode('first'))
-          },
-        }),
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('first'))
+            },
+          }),
+        ),
       )
     },
-    authorize: async () => true,
+    authorize: () => Promise.resolve(true),
   })
   const requester = createHostFetchRequester(channel.port2)
   try {
@@ -100,10 +102,10 @@ export const testHostFetchBridgeChecksToolCapability = async () => {
   const channel = new MessageChannel()
   let checkedOrigin = ''
   const stop = startHostFetchResponder(channel.port1, {
-    fetch: async () => new Response('ok'),
-    authorize: async (_tool, capability) => {
+    fetch: () => Promise.resolve(new Response('ok')),
+    authorize: (_tool, capability) => {
       checkedOrigin = capability.origin
-      return capability.preferProxy === true
+      return Promise.resolve(capability.preferProxy === true)
     },
   })
   const requester = createHostFetchRequester(channel.port2)

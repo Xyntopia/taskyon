@@ -291,22 +291,26 @@ export const testCodexDeviceCodeFlow = async () => {
         prompt = value
       },
     },
-    async (url, init) => {
+    (url, init) => {
       const requestUrl = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
       if (requestUrl.endsWith('/api/accounts/deviceauth/usercode')) {
-        return Response.json({
-          device_auth_id: 'device-id',
-          user_code: 'ABCD-EFGH',
-          interval: '0.001',
-        })
+        return Promise.resolve(
+          Response.json({
+            device_auth_id: 'device-id',
+            user_code: 'ABCD-EFGH',
+            interval: '0.001',
+          }),
+        )
       }
       if (requestUrl.endsWith('/api/accounts/deviceauth/token')) {
         pollCount += 1
-        if (pollCount === 1) return new Response('', { status: 403 })
-        return Response.json({
-          authorization_code: 'authorization-code',
-          code_verifier: 'verifier',
-        })
+        if (pollCount === 1) return Promise.resolve(new Response('', { status: 403 }))
+        return Promise.resolve(
+          Response.json({
+            authorization_code: 'authorization-code',
+            code_verifier: 'verifier',
+          }),
+        )
       }
       if (requestUrl.endsWith('/oauth/token')) {
         if (typeof init?.body !== 'string') throw new Error('Expected a form-encoded token request')
@@ -315,11 +319,13 @@ export const testCodexDeviceCodeFlow = async () => {
           body.get('redirect_uri') === 'https://auth.example/deviceauth/callback',
           'Device flow must use the provider callback URI for token exchange',
         )
-        return Response.json({
-          access_token: 'synthetic-access',
-          refresh_token: 'synthetic-refresh',
-          expires_in: 3600,
-        })
+        return Promise.resolve(
+          Response.json({
+            access_token: 'synthetic-access',
+            refresh_token: 'synthetic-refresh',
+            expires_in: 3600,
+          }),
+        )
       }
       throw new Error(`Unexpected device OAuth request: ${requestUrl}`)
     },

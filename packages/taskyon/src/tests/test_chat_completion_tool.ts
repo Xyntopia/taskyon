@@ -1631,12 +1631,14 @@ export const testChatCompletionCodexUsesInjectedProviderFetch = async () => {
   let injectedCalls = 0
   globalThis.fetch = () =>
     Promise.reject(new Error('The Codex request unexpectedly used the global fetch.'))
-  const providerFetch: typeof fetch = async (_input, _init) => {
+  const providerFetch: typeof fetch = () => {
     injectedCalls += 1
-    return new Response('data: [DONE]\n\n', {
-      status: 200,
-      headers: { 'content-type': 'text/event-stream' },
-    })
+    return Promise.resolve(
+      new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    )
   }
 
   try {
@@ -1722,21 +1724,23 @@ export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
   let requestedHeaders: HeadersInit | undefined
   globalThis.fetch = () =>
     Promise.reject(new Error('The Codex model request unexpectedly used the global fetch.'))
-  const providerFetch: typeof fetch = async (input, init) => {
+  const providerFetch: typeof fetch = (input, init) => {
     injectedCalls += 1
     requestedUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     requestedHeaders = init?.headers
-    return new Response(
-      JSON.stringify({
-        models: [
-          { slug: 'synthetic-codex-model', input_modalities: ['text', 'image'] },
-          { slug: 'synthetic-codex-mini' },
-        ],
-      }),
-      {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      },
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          models: [
+            { slug: 'synthetic-codex-model', input_modalities: ['text', 'image'] },
+            { slug: 'synthetic-codex-mini' },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     )
   }
 
@@ -1751,7 +1755,7 @@ export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
         networkTransport: 'auto',
         routes: { chatCompletion: '/responses', models: '/models' },
       },
-      async () => 'diagnostic-key',
+      () => Promise.resolve('diagnostic-key'),
       { fetch: providerFetch },
     )
     assert(models['synthetic-codex-model'] !== undefined, 'Expected the injected model response')
