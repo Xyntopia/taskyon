@@ -27,6 +27,11 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '@taskyon/common/modules/diagnosticsRunner'
+import {
+  filterDiagnosticsThroughLevel,
+  parseDiagnosticsRunLevel,
+  type DiagnosticsRunLevel,
+} from '@taskyon/common/modules/diagnosticsLevels'
 import { getEnvironmentInfo } from '@taskyon/common/modules/utils'
 
 const route = useRoute()
@@ -62,7 +67,7 @@ async function emitHeadlessEvent(name: string, payload: Record<string, unknown>)
   }
 }
 
-function getDiagnosticsTests() {
+function getDiagnosticsTests(throughLevel?: DiagnosticsRunLevel) {
   const testModules = import.meta.glob(
     [
       '../../../packages/runtime-browser/src/tests/**/*.ts',
@@ -106,14 +111,21 @@ function getDiagnosticsTests() {
   })
 
   const selectedTests = diagnosticsNoGui.value
-    ? { ...registry.tests, ...registry.modelBasedTests }
+    ? {
+        ...registry.tests,
+        ...registry.modelBasedTests,
+        ...(throughLevel !== undefined && throughLevel >= 3 ? registry.experimentalTests : {}),
+      }
     : {
         ...registry.tests,
         ...registry.modelBasedTests,
         ...registry.guiTests,
+        ...(throughLevel !== undefined && throughLevel >= 3 ? registry.experimentalTests : {}),
       }
 
-  if (diagnosticsIncludeLargeTokens.value) return selectedTests
+  if (diagnosticsIncludeLargeTokens.value || (throughLevel !== undefined && throughLevel >= 3)) {
+    return selectedTests
+  }
 
   return Object.fromEntries(
     Object.entries(selectedTests).filter(([, fn]) => !fn.requiresLargeTokens),
@@ -211,21 +223,31 @@ async function runDiagnosticsMode() {
 
   const start = Date.now()
   const filterArg = typeof route.query.testFilter === 'string' ? route.query.testFilter.trim() : ''
-  const allTests = getDiagnosticsTests()
-  const tests = filterArg ? applyTestFilter(allTests, filterArg) : allTests
+  const throughLevel =
+    route.query.throughLevel === undefined
+      ? undefined
+      : parseDiagnosticsRunLevel(route.query.throughLevel)
+  const allTests = getDiagnosticsTests(throughLevel)
+  const matchingNames = filterArg ? applyTestFilter(allTests, filterArg) : allTests
+  const tests =
+    throughLevel === undefined
+      ? matchingNames
+      : filterDiagnosticsThroughLevel(matchingNames, throughLevel)
   if (filterArg) {
     console.log(
       `${HEADLESS_KEEP_TAG}[DIAG][FILTER] diagnostics filter "${filterArg}" matched ${Object.keys(tests).length}/${Object.keys(allTests).length} tests`,
     )
   }
   if (!Object.keys(tests).length) {
-    throw new Error(`No diagnostics tests matched filter: "${filterArg}"`)
+    throw new Error(
+      `No diagnostics tests matched filter: "${filterArg}" at level ${throughLevel ?? 'all'}`,
+    )
   }
   const modelArg = route.query.diagnosticsModel
   const diagnosticModel = typeof modelArg === 'string' ? modelArg : undefined
   if (
     diagnosticModel &&
-    diagnosticModel !== 'openai/gpt-5.6-luna' &&
+    diagnosticModel !== 'openai/gpt-6-luna' &&
     diagnosticModel !== 'z-ai/glm-5.3-flash'
   ) {
     throw new Error('Invalid Taskyon model for workflow diagnostics')
@@ -233,7 +255,8 @@ async function runDiagnosticsMode() {
   const createRunOptions = (model?: string): DiagnosticsRunOptions => ({
     details: diagnosticsDetailed.value,
     context: {
-      allowLongRun: route.query.allowLongRun === '1',
+      allowLongRun:
+        route.query.allowLongRun === '1' || (throughLevel !== undefined && throughLevel >= 3),
     },
     contextForTest: async (_name: string, test: TaskyonTestFn, context: DiagnosticsTestContext) => {
       if (!test.modelBased && !test.requiresAuth) return context

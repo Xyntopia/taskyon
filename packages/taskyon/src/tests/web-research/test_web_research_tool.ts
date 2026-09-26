@@ -4,6 +4,7 @@ import {
   proxyWebReaderProviderIds,
   resolveProxyWebReaderArgs,
 } from '@taskyon/common/modules/webFetching/index'
+import { getDiagnosticsRunLevel } from '@taskyon/common/modules/diagnosticsLevels'
 import { DEFAULT_POLITE_HTTP_MIN_DELAY_MS } from '../../utils/politeHttp'
 import { processTasksDetailed } from '../../api'
 import { tyCore } from '../../core/init'
@@ -704,6 +705,13 @@ export const testMcpCapableWebProviderCatalog = () => {
 }
 
 export const testWebResearchPlannerUsesWebSearchFirstByDefault = async () => {
+  assert(
+    getDiagnosticsRunLevel(
+      'testWebResearchPlannerUsesWebSearchFirstByDefault',
+      testWebResearchPlannerUsesWebSearchFirstByDefault,
+    ) === 2,
+    'Planning-only web research diagnostics belong in the local L2 run',
+  )
   const baseContext = {
     getExecutionTaskChain: () => Promise.resolve([]),
     createSubtasksResult,
@@ -1301,4 +1309,3 @@ testStorageToolInfersPdfValidationFromObjectId.description =
   'Infers PDF byte validation from a .pdf storage object ID even when the model omits expectedFileType.'
 testLocalBrowsingToolsExposePoliteHttpPolicy.description =
   'Exposes a default polite HTTP policy on low-level local browsing tools.'
-testWebResearchPlannerUsesWebSearchFirstByDefault.requiresLargeTokens = true

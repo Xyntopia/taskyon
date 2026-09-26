@@ -105,13 +105,13 @@ Apply this policy when implementing, debugging, or evaluating `tycli`.
 - Keep catalog artifact acceptance separate from product regression coverage. A generated project
   test belongs to the evaluated project; a Taskyon regression belongs at the owning Taskyon or
   `tycli` boundary and must reproduce the upstream defect rather than the incidental task output.
-- Before a release that changes OpenAI request construction or usage accounting, run
-  `yarn tycli:diagnostics:release`. It reuses the saved tycli login, uses `gpt-5.6-luna`, keeps a
-  strict request/output budget, and runs shallow, medium, and deep branches twice under one stable
-  task-tree cache key. Report normal-input, cache-read, and cache-write tokens for every branch and
-  pass, with cold-pass and repeated-pass cache percentages kept separate. Verify that repeated
-  branch request bodies remain byte-stable. A missing cache hit is a model/provider capability
-  miss; missing required telemetry or request drift is a product regression.
+- When changing OpenAI request construction or usage accounting, the focused L3 prompt-cache
+  diagnostic gives focused live evidence. It reuses the saved tycli login, uses `gpt-6-luna`, keeps
+  a strict request/output budget, and runs shallow, medium, and deep branches twice under one
+  stable task-tree cache key. Report normal-input, cache-read, and cache-write tokens for every
+  branch and pass, with cold-pass and repeated-pass cache percentages kept separate. Verify that
+  repeated branch request bodies remain byte-stable. A missing cache hit is a model/provider
+  capability miss; missing required telemetry or request drift is a product regression.
 
 ## Bug And Scope Handling
 

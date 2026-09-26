@@ -1,3 +1,4 @@
+// Optional provider check for cache reuse across repeated conversation branches.
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import type { ChatCompletionProviderSettings, ProviderRequestTrace } from '@taskyon/taskyon'
 import type { ModelMessage, LanguageModelUsage } from 'ai'
@@ -59,7 +60,7 @@ const summarizeUsages = (usages: LanguageModelUsage[]) => {
   }
 }
 
-export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
+export const testGpt6LunaPromptCacheReusesIncreasingTreeBranches = async (
   context?: DiagnosticsTestContext,
 ) => {
   const api = (
@@ -70,9 +71,9 @@ export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
   }
   if (
     (api.provider !== 'openai' && api.provider !== 'chatgpt-codex') ||
-    !context.model?.includes('gpt-5.6')
+    !context.model?.includes('gpt-6-luna')
   ) {
-    return { skipped: true, reason: 'This release diagnostic requires an OpenAI GPT-5.6 model.' }
+    return { skipped: true, reason: 'This diagnostic requires an OpenAI GPT-6 Luna model.' }
   }
   const buildProviderRequest = await createAuthenticatedProviderRequestBuilder(
     context.providerSession,
@@ -107,7 +108,7 @@ export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
         tools: {},
         selectedModel: context.model,
         providerRequest,
-        promptCacheRootId: 'release-prompt-cache-tree-laboratory',
+        promptCacheRootId: 'provider-prompt-cache-tree-laboratory',
       })
       const completion = streamText({
         ...request,
@@ -141,7 +142,7 @@ export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
       usage.inputTokenDetails.noCacheTokens === undefined,
   )
   if (missingTelemetry) {
-    throw new Error('GPT-5.6 prompt-cache token details were unavailable from the provider.')
+    throw new Error('GPT-6 Luna prompt-cache token details were unavailable from the provider.')
   }
 
   const firstPassInputTokens = passes[0]?.map((usage) => usage.inputTokens ?? 0) ?? []
@@ -191,7 +192,7 @@ export const testGpt56PromptCacheReusesIncreasingTreeBranches = async (
   }
 }
 
-testGpt56PromptCacheReusesIncreasingTreeBranches.description =
-  'Release laboratory: run three increasingly deep task-tree branches twice and measure cache reuse.'
-testGpt56PromptCacheReusesIncreasingTreeBranches.modelBased = true
-testGpt56PromptCacheReusesIncreasingTreeBranches.timeoutMs = 60_000
+testGpt6LunaPromptCacheReusesIncreasingTreeBranches.description =
+  'Provider laboratory: run three increasingly deep task-tree branches twice and measure cache reuse.'
+testGpt6LunaPromptCacheReusesIncreasingTreeBranches.modelBased = true
+testGpt6LunaPromptCacheReusesIncreasingTreeBranches.timeoutMs = 60_000

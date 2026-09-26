@@ -14,7 +14,28 @@ const diagnosticsTimeoutMs = 600_000
 const toolWorkflowTimeoutMs = 450_000
 const onlineEnv = readOnlineEnv(process.cwd())
 const researchProvider = process.env.PLAYWRIGHT_RESEARCH_PROVIDER ?? 'openrouter.ai'
-const researchModel = process.env.PLAYWRIGHT_RESEARCH_MODEL ?? 'openai/gpt-5.6-luna'
+const researchModel = process.env.PLAYWRIGHT_RESEARCH_MODEL ?? 'openai/gpt-6-luna'
+
+test('runs quick browser diagnostics without a provider', async ({ page }) => {
+  await page.addLocatorHandler(
+    page.getByRole('dialog').filter({ hasText: 'Connect to taskyon?' }),
+    async (dialog) => {
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+    },
+  )
+  await page.goto('/diagnostics')
+  await expect(dataCy(page, 'run-tests')).toContainText('Run through L1')
+  await dataCy(page, 'diagnostics-run-level').click()
+  await page.getByRole('option', { name: 'L1 · Quick smoke' }).click()
+  await expect(dataCy(page, 'run-tests')).toContainText('Run through L1')
+  await dataCy(page, 'run-tests').click()
+  await expect(dataCy(page, 'test-finished')).toContainText('Test Finished')
+  const report = dataCy(page, 'diagnostics-result')
+  await expect(report).toContainText(
+    'Test Combined Workflow Requires Search Before Final Computation',
+  )
+  await expect(report).toContainText('failed tests: 0/')
+})
 
 test.describe('diagnostics page', () => {
   test.skip(!onlineEnv, 'requires playwright.env.json with Taskyon, OpenAI, and OpenRouter keys')

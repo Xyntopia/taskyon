@@ -71,7 +71,7 @@ Headless diagnostics do not wait for the main Taskyon runtime before listing or 
 Tests that need a browser profile, key, or Taskyon runtime prepare those dependencies when that
 test starts, within its own timeout. A preparation failure is reported as `ERROR` for that test,
 not as a model capability miss, and the runner can continue with other tests. A focused browser
-run may also select `--diagnostics-model=openai/gpt-5.6-luna` or
+run may also select `--diagnostics-model=openai/gpt-6-luna` or
 `--diagnostics-model=z-ai/glm-5.3-flash` without changing the saved profile.
 
 Playwright writes reports to `playwright-report/` and run artifacts to `test-results/`. The normal
@@ -94,6 +94,43 @@ yarn tycli:diagnostics:list
 yarn tycli:diagnostics --filter '<test name>' --details
 ```
 
+Run levels select cumulative diagnostic sets. L1 is the quick development check; L2 adds broad
+per-test-fast coverage; L3 adds the slower and online checks required for a release. L4 is reserved
+for open-ended evaluations whose overall outcome needs a quality judgment beyond automated checks.
+No current diagnostic is assigned to L4.
+
+| Level | Included checks                                                                                                             |
+| ----- | --------------------------------------------------------------------------------------------------------------------------- |
+| L1    | Eleven fast deterministic workflow and diagnostics guards                                                                   |
+| L2    | Remaining per-test-fast checks, including research planning and browser GUI checks                                          |
+| L3    | Slower, online, model-backed, large-token and objective experimental checks, including official Federal Rules PDF retrieval |
+| L4    | Future quality-judged evaluations; no current tests                                                                         |
+
+The CLI and browser use the same level assignments for tests available in both hosts. Tests without
+a special assignment default to L2; network, model, large-token, long-running, experimental, or
+over-30-second timeout flags move them to L3. The CLI includes its own host-specific tests. The
+diagnostics page defaults to L1; its **Run level** selector filters the visible tests and batch
+run. **All levels** includes every test regardless of level. Headless Tauri accepts
+`--diagnostics-through-level=3`.
+
+The Federal Rules PDF retrieval diagnostic remains in L3 so release runs verify the download,
+storage, PDF contents, and existence of a final answer. These automated assertions do **not**
+establish that the answer is legally correct or well written; review the reported answer separately
+when judging its quality.
+
+```bash
+yarn tycli:diagnostics --through-level 1
+yarn tycli:diagnostics --through-level 3 \
+  --online
+```
+
+Selecting L3 or higher enables long-running, large-token, and experimental tests. The
+`testTokenReturnAfterOms` settlement check waits until the backend's one-hour operation window
+closes, so a complete L3 run can take over an hour. Online access and account credentials remain
+separate prerequisites for an actual release run.
+Inspect skipped tests and `MODEL MISS` results; a successful process exit does not mean every
+selected model workflow passed.
+
 Normal CLI diagnostics output is concise: it prints one `PASS`, `FAIL`, `SKIP`, `MODEL PASS`, or
 `MODEL MISS` line per selected test, followed by the summary, every failed deterministic test by
 name, and the diagnostics log path. Runtime and test output is appended synchronously to that log
@@ -115,7 +152,7 @@ yarn tycli:diagnostics --online \
   --allow-long-run \
   --filter ideal-workflows \
   --provider chatgpt-codex \
-  --model gpt-5.6-luna
+  --model gpt-6-luna
 yarn tycli:diagnostics --online \
   --allow-long-run \
   --filter ideal-workflows \
@@ -128,7 +165,7 @@ model misses. Browser diagnostics still use the active browser profile, so this 
 rather than replaces a focused browser run.
 
 The sixth test, **Ideal Workflow Matrix With Luna And Glm**, is an ordinary long-running diagnostic
-on the `/diagnostics` page. It calls the same five functions with `openai/gpt-5.6-luna` and
+on the `/diagnostics` page. It calls the same five functions with `openai/gpt-6-luna` and
 `z-ai/glm-5.3-flash`, keeps the saved browser profile unchanged, and reports all ten results
 together. Each workflow creates and disposes its own isolated Taskyon test core while the page stays
 open. An unexpected task sequence cancels its current workflow immediately; the matrix records that
@@ -163,9 +200,9 @@ node \
 ```
 
 The audit reports ordinary input, cache-read, cache-write, and output tokens when available;
-missing provider telemetry must remain unavailable rather than being reported as zero. Before a
-release that changes OpenAI request construction or usage accounting, run the bounded live check
-with `yarn tycli:diagnostics:release`.
+missing provider telemetry must remain unavailable rather than being reported as zero. The bounded
+live prompt-cache diagnostic is focused L3 coverage for provider request and usage changes; its
+focused command is in the [`tycli` General Agent E2E](tycli-e2e.md) catalog.
 
 The [`tycli` General Agent E2E](tycli-e2e.md) catalog defines the separate interactive
 proof-run protocol, intervention policy, task-tree export, and trace audit used to evaluate

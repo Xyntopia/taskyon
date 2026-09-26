@@ -10,7 +10,11 @@
           <q-btn
             data-cy="run-tests"
             outline
-            label="Run all tests"
+            :label="
+              selectedThroughLevel === null
+                ? 'Run all tests'
+                : `Run through L${selectedThroughLevel}`
+            "
             :disable="isRunning"
             @click="generateReport(state.detailedTests, state.noGuiTests)"
           ></q-btn>
@@ -59,6 +63,17 @@
               class="q-mb-sm"
               label="Filter tests"
               hint="Matches test function names (case-insensitive; ignores spaces and underscores)"
+            />
+            <q-select
+              v-model="selectedThroughLevel"
+              data-cy="diagnostics-run-level"
+              dense
+              filled
+              emit-value
+              map-options
+              :options="runLevelOptions"
+              label="Run level"
+              class="q-mb-sm"
             />
             <div class="text-caption">Available Tests:</div>
             <div
@@ -123,6 +138,7 @@
                         :key="name"
                         type="button"
                         class="diagnostics-test-button"
+                        :title="`Level ${getDiagnosticsRunLevel(name, val)}`"
                         @click="runTests({ [`${name}`]: val }, true, val.requiresLongRun === true)"
                       >
                         {{ name }}
@@ -176,6 +192,12 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '@taskyon/common/modules/diagnosticsRunner'
+import {
+  diagnosticsRunLevels,
+  filterDiagnosticsThroughLevel,
+  getDiagnosticsRunLevel,
+  type DiagnosticsRunLevel,
+} from '@taskyon/common/modules/diagnosticsLevels'
 import { syncRefsWithLocalStorage } from '@taskyon/common/modules/saveState'
 import { copyToClipboard, getEnvironmentInfo } from '@taskyon/common/modules/utils'
 
@@ -198,6 +220,8 @@ const diagnostics = ref<string>('')
 const showPassWordDialog = ref(false)
 const testFinished = ref(false)
 const searchQuery = ref('')
+const selectedThroughLevel = ref<DiagnosticsRunLevel | null>(1)
+const runLevelOptions = [{ value: null, label: 'All levels' }, ...diagnosticsRunLevels]
 const isRunning = ref(false)
 const abortRequested = ref(false)
 const diagnosticsScrollRef = ref<{
@@ -398,13 +422,17 @@ function filterTestRecordByName(source: TestRecord, normalizedNeedle: string): T
 
 const filteredGroupedTestSections = computed(() => {
   const normalizedNeedle = normalizeSearchKey(searchQuery.value)
-  if (!normalizedNeedle) return groupedTestSections
+  if (!normalizedNeedle && selectedThroughLevel.value === null) return groupedTestSections
 
   return groupedTestSections
     .map((section) => {
       const filteredTests = Object.entries(section.tests).reduce<Record<string, TestRecord>>(
         (acc, [groupName, groupTests]) => {
-          const filteredGroup = filterTestRecordByName(groupTests, normalizedNeedle)
+          const matchingNames = filterTestRecordByName(groupTests, normalizedNeedle)
+          const filteredGroup =
+            selectedThroughLevel.value === null
+              ? matchingNames
+              : filterDiagnosticsThroughLevel(matchingNames, selectedThroughLevel.value)
           if (Object.keys(filteredGroup).length > 0) acc[groupName] = filteredGroup
           return acc
         },
@@ -559,7 +587,7 @@ function finishDiagnosticsRun(startTime: number, summary: DiagnosticsSummary) {
 async function runTests(
   tests: Record<string, TaskyonTestFn>,
   details = false,
-  allowLongRun = false,
+  allowLongRun = selectedThroughLevel.value === null || selectedThroughLevel.value >= 3,
 ) {
   if (isRunning.value) return
   beginDiagnosticsRun()
@@ -583,8 +611,18 @@ async function generateReport(details = false, noGui = true) {
   console.log('generating diagnostics report')
 
   // we run this test at the end, because sometimes it just keeps blocking?
-  if (noGui) await runTests({ ...tests, ...modelBasedTests }, details)
-  else await runTests({ ...tests, ...modelBasedTests, ...guiTests }, details)
+  const base = noGui
+    ? { ...tests, ...modelBasedTests }
+    : { ...tests, ...modelBasedTests, ...guiTests }
+  const available =
+    selectedThroughLevel.value === null || selectedThroughLevel.value >= 3
+      ? { ...base, ...experimentalTests }
+      : base
+  const selected =
+    selectedThroughLevel.value === null
+      ? available
+      : filterDiagnosticsThroughLevel(available, selectedThroughLevel.value)
+  await runTests(selected, details)
 }
 
 function downloadReport() {

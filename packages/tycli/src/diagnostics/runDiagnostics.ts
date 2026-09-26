@@ -6,6 +6,14 @@ import {
   type TaskyonTestFn,
   type TestRecord,
 } from '@taskyon/common/modules/diagnosticsRunner'
+import {
+  diagnosticsTestIdentifier,
+  diagnosticsTestMetadata,
+  filterDiagnosticsThroughLevel,
+  getDiagnosticsRunLevel,
+  parseDiagnosticsRunLevel,
+  type DiagnosticsRunLevel,
+} from '@taskyon/common/modules/diagnosticsLevels'
 import { closeDatabases } from '@taskyon/taskyon/db'
 import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -13,7 +21,6 @@ import { basename, join } from 'node:path'
 import process from 'node:process'
 import { resolveCliInvocationDirectory, resolveTaskyonCliStoragePaths } from '../cli/storagePaths'
 import { createDiagnosticsOutput, formatFailedDiagnostics } from './diagnosticsOutput'
-import { diagnosticsTestMetadata, unsupportedModuleFallbacks } from './testMetadata'
 
 const diagnosticsCategories = [
   'standard',
@@ -23,7 +30,6 @@ const diagnosticsCategories = [
   'large-tokens',
   'long-running',
   'model-based',
-  'release',
 ] as const
 
 type DiagnosticsCategory = (typeof diagnosticsCategories)[number]
@@ -38,6 +44,7 @@ type CliOptions = {
   verbose: boolean
   allowLongRun: boolean
   filter: string
+  throughLevel?: DiagnosticsRunLevel
   category?: DiagnosticsCategory
   provider?: string
   model?: string
@@ -70,6 +77,7 @@ type Summary = {
     details: boolean
     verbose: boolean
     category?: DiagnosticsCategory
+    throughLevel?: DiagnosticsRunLevel
     provider?: string
     model?: string
   }
@@ -132,7 +140,10 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === '--json') opts.json = true
     else if (arg === '--verbose') opts.verbose = true
     else if (arg === '--allow-long-run') opts.allowLongRun = true
-    else if (arg === '--category') opts.category = parseCategory(args[++i])
+    else if (arg === '--through-level') opts.throughLevel = parseDiagnosticsRunLevel(args[++i])
+    else if (arg.startsWith('--through-level=')) {
+      opts.throughLevel = parseDiagnosticsRunLevel(arg.slice('--through-level='.length))
+    } else if (arg === '--category') opts.category = parseCategory(args[++i])
     else if (arg.startsWith('--category=')) {
       opts.category = parseCategory(arg.slice('--category='.length))
     } else if (arg === '--filter') opts.filter = args[++i] ?? ''
@@ -186,17 +197,6 @@ function matchesFilter(value: string, filter: string): boolean {
   return value.toLowerCase().includes(filter.trim().toLowerCase())
 }
 
-function testIdentifier(name: string): string {
-  const normalizedName = name.replace(/^Test\s+/i, '')
-  const camelName = normalizedName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/ +([a-z0-9])/g, (_, chr: string) => chr.toUpperCase())
-  if (camelName.startsWith('test') && camelName.length > 4) return camelName
-  return camelName.replace(/^([a-z])/, (_, chr: string) => `test${chr.toUpperCase()}`)
-}
-
 function testDisplayName(name: string): string {
   return name
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -223,7 +223,7 @@ async function testFileMatchesFilter(file: TestFileEntry, filter: string): Promi
     (name) =>
       matchesFilter(name, filter) ||
       matchesFilter(testDisplayName(name), filter) ||
-      matchesFilter(testIdentifier(name), filter),
+      matchesFilter(diagnosticsTestIdentifier(name), filter),
   )
 }
 
@@ -290,33 +290,10 @@ async function loadTestModules(filter: string) {
   }
 
   for (const file of selectedFiles) {
-    try {
-      const mod = await import(file.moduleUrl.href)
-      modules.push({
-        sourcePath: file.sourcePath,
-        mod,
-      })
-    } catch (error) {
-      const fallback = unsupportedModuleFallbacks[basename(file.entry)]
-      if (!fallback) throw error
-
-      const mod = Object.fromEntries(
-        fallback.tests.map(({ exportName, experimental }) => {
-          const fn: TaskyonTestFn = () => ({
-            skipped: true,
-            reason: fallback.reason,
-            testId: exportName,
-          })
-          if (experimental) fn.experimental = true
-          return [exportName, fn]
-        }),
-      )
-
-      modules.push({
-        sourcePath: file.sourcePath,
-        mod,
-      })
-    }
+    modules.push({
+      sourcePath: file.sourcePath,
+      mod: await import(file.moduleUrl.href),
+    })
   }
 
   return { modules, discoveredFiles }
@@ -326,17 +303,27 @@ function filterTests(
   tests: TestRecord,
   filter: string,
   testsByFolder: Record<string, TestRecord>,
+  testsByFile: Record<string, TestRecord>,
 ): TestRecord {
   if (!filter.trim()) return tests
   const normalized = filter.trim().toLowerCase()
-  const folderTests = new Set(
-    Object.entries(testsByFolder)
-      .filter(([folder]) => folder.toLowerCase().includes(normalized))
+  const matchingSourceTests = new Set(
+    [...Object.entries(testsByFolder), ...Object.entries(testsByFile)]
+      .filter(([source]) => source.toLowerCase().includes(normalized))
       .flatMap(([, groupedTests]) => Object.keys(groupedTests)),
   )
+  const compactFilter = normalized.replace(/[\s_]+/g, '')
+  const matchesName = (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/[\s_]+/g, '')
+      .includes(compactFilter)
   return Object.fromEntries(
     Object.entries(tests).filter(
-      ([name]) => name.toLowerCase().includes(normalized) || folderTests.has(name),
+      ([name]) =>
+        matchesName(name) ||
+        matchesName(diagnosticsTestIdentifier(name)) ||
+        matchingSourceTests.has(name),
     ),
   )
 }
@@ -345,7 +332,7 @@ function filterLargeTokenTests(tests: TestRecord, includeLargeTokens: boolean): 
   if (includeLargeTokens) return tests
   return Object.fromEntries(
     Object.entries(tests).filter(([name]) => {
-      const metadata = diagnosticsTestMetadata[testIdentifier(name)]
+      const metadata = diagnosticsTestMetadata[diagnosticsTestIdentifier(name)]
       return !metadata?.requiresLargeTokens
     }),
   )
@@ -358,21 +345,20 @@ function filterTestsByCategory(
   if (!category) return tests
   return Object.fromEntries(
     Object.entries(tests).filter(([name, fn]) => {
-      const metadata = diagnosticsTestMetadata[testIdentifier(name)]
+      const metadata = diagnosticsTestMetadata[diagnosticsTestIdentifier(name)]
       if (category === 'standard') return !fn.experimental && !fn.modelBased
       if (category === 'experimental') return fn.experimental === true
       if (category === 'network') return metadata?.requiresNetwork === true
       if (category === 'authenticated') return metadata?.requiresAuth === true
       if (category === 'large-tokens') return metadata?.requiresLargeTokens === true
       if (category === 'long-running') return metadata?.requiresLongRun === true
-      if (category === 'release') return metadata?.release === true
       return fn.modelBased === true || metadata?.modelBased === true
     }),
   )
 }
 
 function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | null {
-  const id = testIdentifier(name)
+  const id = diagnosticsTestIdentifier(name)
   const metadata = diagnosticsTestMetadata[id]
   if (!metadata) return null
 
@@ -384,7 +370,7 @@ function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | 
     }
   }
 
-  if (metadata.requiresLargeTokens && !opts.includeLargeTokens) {
+  if (metadata.requiresLargeTokens && !includesLargeTokenTests(opts)) {
     return {
       skipped: true,
       reason: 'Requires larger token usage. Re-run with --large-tokens to enable.',
@@ -393,6 +379,14 @@ function shouldSkipTest(name: string, opts: CliOptions): WrappedSkippedResult | 
   }
 
   return null
+}
+
+function includesLargeTokenTests(opts: CliOptions): boolean {
+  return opts.includeLargeTokens || (opts.throughLevel !== undefined && opts.throughLevel >= 3)
+}
+
+function allowsLongRun(opts: CliOptions): boolean {
+  return opts.allowLongRun || (opts.throughLevel !== undefined && opts.throughLevel >= 3)
 }
 
 function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
@@ -404,7 +398,7 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
 
         const nextContext: DiagnosticsTestContext = {
           ...(ctx ?? {}),
-          allowLongRun: opts.allowLongRun,
+          allowLongRun: allowsLongRun(opts),
         }
         return await Promise.resolve(fn(nextContext))
       }
@@ -412,11 +406,15 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
       if (fn.setup !== undefined) wrapped.setup = fn.setup
       if (fn.timeoutMs !== undefined) wrapped.timeoutMs = fn.timeoutMs
       const requiresLongRun =
-        fn.requiresLongRun ?? diagnosticsTestMetadata[testIdentifier(name)]?.requiresLongRun
+        fn.requiresLongRun ??
+        diagnosticsTestMetadata[diagnosticsTestIdentifier(name)]?.requiresLongRun
       if (requiresLongRun !== undefined) wrapped.requiresLongRun = requiresLongRun
-      const modelBased = fn.modelBased ?? diagnosticsTestMetadata[testIdentifier(name)]?.modelBased
+      const modelBased =
+        fn.modelBased ?? diagnosticsTestMetadata[diagnosticsTestIdentifier(name)]?.modelBased
       if (modelBased !== undefined) wrapped.modelBased = modelBased
-      if (diagnosticsTestMetadata[testIdentifier(name)]?.requiresAuth) wrapped.requiresAuth = true
+      if (diagnosticsTestMetadata[diagnosticsTestIdentifier(name)]?.requiresAuth) {
+        wrapped.requiresAuth = true
+      }
       return [name, wrapped]
     }),
   )
@@ -424,9 +422,10 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
 
 function listTests(tests: TestRecord, experimentalTests: TestRecord) {
   const render = (name: string, kind: 'default' | 'experimental') => {
-    const id = testIdentifier(name)
+    const id = diagnosticsTestIdentifier(name)
     const metadata = diagnosticsTestMetadata[id]
     const tags = [
+      `L${getDiagnosticsRunLevel(name, kind === 'default' ? tests[name]! : experimentalTests[name]!)}`,
       kind === 'experimental' ? 'experimental' : '',
       metadata?.requiresNetwork ? 'network' : '',
       metadata?.requiresAuth ? 'auth' : '',
@@ -505,6 +504,7 @@ function buildSummary(
     durationMs,
     options: {
       filter: opts.filter,
+      ...(opts.throughLevel !== undefined ? { throughLevel: opts.throughLevel } : {}),
       includeExperimental: opts.includeExperimental,
       includeLargeTokens: opts.includeLargeTokens,
       online: opts.online,
@@ -535,22 +535,32 @@ async function main(): Promise<number> {
       filterTestsByCategory(
         filterLargeTokenTests(
           { ...registry.tests, ...registry.modelBasedTests },
-          opts.includeLargeTokens,
+          includesLargeTokenTests(opts),
         ),
         opts.category,
       ),
       opts.filter,
       registry.testsByFolder,
+      registry.testsByFile,
     )
+    const levelDefaultTests =
+      opts.throughLevel === undefined
+        ? defaultTests
+        : filterDiagnosticsThroughLevel(defaultTests, opts.throughLevel)
     const experimentalTests = filterTests(
       filterTestsByCategory(registry.experimentalTests, opts.category),
       opts.filter,
       registry.testsByFolder,
+      registry.testsByFile,
     )
+    const levelExperimentalTests =
+      opts.throughLevel === undefined
+        ? experimentalTests
+        : filterDiagnosticsThroughLevel(experimentalTests, opts.throughLevel)
     console.log(`Discovered files: ${discoveredFiles.length}`)
     for (const file of discoveredFiles) console.log(`- ${file}`)
     console.log('')
-    listTests(defaultTests, experimentalTests)
+    listTests(levelDefaultTests, levelExperimentalTests)
     return 0
   }
 
@@ -585,17 +595,23 @@ async function main(): Promise<number> {
     const { modules, discoveredFiles } = await loadTestModules(opts.filter)
     const registry = buildDiagnosticsRegistry({ modules })
 
-    const selectedSource = opts.includeExperimental
-      ? { ...registry.tests, ...registry.modelBasedTests, ...registry.experimentalTests }
-      : { ...registry.tests, ...registry.modelBasedTests }
-    const filtered = filterTests(
+    const selectedSource =
+      opts.includeExperimental || (opts.throughLevel !== undefined && opts.throughLevel >= 3)
+        ? { ...registry.tests, ...registry.modelBasedTests, ...registry.experimentalTests }
+        : { ...registry.tests, ...registry.modelBasedTests }
+    const filteredByName = filterTests(
       filterTestsByCategory(
-        filterLargeTokenTests(selectedSource, opts.includeLargeTokens),
+        filterLargeTokenTests(selectedSource, includesLargeTokenTests(opts)),
         opts.category,
       ),
       opts.filter,
       registry.testsByFolder,
+      registry.testsByFile,
     )
+    const filtered =
+      opts.throughLevel === undefined
+        ? filteredByName
+        : filterDiagnosticsThroughLevel(filteredByName, opts.throughLevel)
     const wrapped = wrapTests(filtered, opts)
     const selectedNames = Object.keys(wrapped)
 
@@ -603,7 +619,8 @@ async function main(): Promise<number> {
     console.log(
       `[tycli-diagnostics] selected ${selectedNames.length} tests` +
         (opts.filter ? ` (filter="${opts.filter}")` : '') +
-        (opts.category ? ` (category="${opts.category}")` : ''),
+        (opts.category ? ` (category="${opts.category}")` : '') +
+        (opts.throughLevel !== undefined ? ` (through-level=${opts.throughLevel})` : ''),
     )
 
     if (selectedNames.length === 0) {
@@ -649,7 +666,7 @@ async function main(): Promise<number> {
           Promise.reject(new Error('Native Python requires interactive approval')),
       }),
       ...(runtime.taskyonAuth ? { tyauth: runtime.taskyonAuth } : {}),
-      allowLongRun: opts.allowLongRun,
+      allowLongRun: allowsLongRun(opts),
       selectedApi: runtime.selectedApi,
       llmSettings: runtime.llmState.settings,
       toolchainConfig: getSelectedToolchainConfig(runtime.llmState),

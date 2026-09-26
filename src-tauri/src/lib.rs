@@ -21,6 +21,7 @@ struct RunConfig {
     diagnostics_detailed: bool,
     diagnostics_no_gui: bool,
     diagnostics_filter: Option<String>,
+    diagnostics_through_level: Option<String>,
     diagnostics_model: Option<String>,
     diagnostics_allow_long_run: bool,
     diagnostics_stdout: bool,
@@ -126,6 +127,7 @@ fn detect_run_config() -> RunConfig {
         diagnostics_detailed: args.iter().any(|arg| arg == "--diagnostics-detailed"),
         diagnostics_no_gui: !args.iter().any(|arg| arg == "--diagnostics-gui"),
         diagnostics_filter,
+        diagnostics_through_level: arg_value(&args, "--diagnostics-through-level"),
         diagnostics_model: arg_value(&args, "--diagnostics-model"),
         diagnostics_allow_long_run: has_arg(&args, "--diagnostics-allow-long-run"),
         diagnostics_stdout: run_diagnostics
@@ -149,6 +151,10 @@ fn headless_url(config: &RunConfig) -> String {
         if let Some(filter) = config.diagnostics_filter.as_deref() {
             url.push_str("&testFilter=");
             url.push_str(&url_encode_query_value(filter));
+        }
+        if let Some(level) = config.diagnostics_through_level.as_deref() {
+            url.push_str("&throughLevel=");
+            url.push_str(&url_encode_query_value(level));
         }
         if config.diagnostics_allow_long_run {
             url.push_str("&allowLongRun=1");
@@ -511,6 +517,7 @@ mod tests {
             diagnostics_detailed: false,
             diagnostics_no_gui: true,
             diagnostics_filter: None,
+            diagnostics_through_level: None,
             diagnostics_model: None,
             diagnostics_allow_long_run: false,
             diagnostics_stdout: false,
@@ -559,6 +566,14 @@ mod tests {
         cfg.run_diagnostics = true;
         cfg.diagnostics_allow_long_run = true;
         assert!(headless_url(&cfg).contains("allowLongRun=1"));
+    }
+
+    #[test]
+    fn headless_diagnostics_can_select_a_run_level() {
+        let mut cfg = test_run_config();
+        cfg.run_diagnostics = true;
+        cfg.diagnostics_through_level = Some("3".to_string());
+        assert!(headless_url(&cfg).contains("throughLevel=3"));
     }
 
     #[test]

@@ -194,14 +194,18 @@ After every finished experiment, audit the trace directory before calling the ru
   project command a human should run to show the result, plus any local URLs or files needed to
   inspect whether the project task was successful and the specific behavior to try manually.
 
-Before releases that change OpenAI request construction or trace usage accounting, run the bounded
-live diagnostic with the saved tycli login:
+For changes to OpenAI request construction or trace usage accounting, the focused L3 diagnostic
+provides a bounded live check with the saved tycli login:
 
 ```bash
-yarn tycli:diagnostics:release
+yarn tycli:diagnostics \
+  --filter prompt_cache_provider \
+  --through-level 3 --online \
+  --provider chatgpt-codex \
+  --model gpt-6-luna
 ```
 
-This uses `gpt-5.6-luna` and two small repeated requests. Normal CI keeps the deterministic cache
+This uses `gpt-6-luna` and two small repeated requests. Normal CI keeps the deterministic cache
 key, breakpoint, trace, and audit tests; the live check verifies provider telemetry and actual
 reuse without turning a transient provider miss into a deterministic unit-test failure.
 

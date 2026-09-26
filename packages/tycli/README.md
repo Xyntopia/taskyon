@@ -86,7 +86,7 @@ yarn tycli
 yarn tycli:diagnostics
 yarn tycli:diagnostics:list
 yarn tycli:diagnostics:modelica
-yarn tycli:diagnostics:release
+yarn tycli:diagnostics --through-level 1
 yarn tycli:discovery-fixture
 ```
 
