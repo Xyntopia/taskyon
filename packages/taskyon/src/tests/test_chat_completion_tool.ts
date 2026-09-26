@@ -1449,11 +1449,11 @@ export const testChatCompletionOpenAIWebSearchIsAvailableWithoutBeingForced = as
         inputSchema: jsonSchema({ type: 'object', properties: {} }),
       },
     },
-    selectedModel: 'gpt-5.6-luna',
+    selectedModel: 'gpt-6-luna',
     api: {
       provider: 'openai',
       name: 'openai',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
       networkTransport: 'auto',
@@ -1476,11 +1476,11 @@ export const testChatCompletionOpenAIWebSearchCanBeRequired = async () => {
   const request = await buildChatProviderRequest({
     messages: [{ role: 'user', content: 'Search this now.' }],
     tools: {},
-    selectedModel: 'gpt-5.6-luna',
+    selectedModel: 'gpt-6-luna',
     api: {
       provider: 'openai',
       name: 'openai',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
       networkTransport: 'auto',
@@ -1590,11 +1590,11 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
       { role: 'user', content: 'Hello.' },
     ],
     tools: {},
-    selectedModel: 'gpt-5.6-luna',
+    selectedModel: 'gpt-6-luna',
     api: {
       provider: 'chatgpt-codex',
       name: 'chatgpt-codex',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       baseURL: 'https://example.test/v1',
       streamSupport: true,
       networkTransport: 'auto',
@@ -1615,7 +1615,7 @@ export const testChatCompletionCodexRequestMovesLeadingSystemPromptToInstruction
   )
   assert(
     request.providerOptions?.openai?.promptCacheKey ===
-      'taskyon-chatgpt-codex-gpt-5.6-luna-root-task',
+      'taskyon-chatgpt-codex-gpt-6-luna-root-task',
     'Expected the cache namespace to follow the provider, model, and task-tree root',
   )
   const promptCacheOptions = request.providerOptions?.openai?.promptCacheOptions
@@ -1645,11 +1645,11 @@ export const testChatCompletionCodexUsesInjectedProviderFetch = async () => {
     const request = await buildChatProviderRequest({
       messages: [{ role: 'user', content: 'Hello.' }],
       tools: {},
-      selectedModel: 'gpt-5.6-luna',
+      selectedModel: 'gpt-6-luna',
       api: {
         provider: 'chatgpt-codex',
         name: 'chatgpt-codex',
-        model: 'gpt-5.6-luna',
+        model: 'gpt-6-luna',
         baseURL: 'https://example.test/v1',
         streamSupport: true,
         networkTransport: 'auto',
@@ -1796,11 +1796,11 @@ export const testChatCompletionCacheKeyAndBreakpointsFollowTaskTree = async () =
         { role: 'user' as const, content: finalPrompt },
       ],
       tools: {},
-      selectedModel: 'gpt-5.6-luna',
+      selectedModel: 'gpt-5.6-sol',
       api: {
         provider: 'openai' as const,
         name: 'openai',
-        model: 'gpt-5.6-luna',
+        model: 'gpt-5.6-sol',
         baseURL: 'https://example.test/v1',
         streamSupport: true,
         networkTransport: 'auto',

@@ -18,7 +18,7 @@ const freeTaskyonModelIds = new Set([
   'z-ai/glm-5.3-flash',
   'qwen/qwen3.8-flash',
   'deepseek/deepseek-v4-flash-0731',
-  'openai/gpt-5.6-luna',
+  'openai/gpt-6-luna',
 ])
 
 const enableExpertMode = async (page: Page) => {

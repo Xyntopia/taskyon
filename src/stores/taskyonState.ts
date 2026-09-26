@@ -946,7 +946,11 @@ const useApiManagement = (
     if (!currentTyKey || currentTyKey === freeKey) return false
     try {
       const name = parseJwt(currentTyKey)?.name
-      return name === 'taskyon.space:free_key_2025080' || name === 'taskyon.space:free_key_20260125'
+      return (
+        name === 'taskyon.space:free_key_2025080' ||
+        name === 'taskyon.space:free_key_20260125' ||
+        name === 'taskyon.space:free_key_20260915'
+      )
     } catch {
       return false
     }

@@ -88,7 +88,7 @@ export const testChatCompletionRetryDelayReportsProgressAndReplaysExactCall = as
   let now = 10_000
   const progress: ToolProgress[] = []
   const originalArguments = {
-    model: 'gpt-5.6-luna',
+    model: 'gpt-6-luna',
     allowedTools: ['taskPlanner'],
     prependSystemPrompts: ['stable instructions'],
   }
@@ -194,7 +194,7 @@ export const testChatCompletionRetryDelayStopsImmediatelyWhenCancelled = async (
       created_at: 1,
       content: {
         type: 'functioncall',
-        data: { name: 'chatCompletion', arguments: { model: 'gpt-5.6-luna' } },
+        data: { name: 'chatCompletion', arguments: { model: 'gpt-6-luna' } },
       },
     },
   ]

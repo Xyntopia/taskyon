@@ -187,7 +187,7 @@ format are documented in `public/docs/developer/diagnostics.md`. A passing test 
 CLI harness does not prove that browser chat used the same pinned tools or prompt settings.
 
 For the five model-based ideal-workflow diagnostics, normally run the focused CLI group with both
-`gpt-5.6-luna` (`chatgpt-codex`) and `z-ai/glm-5.3-flash` (`taskyon`). The exact commands are in
+`gpt-6-luna` (`chatgpt-codex`) and `z-ai/glm-5.3-flash` (`taskyon`). The exact commands are in
 `public/docs/developer/diagnostics.md`. Keep browser runs tied to their active profile; do not
 silently switch its provider or credentials.
 

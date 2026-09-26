@@ -20,7 +20,7 @@ type IdealWorkflowResult = {
   error?: string
 }
 
-const MATRIX_MODELS = ['openai/gpt-5.6-luna', 'z-ai/glm-5.3-flash'] as const
+const MATRIX_MODELS = ['openai/gpt-6-luna', 'z-ai/glm-5.3-flash'] as const
 const MATRIX_CASE_TIMEOUT_MS = 90_000
 const MATRIX_TIMEOUT_MS = 300_000
 
