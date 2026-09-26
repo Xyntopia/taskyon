@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["./**/*.ts", "./**/*.vue"],
+  "exclude": [
+    "./**/node_modules/**",
+    "./**/dist/**",
+    "./**/pkg/**",
+    "./rumoca/**",
+    "./yatra/**",
+    "./maplibre/**",
+    "./protocol/**",
+    "./sdk/**",
+    "./secure-tunnel/**",
+    "./taskyon/**",
+    "./taskyon-mcp/**",
+    "./taskyon-vscode/**",
+    "./tycli/**",
+    "./tyclient/**"
+  ]
+}
