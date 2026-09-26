@@ -322,7 +322,6 @@ const destroyMap = () => {
     m.remove()
     map.value = null
   }
-  pmtilesRuntime.dispose()
 }
 
 const zoomTo = (lat: number, lng: number, zoom?: number) => {

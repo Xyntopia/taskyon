@@ -89,6 +89,7 @@ const baseIds = ref<string[]>([])
 const manifestPicker = ref<HTMLInputElement>()
 const buildingDocumentation = ref(true)
 const loadError = ref('')
+let latestLoadId = 0
 
 const baseOptions = computed(() => baseIds.value.map((id) => ({ label: id, value: id })))
 const initialDocumentId = computed(() => {
@@ -102,7 +103,10 @@ const initialDocumentId = computed(() => {
 })
 
 const loadBase = async () => {
-  if (!props.bases) {
+  const loadId = ++latestLoadId
+  const bases = props.bases
+  const baseId = props.baseId
+  if (!bases) {
     documents.value = []
     buildingDocumentation.value = true
     return
@@ -111,9 +115,12 @@ const loadBase = async () => {
   buildingDocumentation.value = true
   loadError.value = ''
   try {
-    await props.prepareBase?.(props.baseId)
-    documents.value = await props.bases.load(props.baseId)
-    baseIds.value = (await props.bases.list()).map((base) => base.id)
+    await props.prepareBase?.(baseId)
+    const loadedDocuments = await bases.load(baseId)
+    const loadedBaseIds = (await bases.list()).map((base) => base.id)
+    if (loadId !== latestLoadId) return
+    documents.value = loadedDocuments
+    baseIds.value = loadedBaseIds
     const canonicalDocumentId = props.requestedDocumentPath
       ? resolveDocumentationDocumentId(documents.value, props.requestedDocumentPath)
       : documents.value[0]?.id
@@ -121,10 +128,11 @@ const loadBase = async () => {
       emit('canonicalize', canonicalDocumentId)
     }
   } catch (error) {
+    if (loadId !== latestLoadId) return
     documents.value = []
     loadError.value = error instanceof Error ? error.message : String(error)
   } finally {
-    buildingDocumentation.value = false
+    if (loadId === latestLoadId) buildingDocumentation.value = false
   }
 }
 

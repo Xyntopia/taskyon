@@ -51,29 +51,27 @@ export type PmtilesSourceFactory = (url: string) => Source | string
 
 export interface TaskyonPmtilesRuntime {
   setup: () => void
-  dispose: () => void
   register: (source: Source | string) => PMTiles
 }
 
+// MapLibre protocols are page-global. Keep the handler for in-flight requests after map teardown.
+let sharedProtocol: Protocol | undefined
+
 export const createTaskyonPmtilesRuntime = (): TaskyonPmtilesRuntime => {
-  const protocol = new Protocol()
-  let installed = false
+  const setup = (): Protocol => {
+    if (!sharedProtocol) {
+      sharedProtocol = new Protocol()
+      maplibregl.setWorkerUrl(mapLibreWorkerUrl)
+      maplibregl.addProtocol('pmtiles', sharedProtocol.tile)
+    }
+    return sharedProtocol
+  }
 
   return {
-    setup: () => {
-      if (installed) return
-      maplibregl.setWorkerUrl(mapLibreWorkerUrl)
-      maplibregl.addProtocol('pmtiles', protocol.tile)
-      installed = true
-    },
-    dispose: () => {
-      if (!installed) return
-      maplibregl.removeProtocol('pmtiles')
-      installed = false
-    },
+    setup,
     register: (source) => {
       const pmtiles = new PMTiles(source)
-      protocol.add(pmtiles)
+      setup().add(pmtiles)
       return pmtiles
     },
   }
