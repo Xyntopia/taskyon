@@ -1,4 +1,5 @@
 export * from '@taskyon/runtime-browser'
+export { makePageIOTool, createPageIOSessionStore } from './pageIO'
 export { TASKYON_WSS_PROXY_URL } from '@taskyon/taskyon'
 
 export {

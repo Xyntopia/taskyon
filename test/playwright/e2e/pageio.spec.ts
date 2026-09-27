@@ -4,12 +4,16 @@ import type { FunctionArguments } from '@taskyon/tyclient'
 type PageIOTestBridge = {
   call: (args: FunctionArguments) => Promise<unknown>
   callWithoutScreenshot: (args: FunctionArguments) => Promise<unknown>
+  callReadOnly: (args: FunctionArguments) => Promise<unknown>
+  callGuide: (args: FunctionArguments) => Promise<unknown>
   consentCalls: () => number
   screenshotCalls: () => number
   setConsent: (next: boolean) => void
   storedScreenshots: () => unknown[]
   screenshotActions: () => unknown
   actionsWithoutScreenshot: () => unknown
+  readOnlyActions: () => unknown
+  guideActions: () => unknown
 }
 type PageIOBridgeReadMethod =
   | 'consentCalls'
@@ -17,6 +21,8 @@ type PageIOBridgeReadMethod =
   | 'storedScreenshots'
   | 'screenshotActions'
   | 'actionsWithoutScreenshot'
+  | 'readOnlyActions'
+  | 'guideActions'
 
 declare global {
   interface Window {
@@ -134,5 +140,96 @@ test.describe('pageIO browser tool', () => {
     expect(await bridgeValue(page, 'consentCalls')).toBe(2)
     expect(await bridgeValue(page, 'screenshotCalls')).toBe(1)
     expect(await bridgeValue(page, 'storedScreenshots')).toHaveLength(1)
+  })
+
+  test('inspection mode exposes only bounded, read-only page guidance', async ({ page }) => {
+    const actions = readEnum(await bridgeValue(page, 'readOnlyActions'))
+    expect(actions).toEqual(['where', 'list'])
+    const where = await page.evaluate(
+      async () => await window.__pageIOTest?.callReadOnly({ action: 'where' }),
+    )
+    expect(where).toMatchObject({ pathname: '/pageio-test', title: expect.any(String) })
+    expect(where).not.toHaveProperty('search')
+    expect(where).not.toHaveProperty('hash')
+    await page.locator(dataTestIdSelector('pageio-button')).evaluate((button) => {
+      button.setAttribute('aria-label', 'A'.repeat(300))
+    })
+    const listed = await page.evaluate(
+      async () => await window.__pageIOTest?.callReadOnly({ action: 'list', limit: 1000 }),
+    )
+    expect(listed).toMatchObject({ elements: expect.any(Array) })
+    expect((listed as { elements: unknown[] }).elements.length).toBeLessThanOrEqual(32)
+    expect(
+      (listed as { elements: { selector: string; label?: string }[] }).elements.find(
+        (element) => element.selector === '[data-testid="pageio-button"]',
+      )?.label?.length,
+    ).toBe(160)
+    await expect(
+      page.evaluate(
+        async () =>
+          await window.__pageIOTest?.callReadOnly({
+            action: 'click',
+            selector: '[data-testid="pageio-button"]',
+          }),
+      ),
+    ).rejects.toThrow('not available')
+    await expect(page.locator(dataTestIdSelector('pageio-result'))).toContainText('|0')
+  })
+
+  test('guide mode marks one visible control and restores its original outline', async ({
+    page,
+  }) => {
+    expect(readEnum(await bridgeValue(page, 'guideActions'))).toEqual([
+      'where',
+      'list',
+      'mark',
+      'clearMark',
+    ])
+    const button = page.locator(dataTestIdSelector('pageio-button'))
+    await button.evaluate((element) => {
+      element.style.setProperty('outline', '1px dotted red')
+    })
+    const originalOutline = await button.evaluate((element) =>
+      element.style.getPropertyValue('outline'),
+    )
+
+    await expect(
+      page.evaluate(
+        async () =>
+          await window.__pageIOTest?.callGuide({
+            action: 'mark',
+            selector: '[data-testid="pageio-button"]',
+          }),
+      ),
+    ).resolves.toMatchObject({ marked: '[data-testid="pageio-button"]' })
+    await expect(button).toHaveCSS('outline-style', 'solid')
+    await expect(page.locator(dataTestIdSelector('pageio-result'))).toContainText('|0')
+
+    await expect(
+      page.evaluate(async () => await window.__pageIOTest?.callGuide({ action: 'clearMark' })),
+    ).resolves.toMatchObject({ cleared: true })
+    expect(await button.evaluate((element) => element.style.getPropertyValue('outline'))).toBe(
+      originalOutline,
+    )
+  })
+
+  test('guide mode cannot mark hidden elements or click controls', async ({ page }) => {
+    const buttonSelector = dataTestIdSelector('pageio-button')
+    await expect(
+      page.evaluate(
+        async (selector) => await window.__pageIOTest?.callGuide({ action: 'click', selector }),
+        buttonSelector,
+      ),
+    ).rejects.toThrow('not available')
+    await page.locator(buttonSelector).evaluate((element) => {
+      element.style.display = 'none'
+    })
+    await expect(
+      page.evaluate(
+        async (selector) => await window.__pageIOTest?.callGuide({ action: 'mark', selector }),
+        buttonSelector,
+      ),
+    ).rejects.toThrow('not visible')
+    await expect(page.locator(dataTestIdSelector('pageio-result'))).toContainText('|0')
   })
 })

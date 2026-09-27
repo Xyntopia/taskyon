@@ -4523,6 +4523,7 @@ __metadata:
     "@taskyon/runtime-browser": "workspace:*"
     "@taskyon/taskyon": "workspace:*"
     "@taskyon/tyclient": "workspace:*"
+    json-schema-to-ts: "npm:^3.1.1"
     zod: "npm:^4.0.0"
   languageName: unknown
   linkType: soft

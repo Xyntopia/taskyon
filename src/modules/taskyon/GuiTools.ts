@@ -15,7 +15,7 @@ import { mapSearchTool } from '@taskyon/ui/gis/mapSearchTool'
 import { overpassMapTool } from '@taskyon/ui/gis/overpassMapTool'
 import { tauriLocalTools } from './TauriLocalTools'
 import ClarificationQuestionsDialog from 'components/taskyon/ClarificationQuestionsDialog.vue'
-import { makePageIOTool } from './PageIOTool'
+import { makePageIOTool } from '@taskyon/browser-sdk'
 
 export const simpleDialogSchema = {
   $id: 'SimpleQDialogOptions',

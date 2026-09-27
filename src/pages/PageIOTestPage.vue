@@ -46,17 +46,21 @@ import {
   type ClientToolContext,
   type FunctionArguments,
 } from '@taskyon/tyclient'
-import { createPageIOSessionStore, makePageIOTool } from 'src/modules/taskyon/PageIOTool'
+import { createPageIOSessionStore, makePageIOTool } from '@taskyon/browser-sdk'
 
 type PageIOTestBridge = {
   call: (args: FunctionArguments) => Promise<unknown>
   callWithoutScreenshot: (args: FunctionArguments) => Promise<unknown>
+  callReadOnly: (args: FunctionArguments) => Promise<unknown>
+  callGuide: (args: FunctionArguments) => Promise<unknown>
   consentCalls: () => number
   screenshotCalls: () => number
   setConsent: (next: boolean) => void
   storedScreenshots: () => unknown[]
   screenshotActions: () => unknown
   actionsWithoutScreenshot: () => unknown
+  readOnlyActions: () => unknown
+  guideActions: () => unknown
 }
 
 declare global {
@@ -104,6 +108,8 @@ const screenshotTool = makePageIOTool({
   },
 })
 const plainTool = makePageIOTool()
+const readOnlyTool = makePageIOTool({ mode: 'inspect' })
+const guideTool = makePageIOTool({ mode: 'guide' })
 
 const callTool = async (tool: ReturnType<typeof makePageIOTool>, args: FunctionArguments) => {
   if (!tool.function) throw new Error('pageIO test tool has no function')
@@ -123,6 +129,8 @@ const actionProperty = (tool: ReturnType<typeof makePageIOTool>): unknown => {
 window.__pageIOTest = {
   call: (args) => callTool(screenshotTool, args),
   callWithoutScreenshot: (args) => callTool(plainTool, args),
+  callReadOnly: (args) => callTool(readOnlyTool, args),
+  callGuide: (args) => callTool(guideTool, args),
   consentCalls: () => consentCallCount,
   screenshotCalls: () => screenshotCallCount,
   setConsent: (next) => {
@@ -131,6 +139,8 @@ window.__pageIOTest = {
   storedScreenshots: () => store.list(),
   screenshotActions: () => actionProperty(screenshotTool),
   actionsWithoutScreenshot: () => actionProperty(plainTool),
+  readOnlyActions: () => actionProperty(readOnlyTool),
+  guideActions: () => actionProperty(guideTool),
 }
 </script>
 
