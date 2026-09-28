@@ -264,6 +264,22 @@ export async function runCliE2eSession(args: {
 
 runCliE2eSession.helper = true
 
+export const testCliE2eAcceptedOutputWaitsForChildExit = async () => {
+  const result = await runCliE2eSession({
+    testName: 'accepted-output-child-exit',
+    runCommand:
+      "node -e \"process.stdout.write('READY'); const timer = setInterval(() => {}, 1000); process.on('SIGTERM', () => { clearInterval(timer); setTimeout(() => { process.stdout.write('CLOSED'); process.exit(0) }, 75) })\"",
+    runner: 'pipe',
+    isolateHome: false,
+    steps: [{ waitFor: 'READY', input: '' }],
+    acceptOutputAsExit: 'READY',
+    timeoutMs: 5_000,
+  })
+  if (result.code !== 0 || !result.output.includes('CLOSED')) {
+    throw new Error('Accepted output must wait until the stopped child closes.')
+  }
+}
+
 async function withMockOverpassServer<T>(run: (url: string) => Promise<T>): Promise<T> {
   const server = createServer((req, res) => {
     if (req.method !== 'POST') {
@@ -346,6 +362,7 @@ async function runSpawnedSession(args: {
 
     let output = ''
     let done = false
+    let acceptedOutputAsExit = false
     let stepsCompleted = false
     let closedCode: number | null = null
     const recordSession = (code: number | null) => {
@@ -372,17 +389,14 @@ async function runSpawnedSession(args: {
       if (!stepsCompleted) return
       done = true
       clearTimeout(timer)
-      recordSession(code)
-      resolve({ code, output })
+      recordSession(acceptedOutputAsExit ? 0 : code)
+      resolve({ code: acceptedOutputAsExit ? 0 : code, output })
     }
     const tryAcceptOutputAsExit = () => {
-      if (done || !stepsCompleted || closedCode !== null) return
+      if (done || acceptedOutputAsExit || !stepsCompleted || closedCode !== null) return
       if (!acceptOutputAsExit || !output.includes(acceptOutputAsExit)) return
+      acceptedOutputAsExit = true
       child.kill('SIGTERM')
-      done = true
-      clearTimeout(timer)
-      recordSession(0)
-      resolve({ code: 0, output })
     }
 
     child.stdout.on('data', (chunk) => {
@@ -448,7 +462,7 @@ async function runSpawnedSession(args: {
       await delay(WAIT_AFTER_STEPS_MS)
       stepsCompleted = true
       tryAcceptOutputAsExit()
-      if (done) return
+      if (done || acceptedOutputAsExit) return
       child.stdin.end()
       if (closedCode !== null) {
         done = true

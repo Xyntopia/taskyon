@@ -4,6 +4,7 @@ import { testCodexOauthCliUsesBrowserWorkspaceWithoutSecondPrompt as codexWorksp
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
 import {
   runCliE2eSession,
+  testCliE2eAcceptedOutputWaitsForChildExit as runCliE2eAcceptedOutputWaitsForChildExit,
   testTaskRendererDoesNotPrintTransientWorkerProgress as runTaskRendererDoesNotPrintTransientWorkerProgress,
   testTaskRendererHidesHiddenWorkerProgress as runTaskRendererHidesHiddenWorkerProgress,
   testTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask as runTaskRendererSummarizesHiddenFunctionCallsBeforeVisibleTask,
@@ -27,6 +28,7 @@ import {
 } from '../../tests/cliE2eDiagnostics'
 
 export const testCodexOauthCliUsesBrowserWorkspaceWithoutSecondPrompt = codexWorkspaceTest
+export const testCliE2eAcceptedOutputWaitsForChildExit = runCliE2eAcceptedOutputWaitsForChildExit
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
