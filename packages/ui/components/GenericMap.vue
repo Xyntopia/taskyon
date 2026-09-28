@@ -296,20 +296,17 @@ const createMap = () => {
   }
 
   m.on('load', () => {
+    const current = getMapInstance()
+    if (!current) return
+    emit('ready', current)
+    runResizeBurst()
     void (async () => {
-      const current = getMapInstance()
-      if (!current) return
-
       try {
         await addConfiguredPmtilesLayers()
       } catch (error) {
         console.error(`${logPrefix} PMTiles load error`, error)
         addRasterFallbackBaseLayer(current)
       }
-
-      emit('ready', current)
-
-      runResizeBurst()
     })()
   })
 

@@ -478,6 +478,7 @@ import {
 } from '@taskyon/common/modules/interestingPlots'
 import {
   buildContourLayerFromSparseHeatmap,
+  buildCoordinatePointLayer,
   buildFeatureValueLayer,
   pickCoordinatePaths,
   type MapExternalFeatureLayer,
@@ -1663,6 +1664,7 @@ const canRenderChart = (chart: ChartViewModel | null | undefined): boolean => {
   const showFeatures = chart.config.showFeatures !== false
   return (
     (showContour && !!latPath && !!lonPath && !!resolvedValuePath) ||
+    (showFeatures && !!latPath && !!lonPath) ||
     (showFeatures && !!featurePath && (!!resolvedValuePath || !!objectFeaturePath))
   )
 }
@@ -1779,6 +1781,17 @@ const buildMapPayload = (chart: ChartViewModel, index: number): ChartPayload => 
   }
   if (contourData) {
     const layer = buildContourLayerFromSparseHeatmap(contourData, `contour-${index}`)
+    if (layer) layers.push(layer)
+  }
+
+  if (showFeatures && latPath && lonPath && !featurePath) {
+    const layer = buildCoordinatePointLayer({
+      rows: resolvedValuePath?.rows ?? mapRows.value,
+      latPath,
+      lonPath,
+      ...(resolvedValuePath ? { valuePath: resolvedValuePath.resolvedPath } : {}),
+      layerId: `points-${index}`,
+    })
     if (layer) layers.push(layer)
   }
 

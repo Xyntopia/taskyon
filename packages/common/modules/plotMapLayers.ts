@@ -1,5 +1,5 @@
-import type { Feature, Polygon } from 'geojson'
-import { type PlotSparseHeatmapValue } from './plotMath'
+import type { Feature, Point, Polygon } from 'geojson'
+import { type PlotFlatRow, type PlotSparseHeatmapValue } from './plotMath'
 
 export type MapLayerStyle = {
   color?: string
@@ -28,6 +28,66 @@ const valueToColor = (value: number, min: number, max: number): string => {
   const g = Math.round(102 + 70 * (1 - Math.abs(2 * t - 1)))
   const b = Math.round(210 - 170 * t)
   return `rgb(${r},${g},${b})`
+}
+
+export const buildCoordinatePointLayer = (args: {
+  rows: PlotFlatRow[]
+  latPath: string
+  lonPath: string
+  valuePath?: string
+  labelPath?: string
+  layerId: string
+}): MapExternalFeatureLayer | null => {
+  const sites = new Map<
+    string,
+    { lat: number; lon: number; value: number | null; label?: string }
+  >()
+  for (const row of args.rows) {
+    const rawLat = row[args.latPath]
+    const rawLon = row[args.lonPath]
+    if (rawLat === null || rawLat === undefined || rawLat === '') continue
+    if (rawLon === null || rawLon === undefined || rawLon === '') continue
+    const lat = Number(rawLat)
+    const lon = Number(rawLon)
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180)
+      continue
+    const rawValue = args.valuePath ? Number(row[args.valuePath]) : null
+    const value = rawValue !== null && Number.isFinite(rawValue) ? rawValue : null
+    if (args.valuePath && value === null) continue
+    const label = args.labelPath ? row[args.labelPath] : undefined
+    const name = typeof label === 'string' ? label : undefined
+    sites.set(JSON.stringify([lat, lon, value, name]), {
+      lat,
+      lon,
+      value,
+      ...(name ? { label: name } : {}),
+    })
+  }
+  if (sites.size === 0) return null
+
+  const points = [...sites.values()]
+  const values = points.map(({ value }) => value).filter((value): value is number => value !== null)
+  const min = values.length ? Math.min(...values) : 0
+  const max = values.length ? Math.max(...values) : 1
+  const features: Feature<Point>[] = points.map(({ lat, lon, value, label }, index) => ({
+    type: 'Feature',
+    id: index,
+    geometry: { type: 'Point', coordinates: [lon, lat] },
+    properties: {
+      ...(label ? { label } : {}),
+      ...(value === null ? {} : { __plotValue: value, __plotColor: valueToColor(value, min, max) }),
+    },
+  }))
+  return {
+    id: args.layerId,
+    features,
+    interactive: true,
+    style: {
+      color: '#1f2937',
+      radius: 8,
+      circleColorProperty: '__plotColor',
+    },
+  }
 }
 
 const edgesFromCenters = (centers: number[]): number[] => {
@@ -150,7 +210,11 @@ export const buildFeatureValueLayer = (
     }
   }
 
-  const pairs: Array<{ feature: Feature; value: number | null; objectMeta?: Record<string, unknown> }> = []
+  const pairs: Array<{
+    feature: Feature
+    value: number | null
+    objectMeta?: Record<string, unknown>
+  }> = []
   for (const run of runs) {
     const featRaw = getPathValue(run, featurePath)
     if (!isFeatureLike(featRaw)) continue
