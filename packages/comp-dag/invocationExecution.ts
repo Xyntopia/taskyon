@@ -1,4 +1,6 @@
 import type { Hash } from './caching.ts'
+import { iterateCandidatePatches, type CandidateDimension } from './candidateOrder.ts'
+import type { SpatialCandidate } from './spatialCandidates.ts'
 import type { DagNode, EngineConfig, NodeContext } from './dagCore.ts'
 import {
   createInvocationRun,
@@ -41,6 +43,7 @@ export type InvocationRow = {
     rowKey: Record<string, string | number>
     sourceIndexByAlias: Record<string, number>
   }
+  candidate?: SpatialCandidate
   captured?: Record<string, unknown>
 }
 
@@ -71,6 +74,8 @@ export type InvocationExecutionDependencies = {
     signal?: AbortSignal
     onRow: (row: {
       outputs: unknown
+      params?: Record<string, unknown>
+      candidate?: SpatialCandidate
       captured?: Record<string, unknown>
       inputSelection?: InvocationRow['inputSelection']
     }) => Promise<void>
@@ -110,6 +115,10 @@ export const createDagInvocationEvaluators = (args: {
             }
           : {}),
         ...(inputs ? { inputs } : {}),
+        ...(args.invocation.candidateDomain
+          ? { candidateDomain: args.invocation.candidateDomain }
+          : {}),
+        gridOrder: args.invocation.policy.gridOrder ?? 'sequential',
         capture: args.invocation.capture.map((capture) => ({
           path: capture.path,
           ...(capture.as === undefined ? {} : { as: capture.as }),
@@ -122,6 +131,8 @@ export const createDagInvocationEvaluators = (args: {
         onRow: async (row) =>
           await onRow({
             outputs: row.row,
+            ...(row.params ? { params: row.params } : {}),
+            ...(row.candidate ? { candidate: row.candidate } : {}),
             ...(row.captured ? { captured: row.captured } : {}),
             inputSelection: {
               rowKey: row.rowKey,
@@ -135,58 +146,61 @@ export const createDagInvocationEvaluators = (args: {
   },
 })
 
-const finiteValues = function* (variable: VariableSpec): Iterable<unknown> {
+const candidateDimension = (path: string, variable: VariableSpec): CandidateDimension => {
   switch (variable.kind) {
     case 'constant':
-      yield variable.value
-      return
+      return { path, kind: 'list', length: 1, valueAt: () => variable.value }
     case 'grid':
     case 'list':
-      yield* variable.values
-      return
+      return {
+        path,
+        kind: variable.kind,
+        length: variable.values.length,
+        valueAt: (index) => variable.values[index],
+      }
     case 'sweep': {
-      if (variable.step === 0) throw new Error('Invocation sweep step must not be zero.')
+      if (
+        !Number.isFinite(variable.start) ||
+        !Number.isFinite(variable.end) ||
+        !Number.isFinite(variable.step) ||
+        variable.step === 0
+      ) {
+        throw new Error('Invocation sweep requires finite bounds and a non-zero step.')
+      }
       const increasing = variable.end >= variable.start
       if ((increasing && variable.step < 0) || (!increasing && variable.step > 0)) {
         throw new Error('Invocation sweep step moves away from its end value.')
       }
-      for (
-        let value = variable.start;
-        increasing ? value <= variable.end : value >= variable.end;
-        value += variable.step
-      ) {
-        yield value
+      const length = Math.floor((variable.end - variable.start) / variable.step + 1e-10) + 1
+      if (!Number.isSafeInteger(length) || length < 1) {
+        throw new Error('Invocation sweep has an invalid number of values.')
+      }
+      return {
+        path,
+        kind: 'grid',
+        length,
+        valueAt: (index) => variable.start + index * variable.step,
       }
     }
   }
 }
 
-const candidateProduct = function* (
-  entries: Array<[string, VariableSpec]>,
-  index: number,
-  current: Record<string, unknown>,
-): Iterable<Record<string, unknown>> {
-  if (index === entries.length) {
-    yield current
-    return
-  }
-  const [path, variable] = entries[index]!
-  for (const value of finiteValues(variable)) {
-    const next = structuredClone(current)
-    if (value !== undefined) setPathValue(next, path, value)
-    yield* candidateProduct(entries, index + 1, next)
-  }
-}
-
 export const iterateInvocationCandidates = function* (
-  invocation: Pick<InvocationDefinition, 'variables'>,
+  invocation: Pick<InvocationDefinition, 'variables' | 'policy'>,
 ): Iterable<Record<string, unknown>> {
-  const entries = Object.entries(invocation.variables)
-  if (entries.length === 0) {
-    yield {}
-    return
+  const dimensions = Object.entries(invocation.variables).map(([path, variable]) =>
+    candidateDimension(path, variable),
+  )
+  for (const patch of iterateCandidatePatches(
+    dimensions,
+    invocation.policy.gridOrder ?? 'sequential',
+  )) {
+    const params: Record<string, unknown> = {}
+    for (const [path, value] of Object.entries(patch)) {
+      if (value !== undefined) setPathValue(params, path, value)
+    }
+    yield params
   }
-  yield* candidateProduct(entries, 0, {})
 }
 
 export const resolveInvocationPolicy = (
@@ -199,6 +213,9 @@ export const resolveInvocationPolicy = (
   return {
     engine: { id: 'taskyon-row-stream', version: 1 },
     accuracy: 'exact',
+    ...(invocation.policy.gridOrder === undefined
+      ? {}
+      : { gridOrder: invocation.policy.gridOrder }),
     strategies: requestedStrategy ? { root: requestedStrategy } : {},
     ...(invocation.policy.seed === undefined ? {} : { seed: invocation.policy.seed }),
     ...(invocation.policy.tolerance === undefined
@@ -327,6 +344,8 @@ export const executeInvocation = async (args: {
     params: Record<string, unknown>,
     evaluated: {
       outputs: unknown
+      params?: Record<string, unknown>
+      candidate?: SpatialCandidate
       captured?: Record<string, unknown>
       inputSelection?: InvocationRow['inputSelection']
     },
@@ -334,12 +353,13 @@ export const executeInvocation = async (args: {
     const constraints = constraintValues(args.invocation, evaluated.outputs)
     const row: InvocationRow = {
       rowId,
-      params,
+      params: evaluated.params ?? params,
       outputs: evaluated.outputs,
       objectives: await objectiveValues(args.invocation, evaluated.outputs),
       constraints,
       feasible: Object.values(constraints).every(Boolean),
       ...(evaluated.inputSelection ? { inputSelection: evaluated.inputSelection } : {}),
+      ...(evaluated.candidate ? { candidate: evaluated.candidate } : {}),
       ...(evaluated.captured ? { captured: evaluated.captured } : {}),
     }
     const bytes = encode(row)
@@ -359,7 +379,11 @@ export const executeInvocation = async (args: {
         break
       }
       const maxRows = args.invocation.policy.budget?.maxRows
-      if (args.dependencies.evaluateRows && Object.keys(args.invocation.inputs).length > 0) {
+      if (
+        args.dependencies.evaluateRows &&
+        (Object.keys(args.invocation.inputs).length > 0 ||
+          args.invocation.candidateDomain !== undefined)
+      ) {
         await args.dependencies.evaluateRows({
           rootNodeId: args.invocation.rootNodeId,
           params,

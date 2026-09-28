@@ -1799,10 +1799,14 @@ const buildMapPayload = (chart: ChartViewModel, index: number): ChartPayload => 
     showFeatures &&
     featurePath &&
     (resolvedValuePath || objectFeaturePath) &&
-    mapRuns.value.length > 0
+    (mapRuns.value.length > 0 || mapRows.value.length > 0)
   ) {
     const layer = buildFeatureValueLayer(
-      resolvedValuePath?.runs ?? mapRuns.value,
+      resolvedValuePath?.runs?.length
+        ? resolvedValuePath.runs
+        : mapRuns.value.length > 0
+          ? mapRuns.value
+          : mapRows.value,
       featurePath,
       resolvedValuePath?.resolvedPath ?? '',
       getPathValue,

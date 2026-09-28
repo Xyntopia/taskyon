@@ -185,6 +185,38 @@ const isFeatureLike = (v: unknown): v is Feature =>
 
 const cloneFeature = (f: Feature): Feature => JSON.parse(JSON.stringify(f)) as Feature
 
+const readFlatFeature = (run: unknown, path: string): Feature | null => {
+  if (!run || typeof run !== 'object' || Array.isArray(run)) return null
+  const row = run as Record<string, unknown>
+  if (row[`${path}.type`] !== 'Feature') return null
+  const type = row[`${path}.geometry.type`]
+  const coordinates = row[`${path}.geometry.coordinates`]
+  if (typeof type !== 'string' || !Array.isArray(coordinates)) return null
+  const prefix = `${path}.properties.`
+  const properties = Object.fromEntries(
+    Object.entries(row)
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, value]) => [key.slice(prefix.length), value]),
+  )
+  return {
+    type: 'Feature',
+    geometry: { type, coordinates } as Feature['geometry'],
+    properties,
+  }
+}
+
+const pathValue = (
+  run: unknown,
+  path: string,
+  getPathValue: (obj: unknown, path: string) => unknown,
+) => {
+  const nested = getPathValue(run, path)
+  if (nested !== undefined) return nested
+  return run && typeof run === 'object' && !Array.isArray(run)
+    ? (run as Record<string, unknown>)[path]
+    : undefined
+}
+
 export const buildFeatureValueLayer = (
   runs: unknown[],
   featurePath: string,
@@ -216,15 +248,15 @@ export const buildFeatureValueLayer = (
     objectMeta?: Record<string, unknown>
   }> = []
   for (const run of runs) {
-    const featRaw = getPathValue(run, featurePath)
+    const featRaw = pathValue(run, featurePath, getPathValue) ?? readFlatFeature(run, featurePath)
     if (!isFeatureLike(featRaw)) continue
-    const valRaw = valuePath ? getPathValue(run, valuePath) : undefined
+    const valRaw = valuePath ? pathValue(run, valuePath, getPathValue) : undefined
     const value = typeof valRaw === 'number' ? valRaw : Number(valRaw)
     const numericValue = Number.isFinite(value) ? value : null
 
     let objectMeta: Record<string, unknown> | undefined
     if (objectFeaturePath) {
-      const objectRaw = getPathValue(run, objectFeaturePath)
+      const objectRaw = pathValue(run, objectFeaturePath, getPathValue)
       if (objectRaw && typeof objectRaw === 'object' && !Array.isArray(objectRaw)) {
         const flat: Record<string, unknown> = {}
         flattenMetaObject(objectRaw, '', flat)

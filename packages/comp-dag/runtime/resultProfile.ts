@@ -55,6 +55,10 @@ export const flattenRuns = (input: FlattenInput): FlattenOutput => {
 
     flattenObject(run?.params, row, paramsPrefix)
     flattenObject(run?.outputs, row, outputsPrefix)
+    if (includePrefixes) {
+      flattenObject(run?.captured, row, 'captured')
+      flattenObject(run?.candidate, row, 'candidate')
+    }
 
     for (const key of Object.keys(row)) keySet.add(key)
     return row

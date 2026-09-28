@@ -1,4 +1,5 @@
 import { canonicalHash, type Hash } from './caching.ts'
+import { iterateCandidatePatches } from './candidateOrder.ts'
 import {
   createGraphRevision,
   createInvocationDefinition,
@@ -9,6 +10,7 @@ import {
   parseDesignGraphRef,
   parseGraphRevision,
   parseInvocationDefinition,
+  parseInvocationRun,
   parseProjectRevision,
 } from './designGraphModel.ts'
 import {
@@ -1093,6 +1095,75 @@ export const testInvocationCandidatesRemainPullBased = () => {
 
 testInvocationCandidatesRemainPullBased.description =
   'Pulls candidates lazily without allocating a complete Cartesian-product array.'
+
+export const testInvocationGridOrderIsRecursiveAndExplicit = () => {
+  const offsetOrder = [
+    ...iterateCandidatePatches(
+      [{ path: 'index', kind: 'grid', length: 6, offset: 1, valueAt: (index) => index }],
+      'coarseToFine',
+    ),
+  ].map((patch) => patch.index)
+  if (JSON.stringify(offsetOrder) !== JSON.stringify([3, 1, 5, 0, 2, 4])) {
+    throw new Error('Dyadic order must remain anchored to the global grid origin.')
+  }
+  const base = {
+    rootNodeId: canonicalHash('grid-order-root'),
+    variables: { site: { kind: 'grid' as const, values: [1, 2, 3, 4, 5, 6] } },
+    objectives: [],
+    constraints: [],
+    reducerOverrides: {},
+  }
+  const progressive = createInvocationDefinition({
+    ...base,
+    policy: { accuracy: 'exact', gridOrder: 'coarseToFine' },
+  })
+  const sequential = createInvocationDefinition({
+    ...base,
+    policy: { accuracy: 'exact', gridOrder: 'sequential' },
+  })
+  const legacy = createInvocationDefinition({ ...base, policy: { accuracy: 'exact' } })
+  const values = (invocation: typeof progressive) =>
+    [...iterateInvocationCandidates(invocation)].map((params) => params.site)
+
+  assert(
+    JSON.stringify(values(progressive)) === JSON.stringify([1, 5, 3, 2, 4, 6]),
+    'Expected recursive dyadic grid order',
+  )
+  assert(
+    JSON.stringify(values(sequential)) === JSON.stringify([1, 2, 3, 4, 5, 6]),
+    'Expected explicit sequential grid order',
+  )
+  assert(
+    JSON.stringify(values(legacy)) === JSON.stringify(values(sequential)),
+    'Expected old invocations to retain sequential grid order',
+  )
+  assert(
+    parseInvocationDefinition(progressive).policy.gridOrder === 'coarseToFine',
+    'Expected grid order to survive canonical invocation parsing',
+  )
+  assert(progressive.id !== sequential.id, 'Grid order must affect invocation identity')
+  const run = createInvocationRun({
+    invocationId: progressive.id,
+    resolvedPolicy: {
+      engine: { id: 'taskyon-row-stream', version: 1 },
+      accuracy: 'exact',
+      gridOrder: 'coarseToFine',
+      strategies: {},
+    },
+    status: 'completed',
+    startedAtMs: 1,
+    completedAtMs: 2,
+    artifacts: { rows: canonicalHash('grid-order-rows') },
+    provenance: {},
+  })
+  assert(
+    parseInvocationRun(run).resolvedPolicy.gridOrder === 'coarseToFine',
+    'Expected grid order to survive canonical run parsing',
+  )
+}
+
+testInvocationGridOrderIsRecursiveAndExplicit.description =
+  'Schedules finite grids coarse-first while preserving explicit and legacy sequential order.'
 
 export const testDerivedReducerSharesCanonicalCache = async () => {
   const sourceArtifactId = canonicalHash('derived-source')

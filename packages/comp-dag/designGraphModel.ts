@@ -1,12 +1,15 @@
 import { canonicalHash, type Hash } from './caching.ts'
+import type { GridOrder } from './candidateOrder.ts'
 import {
   objectiveSchema,
   optimizationCaptureSpecSchema,
   optimizationInputSpecSchema,
+  spatialCandidateDomainSchema,
   variableSpecSchema,
   type Objective,
   type OptimizationCaptureSpec,
   type OptimizationInputSpec,
+  type SpatialCandidateDomain,
   type VariableSpec,
 } from './optimization.ts'
 
@@ -27,6 +30,7 @@ export type ReducerAccuracy = 'auto' | 'exact' | 'approximate'
 
 export type InvocationRequestedPolicy = {
   accuracy: ReducerAccuracy
+  gridOrder?: GridOrder
   optimizer?: { id: string; version: number; configuration?: Record<string, unknown> }
   estimator?: { id: string; version: number; configuration?: Record<string, unknown> }
   seed?: number
@@ -41,6 +45,7 @@ export type InvocationDefinition = {
   rootNodeId: Hash
   sourceSnapshotId?: Hash
   variables: Record<string, VariableSpec>
+  candidateDomain?: SpatialCandidateDomain
   inputs: Record<string, OptimizationInputSpec>
   objectives: Objective[]
   constraints: InvocationConstraint[]
@@ -78,6 +83,7 @@ export type DesignGraphRef = {
 export type ResolvedInvocationPolicy = {
   engine: { id: string; version: number }
   accuracy: 'exact' | 'approximate'
+  gridOrder?: GridOrder
   strategies: Record<
     string,
     { id: string; version: number; configuration?: Record<string, unknown> }
@@ -243,10 +249,18 @@ const parseRequestedPolicy = (value: unknown): InvocationRequestedPolicy => {
   if (input.accuracy !== 'auto' && input.accuracy !== 'exact' && input.accuracy !== 'approximate') {
     throw new Error('Invocation policy accuracy is invalid.')
   }
+  if (
+    input.gridOrder !== undefined &&
+    input.gridOrder !== 'coarseToFine' &&
+    input.gridOrder !== 'sequential'
+  ) {
+    throw new Error('Invocation grid order is invalid.')
+  }
   const budget =
     input.budget === undefined ? undefined : objectAtBoundary(input.budget, 'Invocation budget')
   return {
     accuracy: input.accuracy,
+    ...(input.gridOrder === undefined ? {} : { gridOrder: input.gridOrder }),
     ...(input.optimizer === undefined
       ? {}
       : { optimizer: parseRequestedStrategy(input.optimizer, 'Invocation optimizer') }),
@@ -305,6 +319,7 @@ export const createInvocationDefinition = (
           sourceSnapshotId: hashAtBoundary(input.sourceSnapshotId, 'Invocation source snapshot id'),
         }),
     variables: input.variables,
+    ...(input.candidateDomain === undefined ? {} : { candidateDomain: input.candidateDomain }),
     inputs: input.inputs ?? {},
     objectives: [...input.objectives],
     constraints: [...input.constraints],
@@ -346,6 +361,9 @@ export const parseInvocationDefinition = (value: unknown): InvocationDefinition 
           sourceSnapshotId: hashAtBoundary(input.sourceSnapshotId, 'Invocation source snapshot id'),
         }),
     variables,
+    ...(input.candidateDomain === undefined
+      ? {}
+      : { candidateDomain: spatialCandidateDomainSchema.parse(input.candidateDomain) }),
     inputs,
     objectives: input.objectives.map((objective) => objectiveSchema.parse(objective)),
     constraints: input.constraints.map(parseConstraint),
@@ -452,12 +470,20 @@ const parseResolvedPolicy = (value: unknown): ResolvedInvocationPolicy => {
   if (input.accuracy !== 'exact' && input.accuracy !== 'approximate') {
     throw new Error('Resolved invocation accuracy is invalid.')
   }
+  if (
+    input.gridOrder !== undefined &&
+    input.gridOrder !== 'coarseToFine' &&
+    input.gridOrder !== 'sequential'
+  ) {
+    throw new Error('Resolved invocation grid order is invalid.')
+  }
   return {
     engine: {
       id: stringAtBoundary(engine.id, 'Resolved engine id'),
       version: integerAtBoundary(engine.version, 'Resolved engine version'),
     },
     accuracy: input.accuracy,
+    ...(input.gridOrder === undefined ? {} : { gridOrder: input.gridOrder }),
     strategies: Object.fromEntries(
       Object.entries(objectAtBoundary(input.strategies, 'Resolved strategies')).map(
         ([address, strategy]) => [address, parseResolvedStrategy(strategy, `Strategy ${address}`)],

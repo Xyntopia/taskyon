@@ -98,6 +98,7 @@ export type OptimizationResultsLoadRowsRunRef = {
   params?: unknown
   outputs?: unknown
   captured?: unknown
+  candidate?: unknown
 }
 
 export type OptimizationResultsLoadRowsInput = {
@@ -147,6 +148,7 @@ const flattenRunInputJsonSchema = {
     params: {},
     outputs: {},
     captured: {},
+    candidate: {},
   },
   additionalProperties: false,
 } as const
@@ -327,6 +329,7 @@ const optimizationResultsRunRefJsonSchema = {
     params: {},
     outputs: {},
     captured: {},
+    candidate: {},
   },
   additionalProperties: false,
 } as const

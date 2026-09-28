@@ -13,6 +13,9 @@
 
 import type { DagStorageBackend } from './caching.ts'
 import { canonicalHash, getDefaultInMemoryBackend, type Hash } from './caching.ts'
+import { iterateCandidatePatches, type GridOrder } from './candidateOrder.ts'
+import { iterateSpatialCandidates, type SpatialCandidate } from './spatialCandidates.ts'
+import type { SpatialCandidateDomain } from './optimization.ts'
 import {
   createSourceLockManifest,
   shouldRefreshSource,
@@ -178,6 +181,8 @@ export type StudyCaptureSpec = {
 
 export type StudyOptions = {
   mode?: 'explore' | 'optimize'
+  gridOrder?: GridOrder
+  candidateDomain?: SpatialCandidateDomain
   objective?: StudyObjective
   variables?: Record<string, StudyVariableSpec>
   inputs?: Record<string, StudyInputOption>
@@ -204,12 +209,14 @@ export type StudyAliasPlan = {
 export type StudyPlan = {
   explodedInputs: StudyAliasPlan[]
   variableRuns: number
-  estimatedRows: number
+  estimatedRows: number | null
 }
 
 export type StudyRowEvent<O = unknown> = {
   rowIndex: number
   row: O
+  params?: Record<string, unknown>
+  candidate?: SpatialCandidate
   rowKey: Record<string, string | number>
   sourceIndexByAlias: Record<string, number>
   objectiveValue: number | null
@@ -920,10 +927,18 @@ const buildStudyPlanFromResolved = (
     if (mode === 'zip') base.zipGroup = entry.inputOpts?.zipGroup ?? 'default'
     return base
   })
+  const domain = opts?.candidateDomain
+  const estimatedRows = domain
+    ? domain.mode === 'grid'
+      ? null
+      : (resolved.find((entry) => entry.alias === domain.featureAlias)?.sourceIndices.length ?? 0) *
+        estimatePlanRows(resolved.filter((entry) => entry.alias !== domain.featureAlias)) *
+        variableRuns
+    : estimatePlanRows(resolved) * variableRuns
   return {
     explodedInputs,
     variableRuns,
-    estimatedRows: estimatePlanRows(resolved) * variableRuns,
+    estimatedRows,
   }
 }
 
@@ -977,20 +992,20 @@ const iterateExplodedCombinations = function* (
 }
 
 const buildVariableDimensions = (variables?: Record<string, StudyVariableSpec>) => {
-  if (!variables) return [] as Array<{ path: string; values: unknown[] }>
-  const dims: Array<{ path: string; values: unknown[] }> = []
+  if (!variables) return [] as Array<{ path: string; kind: 'grid' | 'list'; values: unknown[] }>
+  const dims: Array<{ path: string; kind: 'grid' | 'list'; values: unknown[] }> = []
 
   for (const [path, spec] of Object.entries(variables)) {
     switch (spec.kind) {
       case 'constant':
-        if ('value' in spec) dims.push({ path, values: [spec.value] })
+        if ('value' in spec) dims.push({ path, kind: 'list', values: [spec.value] })
         continue
       case 'list':
       case 'grid': {
         if (!Array.isArray(spec.values) || spec.values.length === 0) {
           throw new Error(`Variable has no values: ${path}`)
         }
-        dims.push({ path, values: spec.values })
+        dims.push({ path, kind: spec.kind, values: spec.values })
         continue
       }
       case 'weightedList': {
@@ -999,6 +1014,7 @@ const buildVariableDimensions = (variables?: Record<string, StudyVariableSpec>) 
         }
         dims.push({
           path,
+          kind: 'list',
           values: spec.values.flatMap((entry) => {
             const repeat = Math.max(1, Math.round(Number(entry.weight ?? 1)))
             return Array.from({ length: repeat }, () => entry.value)
@@ -1022,28 +1038,13 @@ const buildVariableDimensions = (variables?: Record<string, StudyVariableSpec>) 
         if (out.length === 0) {
           throw new Error(`Sweep generated no values: ${path}`)
         }
-        dims.push({ path, values: out })
+        dims.push({ path, kind: 'grid', values: out })
         continue
       }
     }
   }
 
   return dims
-}
-
-const iterateCombinations = function* (
-  dims: Array<{ path: string; values: unknown[] }>,
-  index = 0,
-  current: Record<string, unknown> = {},
-): Iterable<Record<string, unknown>> {
-  if (index === dims.length) {
-    yield current
-    return
-  }
-  const dimension = dims[index]!
-  for (const value of dimension.values) {
-    yield* iterateCombinations(dims, index + 1, { ...current, [dimension.path]: value })
-  }
 }
 
 const setPathValue = (target: Record<string, unknown>, path: string, value: unknown) => {
@@ -1714,6 +1715,7 @@ export function createNode<
         let best: O | null = null
         let bestObjectiveValue: number | null = null
         let completedEvals = 0
+        let skippedSpatialPoints = 0
         let stoppedReason: 'maxRows' | 'maxEvals' | 'timeMs' | null = null
         let yieldedRowsCounter = 0
         const yieldEveryRows = Math.max(1, actualEngineConfig.execution?.yieldEveryRows ?? 20)
@@ -1736,6 +1738,7 @@ export function createNode<
           baseParams: Record<string, unknown>,
           combo: Record<string, { sourceIndex: number; runOrderIndex: number }>,
           variablePatch: Record<string, unknown>,
+          candidate?: SpatialCandidate,
         ) => {
           const runParams = cloneValue(baseParams)
           const keyRow: Record<string, string | number> = {}
@@ -1830,6 +1833,8 @@ export function createNode<
           await opts?.onRow?.({
             rowIndex,
             row: result.value,
+            params: runParams,
+            ...(candidate ? { candidate } : {}),
             rowKey: keyRow,
             sourceIndexByAlias,
             objectiveValue,
@@ -1838,13 +1843,89 @@ export function createNode<
           await maybeYieldToUi()
         }
 
-        for (const patch of iterateCombinations(variableDims)) {
+        for (const patch of iterateCandidatePatches(
+          variableDims.map((dimension) => ({
+            path: dimension.path,
+            kind: dimension.kind,
+            length: dimension.values.length,
+            valueAt: (index) => dimension.values[index],
+          })),
+          opts?.gridOrder ?? 'sequential',
+        )) {
           if (stoppedReason) break
           const baseParams = cloneValue(paramsValue) as Record<string, unknown>
           for (const [path, value] of Object.entries(patch)) {
             setPathValue(baseParams, path, value)
           }
           const validatedBase = parseSchema<Record<string, unknown>>(node.paramsSchema, baseParams)
+
+          if (opts?.candidateDomain) {
+            const domain = opts.candidateDomain
+            const featureEntry = resolved.find((entry) => entry.alias === domain.featureAlias)
+            if (domain.featureAlias && !featureEntry) {
+              throw new Error(`Spatial feature input ${domain.featureAlias} is unavailable.`)
+            }
+            const otherInputs = resolved.filter((entry) => entry.alias !== domain.featureAlias)
+            const candidates = iterateSpatialCandidates({
+              domain,
+              features: featureEntry
+                ? featureEntry.sourceIndices.map((sourceIndex) => ({
+                    sourceIndex,
+                    value: featureEntry.arr[sourceIndex],
+                  }))
+                : [],
+              params: validatedBase,
+              readPath: getObjectPathValue,
+              order: opts.gridOrder ?? 'sequential',
+            })
+            for (const candidate of candidates) {
+              if (domain.featureAlias && candidate.featureSourceIndex === undefined) {
+                if (candidate.featureIds.length > 1) {
+                  throw new Error('Spatial grid point intersects multiple selected features.')
+                }
+                skippedSpatialPoints += 1
+                continue
+              }
+              const selectedParams = cloneValue(validatedBase)
+              setPathValue(selectedParams, domain.coordinatePaths.lat, candidate.lat)
+              setPathValue(selectedParams, domain.coordinatePaths.lon, candidate.lon)
+              const validatedCandidate = parseSchema<Record<string, unknown>>(
+                node.paramsSchema,
+                selectedParams,
+              )
+              const candidatePatch = {
+                ...patch,
+                [domain.coordinatePaths.lat]: candidate.lat,
+                [domain.coordinatePaths.lon]: candidate.lon,
+              }
+              const featureCombo =
+                featureEntry && candidate.featureSourceIndex !== undefined
+                  ? {
+                      [featureEntry.alias]: {
+                        sourceIndex: candidate.featureSourceIndex,
+                        runOrderIndex: featureEntry.sourceIndices.indexOf(
+                          candidate.featureSourceIndex,
+                        ),
+                      },
+                    }
+                  : {}
+              for (const otherCombo of iterateExplodedCombinations(otherInputs)) {
+                const stop = shouldStop()
+                if (stop) {
+                  stoppedReason = stop
+                  break
+                }
+                await runCombo(
+                  validatedCandidate,
+                  { ...otherCombo, ...featureCombo },
+                  candidatePatch,
+                  candidate,
+                )
+              }
+              if (stoppedReason) break
+            }
+            continue
+          }
 
           if (resolved.length === 0) {
             const stop = shouldStop()
@@ -1906,6 +1987,12 @@ export function createNode<
             }
             await runCombo(validatedBase, combo, patch)
           }
+        }
+
+        if (skippedSpatialPoints > 0) {
+          actualCtx.log('Spatial grid points without a selected feature were skipped', {
+            skippedSpatialPoints,
+          })
         }
 
         return {

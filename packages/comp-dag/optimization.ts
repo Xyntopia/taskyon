@@ -1,6 +1,8 @@
 // optimization.ts
 import z from 'zod'
 import type { JSONSchema7, JSONSchema7Definition } from 'json-schema'
+import type { GridOrder } from './candidateOrder.ts'
+import { spatialCandidateSchema } from './spatialCandidates.ts'
 import {
   safeParseSchema,
   schemaArrayElement,
@@ -11,6 +13,22 @@ import {
 
 export const runModeSchema = z.enum(['explore', 'optimize'])
 export type RunMode = z.infer<typeof runModeSchema>
+
+export const spatialCandidateDomainSchema = z.object({
+  kind: z.literal('spatial'),
+  mode: z.enum(['perFeature', 'grid']),
+  featureAlias: z.string().min(1).optional(),
+  regionPath: z.string().min(1).optional(),
+  coordinatePaths: z.object({ lat: z.string().min(1), lon: z.string().min(1) }),
+  grid: z.object({
+    originLat: z.number().finite(),
+    originLon: z.number().finite(),
+    stepLatDeg: z.number().positive(),
+    stepLonDeg: z.number().positive(),
+    levels: z.number().int().min(0).max(16),
+  }),
+})
+export type SpatialCandidateDomain = z.infer<typeof spatialCandidateDomainSchema>
 
 // -----------------------------
 // VariableSpec
@@ -220,6 +238,15 @@ export type OptimizationCaptureSpec = z.infer<typeof optimizationCaptureSpecSche
 export const optimizationConfigSchema = z
   .object({
     mode: z.enum(['explore', 'optimize']).default('explore').describe('Study mode.'),
+    gridOrder: z
+      .enum(['coarseToFine', 'sequential'])
+      .optional()
+      .describe('Order for grid and sweep dimensions. New studies use coarse-to-fine order.'),
+    candidateDomain: spatialCandidateDomainSchema
+      .optional()
+      .describe(
+        'Optional joint spatial candidate domain for polygon features and grid coordinates.',
+      ),
     objective: objectiveSchema
       .optional()
       .describe('Single optimization objective used by study(mode=optimize).'),
@@ -374,6 +401,8 @@ export const createOptimizationConfig = (args: {
 
   return {
     mode: 'explore',
+    gridOrder: 'coarseToFine' satisfies GridOrder,
+    candidateDomain: undefined,
     variables,
     inputs,
     objective: undefined,
@@ -550,6 +579,8 @@ export const createOptimizationConfigUiJsonSchema = (args: {
 
   const uiSchema = z.object({
     mode: optimizationConfigSchema.shape.mode,
+    gridOrder: optimizationConfigSchema.shape.gridOrder,
+    candidateDomain: optimizationConfigSchema.shape.candidateDomain,
     objective: z
       .object({
         direction: objectiveSchema.shape.direction,
@@ -852,6 +883,7 @@ export const optimizationRunRecordSchema = z.object({
   outputs: z
     .unknown()
     .describe('Outputs of the run. Typically the output of the selected output node.'),
+  candidate: spatialCandidateSchema.optional().describe('Planner-selected spatial candidate.'),
   objectives: objectiveMapSchema.describe('Objective values computed from the node output.'),
   captured: z
     .record(z.string(), z.unknown())

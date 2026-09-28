@@ -1,4 +1,5 @@
 import type { StudyInputOption } from '../dagCore'
+import { iterateCandidatePatches, type GridOrder } from '../candidateOrder'
 import { parseSchema, type DagJsonSchema } from '../dagSchema'
 import {
   setPathValue,
@@ -8,7 +9,7 @@ import {
 } from '../optimization'
 import { createStudyInputStrategyFromSelection } from '../studyStrategyLibrary'
 
-export type SearchDimension = { path: string; values: unknown[] }
+export type SearchDimension = { path: string; kind: 'grid' | 'list'; values: unknown[] }
 
 export type RunBudgetLimits = {
   maxRows: number | null
@@ -97,20 +98,20 @@ export const toDagExploreInputs = (raw: unknown): Record<string, StudyInputOptio
   return Object.keys(out).length > 0 ? out : undefined
 }
 
-export const buildCombinations = (dims: SearchDimension[]): Record<string, unknown>[] => {
-  if (dims.length === 0) return [{}]
-
-  const [head, ...tail] = dims
-  const tailCombos = buildCombinations(tail)
-
-  const out: Record<string, unknown>[] = []
-  for (const v of head!.values) {
-    for (const combo of tailCombos) {
-      out.push({ ...combo, [head!.path]: v })
-    }
-  }
-  return out
-}
+export const buildCombinations = (
+  dims: SearchDimension[],
+  order: GridOrder = 'sequential',
+): Record<string, unknown>[] => [
+  ...iterateCandidatePatches(
+    dims.map((dimension) => ({
+      path: dimension.path,
+      kind: dimension.kind,
+      length: dimension.values.length,
+      valueAt: (index) => dimension.values[index],
+    })),
+    order,
+  ),
+]
 
 export const dimensionValuesFromSpec = (
   path: string,
@@ -120,7 +121,7 @@ export const dimensionValuesFromSpec = (
     const values = spec.values
     if (!Array.isArray(values) || values.length === 0)
       throw new Error(`Variable has no values: ${path}`)
-    return { path, values }
+    return { path, kind: spec.kind, values }
   }
 
   if (spec.kind === 'sweep') {
@@ -154,7 +155,7 @@ export const dimensionValuesFromSpec = (
     }
 
     if (values.length === 0) throw new Error(`Sweep produced no values: ${path}`)
-    return { path, values }
+    return { path, kind: 'grid', values }
   }
 
   return null
@@ -205,7 +206,7 @@ export const buildRunPlan = (input: {
   }
 
   const baseParams = parseSchema<Record<string, unknown>>(paramsSchema, baseParamsRaw)
-  const combinations = buildCombinations(dims)
+  const combinations = buildCombinations(dims, config.gridOrder ?? 'sequential')
   const objective = config.objective
   const objectives = objective ? [objective] : []
   const dagInputs = toDagExploreInputs((config as { inputs?: unknown }).inputs)

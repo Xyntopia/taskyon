@@ -857,6 +857,9 @@ const updateNamedNodeReferences = async (args: {
         const nextInvocation = createInvocationDefinition({
           rootNodeId,
           variables: invocation.variables,
+          ...(invocation.candidateDomain === undefined
+            ? {}
+            : { candidateDomain: invocation.candidateDomain }),
           inputs: invocation.inputs,
           objectives: invocation.objectives,
           constraints: invocation.constraints,

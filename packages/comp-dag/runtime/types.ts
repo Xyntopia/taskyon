@@ -1,6 +1,8 @@
 export type FlattenRunInput = {
   params?: unknown
   outputs?: unknown
+  captured?: unknown
+  candidate?: unknown
 }
 
 export type FlattenInput = {
@@ -33,4 +35,3 @@ export type ColumnStats = {
   nullishRate: number
   presenceRate: number
 }
-
