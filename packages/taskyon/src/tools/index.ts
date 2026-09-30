@@ -86,7 +86,6 @@ export const createDefaultTaskyonToolSetup = (options?: {
         listToolDefinitions: () => toolManager.listToolDefinitions(true),
         resolveToolDefinition: async (name, revision) =>
           (await toolManager.resolveTool(name, revision)).tool,
-        metaUpsert: taskManager.metaUpsert,
         ...(options?.chatCompletionFetch ? { fetch: options.chatCompletionFetch(connection) } : {}),
       })
     }
@@ -104,11 +103,13 @@ export const createDefaultTaskyonToolSetup = (options?: {
         taskSearcher(taskManager),
       ],
       chatCompletionStream: chatCompletion.stream,
+      chatCompletionMetadataStream: chatCompletion.metadataStream,
       recreateConfiguredTools: (nextConfig) => {
         const replacement = createChatCompletion(nextConfig)
         return {
           tools: [replacement.chatCompletion],
           chatCompletionStream: replacement.stream,
+          chatCompletionMetadataStream: replacement.metadataStream,
         }
       },
     }

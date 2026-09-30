@@ -7,6 +7,7 @@ import { runIdealWorkflowMatrixCases } from './conversation/ideal-workflows/test
 import type { TaskNode } from '../types/taskNode'
 
 export const testCombinedWorkflowRequiresSearchBeforeFinalComputation = () => {
+  const sourceTitle = 'A New Sky'
   const completion: TaskNode = {
     id: 'search',
     role: 'function',
@@ -19,33 +20,45 @@ export const testCombinedWorkflowRequiresSearchBeforeFinalComputation = () => {
       type: 'functioncall',
       data: {
         name: 'executeJavaScript',
-        arguments: { code: '"2026-01-02".split("").reverse().join("")' },
+        arguments: { code: '"A New Sky".split("").reverse().join("")' },
       },
     },
   }
   const result: TaskNode = {
     id: 'result',
     role: 'system',
-    content: { type: 'toolresult', data: '20-10-6202' },
+    content: { type: 'toolresult', data: 'ykS weN A' },
   }
-  const searchMeta = [{ streamContent: 'response.web_search_call.completed' }]
-  verifySearchedComputation([completion, tool, result], searchMeta, '2026-01-02')
+  const searchMeta = [{ providerWebSearch: { performed: true } }]
+  verifySearchedComputation([completion, tool, result], searchMeta, sourceTitle)
+  let forgedStreamRejected = false
+  try {
+    verifySearchedComputation(
+      [completion, tool, result],
+      [{ streamContent: 'response.web_search_call.completed' }],
+      sourceTitle,
+    )
+  } catch {
+    forgedStreamRejected = true
+  }
+  if (!forgedStreamRejected)
+    throw new Error('Accepted search-looking stream text as search evidence')
   verifySearchedComputation(
     [tool, result, completion, { ...tool, id: 'retry' }, result],
     searchMeta,
-    '2026-01-02',
+    sourceTitle,
   )
-  for (const [tasks, date] of [
-    [[tool, result, completion], '2026-01-02'],
-    [[completion, tool, result], '2026-02-03'],
+  for (const [tasks, title] of [
+    [[tool, result, completion], sourceTitle],
+    [[completion, tool, result], 'Another Sky'],
   ] as const) {
     let rejected = false
     try {
-      verifySearchedComputation(tasks, searchMeta, date)
+      verifySearchedComputation(tasks, searchMeta, title)
     } catch {
       rejected = true
     }
-    if (!rejected) throw new Error('Accepted search after computation or an invented date')
+    if (!rejected) throw new Error('Accepted search after computation or an invented title')
   }
 }
 

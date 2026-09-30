@@ -352,7 +352,8 @@ const hasCurrentTurnToolSelector = (taskChain: readonly TaskNode[], entryNodeNam
 const createToolSelectorBinding = (entryNodeName: string) => {
   const [definition] = bind({
     name: ENTRY_NODE_SELECTION_TOOL_NAME,
-    description: 'Search the full tool catalog when the current callable tools are insufficient.',
+    description:
+      'Search the Taskyon tool catalog, not websites, when the current callable tools lack a needed capability.',
     renderOptions: {
       hideChat: true,
       hideLlm: true,

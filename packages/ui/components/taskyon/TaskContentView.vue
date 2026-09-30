@@ -12,7 +12,6 @@
         @if-click="emit('if-click', $event)"
       />
       <div v-else class="task-content-view__raw">{{ task.content.data }}</div>
-      <TaskSourcesList :sources="task.content.ann ?? []" />
     </template>
 
     <template v-else-if="task.content.type === 'functioncall'">
@@ -77,6 +76,8 @@
     />
 
     <pre v-else class="task-content-view__code">{{ formattedContent }}</pre>
+
+    <TaskSourcesList v-if="annotations.length > 0" :sources="annotations" />
 
     <div
       v-if="task.content.type === 'error' && showSourceTaskHint"
@@ -152,6 +153,10 @@ const functionArgumentSegments = computed(() => {
   if (lastIndex < input.length) segments.push({ type: 'text', value: input.slice(lastIndex) })
   return segments
 })
+
+const annotations = computed(() =>
+  'ann' in props.task.content ? (props.task.content.ann ?? []) : [],
+)
 
 const structuredContent = computed<Record<string, unknown> | undefined>(() => {
   if (props.task.content.type !== 'toolresult' && props.task.content.type !== 'structured') {

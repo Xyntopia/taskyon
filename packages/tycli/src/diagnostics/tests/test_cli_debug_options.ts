@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -6,6 +6,7 @@ import {
   isCliDebugArtifactFile,
   resolveCliDebugConfiguration,
 } from '../../cli/debugOptions'
+import { createCliChatCompletionTraceWriter } from '../../cli/chatCompletionTraceWriter'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -18,6 +19,10 @@ export const testCliDebugOptionEnablesRuntimeAndRequestTracing = () => {
   assert(
     configuration.chatCompletionTrace?.dir === '/var/log/tycli',
     'Expected --debug to write chatCompletion traces beside runtime logs',
+  )
+  assert(
+    configuration.chatCompletionTrace.captureResponse === false,
+    'Routine debug logging must not retain the full provider response',
   )
 }
 
@@ -44,10 +49,93 @@ export const testCliDebugConfigurationKeepsExplicitTraceOverrides = () => {
     configuration.chatCompletionTrace?.label === 'diagnostic',
     'Expected the explicit trace label to be preserved',
   )
+  assert(
+    configuration.chatCompletionTrace.captureResponse === true,
+    'An explicit trace directory should capture the provider response',
+  )
 }
 
 testCliDebugConfigurationKeepsExplicitTraceOverrides.description =
   'Preserves explicit trace-directory and trace-label overrides for isolated diagnostic runs.'
+
+export const testCliTraceDirFlagCapturesResponsesAndOverridesEnvironment = () => {
+  for (const args of [['--trace-dir', '/tmp/flag-trace'], ['--trace-dir=/tmp/flag-trace']]) {
+    const configuration = resolveCliDebugConfiguration(
+      args,
+      'TYCLI',
+      { TYCLI_CHAT_COMPLETION_TRACE_DIR: '/tmp/environment-trace' },
+      '/var/log/tycli',
+    )
+
+    assert(!configuration.debugLogsEnabled, 'Tracing must not enable verbose runtime logging')
+    assert(
+      configuration.chatCompletionTrace?.dir === '/tmp/flag-trace',
+      'The explicit CLI flag should take precedence over the environment',
+    )
+    assert(
+      configuration.chatCompletionTrace.captureResponse,
+      'The explicit CLI flag should capture the provider response',
+    )
+  }
+}
+
+export const testCliTraceDirFlagRequiresAPath = () => {
+  for (const args of [['--trace-dir'], ['--trace-dir', '--online'], ['--trace-dir=']]) {
+    let error: unknown
+    try {
+      resolveCliDebugConfiguration(args, 'TYCLI', {}, '/var/log/tycli')
+    } catch (caught) {
+      error = caught
+    }
+    assert(error instanceof Error, `Expected ${args.join(' ')} to reject a missing path`)
+  }
+}
+
+export const testCliTraceWriterSavesResponseWithPrivatePermissions = async () => {
+  const traceDir = await mkdtemp(join(tmpdir(), 'tycli-trace-diagnostic-'))
+  await createCliChatCompletionTraceWriter(traceDir, 'diagnostic', true).write({
+    taskId: 'synthetic-task',
+    providerRequest: {
+      provider: 'synthetic',
+      model: 'synthetic-model',
+      taskId: 'synthetic-task',
+      attempts: [],
+    },
+    providerResponse: {
+      rawChunks: [{ usage: { server_tool_use_details: { web_search_requests: 1 } } }],
+      messages: [{ role: 'assistant', content: 'Synthetic response' }],
+    },
+  })
+  const files = await readdir(traceDir)
+  assert(files.length === 1, 'Expected one trace record')
+  assert(files[0]?.includes('diagnostic'), 'Expected the diagnostic trace label')
+  const tracePath = join(traceDir, files[0]!)
+  const record = JSON.parse(await readFile(tracePath, 'utf8')) as {
+    providerResponse?: { rawChunks: unknown[]; messages: unknown[] }
+  }
+  assert(record.providerResponse?.rawChunks.length === 1, 'Expected raw response metadata')
+  assert(record.providerResponse.messages.length === 1, 'Expected parsed response messages')
+  assert(((await stat(tracePath)).mode & 0o077) === 0, 'Trace files must be owner-only')
+}
+
+export const testCliDebugWriterOmitsFullProviderResponse = async () => {
+  const traceDir = await mkdtemp(join(tmpdir(), 'tycli-debug-trace-diagnostic-'))
+  await createCliChatCompletionTraceWriter(traceDir).write({
+    taskId: 'synthetic-task',
+    providerRequest: {
+      provider: 'synthetic',
+      model: 'synthetic-model',
+      taskId: 'synthetic-task',
+      attempts: [],
+    },
+    providerResponse: { rawChunks: ['synthetic private output'] },
+  })
+  const files = await readdir(traceDir)
+  const record = JSON.parse(await readFile(join(traceDir, files[0]!), 'utf8')) as {
+    providerResponse?: unknown
+  }
+  assert(record.providerResponse === undefined, 'Routine debug traces should remain request-only')
+}
 
 export const testCliLogCleanupRecognizesOnlyOwnedDebugArtifacts = async () => {
   const logDir = await mkdtemp(join(tmpdir(), 'tycli-debug-cleanup-diagnostic-'))

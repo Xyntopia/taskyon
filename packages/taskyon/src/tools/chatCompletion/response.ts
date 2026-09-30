@@ -8,13 +8,14 @@ import type {
 import Ajv, { type SchemaObject } from 'ajv'
 import { load } from 'js-yaml'
 import type { JSONSchema7 } from 'json-schema'
+import z from 'zod'
 import {
   compileTaskyonFunctionArguments,
   compileTaskyonMessageString,
   type createTaskVariablePresentationService,
   sanitizeTaskyonVariableCommentsOutsideCode,
 } from '../../core/taskVariables'
-import type { TaskNodeMeta } from '../../types/chatCompletion'
+import type { ProviderWebSearchObservation, TaskNodeMeta } from '../../types/chatCompletion'
 import type { Annotation } from '../../types/taskNode'
 import type { ToolBase } from '../../types/tools'
 import { FunctionArguments, FunctionCall } from '../../types/tools'
@@ -27,6 +28,71 @@ import {
 import { augmentToolSchemaForTaskyonVariables } from './context'
 
 type ProviderSource = Awaited<ReturnType<typeof streamText>['sources']>[number]
+
+const ProviderWebSearchResult = z.object({
+  action: z
+    .object({
+      query: z.string().optional(),
+      queries: z.string().array().optional(),
+    })
+    .optional(),
+  sources: z.unknown().array().optional(),
+})
+const ProviderWebSearchUrl = z.object({ type: z.literal('url'), url: z.url() })
+
+export const extractProviderWebSearchAnnotation = (
+  messages: readonly ModelMessage[],
+  observation?: ProviderWebSearchObservation,
+): Annotation | undefined => {
+  const assistantParts = messages.flatMap((message) =>
+    message.role === 'assistant' && Array.isArray(message.content) ? message.content : [],
+  )
+  const executedCallIds = new Set(
+    assistantParts.flatMap((part) =>
+      part.type === 'tool-call' && part.toolName === 'web_search' && part.providerExecuted === true
+        ? [part.toolCallId]
+        : [],
+    ),
+  )
+  const results = assistantParts.flatMap((part) =>
+    part.type === 'tool-result' &&
+    part.toolName === 'web_search' &&
+    executedCallIds.has(part.toolCallId)
+      ? [part]
+      : [],
+  )
+  if (results.length === 0 && !observation?.performed) return undefined
+
+  const parsedResults = results.flatMap((result) => {
+    if (result.output.type !== 'json') return []
+    const parsed = ProviderWebSearchResult.safeParse(result.output.value)
+    return parsed.success ? [parsed.data] : []
+  })
+  const queries = Array.from(
+    new Set(
+      parsedResults.flatMap((result) => [
+        ...(result.action?.query ? [result.action.query] : []),
+        ...(result.action?.queries ?? []),
+      ]),
+    ),
+  )
+  const consultedUrls = Array.from(
+    new Set(
+      parsedResults.flatMap((result) =>
+        (result.sources ?? []).flatMap((source) => {
+          const parsed = ProviderWebSearchUrl.safeParse(source)
+          return parsed.success && /^https?:\/\//i.test(parsed.data.url) ? [parsed.data.url] : []
+        }),
+      ),
+    ),
+  )
+
+  return {
+    type: 'web-search',
+    ...(queries.length > 0 ? { queries } : {}),
+    ...(consultedUrls.length > 0 ? { sources: consultedUrls.map((url) => ({ url })) } : {}),
+  }
+}
 
 const getOpenRouterSourceContent = (source: ProviderSource) => {
   const content = source.providerMetadata?.openrouter?.content
@@ -288,7 +354,6 @@ export const interpretAssistantMessage = (
   useProviderToolCalling: boolean,
   availableTools: Record<string, ToolBase>,
   variableService: ReturnType<typeof createTaskVariablePresentationService>,
-  webSearchPerformed = false,
 ) => {
   if (!Array.isArray(message.content)) return { kind: 'empty' as const, sanitation: [] }
 
@@ -328,12 +393,7 @@ export const interpretAssistantMessage = (
   })
 
   if (answers.length === 0) {
-    const searchObservation =
-      sources.length > 0
-        ? { content: '', annotations: sources }
-        : webSearchPerformed
-          ? { content: 'Hosted web search activity was reported.' }
-          : undefined
+    const searchObservation = sources.length > 0 ? { content: '', annotations: sources } : undefined
     if (calls.length > 0) {
       return {
         kind: 'tool-calls' as const,
@@ -352,9 +412,6 @@ export const interpretAssistantMessage = (
       kind: 'tool-calls' as const,
       calls,
       assistantMessages: [
-        ...(webSearchPerformed && sources.length === 0
-          ? [{ content: 'Hosted web search activity was reported.' }]
-          : []),
         ...answers.map((answer, index) => ({
           ...answer,
           ...(index === 0 && sources.length > 0 ? { annotations: sources } : {}),

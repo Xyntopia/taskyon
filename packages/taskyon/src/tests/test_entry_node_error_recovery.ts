@@ -298,6 +298,11 @@ export const testEntryNodeExposesNarrowSelectorBinding = async () => {
         'toolSearch',
     'Expected one narrow selector binding to EntryNode without copied settings',
   )
+  assert(
+    definition.content.data.description.includes('Taskyon tool catalog') &&
+      definition.content.data.description.includes('not websites'),
+    'Expected the selector description to distinguish tool discovery from website search',
+  )
   const chatCall = findFunctionCall(continuation, 'chatCompletion')
   assert(
     Array.isArray(chatCall?.arguments.allowedTools) &&

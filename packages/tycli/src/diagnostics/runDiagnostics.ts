@@ -15,11 +15,14 @@ import {
   type DiagnosticsRunLevel,
 } from '@taskyon/common/modules/diagnosticsLevels'
 import { closeDatabases } from '@taskyon/taskyon/db'
+import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import process from 'node:process'
 import { resolveCliInvocationDirectory, resolveTaskyonCliStoragePaths } from '../cli/storagePaths'
+import { resolveCliDebugConfiguration } from '../cli/debugOptions'
+import { createCliChatCompletionTraceWriter } from '../cli/chatCompletionTraceWriter'
 import { createDiagnosticsOutput, formatFailedDiagnostics } from './diagnosticsOutput'
 
 const diagnosticsCategories = [
@@ -565,8 +568,24 @@ async function main(): Promise<number> {
   }
 
   if (opts.verbose) process.env.TASKYON_CLI_VERBOSE = '1'
+  const storagePaths = resolveTaskyonCliStoragePaths()
+  const traceConfiguration = resolveCliDebugConfiguration(
+    process.argv.slice(2),
+    'TYCLI',
+    process.env,
+    storagePaths.logDir,
+  ).chatCompletionTrace
+  setChatCompletionTraceWriter(
+    traceConfiguration
+      ? createCliChatCompletionTraceWriter(
+          traceConfiguration.dir,
+          traceConfiguration.label,
+          traceConfiguration.captureResponse,
+        )
+      : undefined,
+  )
   const output = createDiagnosticsOutput({
-    logDir: resolveTaskyonCliStoragePaths().logDir,
+    logDir: storagePaths.logDir,
     verbose: opts.verbose,
   })
   const restoreOutput = output.capture()
@@ -731,6 +750,7 @@ async function main(): Promise<number> {
     output.status(`[tycli-diagnostics] log file: ${output.logFile}`, 'stderr')
     return 1
   } finally {
+    setChatCompletionTraceWriter(undefined)
     process.removeListener('uncaughtException', handleUncaughtException)
     process.removeListener('unhandledRejection', handleUnhandledRejection)
     restoreOutput()

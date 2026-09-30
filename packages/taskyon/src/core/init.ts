@@ -1,4 +1,7 @@
-import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
+import type {
+  ChatCompletionMetadataEvent,
+  ChatCompletionStreamEvent,
+} from '../types/chatCompletion'
 import { createStepTimer, type StepTimingEvent } from '@taskyon/common/modules/stepTiming'
 import { TyToolchainConfig, type llmSettings } from '../types/profiles'
 import type { InternalTool } from '../types/toolApi'
@@ -104,9 +107,11 @@ export type TyCoreToolSetup = {
   }) => {
     tools: InternalTool[]
     chatCompletionStream?: Stream<ChatCompletionStreamEvent>
+    chatCompletionMetadataStream?: Stream<ChatCompletionMetadataEvent>
     recreateConfiguredTools?: (toolchainConfig: TyToolchainConfig) => {
       tools: InternalTool[]
       chatCompletionStream?: Stream<ChatCompletionStreamEvent>
+      chatCompletionMetadataStream?: Stream<ChatCompletionMetadataEvent>
     }
   }
 }
@@ -369,6 +374,16 @@ const dynamicContext =
     await timeStep('core.install-default-tools', () => toolManager.addDefaultTools(sessionToolList))
     let unsubscribeChatCompletion =
       sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
+    const persistChatCompletionMetadata = ({ taskId, metadata }: ChatCompletionMetadataEvent) => {
+      void taskManagerInstance
+        .metaUpsert(taskId, metadata, 'shallow_merge')
+        .catch((error: unknown) =>
+          console.error('Could not persist chat completion metadata.', error),
+        )
+    }
+    // Each metadata stream is private to its tool. Keep its host listener for the tool's
+    // lifetime: direct calls and detached cost lookups may finish after session disposal.
+    sessionTools.chatCompletionMetadataStream?.(persistChatCompletionMetadata)
     const getChatCompletionCredentialOwnerId = async () => {
       const { tool, identity } = await toolManager.resolveTool(toolSetup.chatCompletionToolName)
       if (!tool) {
@@ -394,10 +409,13 @@ const dynamicContext =
           const refreshed = sessionTools.recreateConfiguredTools?.(nextConfiguration)
           const unsubscribeReplacementStream =
             refreshed?.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
+          const unsubscribeReplacementMetadata =
+            refreshed?.chatCompletionMetadataStream?.(persistChatCompletionMetadata) ?? (() => {})
           try {
             await toolManager.addDefaultTools(refreshed?.tools ?? [])
           } catch (error) {
             unsubscribeReplacementStream()
+            unsubscribeReplacementMetadata()
             throw error
           }
           if (refreshed) {

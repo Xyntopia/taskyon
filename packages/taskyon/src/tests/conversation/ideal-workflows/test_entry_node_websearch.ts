@@ -1,6 +1,5 @@
 import type { DiagnosticsTestContext } from '@taskyon/common/modules/diagnosticsRunner'
-import { hasProviderWebSearchObservation } from '../../../tools/chatCompletion/streamResult'
-import { hasSearchSource, searchStreamContent } from './workflowTestSupport'
+import { hasRecordedProviderWebSearch, hasSearchSource } from './workflowTestSupport'
 import { runVerifiedWorkflow } from './test_time_question_conversation'
 
 export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
@@ -17,10 +16,7 @@ export const testEntryNodeWebsearchProducesHostedSearchUsage = async (
   if (!result.success) return result
 
   const { tasks, flow, completionMetas } = result
-  if (
-    !completionMetas.some((meta) => hasProviderWebSearchObservation(searchStreamContent(meta))) &&
-    !hasSearchSource(tasks)
-  ) {
+  if (!completionMetas.some(hasRecordedProviderWebSearch) && !hasSearchSource(tasks)) {
     throw new Error('Expected hosted search usage in metadata or source annotations')
   }
   const assistant = tasks.find(

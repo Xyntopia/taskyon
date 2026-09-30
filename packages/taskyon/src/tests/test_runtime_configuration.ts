@@ -1,7 +1,10 @@
 import { createStream } from '@taskyon/common/modules/frpBus'
 import { createPortClient, createTaskyonClient, taskyonHostProtocol, taskyonProtocol } from '../api'
 import { tyCore, type TyCoreToolSetup } from '../core/init'
-import type { ChatCompletionStreamEvent } from '../types/chatCompletion'
+import type {
+  ChatCompletionMetadataEvent,
+  ChatCompletionStreamEvent,
+} from '../types/chatCompletion'
 import { createTool, toolCall } from '../types/toolApi'
 import type { TyToolchainConfig } from '../types/profiles'
 import { createCryptoSession } from '../utils/cryptoSession'
@@ -228,6 +231,80 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
 
 testRuntimeConfigurationRecreatesConfiguredTools.description =
   'Applies runtime configuration across sessions while keeping external tool registrations session-scoped.'
+
+export const testRuntimePersistsChatCompletionMetadataEvents = async () => {
+  const emitters = new Map<string, (event: ChatCompletionMetadataEvent) => void>()
+  const createSessionTools = (config: TyToolchainConfig) => {
+    const stream = createStream<ChatCompletionMetadataEvent>()
+    emitters.set(configuredValue(config), stream.emit)
+    return {
+      tools: [createConfiguredTool(config)],
+      chatCompletionMetadataStream: stream.stream,
+    }
+  }
+  const ty = await tyCore(
+    () => ({ entryFunction: 'entryNode' }),
+    () => toolCall({ name: 'entryNode', arguments: {} }),
+    { configuredTool: { value: 'initial' } },
+    undefined,
+    {
+      indexTaskVectors: false,
+      databaseFactory: getInMemoryDatabase,
+      toolSetup: {
+        baseTools: [],
+        chatCompletionToolName: 'configuredTool',
+        createSessionTools: ({ toolchainConfig }) => ({
+          ...createSessionTools(toolchainConfig),
+          recreateConfiguredTools: createSessionTools,
+        }),
+      },
+    },
+  )
+  const host = createPortClient(ty.hostPort, taskyonHostProtocol)
+  const emit = (configuration: string, event: ChatCompletionMetadataEvent) => {
+    const emitter = emitters.get(configuration)
+    if (!emitter) throw new Error(`Missing metadata stream for ${configuration}`)
+    emitter(event)
+  }
+
+  try {
+    const initialWrite = ty.metaLiveRead('initial-completion').wait({ timeoutMs: 1000 })
+    emit('initial', {
+      taskId: 'initial-completion',
+      metadata: { providerWebSearch: { performed: true, requests: 2 } },
+    })
+    const initial = await initialWrite
+    assert(initial.data?.providerWebSearch?.requests === 2, 'Host must persist metadata events')
+
+    await host.runtime.configure({ toolchainConfig: { configuredTool: { value: 'updated' } } })
+    const lateWrite = ty.metaLiveRead('late-completion').wait({ timeoutMs: 1000 })
+    emit('initial', {
+      taskId: 'late-completion',
+      metadata: { costs: [{ amount: 1, source: 'test', unit: 'credits' }] },
+    })
+    const late = await lateWrite
+    assert(late.data?.costs?.[0]?.amount === 1, 'Late metadata must survive reconfiguration')
+
+    const afterDisposalWrite = ty.metaLiveRead('disposed-completion').wait({ timeoutMs: 1000 })
+    await ty.dispose('metadata producer still finishing')
+    emit('initial', {
+      taskId: 'disposed-completion',
+      metadata: { taskCosts: 2 },
+    })
+    const afterDisposal = await afterDisposalWrite
+    assert(
+      afterDisposal.data?.taskCosts === 2,
+      'A late metadata event must persist after session disposal',
+    )
+  } finally {
+    await ty.dispose('metadata stream diagnostic complete')
+  }
+
+  return { success: true }
+}
+
+testRuntimePersistsChatCompletionMetadataEvents.description =
+  'The runtime persists chat-completion metadata events, including late events after reconfiguration or disposal.'
 
 export const testHostProviderCredentialsRemainPrivateAndPersistInTheSecretStore = async () => {
   assert(

@@ -13,15 +13,13 @@ import {
   resolveDiagnosticsRuntimeConfig,
   type WorkflowDiagnosticsTestContext,
 } from '../../../testSupport/onlineProviderSupport'
-import { readPublicWebPageAsMarkdown } from '../../../tools/helperCollection'
-import { hasProviderWebSearchObservation } from '../../../tools/chatCompletion/streamResult'
 import { type TaskNode } from '../../../types/taskNode'
 import { createTool, type InternalTool } from '../../../types/toolApi'
 import { createInMemoryDatabase } from '../../../utils/pglite.api'
 import {
   getWorkflowDeviation,
+  hasRecordedProviderWebSearch,
   hasSearchSource,
-  searchStreamContent,
   waitForTaskMeta,
   workflowSteps,
   verifySearchedComputation,
@@ -347,9 +345,7 @@ export const testSimpleGreetingConversationUsesNormalTaskyonFlow = async (
   if (!result.success) return result
   assert(assistantAnswer(result.tasks).trim().length > 0, 'Expected a greeting response')
   assert(
-    !result.completionMetas.some((meta) =>
-      hasProviderWebSearchObservation(searchStreamContent(meta)),
-    ),
+    !result.completionMetas.some(hasRecordedProviderWebSearch),
     'A greeting should not search the web',
   )
   return { success: true, flow: result.flow }
@@ -396,48 +392,74 @@ const createFixturePhraseTool = () =>
     function: () => ({ phrase: 'violet compass river' }),
   })
 
+const readCurrentApod = async (signal?: AbortSignal) => {
+  const response = await fetch(
+    'https://science.nasa.gov/wp-json/wp/v2/apod-basic?per_page=1&orderby=date&order=desc',
+    { cache: 'no-store', ...(signal ? { signal } : {}) },
+  )
+  assert(response.ok, `NASA APOD lookup failed: HTTP ${response.status}`)
+  const entries: unknown = await response.json()
+  const entry: unknown = Array.isArray(entries) ? entries[0] : undefined
+  assert(
+    entry !== null &&
+      typeof entry === 'object' &&
+      'date' in entry &&
+      typeof entry.date === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(entry.date) &&
+      'title' in entry &&
+      typeof entry.title === 'string' &&
+      entry.title.trim().length > 0 &&
+      'permalink' in entry &&
+      typeof entry.permalink === 'string',
+    'NASA APOD lookup returned no dated picture title',
+  )
+  const permalink = new URL(entry.permalink)
+  assert(
+    permalink.protocol === 'https:' && permalink.hostname === 'science.nasa.gov',
+    'NASA APOD lookup returned an unexpected source link',
+  )
+  return { date: entry.date, title: entry.title.trim(), permalink: permalink.href }
+}
+
 export const testWebSearchThenToolUsesSearchedValue = async (
   context?: DiagnosticsTestContext,
   model = context?.model,
 ) => {
+  if (!context?.providerSession || !model) {
+    return {
+      success: false as const,
+      skipped: true,
+      reason: 'No provider session or model was available.',
+    }
+  }
+  const apod = await readCurrentApod(context?.abortSignal)
   const result = await runVerifiedWorkflow(context, model, {
     label: 'combined search and tool',
-    prompt:
-      'This asks for a changing value, so do not answer from memory. First use Taskyon hosted web search to inspect https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml and find its current Last Updated date in YYYY-MM-DD form. Only after the search returns that exact date, use executeJavaScript or bash to reverse the date string. Report the date, reversed date, and source link.',
+    prompt: `Do not answer from memory. First search the web for the NASA Science Astronomy Picture of the Day article dated ${apod.date} on science.nasa.gov and read its picture title exactly. Only after the search returns that title, use executeJavaScript or bash to reverse it character by character. Report the date, title, reversed title, and link to the same NASA Science article.`,
     mode: 'message',
     expectedWorkflows: combinedWorkflows,
     timeoutMs: 75_000,
   })
   if (!result.success) return result
   assert(
-    result.completionMetas.some((meta) =>
-      hasProviderWebSearchObservation(searchStreamContent(meta)),
-    ) || hasSearchSource(result.tasks),
+    result.completionMetas.some(hasRecordedProviderWebSearch) || hasSearchSource(result.tasks),
     'Expected web search evidence',
   )
-  const sourceUrl = 'https://www.iana.org/assignments/http-status-codes/http-status-codes.xhtml'
-  const source = await readPublicWebPageAsMarkdown(sourceUrl)
-  const searchedDate = source
-    .replace(/<[^>]*>/g, ' ')
-    .match(/Last Updated\s*:?\s*(\d{4}-\d{2}-\d{2})/i)?.[1]
-  assert(searchedDate, 'Could not independently verify the IANA Last Updated date')
-  const reversedDate = verifySearchedComputation(result.tasks, result.completionMetas, searchedDate)
+  const reversedTitle = verifySearchedComputation(result.tasks, result.completionMetas, apod.title)
   const answer = assistantAnswer(result.tasks)
   assert(
-    answer.includes(searchedDate) && answer.includes(reversedDate),
-    'Expected the source and reversed dates',
+    answer.includes(apod.title) && answer.includes(reversedTitle),
+    'Expected the NASA picture title and its reversal',
   )
+  const sourceUrl = apod.permalink.replace(/\/$/, '')
   assert(
-    answer.includes('https://www.iana.org/assignments/http-status-codes') ||
+    answer.includes(sourceUrl) ||
       result.tasks.some(
         (task) =>
           task.content.type === 'message' &&
-          task.content.ann?.some(
-            (ann) =>
-              ann.type === 'url' && ann.url?.includes('iana.org/assignments/http-status-codes'),
-          ),
+          task.content.ann?.some((ann) => ann.type === 'url' && ann.url?.includes(sourceUrl)),
       ),
-    'Expected a citation to the IANA HTTP status-code registry',
+    'Expected a citation to the dated NASA Science APOD article',
   )
   return { success: true, flow: result.flow }
 }

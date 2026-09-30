@@ -12,16 +12,22 @@ Canonical content hashes use `sha256:` plus unpadded base64url. Task occurrence 
 call-stack activation data and the content reference, so equal content can appear at distinct
 positions without being stored repeatedly.
 
-| Type             | Purpose                                                   |
-| ---------------- | --------------------------------------------------------- |
-| `message`        | User, assistant, or system text with optional annotations |
-| `structured`     | Machine-readable data                                     |
-| `functioncall`   | A named tool invocation and JSON arguments                |
-| `toolresult`     | A plain tool result                                       |
-| `error`          | A processing or tool failure                              |
-| `files`          | File IDs registered with the file service                 |
-| `tooldefinition` | A sandboxed tool scoped to its following task lineage     |
-| `return`         | Explicit completion of one child chain                    |
+| Type             | Purpose                                                              |
+| ---------------- | -------------------------------------------------------------------- |
+| `message`        | User, assistant, or system text with optional annotations            |
+| `structured`     | Machine-readable data with optional annotations                      |
+| `functioncall`   | A named tool invocation and JSON arguments with optional annotations |
+| `toolresult`     | A tool result with optional annotations                              |
+| `error`          | A processing or tool failure with optional annotations               |
+| `files`          | File IDs registered with the file service, with optional annotations |
+| `tooldefinition` | A sandboxed tool scoped to its following task lineage                |
+| `return`         | Explicit completion of one child chain                               |
+
+Every data-bearing content type — `message`, `structured`, `functioncall`, `toolresult`, `error`,
+and `files` — accepts an optional `ann` list. Annotations are part of the immutable content hash.
+`url` and `document` annotations describe sources of the content; a `web-search` annotation records
+a completed provider or hosted search with its reported queries and consulted URLs, which are not
+answer citations. `tooldefinition` and `return` carry no annotations.
 
 `priorID` links the previous task at the same sequential level. `parentID` links a child task to the
 `functioncall` that created its chain. The schema also has optional author, ACL, and signature
@@ -219,15 +225,28 @@ The provider performs web search inside `chatCompletion`, so its search event ma
 provider metadata rather than as a separate Taskyon task. Ordinary chat enables search in `auto`
 mode; the model decides whether and when to search. The combined diagnostic accepts only the two
 shapes above: search before the first tool, or a first tool followed by a search and a second tool.
-Both shapes must reverse the searched IANA registry date in the final answer and finish without unrelated
-tools, catalog searches, errors, or additional passes.
-The combined diagnostic checks search evidence before the final execution call and independently
-reads the registry through the existing public-page reader to verify its Last Updated date. A source
-lookup failure is a diagnostic failure, not evidence that the model used the correct value.
+Both shapes must reverse the searched NASA Science Astronomy Picture of the Day title in the final answer
+and finish without unrelated tools, catalog searches, errors, or additional passes. The combined
+diagnostic first fetches NASA Science's current APOD article record, gives the model its date but
+not its title or permalink, then asks it to search that site. It checks search evidence before
+the final execution call and compares the tool input, tool result, answer, and article permalink
+against the independently fetched record. Pinning the date avoids a rollover during the test; a
+newly published page may still reach search indexes later than NASA's own feed.
+
+`chatCompletion` emits task-scoped metadata events for provider usage, costs, failures, and search
+observations. The runtime host persists those events; the tool has no metadata-store write
+capability. Model context still comes only from TaskNodes. A completed provider web search is
+recorded as a `web-search` annotation on the tasks produced by that completion: on the assistant
+message for an answer, or on the first tool call when the step ends in calls. The annotation renders
+to the next request as text beside its content, or as a `system` note before a tool call, so the
+model can see that a search already happened. Consulted URLs stay inside the annotation rather than
+becoming answer citations, and a search reported without details still records its activity without
+inventing an assistant message or source.
 
 `selectTaskyonTools` is the model-facing scoped binding to EntryNode. It exposes only EntryNode's
 `toolSearch` request and fixes the continuation to require a selected tool call. It does not copy
-EntryNode prompts, pinned tools, task contracts, or other settings into the binding.
+EntryNode prompts, pinned tools, task contracts, or other settings into the binding. It searches
+Taskyon's tool catalog, not websites; provider-native web search remains a separate capability.
 
 Entry-node search is a task-tree binding over the regular `toolSearcher`; it is not a second
 registered search implementation. The binding calls `toolSearcher` with `analyze: false`, then the
@@ -272,6 +291,8 @@ flowchart TD
   Overview --> NarrowedRouter
   NarrowedRouter --> Chat
   Recover --> Chat
+  Chat --> Metadata[Task-scoped metadata event]
+  Metadata --> Host[Runtime host persists metadata]
   Chat --> Answer[Assistant message]
   Chat --> ToolCall[Tool call]
   ToolCall --> ToolResult[Tool result]

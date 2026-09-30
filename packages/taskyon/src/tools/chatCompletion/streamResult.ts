@@ -1,7 +1,10 @@
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import type { streamText as streamTextType } from 'ai'
 import { APICallError, RetryError, smoothStream } from 'ai'
-import type { ChatCompletionStreamChunk } from '../../types/chatCompletion'
+import type {
+  ChatCompletionStreamChunk,
+  ProviderWebSearchObservation,
+} from '../../types/chatCompletion'
 import { humanizeError } from '../../utils/error'
 
 const normalizeChunkText = (value: unknown) => (typeof value === 'string' ? value : '')
@@ -39,9 +42,54 @@ const serializeRawChunkValue = (value: unknown) => {
   })
 }
 
-export const hasProviderWebSearchObservation = (rawOutput: string) =>
-  /response\.web_search_call\./i.test(rawOutput) ||
-  /web_search:\s*\n\s*num_requests:\s*[1-9]/i.test(rawOutput)
+export const getProviderWebSearchObservation = (
+  rawValue: unknown,
+): ProviderWebSearchObservation | undefined => {
+  if (typeof rawValue !== 'object' || rawValue === null || Array.isArray(rawValue)) return
+
+  if (Reflect.get(rawValue, 'type') === 'response.web_search_call.completed') {
+    return { performed: true }
+  }
+  const item = Reflect.get(rawValue, 'item')
+  if (
+    Reflect.get(rawValue, 'type') === 'response.output_item.done' &&
+    typeof item === 'object' &&
+    item !== null &&
+    !Array.isArray(item) &&
+    Reflect.get(item, 'type') === 'web_search_call' &&
+    Reflect.get(item, 'status') === 'completed'
+  ) {
+    return { performed: true }
+  }
+
+  const usage = Reflect.get(rawValue, 'usage')
+  if (typeof usage !== 'object' || usage === null || Array.isArray(usage)) return
+  const counts = [
+    ['server_tool_use', 'web_search_requests'],
+    ['server_tool_use_details', 'web_search_requests'],
+    ['web_search', 'num_requests'],
+  ] as const
+  const requestCounts = counts.flatMap(([key, countKey]) => {
+    const value = Reflect.get(usage, key)
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return []
+    const requests = Reflect.get(value, countKey)
+    return typeof requests === 'number' && Number.isInteger(requests) && requests > 0
+      ? [requests]
+      : []
+  })
+  return requestCounts.length > 0
+    ? { performed: true, requests: Math.max(...requestCounts) }
+    : undefined
+}
+
+const mergeProviderWebSearchObservation = (
+  current: ProviderWebSearchObservation | undefined,
+  incoming: ProviderWebSearchObservation | undefined,
+): ProviderWebSearchObservation | undefined => {
+  if (!incoming) return current
+  const requests = Math.max(current?.requests ?? 0, incoming.requests ?? 0)
+  return requests > 0 ? { performed: true, requests } : { performed: true }
+}
 
 export const classifyStreamingFailure = (error: unknown, aborted: boolean) => {
   const message = humanizeError(error).toLowerCase()
@@ -92,6 +140,7 @@ export type ChatCompletionStreamResult =
       response: Awaited<ReturnType<typeof streamTextType>['response']>
       rawOutput: string
       partialTextOutput: string
+      providerWebSearch?: ProviderWebSearchObservation
     }
   | {
       ok: false
@@ -100,6 +149,7 @@ export type ChatCompletionStreamResult =
       failure: ReturnType<typeof classifyStreamingFailure>
       rawOutput: string
       partialTextOutput: string
+      providerWebSearch?: ProviderWebSearchObservation
     }
 
 export const runChatCompletionStream = async (input: {
@@ -117,13 +167,20 @@ export const runChatCompletionStream = async (input: {
   let rawOutput = ''
   let partialTextOutput = ''
   let capturedError: unknown
+  let providerWebSearch: ProviderWebSearchObservation | undefined
 
   const completion = input.streamText({
     timeout: input.timeout,
     includeRawChunks: true,
     onChunk({ chunk }) {
       input.onChunk(chunk)
-      if (chunk.type === 'raw') rawOutput += serializeRawChunkValue(chunk.rawValue)
+      if (chunk.type === 'raw') {
+        rawOutput += serializeRawChunkValue(chunk.rawValue)
+        providerWebSearch = mergeProviderWebSearchObservation(
+          providerWebSearch,
+          getProviderWebSearchObservation(chunk.rawValue),
+        )
+      }
       partialTextOutput += extractTextFromChunk(chunk)
     },
     onError(error) {
@@ -153,6 +210,7 @@ export const runChatCompletionStream = async (input: {
       response,
       rawOutput,
       partialTextOutput,
+      ...(providerWebSearch ? { providerWebSearch } : {}),
     }
   } catch (error) {
     const effectiveError = capturedError ?? error
@@ -163,6 +221,7 @@ export const runChatCompletionStream = async (input: {
       failure: classifyStreamingFailure(effectiveError, input.abortSignal?.aborted ?? false),
       rawOutput,
       partialTextOutput,
+      ...(providerWebSearch ? { providerWebSearch } : {}),
     }
   }
 }

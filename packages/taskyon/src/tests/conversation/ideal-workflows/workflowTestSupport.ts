@@ -1,10 +1,9 @@
 import type { TaskNode } from '../../../types/taskNode'
-import { hasProviderWebSearchObservation } from '../../../tools/chatCompletion/streamResult'
 
 export const verifySearchedComputation = (
   tasks: readonly TaskNode[],
   completionMetas: readonly unknown[],
-  sourceDate: string,
+  sourceValue: string,
 ) => {
   const lastToolIndex = tasks.findLastIndex(
     (task) =>
@@ -16,9 +15,7 @@ export const verifySearchedComputation = (
   let completionIndex = 0
   const searchBeforeTool = tasks.slice(0, lastToolIndex).some((task) => {
     if (task.content.type === 'functioncall' && task.content.data.name === 'chatCompletion') {
-      return hasProviderWebSearchObservation(
-        searchStreamContent(completionMetas[completionIndex++]),
-      )
+      return hasRecordedProviderWebSearch(completionMetas[completionIndex++])
     }
     return hasSearchSource([task])
   })
@@ -29,16 +26,16 @@ export const verifySearchedComputation = (
   const decodedCode = code.replace(/\\u([0-9a-f]{4})/gi, (_, hex: string) =>
     String.fromCharCode(Number.parseInt(hex, 16)),
   )
-  if (!decodedCode.includes(sourceDate))
-    throw new Error('Computation did not use the independently verified source date')
-  const reversedDate = [...sourceDate].reverse().join('')
+  if (!decodedCode.includes(sourceValue))
+    throw new Error('Computation did not use the independently verified source value')
+  const reversedValue = [...sourceValue].reverse().join('')
   const result = tasks.slice(lastToolIndex + 1).find((task) => task.content.type === 'toolresult')
   if (
     result?.content.type !== 'toolresult' ||
-    !JSON.stringify(result.content.data).includes(reversedDate)
+    !JSON.stringify(result.content.data).includes(reversedValue)
   )
-    throw new Error('Expected the correctly reversed source date in the tool result')
-  return reversedDate
+    throw new Error('Expected the correctly reversed source value in the tool result')
+  return reversedValue
 }
 verifySearchedComputation.helper = true
 
@@ -97,11 +94,12 @@ export const waitForTaskMeta = async (
 }
 waitForTaskMeta.helper = true
 
-export const searchStreamContent = (meta: unknown) =>
-  meta &&
+export const hasRecordedProviderWebSearch = (meta: unknown) =>
+  meta !== null &&
   typeof meta === 'object' &&
-  'streamContent' in meta &&
-  typeof meta.streamContent === 'string'
-    ? meta.streamContent
-    : ''
-searchStreamContent.helper = true
+  'providerWebSearch' in meta &&
+  meta.providerWebSearch !== null &&
+  typeof meta.providerWebSearch === 'object' &&
+  'performed' in meta.providerWebSearch &&
+  meta.providerWebSearch.performed === true
+hasRecordedProviderWebSearch.helper = true

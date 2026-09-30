@@ -94,6 +94,28 @@ yarn tycli:diagnostics:list
 yarn tycli:diagnostics --filter '<test name>' --details
 ```
 
+To save the opt-in chat-completion trace during a focused CLI diagnostic, pass `--trace-dir`:
+
+```bash
+yarn tycli:diagnostics \
+  --online \
+  --filter Greeting \
+  --trace-dir /tmp/taskyon-traces
+```
+
+Each `*_record.json` contains the redacted provider request attempts, every raw response chunk
+visible to the AI SDK, parsed messages and sources, output, finish reason, and any reported hosted
+web-search usage. Task metadata also records `providerWebSearch` when a structured provider event
+reports a completed search; `streamContent` retains the older serialized raw-chunk view. A usage
+count proves that a search occurred, but may reveal neither its query nor its source URLs. Missing
+sources are reported as an observation, never invented as a citation. Traces omit binary payloads,
+truncate oversized text fields, and are not byte-for-byte network captures or provider-internal
+search logs. Redaction catches known credential fields but cannot reliably identify an arbitrary
+secret split across response chunks. Trace files are owner-readable only and can contain private
+prompt or result text; keep them outside the repository and do not publish them. The flag takes
+precedence over the existing `TYCLI_CHAT_COMPLETION_TRACE_DIR` environment override. Routine
+`tycli --debug` keeps its smaller request-only trace unless a trace directory is explicit.
+
 Run levels select cumulative diagnostic sets. L1 is the quick development check; L2 adds broad
 per-test-fast coverage; L3 adds the slower and online checks required for a release. L4 is reserved
 for open-ended evaluations whose overall outcome needs a quality judgment beyond automated checks.

@@ -18,11 +18,12 @@ import {
 import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import {
   resolveChatCompletionConnection,
+  type ChatCompletionMetadataEvent,
   type ChatCompletionStreamEvent,
   type ProviderRequestTrace,
   type TaskNodeMeta,
 } from '../types/chatCompletion'
-import type { partialTaskDraft, TaskGetter, TaskNode } from '../types/taskNode'
+import type { Annotation, partialTaskDraft, TaskGetter, TaskNode } from '../types/taskNode'
 import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
 import type { ContentHash, ToolBase } from '../types/tools'
@@ -38,17 +39,19 @@ import {
 } from './chatCompletion/providerRequest'
 import {
   convertProviderSourceToAnnotation,
+  extractProviderWebSearchAnnotation,
   interpretAssistantMessage,
   normalizeAssistantMessageForToolCall,
   parseStructuredResponseWithTrailingText,
   validateStructuredResponse,
 } from './chatCompletion/response'
+import { cleanupRawStreamOutput, runChatCompletionStream } from './chatCompletion/streamResult'
 import {
-  cleanupRawStreamOutput,
-  hasProviderWebSearchObservation,
-  runChatCompletionStream,
-} from './chatCompletion/streamResult'
-import { writeChatCompletionTrace } from './chatCompletionTrace'
+  isChatCompletionResponseTracingEnabled,
+  isChatCompletionTracingEnabled,
+  redactChatCompletionTraceValue,
+  writeChatCompletionTrace,
+} from './chatCompletionTrace'
 import {
   buildChatCompletionRetryDelayTask,
   buildNextChatCompletionRetry,
@@ -67,6 +70,14 @@ const getChatCompletionContextOptions = (maxFollow: number | undefined) =>
 
 const normalizePromptInjections = (value: unknown): PromptInjection[] =>
   Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+
+const appendAnnotations = (
+  annotations: readonly Annotation[] | undefined,
+  extra: Annotation | undefined,
+): Annotation[] | undefined => {
+  const merged = [...(annotations ?? []), ...(extra ? [extra] : [])]
+  return merged.length > 0 ? merged : undefined
+}
 
 const normalizeProviderUsage = (
   usage: Awaited<ReturnType<typeof streamText>['totalUsage']>,
@@ -129,13 +140,13 @@ export function createChatCompletionTool(
     getArtifact?: ArtifactStore['get']
     listToolDefinitions: () => Promise<Record<string, ToolBase>>
     resolveToolDefinition?: (name: string, revision?: ContentHash) => Promise<ToolBase | undefined>
-    metaUpsert: TyTaskManager['metaUpsert']
     fetch?: typeof fetch
   },
 ) {
   const providerConnection = resolveChatCompletionConnection(connection)
   const settlementConfirmation = createSettlementConfirmationLoader(providerConnection.baseURL)
   const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
+  const metadataStream = createStream<ChatCompletionMetadataEvent>()
   const chatCompletion = createTool({
     description: 'Generates a chat-based response using the OpenAI API for the previous message.',
     longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
@@ -463,7 +474,9 @@ export function createChatCompletionTool(
         providerRequest,
         ...(capabilities.fetch ? { fetch: capabilities.fetch } : {}),
       })
-      const traceEnabled = trace?.enabled === true
+      const traceEnabled = isChatCompletionTracingEnabled(trace?.enabled === true)
+      const captureResponse = isChatCompletionResponseTracingEnabled()
+      const rawResponseChunks: unknown[] = []
 
       const streamResult = await runChatCompletionStream({
         streamText,
@@ -474,9 +487,13 @@ export function createChatCompletionTool(
         onChunk(chunk) {
           const event = { taskId: currentTask?.id ?? 'N/A', chunk }
           chatCompletionStream.emit(event)
+          if (captureResponse && chunk.type === 'raw') {
+            rawResponseChunks.push(redactChatCompletionTraceValue(chunk.rawValue))
+          }
         },
       })
       const { completion: chatCompletion, rawOutput, partialTextOutput } = streamResult
+      const providerWebSearch = streamResult.providerWebSearch
 
       if (!streamResult.ok) {
         // The next attempt discovers a restarted instance; never replay completed work here.
@@ -527,9 +544,9 @@ export function createChatCompletionTool(
               }
             : undefined
         if (currentTask) {
-          void capabilities.metaUpsert(
-            currentTask.id,
-            {
+          metadataStream.emit({
+            taskId: currentTask.id,
+            metadata: {
               error: {
                 humanized,
                 serialized: serializeError(effectiveErr),
@@ -557,9 +574,9 @@ export function createChatCompletionTool(
                 ? { assistantOutputSanitation: partialAssistantSanitation }
                 : {}),
               providerRequest,
+              ...(providerWebSearch ? { providerWebSearch } : {}),
             },
-            'shallow_merge',
-          )
+          })
         }
         console.log('chat completion error', {
           rawOutput,
@@ -572,6 +589,18 @@ export function createChatCompletionTool(
             taskId: traceTaskId,
             ...(traceLabel ? { label: traceLabel } : {}),
             providerRequest,
+            ...(captureResponse
+              ? {
+                  providerResponse: {
+                    rawChunks: rawResponseChunks,
+                    error: redactChatCompletionTraceValue({
+                      name: effectiveErr instanceof Error ? effectiveErr.name : undefined,
+                      message: humanized,
+                    }),
+                    ...(providerWebSearch ? { providerWebSearch } : {}),
+                  },
+                }
+              : {}),
           })
         }
         return context.createSubtasksResult([
@@ -637,40 +666,56 @@ export function createChatCompletionTool(
           apiKey,
           providerConnection.defaultHeaders?.apiKey ?? '',
           delegatedTokenJti,
-          capabilities.metaUpsert,
+          metadataStream.emit,
           totalUsage,
           selectedApi,
         )
         metaInfo.providerRequest = providerRequest
+        if (providerWebSearch) metaInfo.providerWebSearch = providerWebSearch
         console.log('saving task metadata', {
           taskId: currentTask.id,
           providerAttempts: providerRequest.attempts.length,
         })
-        void capabilities.metaUpsert(currentTask.id, metaInfo, 'shallow_merge')
+        metadataStream.emit({ taskId: currentTask.id, metadata: metaInfo })
       } else if (currentTask) {
         const costs = await readProviderCosts(chatCompletion, selectedApi)
-        void capabilities.metaUpsert(
-          currentTask.id,
-          {
+        metadataStream.emit({
+          taskId: currentTask.id,
+          metadata: {
             providerRequest,
+            ...(providerWebSearch ? { providerWebSearch } : {}),
             ...(costs.length > 0 ? { costs } : {}),
           },
-          'shallow_merge',
-        )
+        })
       }
 
       // in case a schema was given, we simply use that schema and return it as a structured message
       // for further processing (e.g. a contextFunction)...
       const output = await chatCompletion.output
+      const providerSources = await chatCompletion.sources
       if (traceEnabled) {
+        const finishReason = captureResponse ? await chatCompletion.rawFinishReason : undefined
         await writeChatCompletionTrace({
           taskId: traceTaskId,
           ...(traceLabel ? { label: traceLabel } : {}),
           providerRequest,
+          ...(captureResponse
+            ? {
+                providerResponse: {
+                  rawChunks: rawResponseChunks,
+                  messages: redactChatCompletionTraceValue(res.messages),
+                  sources: redactChatCompletionTraceValue(providerSources),
+                  output: redactChatCompletionTraceValue(output),
+                  ...(typeof finishReason === 'string' ? { finishReason } : {}),
+                  ...(providerWebSearch ? { providerWebSearch } : {}),
+                },
+              }
+            : {}),
         })
       }
       // convert sources
-      const sources = (await chatCompletion.sources).map(convertProviderSourceToAnnotation)
+      const sources = providerSources.map(convertProviderSourceToAnnotation)
+      const providerSearch = extractProviderWebSearchAnnotation(res.messages, providerWebSearch)
 
       if (schema) {
         const parsedResponse: { data: unknown; trailingText?: string } =
@@ -681,34 +726,23 @@ export function createChatCompletionTool(
           throw new Error('Schema needs to be an object!', { cause: schema })
         }
         const structResponse = validateStructuredResponse(parsedResponse.data, schema)
-        const responseMessages = parsedResponse.trailingText
-          ? [
-              {
-                role: 'assistant' as const,
-                content: {
-                  type: 'message' as const,
-                  data: parsedResponse.trailingText,
-                  ...(sources.length > 0 ? { ann: sources } : {}),
-                },
-              },
-            ]
-          : sources.length > 0
+        const annotations = appendAnnotations(sources, providerSearch)
+        return context.createSubtasksResult([
+          ...(parsedResponse.trailingText
             ? [
                 {
                   role: 'assistant' as const,
-                  content: {
-                    type: 'message' as const,
-                    data: 'Provided sources for the structured response.',
-                    ann: sources,
-                  },
+                  content: { type: 'message' as const, data: parsedResponse.trailingText },
                 },
               ]
-            : []
-        return context.createSubtasksResult([
-          ...responseMessages,
+            : []),
           {
             role: 'assistant',
-            content: { type: 'structured', data: structResponse },
+            content: {
+              type: 'structured',
+              data: structResponse,
+              ...(annotations ? { ann: annotations } : {}),
+            },
           },
         ])
       }
@@ -725,17 +759,13 @@ export function createChatCompletionTool(
         useProviderToolCalling,
         toolDefs,
         chatInfo.variableService,
-        hasProviderWebSearchObservation(rawOutput),
       )
       const assistantOutputSanitation = outcome.sanitation.at(-1)
       if (currentTask && assistantOutputSanitation) {
-        void capabilities.metaUpsert(
-          currentTask.id,
-          {
-            assistantOutputSanitation,
-          },
-          'shallow_merge',
-        )
+        metadataStream.emit({
+          taskId: currentTask.id,
+          metadata: { assistantOutputSanitation },
+        })
       }
 
       switch (outcome.kind) {
@@ -750,28 +780,42 @@ export function createChatCompletionTool(
                   ...(message.annotations ? { ann: message.annotations } : {}),
                 },
               })),
-              ...outcome.calls.map<partialTaskDraft>((call) => ({
-                role: 'function',
-                content: { type: 'functioncall', data: call },
-              })),
+              ...outcome.calls.map<partialTaskDraft>((call, index) => {
+                const annotations =
+                  index === 0 ? appendAnnotations(undefined, providerSearch) : undefined
+                return {
+                  role: 'function',
+                  content: {
+                    type: 'functioncall',
+                    data: call,
+                    ...(annotations ? { ann: annotations } : {}),
+                  },
+                }
+              }),
             ],
           ])
         case 'answers':
           return context.createSubtasksResult([
-            outcome.answers.flatMap<partialTaskDraft>((answer) => [
-              {
-                role: 'assistant',
-                content: {
-                  type: 'message',
-                  data: answer.content,
-                  ...(answer.annotations ? { ann: answer.annotations } : {}),
+            outcome.answers.flatMap<partialTaskDraft>((answer, index) => {
+              const annotations = appendAnnotations(
+                answer.annotations,
+                index === 0 ? providerSearch : undefined,
+              )
+              return [
+                {
+                  role: 'assistant',
+                  content: {
+                    type: 'message',
+                    data: answer.content,
+                    ...(annotations ? { ann: annotations } : {}),
+                  },
                 },
-              },
-              {
-                role: 'system',
-                content: { type: 'return', data: 'assistant answered' },
-              },
-            ]),
+                {
+                  role: 'system',
+                  content: { type: 'return', data: 'assistant answered' },
+                },
+              ]
+            }),
           ])
         case 'empty':
           return context.createSubtasksResult([[]])
@@ -779,7 +823,11 @@ export function createChatCompletionTool(
     },
   })
 
-  return { chatCompletion, stream: chatCompletionStream.stream }
+  return {
+    chatCompletion,
+    stream: chatCompletionStream.stream,
+    metadataStream: metadataStream.stream,
+  }
 }
 
 export type ChatCompletionTool = Awaited<
@@ -805,7 +853,7 @@ async function getMetaInfos(
   apiKey: string,
   taskyonKey: string,
   delegatedTokenJti: string | undefined,
-  upsertMeta: TyTaskManager['metaUpsert'],
+  emitMetadata: (event: ChatCompletionMetadataEvent) => void,
   totalUsage: Awaited<ReturnType<typeof streamText>['totalUsage']>,
   provider: string,
 ) {
@@ -866,7 +914,7 @@ async function getMetaInfos(
         .then((costs) => {
           if (typeof costs === 'number') {
             console.log('found new task costs:', costs)
-            void upsertMeta(currentTask.id, { taskCosts: costs }, 'shallow_merge')
+            emitMetadata({ taskId: currentTask.id, metadata: { taskCosts: costs } })
           }
         })
         .catch((err) =>

@@ -9,7 +9,22 @@ export const resolveCliDebugConfiguration = (
 ) => {
   const debugLogsEnabled =
     argv.includes('--debug') || environment[`${environmentPrefix}_DEBUG`] === '1'
-  const explicitTraceDir = environment[`${environmentPrefix}_CHAT_COMPLETION_TRACE_DIR`]?.trim()
+  const traceFlagIndex = argv.findIndex(
+    (arg) => arg === '--trace-dir' || arg.startsWith('--trace-dir='),
+  )
+  const traceFlag = argv[traceFlagIndex]
+  const flagTraceDir =
+    traceFlagIndex < 0
+      ? undefined
+      : (traceFlag === '--trace-dir'
+          ? argv[traceFlagIndex + 1]
+          : traceFlag?.slice('--trace-dir='.length)
+        )?.trim()
+  if (traceFlagIndex >= 0 && (!flagTraceDir || flagTraceDir.startsWith('--'))) {
+    throw new Error('--trace-dir requires a directory path')
+  }
+  const explicitTraceDir =
+    flagTraceDir || environment[`${environmentPrefix}_CHAT_COMPLETION_TRACE_DIR`]?.trim()
   const traceDir = explicitTraceDir || (debugLogsEnabled ? logDir : undefined)
   const label = environment[`${environmentPrefix}_CHAT_COMPLETION_TRACE_LABEL`]?.trim()
 
@@ -18,6 +33,7 @@ export const resolveCliDebugConfiguration = (
     chatCompletionTrace: traceDir
       ? {
           dir: traceDir,
+          captureResponse: Boolean(explicitTraceDir),
           ...(label ? { label } : {}),
         }
       : undefined,

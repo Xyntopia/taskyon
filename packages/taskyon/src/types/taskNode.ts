@@ -28,22 +28,41 @@ export const Annotation = z.union([
     })
     .partial()
     .required({ type: true }),
+  z.object({
+    type: z
+      .literal('web-search')
+      .describe('Identifies a provider or hosted web search completed during this step.'),
+    queries: z.string().array().optional().describe('Search queries reported by the provider.'),
+    sources: z
+      .object({ url: z.string(), title: z.string().optional() })
+      .array()
+      .optional()
+      .describe('URLs reported as consulted by the search; these are not answer citations.'),
+  }),
 ])
 
 export type Annotation = z.infer<typeof Annotation>
 
+const ContentAnnotations = {
+  ann: Annotation.array()
+    .optional()
+    .describe('Source and activity annotations attached to this content.'),
+}
+
 const MessageContent = z.object({
   type: z.literal('message').describe('Identifies conversational text content.'),
   data: z.string().describe('Text presented as the task message.'),
-  ann: Annotation.array().optional().describe('Source annotations attached to the message.'),
+  ...ContentAnnotations,
 })
 const StructuredContent = z.object({
   type: z.literal('structured').describe('Identifies machine-readable structured content.'),
   data: z.unknown().describe('Structured task value defined by the producing tool or workflow.'),
+  ...ContentAnnotations,
 })
 const ToolCallContent = z.object({
   type: z.literal('functioncall').describe('Identifies a requested tool call.'),
   data: FunctionCall.describe('Tool name and arguments to invoke.'),
+  ...ContentAnnotations,
 })
 export const FileAttachment = z.object({
   hash: z
@@ -61,10 +80,12 @@ const UploadedFilesContent = z.object({
   data: z
     .array(z.union([FileAttachment, z.string()]))
     .describe('Content-addressed files attached to the task; strings are legacy references.'),
+  ...ContentAnnotations,
 })
 const ToolResultContent = z.object({
   type: z.literal('toolresult').describe('Identifies the result of a tool call.'),
   data: z.unknown().describe('Result value returned by the tool.'),
+  ...ContentAnnotations,
 })
 export const BindingImplementation = z.strictObject({
   type: z.literal('binding'),
@@ -99,6 +120,7 @@ const ErrorContent = z
   .object({
     type: z.literal('error').describe('Identifies task-processing error content.'),
     data: z.unknown().describe('Error details reported by the failed task step.'),
+    ...ContentAnnotations,
   })
   .meta({
     description: 'Gets created if any error occurs during task processing.',

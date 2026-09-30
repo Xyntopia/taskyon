@@ -121,6 +121,30 @@ const sourceItems = computed<SourceListItem[]>(() =>
         },
       ]
     }
+    if (source.type === 'web-search') {
+      const queries = source.queries?.length ? source.queries.join(', ') : undefined
+      const consulted = source.sources ?? []
+      return [
+        {
+          key: `web-search:${index}`,
+          label: 'Web search performed',
+          detail: [
+            queries ? `Queries: ${queries}` : undefined,
+            consulted.length > 0
+              ? `${consulted.length} sources consulted`
+              : 'No source URLs reported',
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        },
+        ...consulted.map((entry, sourceIndex) => ({
+          key: `web-search-source:${index}:${sourceIndex}`,
+          label: entry.title ?? `Source ${sourceIndex + 1}`,
+          detail: entry.url,
+          url: entry.url,
+        })),
+      ]
+    }
     return []
   }),
 )

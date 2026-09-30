@@ -1,13 +1,23 @@
-import type { ProviderRequestTrace } from '../types/chatCompletion'
+import type { ProviderRequestTrace, ProviderWebSearchObservation } from '../types/chatCompletion'
 
 export type ChatCompletionTraceRecord = {
   taskId: string
   label?: string
   providerRequest: ProviderRequestTrace
+  providerResponse?: {
+    rawChunks: unknown[]
+    messages?: unknown
+    sources?: unknown
+    output?: unknown
+    finishReason?: string
+    error?: unknown
+    providerWebSearch?: ProviderWebSearchObservation
+  }
 }
 
 export type ChatCompletionTraceWriter = {
   write: (record: ChatCompletionTraceRecord) => Promise<void> | void
+  captureResponse?: boolean
 }
 
 let traceWriter: ChatCompletionTraceWriter | undefined
@@ -15,6 +25,11 @@ let traceWriter: ChatCompletionTraceWriter | undefined
 export const setChatCompletionTraceWriter = (writer: ChatCompletionTraceWriter | undefined) => {
   traceWriter = writer
 }
+
+export const isChatCompletionTracingEnabled = (requested: boolean) =>
+  requested || traceWriter !== undefined
+
+export const isChatCompletionResponseTracingEnabled = () => traceWriter?.captureResponse === true
 
 const sensitiveKey = /authorization|cookie|api[-_]?key|token|secret|password|credential/i
 const omittedPayloadKey = /file_data|image_url|input_audio|audio|image|file/i
@@ -32,6 +47,10 @@ const redactText = (value: string) =>
   value
     .replace(/(bearer)\s+[^\s,;]+/gi, '$1 [[redacted]]')
     .replace(/(api[-_]?key|token|secret|password|cookie|session)=([^\s,;]+)/gi, '$1=[[redacted]]')
+    .replace(
+      /("[^"\n]*(?:authorization|cookie|api[-_]?key|token|secret|password|credential)[^"\n]*"\s*:\s*")[^"\n]*(")/gi,
+      '$1[[redacted]]$2',
+    )
 
 const truncate = (value: string) => {
   const redacted = redactText(value)
@@ -40,16 +59,17 @@ const truncate = (value: string) => {
     : redacted
 }
 
-const redactValue = (value: unknown, key?: string): unknown => {
+export const redactChatCompletionTraceValue = (value: unknown, key?: string): unknown => {
   if (key && sensitiveKey.test(key)) return '[[redacted]]'
   if (key && omittedPayloadKey.test(key)) return '[[omitted]]'
   if (typeof value === 'string') return truncate(value)
-  if (Array.isArray(value)) return value.map((item) => redactValue(item))
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return '[[omitted]]'
+  if (Array.isArray(value)) return value.map((item) => redactChatCompletionTraceValue(item))
   if (!value || typeof value !== 'object') return value
   return Object.fromEntries(
     Object.entries(value).map(([entryKey, entryValue]) => [
       entryKey,
-      redactValue(entryValue, entryKey),
+      redactChatCompletionTraceValue(entryValue, entryKey),
     ]),
   )
 }
@@ -65,9 +85,9 @@ const readRecordedBody = async (request: Request) => {
   const text = await request.clone().text()
   if (!text) return undefined
   try {
-    return redactValue(JSON.parse(text))
+    return redactChatCompletionTraceValue(JSON.parse(text))
   } catch {
-    return redactValue(text)
+    return redactChatCompletionTraceValue(text)
   }
 }
 
@@ -75,9 +95,9 @@ const readErrorBody = async (response: Response) => {
   const text = await response.clone().text()
   if (!text) return undefined
   try {
-    return redactValue(JSON.parse(text))
+    return redactChatCompletionTraceValue(JSON.parse(text))
   } catch {
-    return redactValue(text)
+    return redactChatCompletionTraceValue(text)
   }
 }
 

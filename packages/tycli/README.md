@@ -121,6 +121,8 @@ Diagnostics defaults:
 - `--verbose` restores full live runtime and test output; `TYCLI_LOG_DIR` selects the log directory. `tycli --clean-logs` removes runtime `.log` files and chat-completion `*_record.json` files from that directory.
 - Taskyon-service diagnostics use the encrypted Taskyon provider secret when available; no raw auth flag is required.
 - `--provider` and `--model` override the stored `tycli` selection for a diagnostics run.
+- `--trace-dir DIR` saves private chat-completion request/response traces for that run. It takes
+  precedence over `TYCLI_CHAT_COMPLETION_TRACE_DIR` when both are provided.
 
 From the Nix dev shell:
 

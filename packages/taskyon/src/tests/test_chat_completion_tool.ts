@@ -15,6 +15,7 @@ import {
 } from '../tools/chatCompletion/providerRequest'
 import { CODEX_MODELS_CLIENT_VERSION, fetchModelsForProvider } from '../llm/modelDiscovery'
 import {
+  extractProviderWebSearchAnnotation,
   convertProviderSourceToAnnotation,
   interpretAssistantMessage,
   parseStructuredResponseWithTrailingText,
@@ -29,9 +30,9 @@ import {
 import { getTaskyonCosts } from '../taskyon.space/taskyon.space_api'
 import { taskPlanner } from '../tools/TaskPlannerTool'
 import { webResearchPlanner } from '../tools/webResearchTool'
-import { jsonSchema, streamText } from 'ai'
+import { jsonSchema, streamText, type ModelMessage } from 'ai'
 import type { JSONSchema7 } from 'json-schema'
-import { Annotation, type TaskNode } from '../types/taskNode'
+import { Annotation, TaskContent, type TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -570,7 +571,6 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
     getTaskChainSelection: unavailable,
     getTask: unavailable,
     listToolDefinitions: unavailable,
-    metaUpsert: unavailable,
   })
   const properties = chatCompletion.parameters.properties
 
@@ -1212,7 +1212,7 @@ export const testChatCompletionConvertsDocumentSourcesWithoutDroppingDetails = (
   return { success: true }
 }
 
-export const testChatCompletionPreservesSourceLessSearchWithNativeToolCall = () => {
+export const testChatCompletionKeepsSourceLessSearchOutOfAssistantHistory = () => {
   const outcome = interpretAssistantMessage(
     [],
     {
@@ -1235,15 +1235,226 @@ export const testChatCompletionPreservesSourceLessSearchWithNativeToolCall = () 
       },
     },
     createTaskVariablePresentationService(),
-    true,
   )
 
   assert(outcome.kind === 'tool-calls', 'Expected native tool call to control continuation')
   assert(
-    outcome.assistantMessages?.[0]?.content === 'Hosted web search activity was reported.',
-    'Expected source-less provider search to remain visible to the continuation',
+    outcome.assistantMessages === undefined,
+    'Provider search usage without sources must not create an assistant message',
   )
 
+  return { success: true }
+}
+
+const providerSearchResponseMessages = (): ModelMessage[] => [
+  {
+    role: 'assistant',
+    content: [
+      {
+        type: 'tool-call',
+        toolCallId: 'hosted-search-call',
+        toolName: 'web_search',
+        input: {},
+        providerExecuted: true,
+      },
+      {
+        type: 'tool-result',
+        toolCallId: 'hosted-search-call',
+        toolName: 'web_search',
+        output: {
+          type: 'json',
+          value: {
+            action: {
+              type: 'search',
+              query: 'daily space photo',
+              queries: ['daily space photo', 'space observatory image'],
+            },
+            sources: [
+              { type: 'url', url: 'https://example.test/space-photo' },
+              { type: 'url', url: 'https://example.test/image-credit' },
+            ],
+          },
+        },
+      },
+      {
+        type: 'tool-call',
+        toolCallId: 'javascript-call',
+        toolName: 'executeJavaScript',
+        input: { code: 'return 1' },
+      },
+    ],
+  },
+]
+
+export const testTaskContentAcceptsAnnotationsOnDataBearingTypes = () => {
+  const annotation = { type: 'url', url: 'https://example.test/source' }
+  for (const content of [
+    { type: 'message', data: 'text', ann: [annotation] },
+    { type: 'structured', data: { value: 1 }, ann: [annotation] },
+    {
+      type: 'functioncall',
+      data: { name: 'executeJavaScript', arguments: {} },
+      ann: [annotation],
+    },
+    { type: 'toolresult', data: 'result', ann: [annotation] },
+    { type: 'error', data: 'failure', ann: [annotation] },
+    { type: 'files', data: [], ann: [annotation] },
+  ]) {
+    TaskContent.parse(content)
+  }
+  assert(
+    !TaskContent.safeParse({ type: 'return', data: 'done', ann: [annotation] }).success,
+    'Return content must stay annotation-free',
+  )
+  return { success: true }
+}
+
+export const testChatCompletionExtractsProviderSearchAnnotation = () => {
+  const responseMessages = providerSearchResponseMessages()
+  const annotation = extractProviderWebSearchAnnotation(responseMessages, { performed: true })
+
+  assert(annotation !== undefined, 'Expected a provider search annotation')
+  Annotation.parse(annotation)
+  assert(
+    JSON.stringify(annotation) ===
+      JSON.stringify({
+        type: 'web-search',
+        queries: ['daily space photo', 'space observatory image'],
+        sources: [
+          { url: 'https://example.test/space-photo' },
+          { url: 'https://example.test/image-credit' },
+        ],
+      }),
+    'Expected provider-reported queries and consulted URLs without citation indexes',
+  )
+  TaskContent.parse({
+    type: 'functioncall',
+    data: { name: 'executeJavaScript', arguments: {} },
+    ann: [annotation],
+  })
+
+  const assistantMessage = responseMessages[0]
+  assert(assistantMessage !== undefined, 'Expected a synthetic assistant response')
+  const outcome = interpretAssistantMessage(
+    [],
+    assistantMessage,
+    true,
+    {
+      executeJavaScript: {
+        name: 'executeJavaScript',
+        description: 'Execute JavaScript.',
+        parameters: {
+          type: 'object',
+          properties: { code: { type: 'string' } },
+          required: ['code'],
+          additionalProperties: false,
+        },
+      },
+    },
+    createTaskVariablePresentationService(),
+  )
+  assert(outcome.kind === 'tool-calls', 'Expected the native tool call to continue')
+  assert(outcome.calls[0]?.name === 'executeJavaScript', 'Expected the native tool call')
+  assert(outcome.assistantMessages === undefined, 'Search data must not invent assistant text')
+
+  return { success: true }
+}
+
+export const testChatCompletionRecordsProviderSearchWithoutReturnedSources = () => {
+  const annotation = extractProviderWebSearchAnnotation([], { performed: true })
+  assert(annotation !== undefined, 'Expected an observation-only search annotation')
+  Annotation.parse(annotation)
+  assert(
+    JSON.stringify(annotation) === JSON.stringify({ type: 'web-search' }),
+    'Expected a performed search without queries or URLs to stay empty',
+  )
+  assert(
+    extractProviderWebSearchAnnotation([], undefined) === undefined,
+    'Expected no annotation when neither the provider nor the stream reports a search',
+  )
+  return { success: true }
+}
+
+export const testChatCompletionRendersProviderSearchBeforeToolCall = async () => {
+  const searchAnnotation = extractProviderWebSearchAnnotation(providerSearchResponseMessages(), {
+    performed: true,
+  })
+  assert(searchAnnotation !== undefined, 'Expected a provider search annotation')
+  const hiddenChatCompletion = task({
+    id: 'hidden-chat-completion',
+    role: 'function',
+    created_at: 1,
+    content: { type: 'functioncall', data: { name: 'chatCompletion', arguments: {} } },
+  })
+  const persistedCall = task({
+    id: 'search-informed-call',
+    role: 'function',
+    parentID: hiddenChatCompletion.id,
+    created_at: 2,
+    content: {
+      type: 'functioncall',
+      data: { name: 'executeJavaScript', arguments: { code: 'return 1' } },
+      ann: [searchAnnotation],
+    },
+  })
+  const messages = await convertTaskNodesToOpenAIChat(
+    [hiddenChatCompletion, persistedCall],
+    undefined,
+    false,
+    true,
+    {
+      chatCompletion: {
+        name: 'chatCompletion',
+        description: 'Generate a response.',
+        parameters: { type: 'object', properties: {} },
+        renderOptions: { hideLlm: true },
+      },
+      executeJavaScript: {
+        name: 'executeJavaScript',
+        description: 'Execute JavaScript.',
+        parameters: { type: 'object', properties: { code: { type: 'string' } } },
+      },
+    },
+  )
+
+  assert(messages[0]?.role === 'system', 'Expected the search note as system context')
+  const note = messages[0]?.content
+  assert(typeof note === 'string', 'Expected the search note as text')
+  assert(note.includes('Web search performed'), 'Expected the search activity label')
+  assert(note.includes('daily space photo'), 'Expected the provider-reported query')
+  assert(note.includes('https://example.test/space-photo'), 'Expected the consulted URL')
+  const call = messages[1]
+  assert(call?.role === 'assistant', 'Expected the tool call after the search note')
+  const callContent = call.content
+  assert(
+    Array.isArray(callContent) && callContent[0]?.type === 'tool-call',
+    'Expected the original native tool call',
+  )
+  assert(
+    !JSON.stringify(messages).includes('Sources used by this assistant response'),
+    'Consulted URLs must not be presented as assistant answer citations',
+  )
+  return { success: true }
+}
+
+export const testChatCompletionRendersProviderSearchOnAnswerMessage = async () => {
+  const searchAnnotation = extractProviderWebSearchAnnotation(providerSearchResponseMessages(), {
+    performed: true,
+  })
+  assert(searchAnnotation !== undefined, 'Expected a provider search annotation')
+  const answer = task({
+    id: 'search-informed-answer',
+    role: 'assistant',
+    created_at: 1,
+    content: { type: 'message', data: 'The title is known.', ann: [searchAnnotation] },
+  })
+  const messages = await convertTaskNodesToOpenAIChat([answer], undefined, false, true, {})
+  assert(messages.length === 1 && messages[0]?.role === 'assistant', 'Expected the answer message')
+  const rendered = messages[0]?.content
+  assert(typeof rendered === 'string', 'Expected rendered answer text')
+  assert(rendered.includes('Web search performed'), 'Expected the search record')
+  assert(rendered.includes('daily space photo'), 'Expected the reported query')
+  assert(rendered.includes('https://example.test/space-photo'), 'Expected the consulted URL')
   return { success: true }
 }
 
@@ -2190,8 +2401,18 @@ testChatCompletionPreservesSourcesWithoutTextOrToolCalls.description =
   'A provider response containing only sources remains visible as an empty source-bearing assistant answer.'
 testChatCompletionConvertsDocumentSourcesWithoutDroppingDetails.description =
   'Provider document sources retain their title, filename, media type, and source identifier.'
-testChatCompletionPreservesSourceLessSearchWithNativeToolCall.description =
-  'A provider search reported only by stream metadata remains visible before a native tool continuation.'
+testChatCompletionKeepsSourceLessSearchOutOfAssistantHistory.description =
+  'A provider search reported only by stream metadata does not add assistant text before a native tool continuation.'
+testTaskContentAcceptsAnnotationsOnDataBearingTypes.description =
+  'Data-bearing content types carry source and activity annotations; return content stays clean.'
+testChatCompletionExtractsProviderSearchAnnotation.description =
+  'A provider-executed web search becomes one web-search annotation with its queries and consulted URLs.'
+testChatCompletionRecordsProviderSearchWithoutReturnedSources.description =
+  'A completed provider search without SDK details still records the activity without invented sources.'
+testChatCompletionRendersProviderSearchBeforeToolCall.description =
+  'A functioncall annotation is visible as a system note before the native assistant tool call.'
+testChatCompletionRendersProviderSearchOnAnswerMessage.description =
+  'A web-search annotation on an answer stays visible to the following model without citation labeling.'
 testChatCompletionRendersAssistantSourcesInFollowingContext.description =
   'Assistant source annotations remain visible to the following model completion.'
 testChatCompletionRejectsToolArgumentsOutsideDeclaredSchema.description =

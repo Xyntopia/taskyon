@@ -154,6 +154,12 @@ export const ProviderRequestTrace = z.object({
 })
 export type ProviderRequestTrace = z.infer<typeof ProviderRequestTrace>
 
+export const ProviderWebSearchObservation = z.object({
+  performed: z.literal(true),
+  requests: z.number().int().positive().optional(),
+})
+export type ProviderWebSearchObservation = z.infer<typeof ProviderWebSearchObservation>
+
 export const TaskNodeCost = z.object({
   amount: z.number().finite().nonnegative(),
   source: z.string().min(1),
@@ -191,6 +197,9 @@ export const TaskNodeMeta = z
       description:
         'Redacted provider-wire request and response metadata captured for each chat completion attempt.',
     }),
+    providerWebSearch: ProviderWebSearchObservation.optional().meta({
+      description: 'Provider-reported completed web search, with request count when available.',
+    }),
     assistantOutputSanitation: z
       .object({
         rawIncomingMessage: z.string(),
@@ -213,6 +222,11 @@ export const TaskNodeMeta = z
   .partial()
 
 export type TaskNodeMeta = z.infer<typeof TaskNodeMeta>
+
+export type ChatCompletionMetadataEvent = {
+  taskId: string
+  metadata: TaskNodeMeta
+}
 
 export const providerEndpointConfig = z
   .object({

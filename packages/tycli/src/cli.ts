@@ -80,6 +80,7 @@ import {
   resolveTaskTreeAgentToolWindow,
 } from '@taskyon/taskyon/tools'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
+import { createCliChatCompletionTraceWriter } from './cli/chatCompletionTraceWriter'
 import { createNodeResourceFilesLoader } from '@taskyon/taskyon/tools/nodeTaskyonDocumentationProvider'
 import {
   createDocumentationIndexClientTool,
@@ -441,65 +442,6 @@ type SessionLocationInfo = {
 }
 
 let runtimeLog: RuntimeLog | undefined
-
-const sanitizeTraceFilePart = (value: string) =>
-  value
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80) || 'trace'
-
-const createJsonReplacer = () => {
-  const seen = new WeakSet<object>()
-  return (_key: string, value: unknown) => {
-    if (typeof value === 'function') return `[Function ${value.name || 'anonymous'}]`
-    if (typeof value === 'bigint') return value.toString()
-    if (value && typeof value === 'object') {
-      if (seen.has(value)) return '[Circular]'
-      seen.add(value)
-    }
-    return value
-  }
-}
-
-const stringifyTraceJson = (value: unknown) => JSON.stringify(value, createJsonReplacer(), 2)
-
-function createCliChatCompletionTraceWriter(traceDir: string) {
-  let sequence = 0
-  const fileNameFor = (sequenceId: number, record: { taskId: string; label?: string }) => {
-    const parts = [
-      String(sequenceId).padStart(4, '0'),
-      ...(record.label ? [sanitizeTraceFilePart(record.label)] : []),
-      sanitizeTraceFilePart(record.taskId),
-      'record',
-    ]
-    return `${parts.join('_')}.json`
-  }
-
-  return {
-    write: async (record: { taskId: string; label?: string; providerRequest: unknown }) => {
-      await mkdir(traceDir, { recursive: true })
-      for (;;) {
-        const sequenceId = ++sequence
-        try {
-          await writeFile(
-            join(traceDir, fileNameFor(sequenceId, record)),
-            stringifyTraceJson({
-              sequence: sequenceId,
-              taskId: record.taskId,
-              ...(record.label ? { label: record.label } : {}),
-              providerRequest: record.providerRequest,
-            }),
-            { encoding: 'utf8', flag: 'wx' },
-          )
-          return
-        } catch (error) {
-          if (!(error && typeof error === 'object' && 'code' in error)) throw error
-          if (error.code !== 'EEXIST') throw error
-        }
-      }
-    },
-  }
-}
 
 function writeLine(text: string) {
   clearTransientStatusLine?.()
@@ -980,6 +922,7 @@ const printCliHelp = (host: InteractiveCliHost) => {
     'Command-line options:',
     '  -h, --help                       Show this help and exit',
     '  --debug                          Enable runtime debug and chatCompletion request tracing',
+    '  --trace-dir=DIR                  Save private chatCompletion request/response traces',
     '  --clean-logs                     Delete runtime logs and chatCompletion traces',
     '  --conversation-format=FORMAT     Save conversations as markdown (default) or yaml',
     '  client list-tools                List tools exposed by the connected Taskyon client',
@@ -3204,7 +3147,13 @@ function createCliModelBootstrap(
   } as CliApiConfig
   const chatCompletionTrace = invocation.debugConfiguration.chatCompletionTrace
   setChatCompletionTraceWriter(
-    chatCompletionTrace ? createCliChatCompletionTraceWriter(chatCompletionTrace.dir) : undefined,
+    chatCompletionTrace
+      ? createCliChatCompletionTraceWriter(
+          chatCompletionTrace.dir,
+          chatCompletionTrace.label,
+          chatCompletionTrace.captureResponse,
+        )
+      : undefined,
   )
   const explorationContextFiles: Record<string, string> = {}
   const workspaceOperations = createNodeWorkspaceOperations(process.cwd(), {

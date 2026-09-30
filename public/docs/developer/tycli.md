@@ -19,8 +19,8 @@ Configuration defaults to `~/.config/tycli/config.json`. Conversations and logs 
 inspection, and durable task records use the data directory documented in
 [Files, Storage, and Secrets](../user/storage-and-security.md).
 
-For a normal debugging run, use one option to enable runtime diagnostics and the redacted
-provider requests made by `chatCompletionTool`:
+For a normal debugging run, use one option to enable runtime diagnostics and redacted
+provider-request traces for `chatCompletionTool`:
 
 ```bash
 yarn tycli --debug
@@ -49,10 +49,17 @@ TYCLI_CHAT_COMPLETION_TRACE_DIR=\
 yarn tycli --debug
 ```
 
+An explicit `TYCLI_CHAT_COMPLETION_TRACE_DIR` also records the AI-SDK-visible response chunks,
+parsed messages and sources. This fuller trace is intentionally separate from routine `--debug`
+because response text can contain private data that no generic redactor can reliably recognize.
+
 Audit an isolated trace with
 `node scripts/audit-tycli-chatcompletion-trace.mjs <trace-dir>`. The records are redacted but may
 still contain user or project content, so handle them as debugging artifacts rather than public
-logs.
+logs. The same `TYCLI_CHAT_COMPLETION_TRACE_DIR` flag enables full trace files for
+`yarn tycli:diagnostics`; see [Testing and Diagnostics](diagnostics.md). A trace includes all raw
+response chunks Taskyon receives, but cannot reveal a hosted search query or sources that the
+provider did not return.
 
 Focused diagnostics:
 

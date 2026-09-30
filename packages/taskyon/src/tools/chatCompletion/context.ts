@@ -21,7 +21,13 @@ import {
 } from '../../core/taskVariables'
 import { mapFunctionNames } from '../../core/tools'
 import { toPromptMessages, type PromptInjection } from '../../llm/promptMessages'
-import type { Annotation, FileAttachment, TaskGetter, TaskNode } from '../../types/taskNode'
+import type {
+  Annotation,
+  FileAttachment,
+  TaskContent,
+  TaskGetter,
+  TaskNode,
+} from '../../types/taskNode'
 import type { ContentHash, ToolBase } from '../../types/tools'
 import { charHash } from '../../utils/crypto'
 import { formatErrorForModel } from '../../utils/error'
@@ -361,7 +367,11 @@ const renderTaskContentForLlm = (
           maxStringLength: 16_000,
           includeTruncationNotice: true,
         })
-  return renderTaskyonVariableBlock(variableName, content)
+  const annotations = renderAnnotationsForLlm(getContentAnnotations(task.content))
+  return renderTaskyonVariableBlock(
+    variableName,
+    annotations ? `${content}\n\n${annotations}` : content,
+  )
 }
 
 const renderMissingReferencedTasksForLlm = async (
@@ -393,8 +403,10 @@ const renderMissingReferencedTasksForLlm = async (
   return injectedMessages
 }
 
-const renderSourceAnnotationsForLlm = (annotations: readonly Annotation[] | undefined) => {
-  const sources = annotations?.flatMap((annotation) => {
+const getContentAnnotations = (content: TaskContent) => ('ann' in content ? content.ann : undefined)
+
+const renderSourceAnnotationLines = (annotations: readonly Annotation[] | undefined) =>
+  annotations?.flatMap((annotation) => {
     if (annotation.type === 'url' && annotation.url) {
       const source = `- ${annotation.title ? `${annotation.title}: ` : ''}${annotation.url}`
       return [annotation.content ? `${source}\n  ${annotation.content}` : source]
@@ -413,8 +425,44 @@ const renderSourceAnnotationsForLlm = (annotations: readonly Annotation[] | unde
       return [`- ${label}${details ? `\n  ${details}` : ''}`]
     }
     return []
-  })
-  return sources?.length ? `Sources used by this assistant response:\n${sources.join('\n')}` : ''
+  }) ?? []
+
+const renderWebSearchAnnotationLines = (annotations: readonly Annotation[] | undefined) =>
+  annotations?.flatMap((annotation) => {
+    if (annotation.type !== 'web-search') return []
+    const queries = annotation.queries?.length
+      ? ` for ${annotation.queries.map((query) => `"${query}"`).join(', ')}`
+      : ''
+    const sources = annotation.sources ?? []
+    const header = `Web search performed${queries}.`
+    return sources.length > 0
+      ? [
+          `${header} Consulted sources:`,
+          ...sources.map((source) => `- ${source.title ? `${source.title}: ` : ''}${source.url}`),
+        ]
+      : [`${header} The provider reported no source URLs.`]
+  }) ?? []
+
+const renderAnnotationsForLlm = (annotations: readonly Annotation[] | undefined) => {
+  const sections: string[] = []
+  const sourceLines = renderSourceAnnotationLines(annotations)
+  if (sourceLines.length > 0) {
+    sections.push(`Sources used by this assistant response:\n${sourceLines.join('\n')}`)
+  }
+  const searchLines = renderWebSearchAnnotationLines(annotations)
+  if (searchLines.length > 0) sections.push(searchLines.join('\n'))
+  return sections.join('\n\n')
+}
+
+const renderFunctionCallAnnotationsForLlm = (annotations: readonly Annotation[] | undefined) => {
+  const sections: string[] = []
+  const searchLines = renderWebSearchAnnotationLines(annotations)
+  if (searchLines.length > 0) sections.push(searchLines.join('\n'))
+  const sourceLines = renderSourceAnnotationLines(annotations)
+  if (sourceLines.length > 0) {
+    sections.push(`Sources for the following tool call:\n${sourceLines.join('\n')}`)
+  }
+  return sections.join('\n\n')
 }
 
 const convertTaskNodeToOpenAIMessage = async (
@@ -438,53 +486,58 @@ const convertTaskNodeToOpenAIMessage = async (
       variableService,
       tasksById,
     })
-    if (useNativeTools) {
-      return [
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: await charHash(task.id, maxToolIdLength),
-              toolName: functionCallName,
-              input: llmArguments,
-            },
-          ],
-        } satisfies AssistantModelMessage,
-      ]
-    }
+    const callMessages: ModelMessage[] = useNativeTools
+      ? [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: await charHash(task.id, maxToolIdLength),
+                toolName: functionCallName,
+                input: llmArguments,
+              },
+            ],
+          } satisfies AssistantModelMessage,
+        ]
+      : [
+          {
+            role: 'assistant',
+            content:
+              `The following tool was used: ${functionCallName}.` +
+              (!isEmpty(llmArguments)
+                ? ` The function arguments were: ${serializeObject(llmArguments, {
+                    format: 'json',
+                    maxDepth: 6,
+                    maxArrayLength: 40,
+                    maxObjectKeys: 40,
+                    maxStringLength: 12_000,
+                    includeTruncationNotice: true,
+                  })}`
+                : ''),
+          },
+        ]
 
-    return [
-      {
-        role: 'assistant',
-        content:
-          `The following tool was used: ${functionCallName}.` +
-          (!isEmpty(llmArguments)
-            ? ` The function arguments were: ${serializeObject(llmArguments, {
-                format: 'json',
-                maxDepth: 6,
-                maxArrayLength: 40,
-                maxObjectKeys: 40,
-                maxStringLength: 12_000,
-                includeTruncationNotice: true,
-              })}`
-            : ''),
-      },
-    ]
+    const annotationNote = renderFunctionCallAnnotationsForLlm(getContentAnnotations(task.content))
+    return annotationNote
+      ? [{ role: 'system', content: annotationNote } satisfies SystemModelMessage, ...callMessages]
+      : callMessages
   }
 
   if (task.content.type === 'toolresult') {
-    const renderedBlock = renderTaskyonVariableBlock(
-      variableService.getOrAssignVariableName(task, tasksById),
-      serializeObject(task.content.data, {
-        format: 'yaml',
-        maxDepth: 6,
-        maxArrayLength: 60,
-        maxObjectKeys: 60,
-        maxStringLength: 20_000,
-        includeTruncationNotice: true,
-      }),
-    )
+    const annotationBlock = renderAnnotationsForLlm(getContentAnnotations(task.content))
+    const renderedBlock =
+      renderTaskyonVariableBlock(
+        variableService.getOrAssignVariableName(task, tasksById),
+        serializeObject(task.content.data, {
+          format: 'yaml',
+          maxDepth: 6,
+          maxArrayLength: 60,
+          maxObjectKeys: 60,
+          maxStringLength: 20_000,
+          includeTruncationNotice: true,
+        }),
+      ) + (annotationBlock ? `\n\n${annotationBlock}` : '')
     const toolCallTask = task.parentID ? tasksById.get(task.parentID) : undefined
     const parentToolName =
       toolCallTask?.content.type === 'functioncall' ? toolCallTask.content.data.name : undefined
@@ -524,45 +577,49 @@ const convertTaskNodeToOpenAIMessage = async (
       variableService.getOrAssignVariableName(task, tasksById),
       task.content.data,
     )
-    const sources = renderSourceAnnotationsForLlm(task.content.ann)
+    const annotations = renderAnnotationsForLlm(task.content.ann)
     return [
       {
         role: task.role,
-        content: sources ? `${message}\n\n${sources}` : message,
+        content: annotations ? `${message}\n\n${annotations}` : message,
       },
     ]
   }
 
   if (task.content.type === 'error') {
+    const annotations = renderAnnotationsForLlm(getContentAnnotations(task.content))
+    const content = renderTaskyonVariableBlock(
+      variableService.getOrAssignVariableName(task, tasksById),
+      formatErrorForModel(task.content.data),
+    )
     return [
       {
         role: 'system',
-        content: renderTaskyonVariableBlock(
-          variableService.getOrAssignVariableName(task, tasksById),
-          formatErrorForModel(task.content.data),
-        ),
+        content: annotations ? `${content}\n\n${annotations}` : content,
       },
     ]
   }
 
   if (task.content.type === 'structured') {
+    const annotations = renderAnnotationsForLlm(getContentAnnotations(task.content))
+    const content = renderTaskyonVariableBlock(
+      variableService.getOrAssignVariableName(task, tasksById),
+      serializeObject(task.content.data, {
+        format: 'yaml',
+        maxDepth: 6,
+        maxArrayLength: 50,
+        maxObjectKeys: 50,
+        maxStringLength: 16_000,
+        includeTruncationNotice: true,
+      }),
+    )
     return [
       {
         role: 'assistant',
         content: [
           {
             type: 'text',
-            text: renderTaskyonVariableBlock(
-              variableService.getOrAssignVariableName(task, tasksById),
-              serializeObject(task.content.data, {
-                format: 'yaml',
-                maxDepth: 6,
-                maxArrayLength: 50,
-                maxObjectKeys: 50,
-                maxStringLength: 16_000,
-                includeTruncationNotice: true,
-              }),
-            ),
+            text: annotations ? `${content}\n\n${annotations}` : content,
           },
         ],
       } satisfies AssistantModelMessage,
@@ -578,9 +635,10 @@ const convertTaskNodeToOpenAIMessage = async (
         return `- ${name}${file ? '' : ' (attachment unavailable)'}`
       })
       .join('\n')
+    const annotations = renderAnnotationsForLlm(getContentAnnotations(task.content))
     const systemMessage: SystemModelMessage = {
       role: 'system',
-      content: `User uploaded files:\n${fileNames}`,
+      content: `User uploaded files:\n${fileNames}${annotations ? `\n\n${annotations}` : ''}`,
     }
     const fileContent = await makeFilesAiReadable(attachments, useVisionModels)
 
