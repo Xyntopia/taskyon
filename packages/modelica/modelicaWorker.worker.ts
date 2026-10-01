@@ -13,6 +13,7 @@ import {
   buildLazyModelicaLibraryByteArchive,
   buildLazyModelicaLibraryByteSources,
   buildLazyModelicaLibraryIndexFromArchiveBytes,
+  mergeLazyModelicaLibraryByteSources,
   selectLazyModelicaSourceUris,
   sourceUrisForQualifiedName,
   type LazyModelicaLibraryIndex,
@@ -30,6 +31,13 @@ let diagramDtoCache = new Map<string, ReturnType<typeof handleExtractDiagram>>()
 function resetDiagramCaches(): void {
   diagramResolutionCaches = createDiagramResolutionCaches()
   diagramDtoCache = new Map()
+}
+
+function resetMaterializationDependentDiagramCaches(): void {
+  diagramResolutionCaches.icons.clear()
+  diagramResolutionCaches.ports.clear()
+  diagramResolutionCaches.connectorTypes.clear()
+  diagramResolutionCaches.qualifiedNames.clear()
 }
 
 function trimMapOldest<K, V>(map: Map<K, V>, limit: number): void {
@@ -232,6 +240,7 @@ function loadSourceRootSubset(subset: Record<string, string>): {
   }
   const raw = rumoca.load_source_roots(JSON.stringify(subset))
   materializedSourceRootUris = new Set(uris)
+  resetMaterializationDependentDiagramCaches()
   return parseSourceRootLoadSummary(raw)
 }
 
@@ -490,15 +499,15 @@ function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): u
     throw new Error('No usable .mo files found in archive')
   }
 
-  const existingDecodedSources = Object.fromEntries(
-    Object.entries(loadedSourceRootFiles)
-      .filter(([uri]) => !loadedSourceRootBytes[uri])
-      .map(([uri, source]) => [uri, new TextEncoder().encode(source)]),
+  const merged = mergeLazyModelicaLibraryByteSources(
+    loadedSourceRootBytes,
+    loadedSourceRootFiles,
+    nextSources,
   )
-  loadedSourceRootBytes = {
-    ...existingDecodedSources,
-    ...loadedSourceRootBytes,
-    ...nextSources,
+  loadedSourceRootBytes = merged.sources
+  for (const uri of merged.replacedUris) {
+    delete loadedSourceRootFiles[uri]
+    materializedSourceRootUris.delete(uri)
   }
   lazyLibraryIndex = buildLazyModelicaLibraryIndexFromArchiveBytes(loadedSourceRootBytes)
   resetDiagramCaches()
@@ -610,6 +619,7 @@ function handleExtractDiagramFull(payload: {
   ])
 
   let result: ReturnType<typeof handleExtractDiagram> | null = null
+  let fullyResolved = false
   for (let pass = 0; pass < 3; pass += 1) {
     const requested = new Set<string>()
     const refined = handleExtractDiagram(
@@ -627,6 +637,7 @@ function handleExtractDiagramFull(payload: {
     })
     if (missing.length === 0) {
       result = refined
+      fullyResolved = true
       break
     }
     console.info('[modelica-worker][extract-diagram] materializing missing classes', {
@@ -645,8 +656,10 @@ function handleExtractDiagramFull(payload: {
       diagramResolutionCaches,
     )
   }
-  diagramDtoCache.set(cacheKey, result)
-  trimDiagramCaches()
+  if (fullyResolved) {
+    diagramDtoCache.set(cacheKey, result)
+    trimDiagramCaches()
+  }
   console.info('[modelica-worker][extract-diagram] finished', {
     qualifiedName: payload.qualifiedName,
     elapsedMs: Math.round(performance.now() - startedAt),

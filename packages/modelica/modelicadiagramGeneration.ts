@@ -901,11 +901,48 @@ const extractAnnotationStatement = (source: string): string => {
   return fallback
 }
 
-const extractExtendsStatements = (source: string): string[] =>
-  source
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('extends ') && line.endsWith(';'))
+const classDeclarationLinePattern =
+  /^\s*(?:(?:encapsulated|partial|replaceable|expandable|pure|impure|operator|redeclare|final|inner|outer)\s+)*(?:model|class|package|block|record|connector|type|function|operator)\s+([A-Za-z_][A-Za-z0-9_]*)/i
+
+const hasEqualsOutsideString = (text: string): boolean => {
+  let inString = false
+  let escaped = false
+  for (const char of text) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') inString = true
+    else if (char === '=') return true
+  }
+  return false
+}
+
+const extractTopLevelExtendsStatements = (source: string): string[] => {
+  const openClasses: string[] = []
+  const statements: string[] = []
+  for (const rawLine of source.split('\n')) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const endMatch = /^end\s+([A-Za-z_][A-Za-z0-9_]*)\s*;\s*$/.exec(line)
+    if (endMatch) {
+      if (openClasses.at(-1) === endMatch[1]) openClasses.pop()
+      continue
+    }
+    const declaration = classDeclarationLinePattern.exec(line)
+    if (declaration) {
+      const remainder = line.slice(declaration[0].length)
+      if (!hasEqualsOutsideString(remainder)) openClasses.push(declaration[1] ?? '')
+      continue
+    }
+    if (openClasses.length === 1 && line.startsWith('extends ') && line.endsWith(';')) {
+      statements.push(line)
+    }
+  }
+  return statements
+}
 
 const parseClassInfoAstWithIconStubFallback = (
   source: string,
@@ -921,7 +958,7 @@ const parseClassInfoAstWithIconStubFallback = (
         .map((part) => part.trim())
         .filter(Boolean)
         .pop() || 'Model'
-    const extendsStatements = extractExtendsStatements(source)
+    const extendsStatements = extractTopLevelExtendsStatements(source)
     const annotationStatement = extractAnnotationStatement(source)
     if (extendsStatements.length === 0 && !annotationStatement) {
       throw new Error('Cannot parse Modelica source for diagram extraction')
@@ -1153,13 +1190,6 @@ const shouldIncludeDiagramComponent = (
   return false
 }
 
-const extractExtendsBaseNamesFromSource = (sourceModelica: string): string[] => {
-  const matches = sourceModelica.matchAll(/^\s*extends\s+([A-Za-z_][A-Za-z0-9_.]*)\s*(?:\(|;)/gm)
-  return Array.from(
-    new Set(Array.from(matches, (match) => String(match[1] || '').trim()).filter(Boolean)),
-  )
-}
-
 const extractExtendsBaseNames = (classDef: Record<string, unknown>): string[] => {
   const extendsList = Array.isArray(classDef.extends) ? classDef.extends : []
   return extendsList
@@ -1271,9 +1301,7 @@ const resolveTypeIcon = (
       }
       let inheritedIcon: DiagramIconSpec | undefined
       if (iconClass) {
-        const basesFromAst = extractExtendsBaseNames(iconClass)
-        const bases =
-          basesFromAst.length > 0 ? basesFromAst : extractExtendsBaseNamesFromSource(sourceModelica)
+        const bases = extractExtendsBaseNames(iconClass)
         const parentIcons = bases
           .map((baseName) =>
             resolveTypeIcon(

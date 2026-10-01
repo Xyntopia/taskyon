@@ -121,6 +121,34 @@ export function buildLazyModelicaLibraryByteSources(
   return sources
 }
 
+const bytesEqual = (lhs: Uint8Array, rhs: Uint8Array): boolean => {
+  if (lhs.byteLength !== rhs.byteLength) return false
+  for (let index = 0; index < lhs.byteLength; index += 1) {
+    if (lhs[index] !== rhs[index]) return false
+  }
+  return true
+}
+
+export function mergeLazyModelicaLibraryByteSources(
+  existingBytes: Record<string, Uint8Array>,
+  decodedSources: Record<string, string>,
+  incomingSources: Record<string, Uint8Array>,
+): { sources: Record<string, Uint8Array>; replacedUris: string[] } {
+  const encoder = new TextEncoder()
+  const sources: Record<string, Uint8Array> = {}
+  for (const [uri, source] of Object.entries(decodedSources)) {
+    if (!existingBytes[uri]) sources[uri] = encoder.encode(source)
+  }
+  Object.assign(sources, existingBytes)
+  const replacedUris: string[] = []
+  for (const [uri, bytes] of Object.entries(incomingSources)) {
+    const existing = sources[uri]
+    if (existing && !bytesEqual(existing, bytes)) replacedUris.push(uri)
+    sources[uri] = bytes
+  }
+  return { sources, replacedUris }
+}
+
 export function buildLazyModelicaLibraryIndex(
   sources: Record<string, string>,
 ): LazyModelicaLibraryIndex {

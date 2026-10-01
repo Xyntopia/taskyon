@@ -53,6 +53,7 @@ export type DiagramGraphMapped = {
 type Rect = { x: number; y: number; width: number; height: number }
 type Size = { width: number; height: number }
 const DIAGRAM_SCALE = 3
+const DIAGRAM_PORT_OVERHANG = 0.25
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value))
@@ -323,8 +324,16 @@ const nodePortsFromComponent = (component: {
     const size = sizeFromPlacementExtent(placement?.extent) ?? { width: 10, height: 10 }
     const widthRatio = clamp(size.width / (extentWidth * DIAGRAM_SCALE), 0.03, 0.25)
     const heightRatio = clamp(size.height / (extentHeight * DIAGRAM_SCALE), 0.03, 0.25)
-    const xRatio = clamp((center[0] - extent.minX) / extentWidth, 0, 1)
-    const yRatio = clamp((extent.maxY - center[1]) / extentHeight, 0, 1)
+    const xRatio = clamp(
+      (center[0] - extent.minX) / extentWidth,
+      -DIAGRAM_PORT_OVERHANG,
+      1 + DIAGRAM_PORT_OVERHANG,
+    )
+    const yRatio = clamp(
+      (extent.maxY - center[1]) / extentHeight,
+      -DIAGRAM_PORT_OVERHANG,
+      1 + DIAGRAM_PORT_OVERHANG,
+    )
     return {
       name: port.name,
       xRatio,

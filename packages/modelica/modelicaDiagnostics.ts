@@ -10,7 +10,7 @@ import {
   validateModelAbiValidationResultV1,
 } from './modelica'
 import { hasRumocaTemplateRenderer, renderRumocaTemplate } from './rumocaTemplateRender'
-import { strFromU8, unzipSync } from 'fflate'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import {
   executeInWorkerSandbox,
   type ExecuteInWorkerSandboxOptions,
@@ -26,7 +26,7 @@ import {
   type DiagramEdgeData,
   type DiagramNodeData,
 } from './diagram/mapDiagramToGraph'
-import type { ModelicaDiagramDto } from './diagram/types'
+import type { DiagramPort, ModelicaDiagramDto } from './diagram/types'
 import { ModelicaWorkerClient } from './modelicaWorkerClient'
 import {
   buildLazyModelicaLibraryByteArchive,
@@ -211,6 +211,68 @@ function ensureDiagramDto(value: unknown): ModelicaDiagramDto {
     components: record.components as ModelicaDiagramDto['components'],
     connections: record.connections as ModelicaDiagramDto['connections'],
   }
+}
+
+function componentPortNames(diagram: ModelicaDiagramDto, componentId: string): string[] {
+  const component = diagram.components.find((entry) => entry.id === componentId)
+  if (!component) {
+    throw new Error(`Diagram is missing component ${componentId}`)
+  }
+  return (component.ports ?? []).map((port) => port.name)
+}
+
+function diagramPortSignature(diagram: ModelicaDiagramDto): string {
+  return diagram.components
+    .map(
+      (component) =>
+        `${component.id}:${(component.ports ?? [])
+          .map((port) => port.name)
+          .sort()
+          .join('|')}`,
+    )
+    .sort()
+    .join(';')
+}
+
+function assertComponentHasPort(
+  diagram: ModelicaDiagramDto,
+  componentId: string,
+  portName: string,
+  context: string,
+): void {
+  if (!componentPortNames(diagram, componentId).includes(portName)) {
+    throw new Error(`${context}: component ${componentId} is missing inherited port ${portName}`)
+  }
+}
+
+const FUNCTION_ICON_ELLIPSE_FILL = '255,215,136'
+const WHITE_FILL = '255,255,255'
+
+function graphicFillColor(graphic: unknown): string {
+  if (!graphic || typeof graphic !== 'object') return ''
+  const fillColor = (graphic as { fillColor?: unknown }).fillColor
+  return Array.isArray(fillColor) ? fillColor.join(',') : ''
+}
+
+function countFunctionStyleEllipses(
+  icon: ModelicaDiagramDto['components'][number]['icon'],
+): number {
+  return (icon?.graphics ?? []).filter(
+    (graphic) =>
+      (graphic as { kind?: string }).kind === 'Ellipse' &&
+      graphicFillColor(graphic) === FUNCTION_ICON_ELLIPSE_FILL,
+  ).length
+}
+
+function hasWhiteFilledShape(icon: ModelicaDiagramDto['components'][number]['icon']): boolean {
+  return (icon?.graphics ?? []).some((graphic) => {
+    const kind = (graphic as { kind?: string }).kind
+    return (kind === 'Rectangle' || kind === 'Polygon') && graphicFillColor(graphic) === WHITE_FILL
+  })
+}
+
+function iconGraphicsCount(icon: ModelicaDiagramDto['components'][number]['icon']): number {
+  return icon?.graphics.length ?? 0
 }
 
 function createOffscreenGraphHost(): HTMLDivElement {
@@ -511,6 +573,117 @@ const diagnosticsLibraryUrl = (
     : typeof entry?.download_url === 'string'
       ? entry.download_url
       : ''
+export function testModelicaDiagramOffEdgePortPlacement() {
+  const makeComponent = (
+    id: string,
+    ports: DiagramPort[],
+  ): ModelicaDiagramDto['components'][number] => ({
+    id,
+    name: id,
+    typeName: 'Probe.Child',
+    icon: {
+      coordinateExtent: [
+        [-100, -100],
+        [100, 100],
+      ],
+      graphics: [
+        {
+          kind: 'Rectangle',
+          extent: [
+            [-100, -100],
+            [100, 100],
+          ],
+        },
+      ],
+    },
+    placement: {
+      extent: [
+        [0, 0],
+        [20, 20],
+      ],
+    },
+    ports,
+  })
+  const diagram: ModelicaDiagramDto = {
+    className: 'OffEdgePortProbe',
+    components: [
+      makeComponent('child', [
+        {
+          name: 'left',
+          typeName: 'In',
+          placement: {
+            extent: [
+              [-130, -20],
+              [-90, 20],
+            ],
+          },
+        },
+        {
+          name: 'right',
+          typeName: 'Out',
+          placement: {
+            extent: [
+              [90, -10],
+              [110, 10],
+            ],
+          },
+        },
+        {
+          name: 'farRight',
+          typeName: 'Out',
+          placement: {
+            extent: [
+              [100, -10],
+              [120, 10],
+            ],
+          },
+        },
+        {
+          name: 'runaway',
+          typeName: 'Out',
+          placement: {
+            extent: [
+              [1000, -10],
+              [1200, 10],
+            ],
+          },
+        },
+        {
+          name: 'runawayLeft',
+          typeName: 'In',
+          placement: {
+            extent: [
+              [-1200, -10],
+              [-1000, 10],
+            ],
+          },
+        },
+      ]),
+    ],
+    connections: [],
+  }
+  const mapped = mapDiagramToGraph(diagram, 'authored')
+  const node = mapped.graph.nodes.find((entry) => entry.id === 'child')
+  if (!node) throw new Error('Off-edge port probe did not map the child node')
+  const ratios = new Map((node.data?.ports ?? []).map((port) => [port.name, port]))
+  const expectRatio = (name: string, predicate: (value: number) => boolean) => {
+    const port = ratios.get(name)
+    if (!port) throw new Error(`Off-edge port probe is missing port ${name}`)
+    if (!predicate(port.xRatio)) {
+      throw new Error(`Off-edge port ${name} has unexpected xRatio ${port.xRatio}`)
+    }
+  }
+  expectRatio('left', (value) => value < 0 && value >= -0.25)
+  expectRatio('right', (value) => value === 1)
+  expectRatio('farRight', (value) => value > 1 && value <= 1.25)
+  expectRatio('runaway', (value) => value === 1.25)
+  expectRatio('runawayLeft', (value) => value === -0.25)
+  return {
+    ok: true,
+    ratios: Object.fromEntries(Array.from(ratios, ([name, port]) => [name, port.xRatio])),
+  }
+}
+
 export async function testModelicaPowerSystemsDiagramRendering() {
   if (typeof Worker === 'undefined' || typeof document === 'undefined') {
     return {
@@ -576,6 +749,7 @@ export async function testModelicaPowerSystemsDiagramRendering() {
       { source: string; qualifiedName: string; fileName: string }
     > = {}
     const caseExtractMs: Record<string, number> = {}
+    const casePortSignatures: Record<string, string> = {}
 
     for (const qualifiedName of cases) {
       debug.phase = `class-info:${qualifiedName}`
@@ -605,6 +779,7 @@ export async function testModelicaPowerSystemsDiagramRendering() {
       const extractMs = performance.now() - extractStartedAt
       caseRequests[qualifiedName] = request
       caseExtractMs[qualifiedName] = extractMs
+      casePortSignatures[qualifiedName] = diagramPortSignature(diagram)
       if (diagram.components.length === 0) {
         throw new Error(`${qualifiedName} produced zero diagram components`)
       }
@@ -613,6 +788,15 @@ export async function testModelicaPowerSystemsDiagramRendering() {
         const powerPlant = diagram.components.find((component) => component.id === 'powerPlant')
         if (!powerPlant?.icon || powerPlant.icon.graphics.length === 0) {
           throw new Error('PowerWorld powerPlant component did not resolve its nested class icon')
+        }
+        for (const componentId of ['powerPlant', 'windFarm', 'hydroPlant', 'city']) {
+          assertComponentHasPort(diagram, componentId, 'terminal', qualifiedName)
+        }
+      }
+
+      if (qualifiedName.endsWith('.PowerPlant')) {
+        for (const portName of ['flange_a', 'flange_b']) {
+          assertComponentHasPort(diagram, 'rotor', portName, qualifiedName)
         }
       }
 
@@ -705,6 +889,9 @@ export async function testModelicaPowerSystemsDiagramRendering() {
     if (repeatedMissingIcons !== firstRendered.components - firstRendered.iconComponents) {
       throw new Error(`${cacheProbeName} repeat render resolved a different number of icons`)
     }
+    if (diagramPortSignature(repeatedDiagram) !== casePortSignatures[cacheProbeName]) {
+      throw new Error(`${cacheProbeName} repeat render resolved different inherited ports`)
+    }
     const firstMs = caseExtractMs[cacheProbeName] ?? 0
     if (!(repeatMs < 2000)) {
       throw new Error(
@@ -717,7 +904,50 @@ export async function testModelicaPowerSystemsDiagramRendering() {
       repeatExtractMs: Math.round(repeatMs),
     }
 
-    return { ok: true, rendered, cacheProbe }
+    debug.phase = 'icon-inheritance-probe'
+    const iconProbeSource = `within PowerSystems;
+model IconInheritanceProbe
+  PowerSystems.Interfaces.Terminal terminal annotation(Placement(transformation(extent = {{-80, 40}, {-60, 60}})));
+  PowerSystems.Generic.Ports.Terminal_n terminalN annotation(Placement(transformation(extent = {{-40, 40}, {-20, 60}})));
+  PowerSystems.Generic.PrescribedPowerSource source annotation(Placement(transformation(extent = {{0, 40}, {20, 60}})));
+end IconInheritanceProbe;
+`
+    const iconProbe = ensureDiagramDto(
+      await worker.extractDiagram({
+        source: iconProbeSource,
+        qualifiedName: 'PowerSystems.IconInheritanceProbe',
+        fileName: 'IconInheritanceProbe.mo',
+      }),
+    )
+    const iconProbeComponent = (id: string) => {
+      const component = iconProbe.components.find((entry) => entry.id === id)
+      if (!component) throw new Error(`Icon inheritance probe is missing component ${id}`)
+      return component
+    }
+    const terminalIcon = iconProbeComponent('terminal').icon
+    if (iconGraphicsCount(terminalIcon) !== 0) {
+      throw new Error(
+        `PowerSystems.Interfaces.Terminal must not resolve icon graphics, got ${iconGraphicsCount(terminalIcon)}`,
+      )
+    }
+    const terminalNIcon = iconProbeComponent('terminalN').icon
+    if (countFunctionStyleEllipses(terminalNIcon) !== 0) {
+      throw new Error('Terminal_n inherited unrelated Modelica.Icons.Function graphics')
+    }
+    if (!hasWhiteFilledShape(terminalNIcon)) {
+      throw new Error('Terminal_n lost its own white rectangle icon')
+    }
+    const sourceIcon = iconProbeComponent('source').icon
+    if (countFunctionStyleEllipses(sourceIcon) !== 0) {
+      throw new Error('PrescribedPowerSource inherited unrelated Modelica.Icons.Function graphics')
+    }
+    const iconProbeResult = {
+      terminalGraphics: iconGraphicsCount(terminalIcon),
+      terminalNGraphics: iconGraphicsCount(terminalNIcon),
+      sourceGraphics: iconGraphicsCount(sourceIcon),
+    }
+
+    return { ok: true, rendered, cacheProbe, iconProbe: iconProbeResult }
   } catch (error) {
     const baseMessage = error instanceof Error ? error.message : String(error)
     const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS)
@@ -727,6 +957,92 @@ export async function testModelicaPowerSystemsDiagramRendering() {
   }
 }
 testModelicaPowerSystemsDiagramRendering.timeoutMs = 120_000
+
+const libraryArchiveBytes = (files: Record<string, string>): ArrayBuffer => {
+  const archive = zipSync(
+    Object.fromEntries(Object.entries(files).map(([path, source]) => [path, strToU8(source)])),
+  )
+  const bytes = new Uint8Array(archive.byteLength)
+  bytes.set(archive)
+  return bytes.buffer
+}
+
+const diagramComponentFills = (diagram: ModelicaDiagramDto, componentId: string): string[] => {
+  const component = diagram.components.find((entry) => entry.id === componentId)
+  return (component?.icon?.graphics ?? []).flatMap((graphic) => {
+    if (graphic.kind !== 'Rectangle' && graphic.kind !== 'Ellipse') return []
+    return graphic.fillColor ? [graphic.fillColor.join(',')] : []
+  })
+}
+
+export async function testModelicaLibraryMergeReplacement() {
+  if (typeof Worker === 'undefined' || typeof document === 'undefined') {
+    return { ok: true, skipped: 'Library merge replacement requires browser Worker + DOM' }
+  }
+
+  const packageSource = 'package MergeProbe\nend MergeProbe;\n'
+  const fooSource = (fillColor: string) => `within MergeProbe;
+model Foo
+  annotation(Icon(graphics = {Rectangle(extent = {{-100, -100}, {100, 100}}, fillColor = ${fillColor}, fillPattern = FillPattern.Solid)}));
+end Foo;
+`
+  const barSource = `within MergeProbe;
+model Bar
+  Foo foo annotation(Placement(transformation(extent = {{-10, -10}, {10, 10}})));
+end Bar;
+`
+  const versionFiles = (fooFill: string) => ({
+    'MergeProbe/package.mo': packageSource,
+    'MergeProbe/Foo.mo': fooSource(fooFill),
+    'MergeProbe/Bar.mo': barSource,
+  })
+  const request = {
+    source: barSource,
+    qualifiedName: 'MergeProbe.Bar',
+    fileName: 'Bar.mo',
+  }
+
+  const debug: Record<string, unknown> = { phase: 'worker-init' }
+  const worker = new ModelicaWorkerClient()
+  try {
+    await worker.init(0)
+    debug.phase = 'load-v1'
+    await worker.loadMslZip('MergeProbe-v1.zip', libraryArchiveBytes(versionFiles('{0, 0, 255}')))
+    const firstInfo = await worker.getClassInfo('MergeProbe.Foo')
+    const firstDiagram = ensureDiagramDto(await worker.extractDiagram(request))
+    const firstFills = diagramComponentFills(firstDiagram, 'foo')
+    if (!firstFills.includes('0,0,255')) {
+      throw new Error(
+        `first render did not resolve the authored icon fill: ${firstFills.join(';')}`,
+      )
+    }
+
+    debug.phase = 'merge-v2'
+    await worker.mergeMslZip('MergeProbe-v2.zip', libraryArchiveBytes(versionFiles('{255, 0, 0}')))
+    const secondInfo = await worker.getClassInfo('MergeProbe.Foo')
+    const firstSource =
+      typeof firstInfo.source_modelica === 'string' ? firstInfo.source_modelica : ''
+    const secondSource =
+      typeof secondInfo.source_modelica === 'string' ? secondInfo.source_modelica : ''
+    if (!secondSource.trim() || secondSource === firstSource) {
+      throw new Error('merged archive did not replace the previously materialized class source')
+    }
+    const secondDiagram = ensureDiagramDto(await worker.extractDiagram(request))
+    const secondFills = diagramComponentFills(secondDiagram, 'foo')
+    if (!secondFills.includes('255,0,0')) {
+      throw new Error(`replaced source did not update the resolved icon: ${secondFills.join(';')}`)
+    }
+
+    return { ok: true, firstFills, secondFills }
+  } catch (error) {
+    const baseMessage = error instanceof Error ? error.message : String(error)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `Library merge replacement debug:\n${debugDump}`].join('\n'))
+  } finally {
+    worker.terminate()
+  }
+}
+testModelicaLibraryMergeReplacement.timeoutMs = 60_000
 
 export async function testModelicaOpenIpslDiagramRendering() {
   if (typeof Worker === 'undefined' || typeof document === 'undefined') {
