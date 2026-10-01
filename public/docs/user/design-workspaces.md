@@ -25,6 +25,9 @@ reproducible.
 - **Node** opens the source and schemas for the selected computational node. Its upstream and
   downstream links navigate within the same graph.
 - **Run** accepts constant parameters as JSON and shows the latest terminal run and result.
+- **Visual** renders the project's sandboxed HTML visualization for the current result shape. Bundled
+  examples install their renderer on first open; the workspace assistant can install a project-specific
+  one with `setDesignVisualization`, and the tab receives every evaluated result.
 - **Git** synchronizes the selected project projection with a configured Git branch.
 
 Select the invocation in the workspace toolbar before running when a project contains more than

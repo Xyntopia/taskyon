@@ -25,7 +25,7 @@
               dense
               flat
               round
-              icon="error_outline"
+              :icon="matErrorOutline"
               aria-label="Show source failure"
               @click.stop="emit('showFailure', node.id)"
             />
@@ -51,6 +51,8 @@
 </template>
 
 <script setup lang="ts">
+import { matErrorOutline } from '@quasar/extras/material-icons'
+
 type NodeStatus = 'idle' | 'running' | 'cached' | 'completed' | 'failed' | 'blocked'
 
 defineProps<{

@@ -1,7 +1,6 @@
 import type { GraphData } from '@taskyon/common/modules/graph'
 import type { Hash } from '@taskyon/comp-dag/caching'
 import {
-  createGraphRevision,
   createInvocationDefinition,
   type GraphRevision,
   type InvocationDefinition,
@@ -15,6 +14,7 @@ import type {
 import {
   compileDesignRepositoryNodes,
   createUrlDesignRepositoryReader,
+  loadDesignRepositoryNodeClosure,
   loadDesignRepositorySnapshot,
   loadProjectRepositorySnapshot,
 } from '@taskyon/comp-dag/designRepositorySnapshot'
@@ -27,10 +27,7 @@ import {
   savedStoredNodesToRecordGraph,
   type DagNodeRecordGraph,
 } from '@taskyon/comp-dag/dagNodeRecordGraph'
-import type {
-  loadStoredGraphNodeFiles,
-  StoredGraphNodeFile,
-} from '@taskyon/comp-dag/dagNodeLoader'
+import type { loadStoredGraphNodeFiles, StoredGraphNodeFile } from '@taskyon/comp-dag/dagNodeLoader'
 import { recordInputsToRuntimeInputs } from '@taskyon/comp-dag/dagNodeRecord'
 import type { DagJsonSchema } from '@taskyon/comp-dag/dagSchema'
 import {
@@ -174,23 +171,7 @@ export const prepareBundledDesignProject = async (args: {
   }
   await args.repository.putProjectRevision(projectSnapshot.revision)
 
-  const currentGraphRef = await args.repository.getGraphRef('graph/main')
-  const currentGraph = currentGraphRef
-    ? await args.repository.getGraphRevision(currentGraphRef.revisionId)
-    : null
-  const mergedGraph = currentGraph
-    ? createGraphRevision({
-        parents: [currentGraph.id, graphSnapshot.revision.id],
-        nodes: { ...currentGraph.nodes, ...graphSnapshot.revision.nodes },
-      })
-    : graphSnapshot.revision
-  await args.repository.putGraphRevision(mergedGraph)
-  await args.repository.advanceGraphRef({
-    name: 'graph/main',
-    revisionId: mergedGraph.id,
-    expected: currentGraphRef?.revisionId ?? null,
-  })
-  return { graph: mergedGraph, project: projectSnapshot.revision }
+  return { graph: graphSnapshot.revision, project: projectSnapshot.revision }
 }
 
 export const ensureBundledDesignProject = async (args: {
@@ -231,11 +212,10 @@ export const loadDesignWorkspaceProject = async (args: {
   const invocationId = revision.invocations[invocationName]
   if (!invocationId) throw new Error(`Project invocation not found: ${invocationName}`)
   const invocation = await args.repository.getInvocation(invocationId)
-  const graphRef = await args.repository.getGraphRef('graph/main')
-  if (!graphRef) throw new Error('Design graph ref not found: graph/main')
-  const graphSnapshot = await loadDesignRepositorySnapshot({
+  const graphSnapshot = await loadDesignRepositoryNodeClosure({
     readText: args.store.readText,
-    checkout: { kind: 'graphRevision', id: graphRef.revisionId },
+    ...(args.store.readManyText ? { readManyText: args.store.readManyText } : {}),
+    rootNodeId: invocation.rootNodeId,
   })
   const { createBrowserDagRunCodeCompiler } = await import('@taskyon/runtime-browser')
   const browserCompiler = createBrowserDagRunCodeCompiler()
@@ -489,6 +469,7 @@ export const evaluateDesign = async (args: {
   await args.repository.putInvocation(invocation)
   let value: unknown
   const completed = await executeInvocation({
+    reuseCompletedRun: false,
     invocation,
     dependencies: {
       repository: args.repository,

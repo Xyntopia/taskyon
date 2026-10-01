@@ -11,7 +11,7 @@
       initial-chat-open
       :chat-size="40"
     >
-      <section class="design-workspace col column no-wrap">
+      <section class="design-workspace fit column no-wrap">
         <header class="design-toolbar row items-center no-wrap q-gutter-sm">
           <div class="text-subtitle1 ellipsis">
             {{ project?.revision.displayName ?? projectId }}
@@ -30,7 +30,14 @@
             class="invocation-select"
             @update:model-value="selectInvocation"
           />
-          <q-btn flat round dense icon="refresh" aria-label="Reload project" @click="loadProject" />
+          <q-btn
+            flat
+            round
+            dense
+            :icon="matRefresh"
+            aria-label="Reload project"
+            @click="loadProject"
+          />
           <q-btn
             unelevated
             dense
@@ -51,10 +58,11 @@
         </q-banner>
         <template v-else-if="project">
           <q-tabs v-model="activeTab" dense align="left" class="design-tabs">
-            <q-tab name="graph" icon="account_tree" label="Graph" />
-            <q-tab name="node" icon="code" label="Node" :disable="!selectedNode" />
-            <q-tab name="run" icon="play_arrow" label="Run" />
-            <q-tab name="git" icon="sync" label="Git" />
+            <q-tab name="graph" :icon="matAccountTree" label="Graph" />
+            <q-tab name="node" :icon="matCode" label="Node" :disable="!selectedNode" />
+            <q-tab name="run" :icon="matPlayArrow" label="Run" />
+            <q-tab name="visual" :icon="matInsights" label="Visual" :disable="!visualizationHtml" />
+            <q-tab name="git" :icon="matSync" label="Git" />
           </q-tabs>
           <q-separator />
           <q-tab-panels v-model="activeTab" animated class="col design-panels">
@@ -84,12 +92,12 @@
               />
             </q-tab-panel>
             <q-tab-panel name="run" class="run-panel q-pa-md">
-              <q-input
-                v-model="paramsJson"
-                type="textarea"
-                autogrow
-                outlined
-                label="Constant parameters (JSON)"
+              <ObjectView
+                v-model="params"
+                :schema="paramsSchema"
+                :renderers="designRenderers"
+                missing-mode="all"
+                :default-expanded-depth="2"
               />
               <q-banner v-if="evaluationError" class="bg-negative text-white" rounded>
                 {{ evaluationError }}
@@ -99,6 +107,16 @@
                 {{ Object.keys(run.artifacts).length }} artifacts
               </div>
               <pre v-if="result !== null" class="result-output">{{ formattedResult }}</pre>
+            </q-tab-panel>
+            <q-tab-panel name="visual" class="fit q-pa-none">
+              <iframe
+                ref="visualizationFrame"
+                class="visualization-frame"
+                title="Design result visualization"
+                sandbox="allow-scripts"
+                :srcdoc="sandboxedVisualization"
+                @load="connectVisualizationRenderer"
+              />
             </q-tab-panel>
             <q-tab-panel name="git" class="fit q-pa-none">
               <DesignGraphGitSyncPane
@@ -116,9 +134,17 @@
 </template>
 
 <script setup lang="ts">
-import type { Hash } from '@taskyon/comp-dag/caching'
-import type { InvocationRun } from '@taskyon/comp-dag/designGraphModel'
+import { canonicalHash, type Hash } from '@taskyon/comp-dag/caching'
+import type { DesignVisualization, InvocationRun } from '@taskyon/comp-dag/designGraphModel'
 import { createStorageInvocationArtifactStore } from '@taskyon/comp-dag/storageInvocationArtifacts'
+import {
+  matAccountTree,
+  matCode,
+  matInsights,
+  matPlayArrow,
+  matRefresh,
+  matSync,
+} from '@quasar/extras/material-icons'
 import {
   createChatCompletionTask,
   createClientTool,
@@ -127,6 +153,9 @@ import {
 import DagNodeViewer from '@taskyon/ui/components/DagNodeViewer.vue'
 import DesignGraphGitSyncPane from '@taskyon/ui/components/DesignGraphGitSyncPane.vue'
 import GraphCanvas from '@taskyon/ui/components/GraphCanvas.vue'
+import DesignNumberField from '@taskyon/ui/components/varViews/DesignNumberField.vue'
+import ObjectView from '@taskyon/ui/components/varViews/ObjectView.vue'
+import type { CustomRenderer } from '@taskyon/ui/components/varViews/VariableField.vue'
 import SplitTaskyonDirectView from 'src/components/taskyon/SplitTaskyonDirectView.vue'
 import { syncStateWithStorageClient } from '@taskyon/ui/modules/storageState'
 import {
@@ -134,7 +163,13 @@ import {
   type BrowserDagGitCredentials,
   type BrowserDesignGraphGitSettings,
 } from '@taskyon/runtime-browser'
-import { bundledDesignExamples } from 'src/modules/bundledDesignExamples'
+import { bundledDesignExamples, bundledVisualizationId } from 'src/modules/bundledDesignExamples'
+import {
+  connectDesignRendererFrame,
+  designRendererBootstrapSource,
+  type DesignRendererHostConnection,
+} from 'src/modules/designRendererProtocol'
+import { workstationVisualizationHtml } from 'src/modules/workstationVisualization'
 import {
   defaultDesignParams,
   designNodeViewerData,
@@ -146,7 +181,17 @@ import {
 } from 'src/modules/designWorkspaceRuntime'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import type { JSONSchema7 } from 'json-schema'
+import {
+  computed,
+  markRaw,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
@@ -169,13 +214,16 @@ const project = shallowRef<DesignWorkspaceProject | null>(null)
 const selectedNodeHash = ref<string>()
 const selectedNode = shallowRef<DesignNodeViewerData | null>(null)
 const activeTab = ref('graph')
-const paramsJson = ref('{}')
+const params = ref<Record<string, unknown>>({})
 const result = shallowRef<unknown>(null)
 const run = shallowRef<InvocationRun | null>(null)
 const loading = ref(true)
 const evaluating = ref(false)
 const loadError = ref('')
 const evaluationError = ref('')
+const visualizationHtml = ref('')
+const visualizationFrame = ref<HTMLIFrameElement | null>(null)
+let visualizationConnection: DesignRendererHostConnection | null = null
 const gitSettings = reactive<BrowserDesignGraphGitSettings>({
   remoteUrl: '',
   branch: 'main',
@@ -188,6 +236,15 @@ const gitSettings = reactive<BrowserDesignGraphGitSettings>({
 const shortHash = (value: string) => value.replace(/^sha256:/, '').slice(0, 10)
 const invocationNames = computed(() => Object.keys(project.value?.revision.invocations ?? {}))
 const formattedResult = computed(() => JSON.stringify(result.value, null, 2))
+const paramsSchema = computed(
+  () => project.value?.compiledRoot.paramsSchema as JSONSchema7 | undefined,
+)
+const designRenderers: CustomRenderer[] = [
+  {
+    match: (node) => node.kind === 'number',
+    component: markRaw(DesignNumberField),
+  },
+]
 const activeStore = () => tystate.designProjectStore(projectId.value)
 const navigationItem = (item: DesignNodeViewerData['upstream'][number]) => ({
   id: item.hash,
@@ -231,9 +288,10 @@ const loadProject = async () => {
       invocationName: invocationName.value,
     })
     invocationName.value = project.value.invocationName
-    paramsJson.value = JSON.stringify(defaultDesignParams(project.value), null, 2)
+    params.value = defaultDesignParams(project.value)
     selectedNodeHash.value = project.value.invocation.rootNodeId
     selectedNode.value = designNodeViewerData(project.value, project.value.invocation.rootNodeId)
+    await resolveVisualization()
     await tystate.registerDesignProject({
       projectId: projectId.value,
       title: project.value.revision.displayName,
@@ -252,10 +310,6 @@ const runInvocation = async () => {
   evaluating.value = true
   evaluationError.value = ''
   try {
-    const params = JSON.parse(paramsJson.value) as unknown
-    if (!params || typeof params !== 'object' || Array.isArray(params)) {
-      throw new Error('Constant parameters must be a JSON object.')
-    }
     const store = activeStore()
     const completed = await evaluateDesign({
       project: project.value,
@@ -263,17 +317,79 @@ const runInvocation = async () => {
       artifacts: createStorageInvocationArtifactStore(tystate.storageClient, () =>
         crypto.randomUUID(),
       ),
-      params: params as Record<string, unknown>,
+      params: params.value,
       makeAttemptId: () => crypto.randomUUID(),
     })
     result.value = completed.value
     run.value = completed.run
     activeTab.value = 'run'
+    sendVisualizationResult()
   } catch (error) {
     evaluationError.value = error instanceof Error ? error.message : String(error)
   } finally {
     evaluating.value = false
   }
+}
+
+const installVisualization = async (
+  html: string,
+  outputSchemaId: Hash,
+): Promise<DesignVisualization> => {
+  const visualizationId = canonicalHash({ schemaId: outputSchemaId, html })
+  await activeStore().repository.putVisualization({
+    scope: projectId.value,
+    outputSchemaId,
+    visualizationId,
+    html,
+  })
+  return { schemaVersion: 1, visualizationId, html }
+}
+
+const resolveVisualization = async () => {
+  const activeProject = project.value
+  if (!activeProject) return
+  const store = activeStore()
+  const outputSchemaId = canonicalHash(activeProject.compiledRoot.outputSchema)
+  const bundledExample = bundledDesignExamples[projectId.value]
+  let visualization = await store.repository.getVisualization({
+    scope: projectId.value,
+    outputSchemaId,
+  })
+  if (!visualization && projectId.value === 'ai-workstation') {
+    visualization = await installVisualization(workstationVisualizationHtml, outputSchemaId)
+  } else if (!visualization && bundledExample) {
+    visualization = await installVisualization(
+      bundledVisualizationId(bundledExample, outputSchemaId).html,
+      outputSchemaId,
+    )
+  }
+  visualizationHtml.value = visualization?.html ?? ''
+  if (visualizationHtml.value && bundledExample) activeTab.value = 'visual'
+}
+
+const visualizationCsp =
+  "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:;"
+const sandboxedVisualization = computed(() => {
+  if (!visualizationHtml.value) return ''
+  const csp = `<meta http-equiv="Content-Security-Policy" content="${visualizationCsp}">`
+  const bootstrap = `<script>${designRendererBootstrapSource}<` + '/script>'
+  return visualizationHtml.value.includes('<head>')
+    ? visualizationHtml.value.replace('<head>', `<head>${csp}${bootstrap}`)
+    : `${csp}${bootstrap}${visualizationHtml.value}`
+})
+
+function sendVisualizationResult() {
+  if (!visualizationConnection || result.value === null) return
+  visualizationConnection.sendResult(result.value)
+}
+
+function connectVisualizationRenderer() {
+  visualizationConnection?.destroy()
+  visualizationConnection = null
+  const frame = visualizationFrame.value
+  if (!frame) return
+  visualizationConnection = connectDesignRendererFrame(frame)
+  sendVisualizationResult()
 }
 
 const synchronizeGit = async (credentials?: BrowserDagGitCredentials) =>
@@ -293,9 +409,10 @@ const chatTools = [
       ctx.createSubtasksResult([
         createChatCompletionTask({
           appendSystemPrompts: [
-            'You are collaborating in a Taskyon project workspace. Inspect the exact selected project and invocation before making recommendations.',
+            `You are collaborating in a Taskyon project workspace. Inspect the exact selected project and invocation before making recommendations.
+When a domain-specific visual would materially improve understanding, install one reusable HTML renderer with setDesignVisualization. Register its render function with connectDesignRenderer(render), which receives each evaluated result. Do not use window messaging or fetch network resources.`,
           ],
-          allowedTools: ['inspectDesignWorkspace'],
+          allowedTools: ['inspectDesignWorkspace', 'setDesignVisualization'],
         }),
       ]),
   }),
@@ -308,10 +425,30 @@ const chatTools = [
       projectRevision: project.value?.revision,
       invocationName: project.value?.invocationName,
       invocation: project.value?.invocation,
-      parameters: paramsJson.value,
+      parameters: params.value,
       run: run.value,
       result: result.value,
     }),
+  }),
+  createClientTool({
+    name: 'setDesignVisualization',
+    description: 'Install a sandboxed HTML renderer for the current project result shape.',
+    parameters: {
+      type: 'object',
+      properties: { html: { type: 'string' } },
+      required: ['html'],
+      additionalProperties: false,
+    } as const,
+    function: async ({ html }) => {
+      if (!project.value) throw new Error('No active design project.')
+      if (html.length > 200_000) throw new Error('Visualization HTML exceeds 200 KB.')
+      const outputSchemaId = canonicalHash(project.value.compiledRoot.outputSchema)
+      const visualization = await installVisualization(html, outputSchemaId)
+      visualizationHtml.value = html
+      activeTab.value = 'visual'
+      sendVisualizationResult()
+      return { visualizationId: visualization.visualizationId, outputSchemaId }
+    },
   }),
 ]
 
@@ -342,6 +479,8 @@ onMounted(async () => {
   )
 })
 onBeforeUnmount(() => {
+  visualizationConnection?.destroy()
+  visualizationConnection = null
   gitSettingsStorage?.stop()
   void gitSettingsStorage?.flush()
 })
@@ -379,5 +518,12 @@ watch([projectId, revisionId], () => void loadProject())
   max-width: 100%;
   overflow: auto;
   white-space: pre-wrap;
+}
+
+.visualization-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 </style>

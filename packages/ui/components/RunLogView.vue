@@ -17,13 +17,13 @@
     </q-scroll-area>
 
     <div class="column q-ml-xs q-gutter-xs justify-start items-center log-actions">
-      <q-btn dense flat icon="content_copy" color="primary" @click="copyAllLogs">
+      <q-btn dense flat :icon="matContentCopy" color="primary" @click="copyAllLogs">
         <q-tooltip>Copy all logs</q-tooltip>
       </q-btn>
       <q-btn
         dense
         flat
-        icon="delete_sweep"
+        :icon="matDeleteSweep"
         color="negative"
         class="run-log-clear"
         @click="clearAllLogs"
@@ -37,6 +37,7 @@
 <script setup lang="ts">
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { useSharedRunLogs, type UnifiedLogEntry } from '@taskyon/common/modules/runLogs'
+import { matContentCopy, matDeleteSweep } from '@quasar/extras/material-icons'
 import { useQuasar } from 'quasar'
 import { computed, nextTick, ref, watch } from 'vue'
 

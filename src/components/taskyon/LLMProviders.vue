@@ -96,7 +96,7 @@ To get started, you'll need an API key for an OpenAI-compatible AI service. You 
                       <q-btn
                         flat
                         no-caps
-                        icon="login"
+                        :icon="matLogin"
                         :label="'Login with OAuth for ' + api.name"
                         :loading="oauthLoadingByProvider[profileName] === true"
                         @click="loginProviderWithOauth(profileName, close)"
@@ -286,7 +286,7 @@ insert into the settings below."
 </template>
 
 <script setup lang="ts">
-import { matEdit, matKey } from '@quasar/extras/material-icons'
+import { matEdit, matKey, matLogin } from '@quasar/extras/material-icons'
 import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import TyMarkdown from '@taskyon/ui/components/tyMarkdown.vue'
 import JsonInput from '@taskyon/ui/components/varViews/JsonInput.vue'

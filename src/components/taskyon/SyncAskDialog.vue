@@ -2,7 +2,7 @@
   <q-card-section v-if="title" class="row items-center q-pb-none">
     <div class="text-h6">{{ title }}</div>
     <q-space />
-    <q-btn v-close-popup icon="close" flat round dense />
+    <q-btn v-close-popup :icon="matClose" flat round dense />
   </q-card-section>
   <q-list dense class="col">
     <q-item class="text-center text-warning">
@@ -115,7 +115,13 @@
 </template>
 
 <script setup lang="ts">
-import { matContentCopy, matDevices, matKeyOff, matSync } from '@quasar/extras/material-icons'
+import {
+  matClose,
+  matContentCopy,
+  matDevices,
+  matKeyOff,
+  matSync,
+} from '@quasar/extras/material-icons'
 import { mdiConnection, mdiGoogleDrive } from '@quasar/extras/mdi-v6'
 import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
 import QrCode from '@taskyon/ui/components/QrCode.vue'

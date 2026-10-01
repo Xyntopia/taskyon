@@ -80,6 +80,17 @@ export type DesignGraphRef = {
   revisionId: Hash
 }
 
+export type DesignVisualization = {
+  schemaVersion: 1
+  visualizationId: Hash
+  html: string
+}
+
+export type ActiveDesignVisualization = {
+  schemaVersion: 1
+  visualizationId: Hash
+}
+
 export type ResolvedInvocationPolicy = {
   engine: { id: string; version: number }
   accuracy: 'exact' | 'approximate'
@@ -457,6 +468,25 @@ export const parseDesignGraphRef = (value: unknown): DesignGraphRef => {
   const input = objectAtBoundary(value, 'Design graph ref')
   if (input.schemaVersion !== 2) throw new Error('Unsupported design graph ref.')
   return { schemaVersion: 2, revisionId: hashAtBoundary(input.revisionId, 'Ref revision id') }
+}
+
+export const parseDesignVisualization = (value: unknown): DesignVisualization => {
+  const input = objectAtBoundary(value, 'Design visualization')
+  if (input.schemaVersion !== 1) throw new Error('Unsupported design visualization.')
+  return {
+    schemaVersion: 1,
+    visualizationId: hashAtBoundary(input.visualizationId, 'Visualization id'),
+    html: stringAtBoundary(input.html, 'Visualization HTML'),
+  }
+}
+
+export const parseActiveDesignVisualization = (value: unknown): ActiveDesignVisualization => {
+  const input = objectAtBoundary(value, 'Active design visualization')
+  if (input.schemaVersion !== 1) throw new Error('Unsupported active design visualization.')
+  return {
+    schemaVersion: 1,
+    visualizationId: hashAtBoundary(input.visualizationId, 'Visualization id'),
+  }
 }
 
 const parseResolvedStrategy = (

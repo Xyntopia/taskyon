@@ -23,6 +23,7 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testIdealWorkflowGuardStopsUnexpectedFollowUp: { level: 1 },
   testDiagnosticsRunnerSkipsLongRunWithoutPermission: { level: 1 },
   testFocusedToolSearchMatchesCamelCaseNames: { level: 1 },
+  testVueTemplatesUseSvgIcons: { level: 1 },
   testToolSearchVisibilityIsIndependentOfTaskIndexing: { level: 1 },
   testIdealWorkflowGuardAllowsCombinedSearchContinuation: { level: 1 },
   testIdealWorkflowGuardStopsUnexpectedWebsearchTool: { level: 1 },

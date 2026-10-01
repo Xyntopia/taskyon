@@ -181,6 +181,8 @@ function applyElementStyle(el: HTMLElement | SVGElement, style: Record<string, s
 function createGraphSurface(container: HTMLElement): GraphSurface {
   applyElementStyle(container, { position: 'relative', overflow: 'hidden' })
   const svg = createSvgEl('svg')
+  svg.setAttribute('role', 'img')
+  svg.setAttribute('aria-label', 'Graph visualization')
   applyElementStyle(svg, { display: 'block', width: '100%', height: '100%', userSelect: 'none' })
   const scene = createSvgEl('g')
   const defs = createSvgEl('defs')

@@ -135,7 +135,7 @@
                 flat
                 round
                 dense
-                icon="splitscreen"
+                :icon="matSplitscreen"
                 :aria-label="`Split ${option.label}`"
                 @click.stop
               >
@@ -410,7 +410,12 @@
 </template>
 
 <script setup lang="ts">
-import { matCloseFullscreen, matOpenInFull, matSearch } from '@quasar/extras/material-icons'
+import {
+  matCloseFullscreen,
+  matOpenInFull,
+  matSearch,
+  matSplitscreen,
+} from '@quasar/extras/material-icons'
 import { mdiChevronDoubleLeft, mdiChevronDoubleRight } from '@quasar/extras/mdi-v6'
 import { computed, onUnmounted, ref, shallowRef, useId, useSlots, type Ref } from 'vue'
 import {

@@ -8,13 +8,16 @@ import {
   type DagModuleLock,
 } from './dagModule.ts'
 import {
+  parseActiveDesignVisualization,
   parseDesignGraphRef,
+  parseDesignVisualization,
   parseExecutionAttempt,
   parseGraphRevision,
   parseInvocationDefinition,
   parseInvocationRun,
   parseProjectExtension,
   parseProjectRevision,
+  type ActiveDesignVisualization,
   type DesignGraphRef,
   type ExecutionAttempt,
   type GraphRevision,
@@ -323,6 +326,41 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
     return value === null ? null : parseExecutionAttempt(value)
   }
 
+  const visualizationDirectory = (scope: string, outputSchemaId: Hash) =>
+    `visualizations/${safePath(scope, 'Visualization scope')}/${hashFilePart(outputSchemaId)}`
+
+  const putVisualization = async (args: {
+    scope: string
+    outputSchemaId: Hash
+    visualizationId: Hash
+    html: string
+  }) => {
+    const record = parseDesignVisualization({
+      schemaVersion: 1,
+      visualizationId: args.visualizationId,
+      html: args.html,
+    })
+    const directory = visualizationDirectory(args.scope, args.outputSchemaId)
+    await putImmutable(store, `${directory}/${hashFilePart(record.visualizationId)}.json`, record)
+    const active: ActiveDesignVisualization = {
+      schemaVersion: 1,
+      visualizationId: record.visualizationId,
+    }
+    await store.writeText(`${directory}/active.json`, jsonText(active))
+  }
+
+  const getVisualization = async (args: { scope: string; outputSchemaId: Hash }) => {
+    const directory = visualizationDirectory(args.scope, args.outputSchemaId)
+    const active = await readOptionalJson(store, `${directory}/active.json`)
+    if (active === null) return null
+    const parsedActive = parseActiveDesignVisualization(active)
+    const value = await readOptionalJson(
+      store,
+      `${directory}/${hashFilePart(parsedActive.visualizationId)}.json`,
+    )
+    return value === null ? null : parseDesignVisualization(value)
+  }
+
   const getRef = async (name: string): Promise<DesignGraphRef | null> => {
     const value = await readOptionalJson(store, `refs/${safePath(name, 'Ref name')}.json`)
     return value === null ? null : parseDesignGraphRef(value)
@@ -401,6 +439,8 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
     listRuns,
     putAttempt,
     getAttempt,
+    putVisualization,
+    getVisualization,
     advanceGraphRef,
     advanceProjectRef,
     getGraphRef,

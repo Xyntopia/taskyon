@@ -499,6 +499,67 @@ export const testUnifiedProjectRepositoryKeepsRefsAndRunsSeparate = async () => 
 testUnifiedProjectRepositoryKeepsRefsAndRunsSeparate.description =
   'Stores graph, project, invocation, extension, and run records in one repository with typed refs.'
 
+export const testDesignGraphRepositoryActivatesVisualizationPerScopeAndSchema = async () => {
+  const memory = createMemoryStore()
+  const repository = createDesignGraphRepository(memory.store)
+  const schemaId = canonicalHash({ type: 'object', properties: { score: { type: 'number' } } })
+  assert(
+    (await repository.getVisualization({ scope: 'mission-drone', outputSchemaId: schemaId })) ===
+      null,
+    'Expected no visualization before one is installed',
+  )
+
+  const firstHtml = '<!doctype html><html><body>first</body></html>'
+  const firstId = canonicalHash({ schemaId, html: firstHtml })
+  await repository.putVisualization({
+    scope: 'mission-drone',
+    outputSchemaId: schemaId,
+    visualizationId: firstId,
+    html: firstHtml,
+  })
+  const installed = await repository.getVisualization({
+    scope: 'mission-drone',
+    outputSchemaId: schemaId,
+  })
+  assert(installed?.visualizationId === firstId, 'Expected the installed visualization id')
+  assert(installed.html === firstHtml, 'Expected the installed visualization HTML')
+
+  const secondHtml = '<!doctype html><html><body>second</body></html>'
+  const secondId = canonicalHash({ schemaId, html: secondHtml })
+  await repository.putVisualization({
+    scope: 'mission-drone',
+    outputSchemaId: schemaId,
+    visualizationId: secondId,
+    html: secondHtml,
+  })
+  assert(
+    (await repository.getVisualization({ scope: 'mission-drone', outputSchemaId: schemaId }))
+      ?.visualizationId === secondId,
+    'Expected the newest visualization to become active',
+  )
+  assert(
+    (await repository.getVisualization({ scope: 'mars-rover', outputSchemaId: schemaId })) === null,
+    'Expected visualization lookup to stay scoped to its project',
+  )
+
+  let collision = false
+  try {
+    await repository.putVisualization({
+      scope: 'mission-drone',
+      outputSchemaId: schemaId,
+      visualizationId: secondId,
+      html: firstHtml,
+    })
+  } catch {
+    collision = true
+  }
+  assert(collision, 'Expected immutable visualization content to reject collisions')
+  return [...memory.values.keys()].sort()
+}
+
+testDesignGraphRepositoryActivatesVisualizationPerScopeAndSchema.description =
+  'Stores scoped visualization renderers with an active pointer and immutable content.'
+
 export const testProjectProjectionCarriesExtensionInvocationSourceFiles = async () => {
   const memory = createMemoryStore()
   const sourceRecords = createMemoryRecords()
