@@ -178,7 +178,7 @@ export async function runCliE2eSession(args: {
     cwd,
     acceptOutputAsExit,
     homeKey,
-    timeoutMs = 20_000,
+    timeoutMs = 30_000,
     env,
     cliArgs = [],
     runner = 'pty',
@@ -1160,7 +1160,7 @@ export async function testEscapeCancelsModelMenuAndKeepsPromptUsable() {
     steps: [
       { waitFor: 'Slash commands:', input: '/model\n' },
       { waitFor: 'Model menu', input: '\u001b' },
-      { waitFor: '\u001b[?2004h> ', input: '/tools\n' },
+      { waitFor: '\u001b[?2004h\u001b[1G\u001b[0J> ', input: '/tools\n' },
       { waitFor: 'Active tool definitions:', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },

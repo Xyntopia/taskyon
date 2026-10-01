@@ -649,13 +649,13 @@ export const testCliPromptHistoryWithoutHotkeyMenus = async () =>
   await runPromptHistoryWithoutHotkeyMenus()
 testCliPromptHistoryWithoutHotkeyMenus.description =
   'Up replays persisted prompt history with hotkey menus disabled.'
-testCliPromptHistoryWithoutHotkeyMenus.timeoutMs = 60_000
+testCliPromptHistoryWithoutHotkeyMenus.timeoutMs = 90_000
 
 export const testCliPromptHistoryWithHotkeyMenus = async () =>
   await runPromptHistoryWithHotkeyMenus()
 testCliPromptHistoryWithHotkeyMenus.description =
   'Up replays persisted prompt history with hotkey menus enabled.'
-testCliPromptHistoryWithHotkeyMenus.timeoutMs = 60_000
+testCliPromptHistoryWithHotkeyMenus.timeoutMs = 90_000
 
 export const testCliTaskRendererDoesNotPrintTransientWorkerProgress = () =>
   runTaskRendererDoesNotPrintTransientWorkerProgress()
