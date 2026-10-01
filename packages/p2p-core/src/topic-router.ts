@@ -11,13 +11,14 @@ import {
   serviceDependencies,
 } from '@libp2p/interface'
 import { prefixLogger } from '@libp2p/logger'
+import { peerIdFromString } from '@libp2p/peer-id'
 import { lpStream } from 'it-length-prefixed-stream'
 import { streamToDuplex } from './stream'
 
 export type TopicRouterMessageEvent = {
   topic: string
   data: Uint8Array
-  from: PeerId | string
+  from: PeerId
   type: 'signed'
   sequenceNumber?: bigint
 }
@@ -359,6 +360,13 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
 
         const data = base64ToBytes(envelope.data)
         if (this.localSubscriptions.has(envelope.topic)) {
+          let sender: PeerId
+          try {
+            sender = peerIdFromString(envelope.from)
+          } catch {
+            log.error('broadcast ignored: invalid sender peer id %s', envelope.from)
+            break
+          }
           this.dispatchEvent(
             new CustomEvent('message', {
               detail: {
@@ -366,7 +374,7 @@ export class TopicRouter extends TypedEventEmitter<TopicRouterEvents> implements
                 data,
                 // Preserve the original sender across relay hops so higher-level
                 // protocols can attribute and validate messages correctly.
-                from: envelope.from,
+                from: sender,
                 type: 'signed',
               },
             }),

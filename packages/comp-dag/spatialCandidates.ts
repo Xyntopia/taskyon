@@ -35,8 +35,16 @@ export const spatialCandidateSchema = z.object({
 })
 export type SpatialCandidate = z.infer<typeof spatialCandidateSchema>
 
+const readIdentifier = (value: unknown): string | number | undefined =>
+  typeof value === 'string' || typeof value === 'number' ? value : undefined
+
 const featureId = (feature: PolygonFeature, sourceIndex: number) =>
-  String(feature.id ?? feature.properties?.parcelid ?? feature.properties?.id ?? sourceIndex)
+  String(
+    feature.id ??
+      readIdentifier(feature.properties?.parcelid) ??
+      readIdentifier(feature.properties?.id) ??
+      sourceIndex,
+  )
 
 const polygonsOf = (geometry: Geometry) =>
   geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates

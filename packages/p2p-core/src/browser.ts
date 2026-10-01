@@ -41,7 +41,7 @@ type BrowserConnectionLike = {
 export type BrowserPubsubMessage = {
   topic: string
   data: Uint8Array
-  from?: PeerId | string
+  from?: PeerId
   type?: 'signed' | 'unsigned'
   sequenceNumber?: bigint
 }
