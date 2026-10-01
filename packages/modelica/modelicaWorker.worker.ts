@@ -1,7 +1,12 @@
 import initRumoca from 'rumoca-full-web'
 import * as rumoca from 'rumoca-full-web'
 import { strFromU8, unzipSync } from 'fflate'
-import { findOriginalModelicaClassSource, handleExtractDiagram } from './modelicadiagramGeneration'
+import {
+  createDiagramResolutionCaches,
+  findOriginalModelicaClassSource,
+  handleExtractDiagram,
+  type DiagramResolutionCaches,
+} from './modelicadiagramGeneration'
 import { renderRumocaTemplate } from './rumocaTemplateRender'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import {
@@ -17,6 +22,28 @@ let loadedSourceRootFiles: Record<string, string> = {}
 let loadedSourceRootBytes: Record<string, Uint8Array> = {}
 let lazyLibraryIndex: LazyModelicaLibraryIndex | null = null
 let materializedSourceRootUris = new Set<string>()
+const DIAGRAM_AST_CACHE_LIMIT = 512
+const DIAGRAM_DTO_CACHE_LIMIT = 64
+let diagramResolutionCaches: DiagramResolutionCaches = createDiagramResolutionCaches()
+let diagramDtoCache = new Map<string, ReturnType<typeof handleExtractDiagram>>()
+
+function resetDiagramCaches(): void {
+  diagramResolutionCaches = createDiagramResolutionCaches()
+  diagramDtoCache = new Map()
+}
+
+function trimMapOldest<K, V>(map: Map<K, V>, limit: number): void {
+  while (map.size > limit) {
+    const oldest = map.keys().next().value
+    if (oldest === undefined) return
+    map.delete(oldest)
+  }
+}
+
+function trimDiagramCaches(): void {
+  trimMapOldest(diagramResolutionCaches.astBySource, DIAGRAM_AST_CACHE_LIMIT)
+  trimMapOldest(diagramDtoCache, DIAGRAM_DTO_CACHE_LIMIT)
+}
 
 type WorkerRequest =
   | { id: number; type: 'init'; payload?: { threads?: number } }
@@ -186,6 +213,14 @@ function loadSourceRootSubset(subset: Record<string, string>): {
 } {
   const uris = Object.keys(subset)
   if (uris.length === 0) {
+    return {
+      parsedCount: 0,
+      insertedCount: 0,
+      documentCount: getSourceRootDocumentCount(),
+    }
+  }
+  const hasNewUris = uris.some((uri) => !materializedSourceRootUris.has(uri))
+  if (!hasNewUris) {
     return {
       parsedCount: 0,
       insertedCount: 0,
@@ -433,6 +468,7 @@ function handleLoadMslZip(payload: {
   loadedSourceRootBytes = lazyArchive.sources
   lazyLibraryIndex = lazyArchive.index
   materializedSourceRootUris = new Set()
+  resetDiagramCaches()
   return {
     fileCount,
     parsedCount: 0,
@@ -465,6 +501,7 @@ function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): u
     ...nextSources,
   }
   lazyLibraryIndex = buildLazyModelicaLibraryIndexFromArchiveBytes(loadedSourceRootBytes)
+  resetDiagramCaches()
 
   return {
     fileCount,
@@ -527,6 +564,7 @@ function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
     const original = findOriginalModelicaClassSource(
       payload.qualifiedName,
       () => loadedSourceRootFiles,
+      diagramResolutionCaches,
     )
     if (original) {
       info.source_modelica_original = original.source
@@ -541,7 +579,14 @@ function handleExtractDiagramPreview(payload: {
   qualifiedName?: string
   fileName?: string
 }): unknown {
-  return handleExtractDiagram(payload, () => loadedSourceRootFiles, isLibraryClassMaterialized)
+  const result = handleExtractDiagram(
+    payload,
+    () => loadedSourceRootFiles,
+    isLibraryClassMaterialized,
+    diagramResolutionCaches,
+  )
+  trimDiagramCaches()
+  return result
 }
 
 function handleExtractDiagramFull(payload: {
@@ -550,11 +595,21 @@ function handleExtractDiagramFull(payload: {
   fileName?: string
 }): unknown {
   const startedAt = performance.now()
+  const cacheKey = `${asString(payload.qualifiedName)}\u0000${asString(payload.source)}`
+  const cached = diagramDtoCache.get(cacheKey)
+  if (cached) {
+    console.info('[modelica-worker][extract-diagram] served from diagram cache', {
+      qualifiedName: payload.qualifiedName,
+      elapsedMs: Math.round(performance.now() - startedAt),
+    })
+    return cached
+  }
   materializeLibraryClasses([
     asString(payload.qualifiedName),
     ...referencedModelicaClassNames(payload.source),
   ])
 
+  let result: ReturnType<typeof handleExtractDiagram> | null = null
   for (let pass = 0; pass < 3; pass += 1) {
     const requested = new Set<string>()
     const refined = handleExtractDiagram(
@@ -565,11 +620,15 @@ function handleExtractDiagramFull(payload: {
         requested.add(qualifiedName)
         return false
       },
+      diagramResolutionCaches,
     )
     const missing = Array.from(requested).filter((qualifiedName) => {
       return !isLibraryClassMaterialized(qualifiedName)
     })
-    if (missing.length === 0) return refined
+    if (missing.length === 0) {
+      result = refined
+      break
+    }
     console.info('[modelica-worker][extract-diagram] materializing missing classes', {
       pass,
       missingCount: missing.length,
@@ -578,11 +637,16 @@ function handleExtractDiagramFull(payload: {
     materializeLibraryClasses(missing)
   }
 
-  const result = handleExtractDiagram(
-    payload,
-    () => loadedSourceRootFiles,
-    isLibraryClassMaterialized,
-  )
+  if (!result) {
+    result = handleExtractDiagram(
+      payload,
+      () => loadedSourceRootFiles,
+      isLibraryClassMaterialized,
+      diagramResolutionCaches,
+    )
+  }
+  diagramDtoCache.set(cacheKey, result)
+  trimDiagramCaches()
   console.info('[modelica-worker][extract-diagram] finished', {
     qualifiedName: payload.qualifiedName,
     elapsedMs: Math.round(performance.now() - startedAt),
@@ -617,6 +681,7 @@ function handleMaterializeDiagramClasses(payload: {
         totalRequested.add(qualifiedName)
         return false
       },
+      diagramResolutionCaches,
     )
     const missing = Array.from(requested).filter((qualifiedName) => {
       return !isLibraryClassMaterialized(qualifiedName)
@@ -795,6 +860,7 @@ function handleLoadBundledSourceRootCache(payload: { archiveId: string }): unkno
   loadedSourceRootBytes = {}
   lazyLibraryIndex = null
   materializedSourceRootUris = new Set()
+  resetDiagramCaches()
   return {
     archiveId,
     documentCount: getSourceRootDocumentCount(),
@@ -822,6 +888,7 @@ function handleRestoreSourceRootBinaryCache(payload: { bytes: ArrayBuffer }): nu
   loadedSourceRootBytes = {}
   lazyLibraryIndex = null
   materializedSourceRootUris = new Set()
+  resetDiagramCaches()
   const restoredCount =
     Number(rumoca.merge_parsed_source_roots_binary(new Uint8Array(payload.bytes))) || 0
   console.info('[modelica-worker][restore-source-root-cache] finished', {
@@ -867,6 +934,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         loadedSourceRootBytes = {}
         lazyLibraryIndex = null
         materializedSourceRootUris = new Set()
+        resetDiagramCaches()
         result = { ok: true }
         break
       case 'list_classes':

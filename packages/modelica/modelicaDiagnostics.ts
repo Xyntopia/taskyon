@@ -571,6 +571,11 @@ export async function testModelicaPowerSystemsDiagramRendering() {
       'PowerSystems.Examples.PowerWorld.PowerWorld',
       'PowerSystems.Examples.PowerWorld.Components.WindFarm',
     ] as const
+    const caseRequests: Record<
+      string,
+      { source: string; qualifiedName: string; fileName: string }
+    > = {}
+    const caseExtractMs: Record<string, number> = {}
 
     for (const qualifiedName of cases) {
       debug.phase = `class-info:${qualifiedName}`
@@ -590,13 +595,16 @@ export async function testModelicaPowerSystemsDiagramRendering() {
       const parent = parts.slice(0, -1).join('.')
       const source = `within ${parent};\n\n${preferredSource}`
       debug.phase = `extract:${qualifiedName}`
-      const diagram = ensureDiagramDto(
-        await worker.extractDiagram({
-          source,
-          qualifiedName,
-          fileName: `${parts.at(-1) || 'Model'}.mo`,
-        }),
-      )
+      const request = {
+        source,
+        qualifiedName,
+        fileName: `${parts.at(-1) || 'Model'}.mo`,
+      }
+      const extractStartedAt = performance.now()
+      const diagram = ensureDiagramDto(await worker.extractDiagram(request))
+      const extractMs = performance.now() - extractStartedAt
+      caseRequests[qualifiedName] = request
+      caseExtractMs[qualifiedName] = extractMs
       if (diagram.components.length === 0) {
         throw new Error(`${qualifiedName} produced zero diagram components`)
       }
@@ -665,6 +673,7 @@ export async function testModelicaPowerSystemsDiagramRendering() {
           svgLength: svg.length,
           iconComponents: diagram.components.length - missingIconComponents.length,
           missingIconComponents,
+          extractMs: Math.round(extractMs),
         }
       } finally {
         controller.destroy()
@@ -672,7 +681,43 @@ export async function testModelicaPowerSystemsDiagramRendering() {
       }
     }
 
-    return { ok: true, rendered }
+    const cacheProbeName = cases[0]
+    const cacheProbeRequest = caseRequests[cacheProbeName]
+    const firstRendered = rendered[cacheProbeName] as
+      | { components: number; connections: number; iconComponents: number }
+      | undefined
+    if (!cacheProbeRequest || !firstRendered) {
+      throw new Error(`${cacheProbeName} did not record a first render for the cache probe`)
+    }
+    debug.phase = `cache-probe:${cacheProbeName}`
+    const repeatStartedAt = performance.now()
+    const repeatedDiagram = ensureDiagramDto(await worker.extractDiagram(cacheProbeRequest))
+    const repeatMs = performance.now() - repeatStartedAt
+    if (
+      repeatedDiagram.components.length !== firstRendered.components ||
+      repeatedDiagram.connections.length !== firstRendered.connections
+    ) {
+      throw new Error(`${cacheProbeName} repeat render changed the diagram shape`)
+    }
+    const repeatedMissingIcons = repeatedDiagram.components.filter(
+      (component) => !component.icon || component.icon.graphics.length === 0,
+    ).length
+    if (repeatedMissingIcons !== firstRendered.components - firstRendered.iconComponents) {
+      throw new Error(`${cacheProbeName} repeat render resolved a different number of icons`)
+    }
+    const firstMs = caseExtractMs[cacheProbeName] ?? 0
+    if (!(repeatMs < 2000)) {
+      throw new Error(
+        `${cacheProbeName} repeat render did not use the diagram cache: first=${Math.round(firstMs)}ms repeat=${Math.round(repeatMs)}ms`,
+      )
+    }
+    const cacheProbe = {
+      qualifiedName: cacheProbeName,
+      firstExtractMs: Math.round(firstMs),
+      repeatExtractMs: Math.round(repeatMs),
+    }
+
+    return { ok: true, rendered, cacheProbe }
   } catch (error) {
     const baseMessage = error instanceof Error ? error.message : String(error)
     const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS)

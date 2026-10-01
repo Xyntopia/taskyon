@@ -8,6 +8,26 @@ import {
 
 type SourceRootMaterializer = (qualifiedName: string) => boolean
 
+export type DiagramResolutionCaches = {
+  astBySource: Map<string, DiagramAstCacheEntry>
+  icons: Map<string, DiagramIconSpec | null>
+  ports: Map<string, DiagramPort[] | null>
+  connectorTypes: Map<string, boolean>
+  qualifiedNames: Map<string, string | null>
+}
+
+type DiagramAstCacheEntry =
+  | { ok: true; ast: Record<string, unknown> }
+  | { ok: false; error: string }
+
+export const createDiagramResolutionCaches = (): DiagramResolutionCaches => ({
+  astBySource: new Map(),
+  icons: new Map(),
+  ports: new Map(),
+  connectorTypes: new Map(),
+  qualifiedNames: new Map(),
+})
+
 const ENABLE_DIAGRAM_ICON_DIAGNOSTICS = true
 
 function asString(value: unknown): string {
@@ -771,7 +791,17 @@ const stripEquationSectionsForDiagramParse = (source: string): string => {
   return result.join('\n')
 }
 
-const parseSourceRootAst = (source: string, fileName: string): Record<string, unknown> => {
+const parseSourceRootAst = (
+  source: string,
+  fileName: string,
+  caches: DiagramResolutionCaches,
+): Record<string, unknown> => {
+  const cacheKey = `${fileName}\u0000${source}`
+  const cached = caches.astBySource.get(cacheKey)
+  if (cached) {
+    if (cached.ok) return cached.ast
+    throw new Error(cached.error)
+  }
   const parseJson = (input: string): Record<string, unknown> =>
     JSON.parse(String(parse_source_root_file(input, fileName))) as Record<string, unknown>
   const fallbacks = [
@@ -783,27 +813,35 @@ const parseSourceRootAst = (source: string, fileName: string): Record<string, un
     ),
   ]
   try {
-    return parseJson(source)
+    const ast = parseJson(source)
+    caches.astBySource.set(cacheKey, { ok: true, ast })
+    return ast
   } catch (firstError) {
     const firstMessage = firstError instanceof Error ? firstError.message : String(firstError)
     let lastError: unknown = firstError
     for (const fallback of fallbacks) {
       if (fallback === source) continue
       try {
-        return parseJson(fallback)
+        const ast = parseJson(fallback)
+        caches.astBySource.set(cacheKey, { ok: true, ast })
+        return ast
       } catch (error) {
         lastError = error
       }
     }
     const secondMessage =
       lastError instanceof Error ? lastError.message : String(lastError ?? firstError)
-    throw new Error(
-      `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`,
-    )
+    const message = `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`
+    caches.astBySource.set(cacheKey, { ok: false, error: message })
+    throw new Error(message)
   }
 }
 
-const parseClassInfoAst = (source: string, qualifiedName: string): Record<string, unknown> => {
+const parseClassInfoAst = (
+  source: string,
+  qualifiedName: string,
+  caches: DiagramResolutionCaches,
+): Record<string, unknown> => {
   const fileNames = [
     qualifiedNameToFileName(qualifiedName),
     shortFileNameFromQualifiedName(qualifiedName),
@@ -814,7 +852,7 @@ const parseClassInfoAst = (source: string, qualifiedName: string): Record<string
   for (const candidateSource of sourceVariants) {
     for (const fileName of fileNames) {
       try {
-        return parseSourceRootAst(candidateSource, fileName)
+        return parseSourceRootAst(candidateSource, fileName, caches)
       } catch (error) {
         lastError = error
       }
@@ -872,9 +910,10 @@ const extractExtendsStatements = (source: string): string[] =>
 const parseClassInfoAstWithIconStubFallback = (
   source: string,
   qualifiedName: string,
+  caches: DiagramResolutionCaches,
 ): Record<string, unknown> => {
   try {
-    return parseClassInfoAst(source, qualifiedName)
+    return parseClassInfoAst(source, qualifiedName, caches)
   } catch {
     const className =
       qualifiedName
@@ -890,7 +929,7 @@ const parseClassInfoAstWithIconStubFallback = (
     const bodyLines = [...extendsStatements]
     if (annotationStatement) bodyLines.push(annotationStatement)
     const fallbackSource = `model ${className}\n  ${bodyLines.join('\n  ')}\nend ${className};\n`
-    return parseClassInfoAst(fallbackSource, qualifiedName)
+    return parseClassInfoAst(fallbackSource, qualifiedName, caches)
   }
 }
 
@@ -938,6 +977,7 @@ const parseShortClassAnnotationAst = (
   fileSource: string,
   fileName: string,
   qualifiedName: string,
+  caches: DiagramResolutionCaches,
 ): Record<string, unknown> | null => {
   const className = qualifiedName
     .split('.')
@@ -949,7 +989,11 @@ const parseShortClassAnnotationAst = (
   if (!shortSource) return null
   const annotation = extractAnnotationStatement(shortSource)
   if (!annotation) return null
-  return parseSourceRootAst(`model ${className}\n  ${annotation}\nend ${className};\n`, fileName)
+  return parseSourceRootAst(
+    `model ${className}\n  ${annotation}\nend ${className};\n`,
+    fileName,
+    caches,
+  )
 }
 
 const sourceRootPathsForQualifiedName = (qualifiedName: string): string[] => {
@@ -984,6 +1028,7 @@ const loadedSourceRootByPath = (
 const findLoadedSourceRootClass = (
   qualifiedName: string,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  caches: DiagramResolutionCaches,
 ): { filePath: string; source: string; parsed: Record<string, unknown> } | null => {
   const files = loadedSourceRootFiles()
   const attemptedPaths = new Set<string>()
@@ -995,13 +1040,14 @@ const findLoadedSourceRootClass = (
         sourceRoot.source,
         sourceRoot.filePath,
         qualifiedName,
+        caches,
       )
       if (shortParsed) return { ...sourceRoot, parsed: shortParsed }
     } catch {
       // Fall through to the full source-root AST.
     }
     try {
-      const parsed = parseSourceRootAst(sourceRoot.source, sourceRoot.filePath)
+      const parsed = parseSourceRootAst(sourceRoot.source, sourceRoot.filePath, caches)
       if (exactClassByName(parsed, qualifiedName)) return { ...sourceRoot, parsed }
     } catch {
       // A valid source root can contain legacy syntax unsupported by the diagram parser.
@@ -1044,8 +1090,9 @@ const extractClassSourceFromFile = (fileSource: string, className: string): stri
 export const findOriginalModelicaClassSource = (
   qualifiedName: string,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  caches: DiagramResolutionCaches,
 ): { fileName: string; source: string } | null => {
-  const match = findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles)
+  const match = findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles, caches)
   if (!match) return null
   const className = qualifiedName
     .split('.')
@@ -1060,8 +1107,9 @@ export const findOriginalModelicaClassSource = (
 const parseQualifiedFromLoadedSourceRoots = (
   qualifiedName: string,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
+  caches: DiagramResolutionCaches,
 ): Record<string, unknown> | null =>
-  findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles)?.parsed ?? null
+  findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles, caches)?.parsed ?? null
 
 const readNestedString = (source: Record<string, unknown>, path: string[]): string => {
   let cursor: unknown = source
@@ -1141,7 +1189,7 @@ const mergeIcons = (
 const resolveTypeIcon = (
   typeName: string,
   classQualifiedName: string | undefined,
-  cache: Map<string, DiagramIconSpec | null>,
+  caches: DiagramResolutionCaches,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
   materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
@@ -1163,8 +1211,8 @@ const resolveTypeIcon = (
   }
   for (const candidate of candidates) {
     if (visited.has(candidate)) continue
-    if (cache.has(candidate)) {
-      const cached = cache.get(candidate)
+    if (caches.icons.has(candidate)) {
+      const cached = caches.icons.get(candidate)
       if (cached) return cached
       continue
     }
@@ -1183,22 +1231,30 @@ const resolveTypeIcon = (
         })
       }
       if (!sourceModelica.trim()) {
-        cache.set(candidate, null)
+        caches.icons.set(candidate, null)
         continue
       }
       const qualified = asString(info.qualified_name) || candidate
       let parsed: Record<string, unknown>
       try {
-        parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified)
+        parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified, caches)
       } catch {
-        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(qualified, loadedSourceRootFiles)
+        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(
+          qualified,
+          loadedSourceRootFiles,
+          caches,
+        )
         if (!fallbackParsed) throw new Error('Cannot parse Modelica source for diagram extraction')
         parsed = fallbackParsed
       }
       const iconClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
       let ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
       if (!ownIcon || ownIcon.graphics.length === 0) {
-        const originalParsed = parseQualifiedFromLoadedSourceRoots(qualified, loadedSourceRootFiles)
+        const originalParsed = parseQualifiedFromLoadedSourceRoots(
+          qualified,
+          loadedSourceRootFiles,
+          caches,
+        )
         const originalClass = originalParsed
           ? (classByName(originalParsed, qualified) ?? classByName(originalParsed, candidate))
           : null
@@ -1223,7 +1279,7 @@ const resolveTypeIcon = (
             resolveTypeIcon(
               baseName,
               qualified,
-              cache,
+              caches,
               loadedSourceRootFiles,
               materializeSourceRoot,
               importAliases,
@@ -1247,7 +1303,7 @@ const resolveTypeIcon = (
           mergedHasExtent: Boolean(icon?.coordinateExtent),
         })
       }
-      cache.set(candidate, icon ?? null)
+      caches.icons.set(candidate, icon ?? null)
       if (icon) return icon
     } catch (error) {
       if (traceIconResolve) {
@@ -1256,7 +1312,7 @@ const resolveTypeIcon = (
           error: error instanceof Error ? error.message : String(error),
         })
       }
-      cache.set(candidate, null)
+      caches.icons.set(candidate, null)
     } finally {
       visited.delete(candidate)
     }
@@ -1267,7 +1323,7 @@ const resolveTypeIcon = (
 const resolveQualifiedTypeName = (
   typeName: string,
   classQualifiedName: string | undefined,
-  cache: Map<string, string | null>,
+  caches: DiagramResolutionCaches,
   materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
 ): string | undefined => {
@@ -1275,8 +1331,8 @@ const resolveQualifiedTypeName = (
   if (!normalizedType) return undefined
   const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
   for (const candidate of candidates) {
-    if (cache.has(candidate)) {
-      const cached = cache.get(candidate)
+    if (caches.qualifiedNames.has(candidate)) {
+      const cached = caches.qualifiedNames.get(candidate)
       if (cached) return cached
       continue
     }
@@ -1285,10 +1341,10 @@ const resolveQualifiedTypeName = (
       const rawInfo = get_class_info(candidate)
       const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
       const qualified = asString(info.qualified_name).trim() || candidate
-      cache.set(candidate, qualified)
+      caches.qualifiedNames.set(candidate, qualified)
       return qualified
     } catch {
-      cache.set(candidate, null)
+      caches.qualifiedNames.set(candidate, null)
     }
   }
   return undefined
@@ -1297,6 +1353,7 @@ const resolveQualifiedTypeName = (
 const diagnoseTypeIconResolution = (
   typeName: string,
   classQualifiedName: string | undefined,
+  caches: DiagramResolutionCaches,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
   materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
@@ -1324,7 +1381,7 @@ const diagnoseTypeIconResolution = (
         }
       }
       try {
-        const parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified)
+        const parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified, caches)
         const iconClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
         const ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
         return {
@@ -1335,7 +1392,11 @@ const diagnoseTypeIconResolution = (
           ownHasExtent: Boolean(ownIcon?.coordinateExtent),
         }
       } catch (parseErr) {
-        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(qualified, loadedSourceRootFiles)
+        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(
+          qualified,
+          loadedSourceRootFiles,
+          caches,
+        )
         if (fallbackParsed) {
           const iconClass =
             classByName(fallbackParsed, qualified) ?? classByName(fallbackParsed, candidate)
@@ -1388,7 +1449,7 @@ const endpointPortName = (endpoint: string): string | undefined => {
 const isConnectorType = (
   typeName: string,
   classQualifiedName: string | undefined,
-  cache: Map<string, boolean>,
+  caches: DiagramResolutionCaches,
   materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
 ): boolean => {
@@ -1396,8 +1457,8 @@ const isConnectorType = (
   if (!normalized) return false
   const candidates = buildTypeLookupCandidates(normalized, classQualifiedName, importAliases)
   for (const candidate of candidates) {
-    if (cache.has(candidate)) {
-      if (cache.get(candidate)) return true
+    if (caches.connectorTypes.has(candidate)) {
+      if (caches.connectorTypes.get(candidate)) return true
       continue
     }
     try {
@@ -1411,10 +1472,10 @@ const isConnectorType = (
         classType.includes('connector') ||
         candidate.endsWith('.Pin') ||
         candidate.endsWith('.Port')
-      cache.set(candidate, isConnector)
+      caches.connectorTypes.set(candidate, isConnector)
       if (isConnector) return true
     } catch {
-      cache.set(candidate, false)
+      caches.connectorTypes.set(candidate, false)
     }
   }
   return false
@@ -1423,9 +1484,7 @@ const isConnectorType = (
 const resolveTypePorts = (
   typeName: string,
   classQualifiedName: string | undefined,
-  iconCache: Map<string, DiagramIconSpec | null>,
-  portCache: Map<string, DiagramPort[] | null>,
-  connectorTypeCache: Map<string, boolean>,
+  caches: DiagramResolutionCaches,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
   materializeSourceRoot: SourceRootMaterializer,
   importAliases: ImportAliasMap = {},
@@ -1436,8 +1495,8 @@ const resolveTypePorts = (
   const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
   for (const candidate of candidates) {
     if (visited.has(candidate)) continue
-    if (portCache.has(candidate)) {
-      const cached = portCache.get(candidate)
+    if (caches.ports.has(candidate)) {
+      const cached = caches.ports.get(candidate)
       if (cached) return cached
       continue
     }
@@ -1448,33 +1507,35 @@ const resolveTypePorts = (
       const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
       const sourceModelica = asString(info.source_modelica)
       if (!sourceModelica.trim()) {
-        portCache.set(candidate, null)
+        caches.ports.set(candidate, null)
         continue
       }
       const qualified = asString(info.qualified_name) || candidate
       let parsed: Record<string, unknown>
       try {
-        parsed = parseClassInfoAst(sourceModelica, qualified)
+        parsed = parseClassInfoAst(sourceModelica, qualified, caches)
       } catch {
-        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(qualified, loadedSourceRootFiles)
+        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(
+          qualified,
+          loadedSourceRootFiles,
+          caches,
+        )
         if (!fallbackParsed) {
-          portCache.set(candidate, null)
+          caches.ports.set(candidate, null)
           continue
         }
         parsed = fallbackParsed
       }
       const typeClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
       if (!typeClass) {
-        portCache.set(candidate, null)
+        caches.ports.set(candidate, null)
         continue
       }
       const inherited = extractExtendsBaseNames(typeClass).flatMap((baseName) =>
         resolveTypePorts(
           baseName,
           qualified,
-          iconCache,
-          portCache,
-          connectorTypeCache,
+          caches,
           loadedSourceRootFiles,
           materializeSourceRoot,
           importAliases,
@@ -1488,7 +1549,7 @@ const resolveTypePorts = (
           isConnectorType(
             extractTypeName(component.type_name),
             qualified,
-            connectorTypeCache,
+            caches,
             materializeSourceRoot,
             importAliases,
           ),
@@ -1501,7 +1562,7 @@ const resolveTypePorts = (
           const portIcon = resolveTypeIcon(
             portTypeName,
             qualified,
-            iconCache,
+            caches,
             loadedSourceRootFiles,
             materializeSourceRoot,
             importAliases,
@@ -1518,10 +1579,10 @@ const resolveTypePorts = (
       const byName = new Map<string, DiagramPort>()
       merged.forEach((port) => byName.set(port.name, port))
       const result = Array.from(byName.values())
-      portCache.set(candidate, result.length > 0 ? result : null)
+      caches.ports.set(candidate, result.length > 0 ? result : null)
       if (result.length > 0) return result
     } catch {
-      portCache.set(candidate, null)
+      caches.ports.set(candidate, null)
     } finally {
       visited.delete(candidate)
     }
@@ -1536,12 +1597,13 @@ export function handleExtractDiagram(
     fileName?: string
   },
   loadedSourceRootFiles: Thunk<Record<string, string>>,
-  materializeSourceRoot: SourceRootMaterializer = () => true,
+  materializeSourceRoot: SourceRootMaterializer,
+  caches: DiagramResolutionCaches,
 ): DiagramDto {
   const source = asString(payload.source)
   if (!source.trim()) throw new Error('Cannot build diagram: source is empty')
   const fileName = asString(payload.fileName) || 'Model.mo'
-  const parsed = parseSourceRootAst(source, fileName)
+  const parsed = parseSourceRootAst(source, fileName, caches)
   const importAliases = extractImportAliases(source)
   const classDef = classByName(parsed, payload.qualifiedName)
   if (!classDef) throw new Error('Cannot build diagram: no class found in source')
@@ -1549,10 +1611,6 @@ export function handleExtractDiagram(
   const className = asString(classDef.name) || 'Model'
   const classIcon = extractIconFromClass(classDef)
   const componentsMap = asRecord(classDef.components) ?? {}
-  const iconCache = new Map<string, DiagramIconSpec | null>()
-  const portCache = new Map<string, DiagramPort[] | null>()
-  const connectorTypeCache = new Map<string, boolean>()
-  const qualifiedTypeCache = new Map<string, string | null>()
   const equations = Array.isArray(classDef.equations) ? classDef.equations : []
   const rawConnections: Array<{
     lhs: string
@@ -1594,14 +1652,14 @@ export function handleExtractDiagram(
       const qualifiedTypeName = resolveQualifiedTypeName(
         typeName,
         payload.qualifiedName,
-        qualifiedTypeCache,
+        caches,
         materializeSourceRoot,
         importAliases,
       )
       const icon = resolveTypeIcon(
         iconRef,
         payload.qualifiedName,
-        iconCache,
+        caches,
         loadedSourceRootFiles,
         materializeSourceRoot,
         importAliases,
@@ -1624,6 +1682,7 @@ export function handleExtractDiagram(
           diagnoseTypeIconResolution(
             typeName,
             payload.qualifiedName,
+            caches,
             loadedSourceRootFiles,
             materializeSourceRoot,
             importAliases,
@@ -1633,9 +1692,7 @@ export function handleExtractDiagram(
       const ports = resolveTypePorts(
         typeName,
         payload.qualifiedName,
-        iconCache,
-        portCache,
-        connectorTypeCache,
+        caches,
         loadedSourceRootFiles,
         materializeSourceRoot,
         importAliases,
