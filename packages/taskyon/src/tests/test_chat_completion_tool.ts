@@ -13,7 +13,7 @@ import {
   buildChatProviderRequest,
   normalizeNativeStructuredOutputSchema,
 } from '../tools/chatCompletion/providerRequest'
-import { CODEX_MODELS_CLIENT_VERSION, fetchModelsForProvider } from '../llm/modelDiscovery'
+import { fetchModelsForProvider } from '../llm/modelDiscovery'
 import {
   extractProviderWebSearchAnnotation,
   convertProviderSourceToAnnotation,
@@ -1944,7 +1944,7 @@ export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
         JSON.stringify({
           models: [
             { slug: 'synthetic-codex-model', input_modalities: ['text', 'image'] },
-            { slug: 'synthetic-codex-mini' },
+            { slug: 'gpt-6-luna' },
           ],
         }),
         {
@@ -1970,7 +1970,7 @@ export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
       { fetch: providerFetch },
     )
     assert(models['synthetic-codex-model'] !== undefined, 'Expected the injected model response')
-    assert(models['synthetic-codex-mini'] !== undefined, 'Expected every Codex model response')
+    assert(models['gpt-6-luna'] !== undefined, 'Expected GPT-6 Luna in the Codex model response')
     assert(
       models['synthetic-codex-model']?.owned_by === 'openai',
       'Expected Codex model metadata to be normalized',
@@ -1981,8 +1981,8 @@ export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
 
   assert(injectedCalls === 1, 'Expected model discovery to use the injected fetch exactly once')
   assert(
-    requestedUrl === `https://example.test/v1/models?client_version=${CODEX_MODELS_CLIENT_VERSION}`,
-    'Expected model discovery to preserve the provider base path',
+    requestedUrl === 'https://example.test/v1/models?client_version=0.156.1',
+    'Expected model discovery to use a Codex client version with GPT-6 Luna support',
   )
   const headers = new Headers(requestedHeaders)
   assert(
