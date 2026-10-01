@@ -63,7 +63,11 @@ import {
 } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { createCorsAnywhereFetch } from '@taskyon/common/modules/webFetching/index'
 import { createCachedSecureFetch } from '@taskyon/secure-tunnel'
-import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '@taskyon/taskyon/token-service-types'
+import {
+  TASKYON_WSS_PROXY_URL,
+  TOKEN_SERVICE_BASE_URL,
+  TOKEN_SERVICE_PREFIX,
+} from '@taskyon/taskyon/token-service-types'
 import {
   canUseTauriHttpPlugin,
   createPersistentOauthTokenGetter,
@@ -1495,6 +1499,14 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           (provider.networkTransport !== 'auto' || provider.networkTransportConfirmed),
       )?.networkTransport,
     chooseProviderSelection: ({ providerId, recommendation }, origin) => {
+      const taskyonOrigins = new Set([
+        'https://taskyon.space',
+        `https://${new URL(TASKYON_WSS_PROXY_URL).host}`,
+        new URL(TOKEN_SERVICE_BASE_URL).origin,
+      ])
+      if (providerId === 'taskyon' && taskyonOrigins.has(origin)) {
+        return Promise.resolve('direct')
+      }
       const appProxy = stateRefs.appConfiguration.customProxyTemplate
       const providerProxy = Object.values(
         getToolchainProviderProfiles(stateRefs.toolchainProfiles),

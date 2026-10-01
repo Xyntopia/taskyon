@@ -92,6 +92,24 @@ const createStorageConnection = (storage: TaskyonCoreStorage) => {
   }
 }
 
+const createBufferedSendPort = <Tx, Rx>(port: Port<Tx, Rx>) => {
+  const pending: Tx[] = []
+  let connected = false
+  return {
+    port: {
+      ...port,
+      send: (message: Tx) => {
+        if (connected) port.send(message)
+        else pending.push(message)
+      },
+    } satisfies Port<Tx, Rx>,
+    connect: () => {
+      connected = true
+      for (const message of pending.splice(0)) port.send(message)
+    },
+  }
+}
+
 export const createTaskyonBrowserCoreRuntime = (
   options: TaskyonBrowserCoreRuntimeOptions,
 ): TaskyonBrowserCoreRuntime => {
@@ -100,7 +118,8 @@ export const createTaskyonBrowserCoreRuntime = (
   const { x: hostPort, y: coreHostPort } = createProtocolPort(taskyonHostProtocol)
   const host = createTaskyonHostClient(hostPort)
   const storage = createStorageConnection(options.storage)
-  const storageClient = createStorageClient(storage.port, {
+  const bufferedStoragePort = createBufferedSendPort(storage.port)
+  const storageClient = createStorageClient(bufferedStoragePort.port, {
     namespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     distribution: 'local-only',
   })
@@ -109,6 +128,22 @@ export const createTaskyonBrowserCoreRuntime = (
   let stopStorage: (() => void) | undefined
   let stopReason: string | undefined
   let disposed = false
+
+  const pendingClientMessages: TaskyonMessageType[] = []
+  const pendingHostMessages: TaskyonHostMessage[] = []
+  let sendToCore: ((message: TaskyonMessageType) => void) | undefined
+  let sendToCoreHost: ((message: TaskyonHostMessage) => void) | undefined
+
+  const unsubscribeClientQueue = corePort.receive((message) => {
+    if (disposed) return
+    if (sendToCore) sendToCore(message)
+    else pendingClientMessages.push(message)
+  })
+  const unsubscribeHostQueue = coreHostPort.receive((message) => {
+    if (disposed) return
+    if (sendToCoreHost) sendToCoreHost(message)
+    else pendingHostMessages.push(message)
+  })
 
   const stopStorageService = () => {
     const stop = stopStorage
@@ -124,6 +159,10 @@ export const createTaskyonBrowserCoreRuntime = (
     disconnectCore = undefined
     disconnectHost?.()
     disconnectHost = undefined
+    unsubscribeClientQueue()
+    unsubscribeHostQueue()
+    pendingClientMessages.length = 0
+    pendingHostMessages.length = 0
     try {
       await core.dispose(reason)
     } finally {
@@ -134,6 +173,7 @@ export const createTaskyonBrowserCoreRuntime = (
   const taskyon = (async () => {
     options.onStage?.('connecting-storage')
     stopStorage = await storage.start()
+    bufferedStoragePort.connect()
     try {
       options.onStage?.('creating-crypto-session')
       const cryptoSession = await (options.cryptoSession ?? createCryptoSession())
@@ -179,14 +219,22 @@ export const createTaskyonBrowserCoreRuntime = (
         },
       )
       options.onStage?.('connecting-core-protocol')
-      disconnectCore = corePort.connect(core.port)
-      disconnectHost = coreHostPort.connect(core.hostPort)
+      disconnectCore = core.port.receive((message) => corePort.send(message))
+      disconnectHost = core.hostPort.receive((message) => coreHostPort.send(message))
+      sendToCore = (message) => core.port.send(message)
+      sendToCoreHost = (message) => core.hostPort.send(message)
+      for (const message of pendingClientMessages.splice(0)) sendToCore(message)
+      for (const message of pendingHostMessages.splice(0)) sendToCoreHost(message)
       corePort.send({ type: 'taskyonReady' })
       options.onStage?.('ready')
       if (stopReason) await disposeCore(core, stopReason)
       return core
     } catch (error) {
       client.dispose()
+      unsubscribeClientQueue()
+      unsubscribeHostQueue()
+      pendingClientMessages.length = 0
+      pendingHostMessages.length = 0
       stopStorageService()
       throw error
     }

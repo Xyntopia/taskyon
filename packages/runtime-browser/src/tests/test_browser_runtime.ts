@@ -212,3 +212,73 @@ export const testBrowserRuntimeProviderAuthKeepsOauthInHostStorage = async () =>
 
 testBrowserRuntimeProviderAuthKeepsOauthInHostStorage.description =
   'Keeps encrypted OAuth credentials in host storage and sends only the access token to Taskyon.'
+
+const createEarlyRequestRuntime = () =>
+  createTaskyonBrowserCoreRuntime({
+    llmSettings: () => ({ entryFunction: 'entryNode' }),
+    entryNode: () => toolCall({ name: 'entryNode', arguments: {} }),
+    toolchainConfig: {},
+    cryptoSession: createCryptoSession(),
+    indexTaskVectors: false,
+    toolSetup: {
+      baseTools: [],
+      chatCompletionToolName: 'chatCompletion',
+      createSessionTools: () => ({ tools: [] }),
+    },
+    storageNamespacePrefix: 'taskyon',
+    storage: {
+      kind: 'service',
+      createService: async (port) => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        return createPgLiteTaskManagerStorageService(port, 'taskyon', getDatabase, () =>
+          createMemoryStorageRecordBackend(),
+        )
+      },
+    },
+  })
+
+export const testBrowserRuntimeDeliversHostRequestsIssuedBeforeReadiness = async () => {
+  const runtime = createEarlyRequestRuntime()
+  try {
+    const configuration = runtime.host.runtime.configure({
+      toolchainConfig: {},
+      timeoutMs: 5_000,
+    })
+    await runtime.taskyon
+    const result = await configuration
+    assert(result.ok, 'Expected the early host configuration to arrive after readiness')
+  } finally {
+    await runtime.stop('early host request diagnostic cleanup')
+  }
+  return { success: true }
+}
+
+testBrowserRuntimeDeliversHostRequestsIssuedBeforeReadiness.description =
+  'Delivers host requests issued while the browser runtime is still connecting.'
+
+export const testBrowserRuntimeDeliversStorageRequestsIssuedBeforeReadiness = async () => {
+  const runtime = createEarlyRequestRuntime()
+  try {
+    const write = runtime.storageClient.set({
+      namespace: 'early-writes',
+      id: 'record',
+      value: { hello: 'world' },
+    })
+    await runtime.taskyon
+    await write
+    const stored = await runtime.storageClient.get({ namespace: 'early-writes', id: 'record' })
+    assert(
+      stored.value !== null &&
+        typeof stored.value === 'object' &&
+        'hello' in stored.value &&
+        stored.value.hello === 'world',
+      'Expected the early storage write to persist after readiness',
+    )
+  } finally {
+    await runtime.stop('early storage request diagnostic cleanup')
+  }
+  return { success: true }
+}
+
+testBrowserRuntimeDeliversStorageRequestsIssuedBeforeReadiness.description =
+  'Delivers storage requests issued while the browser runtime is still connecting.'

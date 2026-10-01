@@ -7,8 +7,10 @@ yarn install
 yarn dev
 ```
 
-The application runs at `http://localhost:9000` by default. `yarn dev:http` enables the explicit
-HTTP development mode.
+The application runs at `https://localhost:9000` when that port is available. Quasar prints the
+actual HTTPS URL if it selects another port. The local CORS proxy selects a free loopback port
+automatically; set `TASKYON_CORS_PROXY_PORT` only when a fixed proxy port is needed.
+`yarn dev:http` enables the explicit HTTP development mode.
 
 The Nix flake pins Node, Yarn/Corepack, Rust, and supporting tools:
 

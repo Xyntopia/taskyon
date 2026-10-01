@@ -4,6 +4,14 @@ test.describe('design workspace', () => {
   test('opens, renders, and reruns the local AI workstation example', async ({ page }) => {
     const pageErrors: string[] = []
     const relevantConsoleErrors: string[] = []
+    let providerPrompts = 0
+    await page.addLocatorHandler(
+      page.getByRole('dialog').filter({ hasText: 'Connect to taskyon?' }),
+      async (dialog) => {
+        providerPrompts += 1
+        await dialog.getByRole('button', { name: 'Cancel' }).click()
+      },
+    )
     page.on('pageerror', (error) => pageErrors.push(error.stack ?? error.message))
     page.on('console', (message) => {
       if (
@@ -40,5 +48,27 @@ test.describe('design workspace', () => {
     await expect(page.locator('.run-panel .q-banner.bg-negative')).toHaveCount(0)
     expect(pageErrors).toEqual([])
     expect(relevantConsoleErrors).toEqual([])
+    expect(providerPrompts).toBe(0)
+  })
+
+  test('opens the mission drone example with its rendered design', async ({ page }) => {
+    page.on('console', (message) => {
+      if (message.text().startsWith('design-load:')) console.log(message.text())
+    })
+    let providerPrompts = 0
+    await page.addLocatorHandler(
+      page.getByRole('dialog').filter({ hasText: 'Connect to taskyon?' }),
+      async (dialog) => {
+        providerPrompts += 1
+        await dialog.getByRole('button', { name: 'Cancel' }).click()
+      },
+    )
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Mission drone', exact: true }).click()
+
+    await expect(page).toHaveURL(/\/design\/mission-drone\/main$/)
+    await expect(page.getByRole('tab', { name: 'Graph', exact: true })).toBeVisible()
+    await expect(page.getByTitle('Design result visualization')).toBeVisible()
+    expect(providerPrompts).toBe(0)
   })
 })

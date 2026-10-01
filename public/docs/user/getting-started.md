@@ -9,8 +9,8 @@ yarn install
 yarn dev
 ```
 
-Open `http://localhost:9000`. The Nix development shell provides the pinned toolchain when Nix is
-available.
+Open the HTTPS URL printed by `yarn dev` (usually `https://localhost:9000`). The Nix development
+shell provides the pinned toolchain when Nix is available.
 
 ## Select an AI provider
 

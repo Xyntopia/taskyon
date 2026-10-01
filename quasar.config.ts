@@ -87,9 +87,9 @@ export default defineConfig((ctx) => {
   )
   const fastDevBuild = process.env.TASKYON_FAST_DEV_BUILD === '1'
   const buildChecksCompleted = ctx.prod && process.env.TASKYON_BUILD_CHECKS_COMPLETED === '1'
-  const devCorsProxyPort = Number(process.env.TASKYON_CORS_PROXY_PORT ?? 9001)
-  if (!Number.isInteger(devCorsProxyPort) || devCorsProxyPort < 1 || devCorsProxyPort > 65535) {
-    throw new Error('TASKYON_CORS_PROXY_PORT must be an integer between 1 and 65535.')
+  const devCorsProxyPort = Number(process.env.TASKYON_CORS_PROXY_PORT ?? 0)
+  if (!Number.isInteger(devCorsProxyPort) || devCorsProxyPort < 0 || devCorsProxyPort > 65535) {
+    throw new Error('TASKYON_CORS_PROXY_PORT must be an integer between 0 and 65535.')
   }
   const devCorsProxy = ctx.dev ? createTaskyonDevCorsProxy({ port: devCorsProxyPort }) : undefined
   const keepConsoleLogging = process.env.LOGGING === 'true' || isTauriBuild
@@ -396,7 +396,12 @@ export default defineConfig((ctx) => {
               {
                 name: 'taskyon-dev-cors-proxy',
                 configureServer: async (server: ViteDevServer) => {
+                  const proxyConfig = server.config.server.proxy?.[TASKYON_DEV_CORS_PROXY_PATH]
+                  if (!proxyConfig || typeof proxyConfig === 'string') {
+                    throw new Error('Taskyon development CORS proxy route is missing.')
+                  }
                   const proxyOrigin = await devCorsProxy.start()
+                  proxyConfig.target = proxyOrigin
                   console.log(`Taskyon development CORS proxy: ${proxyOrigin}`)
                   server.middlewares.use(TASKYON_DEV_CORS_PROXY_PATH, (request, response, next) => {
                     if (isTaskyonDevCorsProxyRequestAllowed(request.headers)) return next()
