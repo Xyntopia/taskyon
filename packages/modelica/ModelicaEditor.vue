@@ -760,6 +760,7 @@ import { ModelicaWorkerClient, type ModelicaWorkerActivityEvent } from './modeli
 import {
   DEFAULT_MODELICA_LIBRARY_ID,
   detectedModelicaLibraryPresets,
+  getDefaultModelicaLibraryUrl,
 } from './modelicaLibraryCatalog'
 import { buildTypeLookupCandidates, extractImportAliases } from './qualifiedNameResolution'
 import ObjectPathCharts from '@taskyon/ui/components/ObjectPathCharts.vue'
@@ -1356,8 +1357,8 @@ const daeAnalysis = computed<ModelicaDaeAnalysis>(() => {
           : 'Underdetermined solve slice (likely partitioning issue).'
   const hasDummyState = Boolean(
     modelShape.hasOnlyDummyState ||
-    (nx === 1 &&
-      Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
+      (nx === 1 &&
+        Object.prototype.hasOwnProperty.call((dae.x ?? {}) as object, '_rumoca_dummy_state')),
   )
   const executionMode =
     typeof resultMeta.executionMode === 'string'
@@ -3226,13 +3227,16 @@ async function fetchLibraryClassSource(qualifiedName: string): Promise<{
     typeof info.qualified_name === 'string' && info.qualified_name.trim().length > 0
       ? info.qualified_name.trim()
       : qualifiedName
-  const sourceModelica = typeof info.source_modelica === 'string' ? info.source_modelica : ''
-  if (!sourceModelica.trim()) {
+  const originalSource =
+    typeof info.source_modelica_original === 'string' ? info.source_modelica_original : ''
+  const serializedSource = typeof info.source_modelica === 'string' ? info.source_modelica : ''
+  const source = originalSource.trim() ? originalSource : serializedSource
+  if (!source.trim()) {
     throw new Error(`No source available for ${qualifiedName}`)
   }
   return {
     qualifiedName: qualified,
-    source: withLibraryContext(qualified, sourceModelica),
+    source: withLibraryContext(qualified, source),
   }
 }
 
@@ -3388,8 +3392,20 @@ async function handleLoadLibraryPreset(url: string) {
   const nextUrl = String(url || '').trim()
   if (!nextUrl) return
 
-  mslDownloadUrl.value = nextUrl
   useModelicaStandardLibrary.value = true
+  const standardUrl = getDefaultModelicaLibraryUrl()
+  if (nextUrl === standardUrl) {
+    await loadStandardMslZipFromStorage('user action: install standard MSL')
+    await refreshLibraryTree()
+    return
+  }
+
+  if (!standardMslLoaded.value) {
+    await loadStandardMslZipFromStorage('dependency for selected Modelica library')
+    if (!standardMslLoaded.value) return
+  }
+
+  mslDownloadUrl.value = nextUrl
   libraryMenuOptions.value = {
     ...libraryMenuOptions.value,
     useMSL: true,

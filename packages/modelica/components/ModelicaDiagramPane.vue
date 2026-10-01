@@ -46,6 +46,7 @@
         text-color="grey-7"
         :options="[
           { label: 'Authored', value: 'authored' },
+          { label: 'Distribute', value: 'distributed' },
           { label: 'Auto', value: 'auto' },
         ]"
       />

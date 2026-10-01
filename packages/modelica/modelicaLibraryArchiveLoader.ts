@@ -196,10 +196,10 @@ const logLoadedArchive = (loaded: LoadedArchive): void => {
   const loadMessage =
     result.loadMode === 'lazy-index'
       ? `Modelica libraries indexed: ${result.fileCount} files scanned, ${result.classCount ?? 0} classes discovered`
-      : result.loadMode === 'index'
-        ? `Modelica libraries indexed: ${result.fileCount} files scanned, ${result.classCount ?? 0} classes discovered`
-        : result.loadMode === 'merge'
-          ? `Modelica libraries merged: ${result.parsedCount} files parsed`
+      : result.loadMode === 'lazy-merge'
+        ? `Modelica libraries indexed and merged lazily: ${result.fileCount} files added, ${result.classCount ?? 0} classes available`
+        : result.loadMode === 'index'
+          ? `Modelica libraries indexed: ${result.fileCount} files scanned, ${result.classCount ?? 0} classes discovered`
           : `Modelica libraries loaded: ${result.parsedCount} files parsed`
   appendModelicaLog({
     level: 'success',
@@ -251,6 +251,7 @@ const persistParsedArchiveCache = async (
   if (
     !loaded.input.archiveId ||
     loaded.result.loadMode === 'lazy-index' ||
+    loaded.result.loadMode === 'lazy-merge' ||
     loaded.result.sourceRootUris.length === 0
   ) {
     return

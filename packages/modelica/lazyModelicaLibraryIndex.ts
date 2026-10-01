@@ -70,12 +70,17 @@ export function normalizeModelicaLibraryEntryPath(path: string): string {
     .replaceAll('\\', '/')
     .split('/')
     .filter(Boolean)
-  if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? '')) {
+  if (parts.length === 0) return ''
+
+  const normalizedWrapper = parts[0]!.replace(/[\s-][\d.]+$/, '')
+  const wrappedTopPackage = parts.length > 1 && normalizedWrapper === parts[1]
+  if (
+    parts.length > 1 &&
+    (/(?:Standard)?Library|^MSL/i.test(parts[0] ?? '') || wrappedTopPackage)
+  ) {
     return parts.slice(1).join('/')
   }
-  if (parts.length > 0) {
-    parts[0] = parts[0]!.replace(/[\s-][\d.]+$/, '')
-  }
+  parts[0] = normalizedWrapper
   return parts.join('/')
 }
 

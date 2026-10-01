@@ -32,6 +32,7 @@ import {
   buildLazyModelicaLibraryByteArchive,
   normalizeModelicaLibraryEntryPath,
 } from './lazyModelicaLibraryIndex'
+import modelicaLibrariesManifest from './modelica_libraries.json' with { type: 'json' }
 
 const executeModelicaDiagnosticInSandbox = <R = unknown>(
   options: ExecuteInWorkerSandboxOptions,
@@ -480,6 +481,335 @@ export async function testModelicaDiagramSvgRenderSmoke() {
     worker.terminate()
   }
 }
+
+type DiagnosticsModelicaLibraryManifestEntry = {
+  name?: unknown
+  file_name?: unknown
+  mirror_url?: unknown
+  download_url?: unknown
+}
+
+const diagnosticsModelicaLibraries =
+  (modelicaLibrariesManifest as { libraries?: DiagnosticsModelicaLibraryManifestEntry[] })
+    .libraries ?? []
+
+const diagnosticsLibraryByName = (
+  name: string,
+): DiagnosticsModelicaLibraryManifestEntry | undefined =>
+  diagnosticsModelicaLibraries.find((entry) => entry.name === name)
+
+const diagnosticsStandardMsl = (): DiagnosticsModelicaLibraryManifestEntry | undefined =>
+  diagnosticsModelicaLibraries.find((entry) =>
+    String(entry.name || '').startsWith('ModelicaStandardLibrary-'),
+  )
+
+const diagnosticsLibraryUrl = (
+  entry: DiagnosticsModelicaLibraryManifestEntry | undefined,
+): string =>
+  typeof entry?.mirror_url === 'string'
+    ? entry.mirror_url
+    : typeof entry?.download_url === 'string'
+      ? entry.download_url
+      : ''
+export async function testModelicaPowerSystemsDiagramRendering() {
+  if (typeof Worker === 'undefined' || typeof document === 'undefined') {
+    return {
+      ok: true,
+      skipped: 'PowerSystems diagram rendering requires browser Worker + DOM',
+    }
+  }
+
+  const standardMsl = diagnosticsStandardMsl()
+  const powerSystems = diagnosticsLibraryByName('PowerSystems')
+  const standardMslUrl = diagnosticsLibraryUrl(standardMsl)
+  const powerSystemsUrl = diagnosticsLibraryUrl(powerSystems)
+  if (!standardMslUrl) throw new Error('Standard MSL archive URL is missing from Modelica manifest')
+  if (!powerSystemsUrl)
+    throw new Error('PowerSystems archive URL is missing from Modelica manifest')
+
+  const debug: Record<string, unknown> = {
+    phase: 'fetch-libraries',
+    standardMslUrl,
+    powerSystemsUrl,
+  }
+  const worker = new ModelicaWorkerClient()
+  const rendered: Record<string, unknown> = {}
+
+  try {
+    const [standardResponse, powerSystemsResponse] = await Promise.all([
+      fetch(standardMslUrl),
+      fetch(powerSystemsUrl),
+    ])
+    if (!standardResponse.ok) {
+      throw new Error(`Failed to fetch standard MSL archive: HTTP ${standardResponse.status}`)
+    }
+    if (!powerSystemsResponse.ok) {
+      throw new Error(`Failed to fetch PowerSystems archive: HTTP ${powerSystemsResponse.status}`)
+    }
+    const [standardArchive, powerSystemsArchive] = await Promise.all([
+      standardResponse.arrayBuffer(),
+      powerSystemsResponse.arrayBuffer(),
+    ])
+
+    debug.phase = 'worker-init'
+    await worker.init(0)
+    debug.phase = 'load-standard-msl'
+    await worker.loadMslZip(
+      typeof standardMsl?.file_name === 'string'
+        ? standardMsl.file_name
+        : 'ModelicaStandardLibrary.zip',
+      standardArchive,
+    )
+    debug.phase = 'merge-powersystems'
+    await worker.mergeMslZip(
+      typeof powerSystems?.file_name === 'string' ? powerSystems.file_name : 'PowerSystems.zip',
+      powerSystemsArchive,
+    )
+
+    const cases = [
+      'PowerSystems.Examples.PowerWorld.Components.PowerPlant',
+      'PowerSystems.Examples.PowerWorld.PowerWorld',
+      'PowerSystems.Examples.PowerWorld.Components.WindFarm',
+    ] as const
+
+    for (const qualifiedName of cases) {
+      debug.phase = `class-info:${qualifiedName}`
+      const info = await worker.getClassInfo(qualifiedName)
+      const serializedSource = typeof info.source_modelica === 'string' ? info.source_modelica : ''
+      const originalSource =
+        typeof info.source_modelica_original === 'string' ? info.source_modelica_original : ''
+      if (qualifiedName.endsWith('.PowerPlant') && !originalSource.trim()) {
+        throw new Error(`${qualifiedName} did not recover original source-root class text`)
+      }
+      const preferredSource = originalSource.trim() ? originalSource : serializedSource
+      if (!preferredSource.trim()) {
+        throw new Error(`${qualifiedName} did not expose usable Modelica source`)
+      }
+
+      const parts = qualifiedName.split('.')
+      const parent = parts.slice(0, -1).join('.')
+      const source = `within ${parent};\n\n${preferredSource}`
+      debug.phase = `extract:${qualifiedName}`
+      const diagram = ensureDiagramDto(
+        await worker.extractDiagram({
+          source,
+          qualifiedName,
+          fileName: `${parts.at(-1) || 'Model'}.mo`,
+        }),
+      )
+      if (diagram.components.length === 0) {
+        throw new Error(`${qualifiedName} produced zero diagram components`)
+      }
+
+      if (qualifiedName.endsWith('.PowerWorld')) {
+        const powerPlant = diagram.components.find((component) => component.id === 'powerPlant')
+        if (!powerPlant?.icon || powerPlant.icon.graphics.length === 0) {
+          throw new Error('PowerWorld powerPlant component did not resolve its nested class icon')
+        }
+      }
+
+      const distributed = mapDiagramToGraph(diagram, 'distributed')
+      const distributedRects = distributed.options.fixedNodeRects ?? {}
+      if (Object.keys(distributedRects).length !== diagram.components.length) {
+        throw new Error(
+          `${qualifiedName} distributed layout placed ${Object.keys(distributedRects).length}/${diagram.components.length} components`,
+        )
+      }
+      const distributedEntries = Object.entries(distributedRects)
+      for (let i = 0; i < distributedEntries.length; i += 1) {
+        const [leftId, left] = distributedEntries[i]!
+        for (let j = i + 1; j < distributedEntries.length; j += 1) {
+          const [rightId, right] = distributedEntries[j]!
+          const overlaps =
+            left.x < right.x + (right.width ?? 0) &&
+            left.x + (left.width ?? 0) > right.x &&
+            left.y < right.y + (right.height ?? 0) &&
+            left.y + (left.height ?? 0) > right.y
+          if (overlaps) {
+            throw new Error(`${qualifiedName} distributed layout overlaps ${leftId} and ${rightId}`)
+          }
+        }
+      }
+
+      debug.phase = `render:${qualifiedName}`
+      const mapped = mapDiagramToGraph(diagram, 'auto')
+      if (mapped.options.direction !== 'LR') {
+        throw new Error(`${qualifiedName} auto layout is not left-to-right`)
+      }
+      const host = createOffscreenGraphHost()
+      const controller = createGraphController<DiagramNodeData, DiagramEdgeData>(
+        host,
+        mapped.graph,
+        mapped.options,
+      )
+      try {
+        const svg = controller.exportSvgString({
+          cropToContent: true,
+          cropPadding: 18,
+          backgroundColor: 'rgb(229, 231, 235)',
+        })
+        if (!svg.includes('<svg') || /\b(?:NaN|undefined)\b/.test(svg)) {
+          throw new Error(`${qualifiedName} produced invalid SVG output`)
+        }
+        const missingIconComponents = diagram.components
+          .filter((component) => !component.icon || component.icon.graphics.length === 0)
+          .map((component) => component.id)
+        if (missingIconComponents.length > 0) {
+          throw new Error(
+            `${qualifiedName} has unresolved component icons: ${missingIconComponents.join(', ')}`,
+          )
+        }
+        rendered[qualifiedName] = {
+          components: diagram.components.length,
+          connections: diagram.connections.length,
+          svgLength: svg.length,
+          iconComponents: diagram.components.length - missingIconComponents.length,
+          missingIconComponents,
+        }
+      } finally {
+        controller.destroy()
+        host.remove()
+      }
+    }
+
+    return { ok: true, rendered }
+  } catch (error) {
+    const baseMessage = error instanceof Error ? error.message : String(error)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `PowerSystems diagram debug:\n${debugDump}`].join('\n'))
+  } finally {
+    worker.terminate()
+  }
+}
+testModelicaPowerSystemsDiagramRendering.timeoutMs = 120_000
+
+export async function testModelicaOpenIpslDiagramRendering() {
+  if (typeof Worker === 'undefined' || typeof document === 'undefined') {
+    return { ok: true, skipped: 'OpenIPSL diagram rendering requires browser Worker + DOM' }
+  }
+
+  const standardMsl = diagnosticsStandardMsl()
+  const openIpsl = diagnosticsLibraryByName('OpenIPSL')
+  const standardMslUrl = diagnosticsLibraryUrl(standardMsl)
+  const openIpslUrl = diagnosticsLibraryUrl(openIpsl)
+  if (!standardMslUrl) throw new Error('Standard MSL archive URL is missing from Modelica manifest')
+  if (!openIpslUrl) throw new Error('OpenIPSL archive URL is missing from Modelica manifest')
+
+  const qualifiedName = 'OpenIPSL.Examples.DAEMode.SMIB_Examples.Example_1.Network1'
+  const debug: Record<string, unknown> = {
+    phase: 'fetch-libraries',
+    qualifiedName,
+    standardMslUrl,
+    openIpslUrl,
+  }
+  const worker = new ModelicaWorkerClient()
+  let host: HTMLDivElement | null = null
+  let controller: ReturnType<
+    typeof createGraphController<DiagramNodeData, DiagramEdgeData>
+  > | null = null
+
+  try {
+    const [standardResponse, openIpslResponse] = await Promise.all([
+      fetch(standardMslUrl),
+      fetch(openIpslUrl),
+    ])
+    if (!standardResponse.ok) {
+      throw new Error(`Failed to fetch standard MSL archive: HTTP ${standardResponse.status}`)
+    }
+    if (!openIpslResponse.ok) {
+      throw new Error(`Failed to fetch OpenIPSL archive: HTTP ${openIpslResponse.status}`)
+    }
+    const [standardArchive, openIpslArchive] = await Promise.all([
+      standardResponse.arrayBuffer(),
+      openIpslResponse.arrayBuffer(),
+    ])
+
+    debug.phase = 'worker-init'
+    await worker.init(0)
+    debug.phase = 'load-standard-msl'
+    await worker.loadMslZip(
+      typeof standardMsl?.file_name === 'string'
+        ? standardMsl.file_name
+        : 'ModelicaStandardLibrary.zip',
+      standardArchive,
+    )
+    debug.phase = 'merge-openipsl'
+    await worker.mergeMslZip(
+      typeof openIpsl?.file_name === 'string' ? openIpsl.file_name : 'OpenIPSL.zip',
+      openIpslArchive,
+    )
+
+    debug.phase = 'class-info'
+    const info = await worker.getClassInfo(qualifiedName)
+    const serializedSource = typeof info.source_modelica === 'string' ? info.source_modelica : ''
+    const originalSource =
+      typeof info.source_modelica_original === 'string' ? info.source_modelica_original : ''
+    const preferredSource = originalSource.trim() ? originalSource : serializedSource
+    if (!preferredSource.trim()) throw new Error(`${qualifiedName} did not expose usable source`)
+
+    const parts = qualifiedName.split('.')
+    const source = `within ${parts.slice(0, -1).join('.')};\n\n${preferredSource}`
+    debug.phase = 'extract-diagram'
+    const diagram = ensureDiagramDto(
+      await worker.extractDiagram({
+        source,
+        qualifiedName,
+        fileName: `${parts.at(-1) || 'Model'}.mo`,
+      }),
+    )
+    if (diagram.components.length === 0)
+      throw new Error(`${qualifiedName} produced zero components`)
+    if (diagram.connections.length === 0)
+      throw new Error(`${qualifiedName} produced zero connections`)
+
+    const missingIconComponents = diagram.components
+      .filter((component) => !component.icon)
+      .map((component) => component.id)
+    const distributed = mapDiagramToGraph(diagram, 'distributed')
+    if (
+      Object.keys(distributed.options.fixedNodeRects ?? {}).length !== diagram.components.length
+    ) {
+      throw new Error(`${qualifiedName} distributed layout did not place every component`)
+    }
+    const auto = mapDiagramToGraph(diagram, 'auto')
+    if (auto.options.direction !== 'LR') throw new Error(`${qualifiedName} auto layout is not LR`)
+
+    debug.phase = 'render-svg'
+    host = createOffscreenGraphHost()
+    controller = createGraphController<DiagramNodeData, DiagramEdgeData>(
+      host,
+      distributed.graph,
+      distributed.options,
+    )
+    const svg = controller.exportSvgString({
+      cropToContent: true,
+      cropPadding: 18,
+      backgroundColor: 'rgb(229, 231, 235)',
+    })
+    if (!svg.includes('<svg') || /\b(?:NaN|undefined)\b/.test(svg)) {
+      throw new Error(`${qualifiedName} produced invalid SVG output`)
+    }
+
+    return {
+      ok: true,
+      qualifiedName,
+      components: diagram.components.length,
+      connections: diagram.connections.length,
+      iconComponents: diagram.components.length - missingIconComponents.length,
+      missingIconComponents,
+      svgLength: svg.length,
+    }
+  } catch (error) {
+    const baseMessage = error instanceof Error ? error.message : String(error)
+    const debugDump = serializeObject(debug, MODELICA_DIAGNOSTICS_EXTENDED_SERIALIZE_OPTIONS)
+    throw new Error([baseMessage, `OpenIPSL diagram debug:\n${debugDump}`].join('\n'))
+  } finally {
+    controller?.destroy()
+    if (host?.parentNode) host.parentNode.removeChild(host)
+    worker.terminate()
+  }
+}
+testModelicaOpenIpslDiagramRendering.timeoutMs = 120_000
 
 export async function testModelicaPreparedMetadataContract() {
   const wasm = await getDiagnosticsWasm()

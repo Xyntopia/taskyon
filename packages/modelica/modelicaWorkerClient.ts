@@ -383,8 +383,11 @@ export class ModelicaWorkerClient {
     parsedCount: number
     archiveName: string
     documentCount: number
-    loadMode?: 'merge'
+    loadMode?: 'lazy-merge'
+    classCount?: number
     sourceRootUris: string[]
+    classes?: LazyModelicaClassTreeNode[]
+    lazyIndex?: LazyModelicaLibraryIndex
   }> {
     return this.request({ type: 'merge_msl_zip', payload: { fileName, bytes } }, [bytes])
   }

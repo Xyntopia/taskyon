@@ -686,6 +686,16 @@ const classByName = (
   return firstClassDeep(classes)
 }
 
+const exactClassByName = (
+  stored: Record<string, unknown>,
+  qualifiedName: string,
+): Record<string, unknown> | null => {
+  const classes = asRecord(stored.classes)
+  if (!classes) return null
+  const requestedLeaf = qualifiedName.split('.').filter(Boolean).pop() ?? ''
+  return requestedLeaf ? findClassByLeaf(classes, requestedLeaf) : null
+}
+
 const canonicalNodeId = (endpoint: string): string => endpoint.split('.').filter(Boolean)[0] ?? ''
 
 const qualifiedNameToFileName = (qualifiedName: string): string =>
@@ -840,26 +850,17 @@ const extractBalancedAnnotationAt = (source: string, start: number): string => {
 }
 
 const extractAnnotationStatement = (source: string): string => {
-  const iconMarker = 'annotation(Icon('
-  const iconStart = source.lastIndexOf(iconMarker)
-  if (iconStart >= 0) {
-    const iconAnnotation = extractBalancedAnnotationAt(source, iconStart)
-    if (iconAnnotation) return iconAnnotation
+  const starts = Array.from(source.matchAll(/\bannotation\s*\(/g))
+    .map((match) => match.index)
+    .filter((index): index is number => typeof index === 'number')
+  let fallback = ''
+  for (let index = starts.length - 1; index >= 0; index -= 1) {
+    const annotation = extractBalancedAnnotationAt(source, starts[index] ?? -1)
+    if (!annotation) continue
+    if (!fallback) fallback = annotation
+    if (/\bIcon\s*\(/.test(annotation)) return annotation
   }
-  const marker = 'annotation('
-  const starts: number[] = []
-  let from = 0
-  while (from < source.length) {
-    const found = source.indexOf(marker, from)
-    if (found < 0) break
-    starts.push(found)
-    from = found + marker.length
-  }
-  for (let i = starts.length - 1; i >= 0; i -= 1) {
-    const annotation = extractBalancedAnnotationAt(source, starts[i] ?? -1)
-    if (annotation) return annotation
-  }
-  return ''
+  return fallback
 }
 
 const extractExtendsStatements = (source: string): string[] =>
@@ -893,15 +894,174 @@ const parseClassInfoAstWithIconStubFallback = (
   }
 }
 
+const extractShortClassDeclarationSource = (fileSource: string, className: string): string => {
+  const escapedName = escapeRegExp(className)
+  const declaration = new RegExp(
+    `(?:^|\\n)\\s*(?:(?:encapsulated|partial|expandable|pure|impure|operator)\\s+)*(?:model|block|record|type|package|connector|function|class)\\s+${escapedName}\\s*=`,
+    'm',
+  )
+  const match = declaration.exec(fileSource)
+  if (!match) return ''
+
+  const start = match.index + (match[0].startsWith('\n') ? 1 : 0)
+  let parentheses = 0
+  let braces = 0
+  let brackets = 0
+  let inString = false
+  let escaped = false
+  for (let index = start; index < fileSource.length; index += 1) {
+    const char = fileSource[index] ?? ''
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') {
+      inString = true
+      continue
+    }
+    if (char === '(') parentheses += 1
+    else if (char === ')') parentheses = Math.max(0, parentheses - 1)
+    else if (char === '{') braces += 1
+    else if (char === '}') braces = Math.max(0, braces - 1)
+    else if (char === '[') brackets += 1
+    else if (char === ']') brackets = Math.max(0, brackets - 1)
+    else if (char === ';' && parentheses === 0 && braces === 0 && brackets === 0) {
+      return fileSource.slice(start, index + 1).trim()
+    }
+  }
+  return ''
+}
+
+const parseShortClassAnnotationAst = (
+  fileSource: string,
+  fileName: string,
+  qualifiedName: string,
+): Record<string, unknown> | null => {
+  const className = qualifiedName
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .at(-1)
+  if (!className) return null
+  const shortSource = extractShortClassDeclarationSource(fileSource, className)
+  if (!shortSource) return null
+  const annotation = extractAnnotationStatement(shortSource)
+  if (!annotation) return null
+  return parseSourceRootAst(`model ${className}\n  ${annotation}\nend ${className};\n`, fileName)
+}
+
+const sourceRootPathsForQualifiedName = (qualifiedName: string): string[] => {
+  const parts = qualifiedName
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return []
+
+  const paths = [`${parts.join('/')}.mo`]
+  for (let count = parts.length - 1; count > 0; count -= 1) {
+    const prefix = parts.slice(0, count).join('/')
+    paths.push(`${prefix}.mo`, `${prefix}/package.mo`)
+  }
+  return Array.from(new Set(paths))
+}
+
+const loadedSourceRootByPath = (
+  loadedSourceRootFiles: Record<string, string>,
+  path: string,
+): { filePath: string; source: string } | null => {
+  const direct = loadedSourceRootFiles[path]
+  if (typeof direct === 'string') return { filePath: path, source: direct }
+
+  const suffix = `/${path}`
+  const match = Object.entries(loadedSourceRootFiles).find(([filePath]) =>
+    filePath.endsWith(suffix),
+  )
+  return match ? { filePath: match[0], source: match[1] } : null
+}
+
+const findLoadedSourceRootClass = (
+  qualifiedName: string,
+  loadedSourceRootFiles: Thunk<Record<string, string>>,
+): { filePath: string; source: string; parsed: Record<string, unknown> } | null => {
+  const files = loadedSourceRootFiles()
+  const attemptedPaths = new Set<string>()
+  const trySourceRoot = (sourceRoot: { filePath: string; source: string } | null) => {
+    if (!sourceRoot || attemptedPaths.has(sourceRoot.filePath)) return null
+    attemptedPaths.add(sourceRoot.filePath)
+    try {
+      const shortParsed = parseShortClassAnnotationAst(
+        sourceRoot.source,
+        sourceRoot.filePath,
+        qualifiedName,
+      )
+      if (shortParsed) return { ...sourceRoot, parsed: shortParsed }
+    } catch {
+      // Fall through to the full source-root AST.
+    }
+    try {
+      const parsed = parseSourceRootAst(sourceRoot.source, sourceRoot.filePath)
+      if (exactClassByName(parsed, qualifiedName)) return { ...sourceRoot, parsed }
+    } catch {
+      // A valid source root can contain legacy syntax unsupported by the diagram parser.
+    }
+    return null
+  }
+
+  for (const path of sourceRootPathsForQualifiedName(qualifiedName)) {
+    const match = trySourceRoot(loadedSourceRootByPath(files, path))
+    if (match) return match
+  }
+
+  for (const [filePath, source] of Object.entries(files)) {
+    const match = trySourceRoot({ filePath, source })
+    if (match) return match
+  }
+  return null
+}
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const extractClassSourceFromFile = (fileSource: string, className: string): string | null => {
+  const escapedName = escapeRegExp(className)
+  const declaration = new RegExp(
+    `(?:^|\\n)\\s*(?:(?:encapsulated|partial|expandable|pure|impure|operator)\\s+)*(?:model|block|record|type|package|connector|function|class)\\s+${escapedName}\\b`,
+    'm',
+  )
+  const startMatch = declaration.exec(fileSource)
+  if (!startMatch) return null
+
+  const startIndex = startMatch.index + (startMatch[0].startsWith('\n') ? 1 : 0)
+  const endPattern = new RegExp(`(?:^|\\n)\\s*end\\s+${escapedName}\\s*;`, 'm')
+  const endMatch = endPattern.exec(fileSource.slice(startIndex))
+  if (!endMatch) return null
+
+  const endIndex = startIndex + endMatch.index + endMatch[0].length
+  return fileSource.slice(startIndex, endIndex).trim()
+}
+
+export const findOriginalModelicaClassSource = (
+  qualifiedName: string,
+  loadedSourceRootFiles: Thunk<Record<string, string>>,
+): { fileName: string; source: string } | null => {
+  const match = findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles)
+  if (!match) return null
+  const className = qualifiedName
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .at(-1)
+  if (!className) return null
+  const source = extractClassSourceFromFile(match.source, className)
+  return source ? { fileName: match.filePath, source } : null
+}
+
 const parseQualifiedFromLoadedSourceRoots = (
   qualifiedName: string,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
-): Record<string, unknown> | null => {
-  const filePath = `${qualifiedName.replaceAll('.', '/')}.mo`
-  const source = loadedSourceRootFiles()[filePath]
-  if (!source) return null
-  return parseSourceRootAst(source, filePath)
-}
+): Record<string, unknown> | null =>
+  findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles)?.parsed ?? null
 
 const readNestedString = (source: Record<string, unknown>, path: string[]): string => {
   let cursor: unknown = source
@@ -1036,7 +1196,15 @@ const resolveTypeIcon = (
         parsed = fallbackParsed
       }
       const iconClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
-      const ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
+      let ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
+      if (!ownIcon || ownIcon.graphics.length === 0) {
+        const originalParsed = parseQualifiedFromLoadedSourceRoots(qualified, loadedSourceRootFiles)
+        const originalClass = originalParsed
+          ? (classByName(originalParsed, qualified) ?? classByName(originalParsed, candidate))
+          : null
+        const originalIcon = originalClass ? extractIconFromClass(originalClass) : undefined
+        if (originalIcon && originalIcon.graphics.length > 0) ownIcon = originalIcon
+      }
       if (traceIconResolve) {
         console.log('[diagram][icon] own icon extracted', {
           candidate,

@@ -1,4 +1,4 @@
-export type DiagramLayoutMode = 'authored' | 'auto'
+export type DiagramLayoutMode = 'authored' | 'distributed' | 'auto'
 
 export type DiagramPoint = {
   x: number

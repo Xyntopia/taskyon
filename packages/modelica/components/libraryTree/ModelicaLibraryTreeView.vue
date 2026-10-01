@@ -148,6 +148,7 @@
           <q-table
             flat
             dense
+            class="library-installer-table"
             row-key="id"
             :rows="downloadableLibraries"
             :columns="downloadableLibraryColumns"
@@ -157,10 +158,11 @@
           >
             <template #body-cell-action="scope">
               <q-td :props="scope" class="table-cell-wrap">
-                <div class="row no-wrap q-gutter-xs">
+                <div class="row no-wrap library-installer-actions">
                   <q-btn
                     dense
-                    size="sm"
+                    size="xs"
+                    padding="4px 7px"
                     color="primary"
                     label="Install"
                     :disable="!scope.row.installUrl"
@@ -176,9 +178,10 @@
                   </q-btn>
                   <q-btn
                     dense
-                    size="sm"
+                    size="xs"
+                    padding="4px 7px"
                     flat
-                    label="Original"
+                    label="Source"
                     :disable="!scope.row.upstreamUrl"
                     @click="emit('load-library-preset', scope.row.upstreamUrl)"
                   >
@@ -198,8 +201,13 @@
             </template>
             <template #body-cell-link="scope">
               <q-td :props="scope" class="table-cell-wrap">
-                <a :href="String(scope.value || '')" target="_blank" rel="noopener noreferrer">
-                  {{ String(scope.value || '') }}
+                <a
+                  :href="String(scope.value || '')"
+                  :title="String(scope.value || '')"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Project
                 </a>
               </q-td>
             </template>
@@ -208,18 +216,24 @@
                 <a
                   v-if="scope.value"
                   :href="String(scope.value || '')"
+                  :title="String(scope.value || '')"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {{ String(scope.value || '') }}
+                  Mirror
                 </a>
-                <span v-else class="text-grey-6">Not mirrored</span>
+                <span v-else class="text-grey-6">—</span>
               </q-td>
             </template>
             <template #body-cell-upstreamUrl="scope">
               <q-td :props="scope" class="table-cell-wrap">
-                <a :href="String(scope.value || '')" target="_blank" rel="noopener noreferrer">
-                  {{ String(scope.value || '') }}
+                <a
+                  :href="String(scope.value || '')"
+                  :title="String(scope.value || '')"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Source
                 </a>
               </q-td>
             </template>
@@ -338,16 +352,46 @@ const mslBusy = computed(() => mslDownloading.value || activeLibraryLoads.value.
 const detectedLibraryPresets = computed(() => detectedModelicaLibraryPresets.value)
 const downloadableLibraries = computed(() => downloadableModelicaLibraries.value)
 const downloadableLibraryColumns: QTableColumn[] = [
-  { name: 'action', label: '', field: 'action', sortable: false, align: 'left' },
-  { name: 'name', label: 'Name', field: 'name', sortable: true, align: 'left' },
-  { name: 'license', label: 'License', field: 'license', sortable: true, align: 'left' },
-  { name: 'mirrorUrl', label: 'Mirror', field: 'mirrorUrl', sortable: false, align: 'left' },
+  {
+    name: 'action',
+    label: '',
+    field: 'action',
+    sortable: false,
+    align: 'left',
+    style: 'width: 108px',
+    headerStyle: 'width: 108px',
+  },
+  {
+    name: 'name',
+    label: 'Name',
+    field: 'name',
+    sortable: true,
+    align: 'left',
+    style: 'width: 120px',
+  },
+  {
+    name: 'license',
+    label: 'License',
+    field: 'license',
+    sortable: true,
+    align: 'left',
+    style: 'width: 90px',
+  },
+  {
+    name: 'mirrorUrl',
+    label: 'Mirror',
+    field: 'mirrorUrl',
+    sortable: false,
+    align: 'left',
+    style: 'width: 62px',
+  },
   {
     name: 'upstreamUrl',
     label: 'Original',
     field: 'upstreamUrl',
     sortable: false,
     align: 'left',
+    style: 'width: 68px',
   },
   {
     name: 'description',
@@ -356,7 +400,14 @@ const downloadableLibraryColumns: QTableColumn[] = [
     sortable: false,
     align: 'left',
   },
-  { name: 'link', label: 'Link', field: 'link', sortable: false, align: 'left' },
+  {
+    name: 'link',
+    label: 'Link',
+    field: 'link',
+    sortable: false,
+    align: 'left',
+    style: 'width: 62px',
+  },
 ]
 const libraryMenuModel = computed({
   get: () => props.libraryMenuOptions,
@@ -633,9 +684,18 @@ async function revealCurrentClassOrPackage() {
 
 .table-cell-wrap {
   white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: break-word;
   vertical-align: top;
+}
+
+.library-installer-actions {
+  gap: 2px;
+}
+
+:deep(.library-installer-table .q-td),
+:deep(.library-installer-table .q-th) {
+  padding: 4px 6px;
 }
 
 :deep(.q-table__middle) {

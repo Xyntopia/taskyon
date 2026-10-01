@@ -418,6 +418,120 @@ const deriveFixedRects = (
   return fixedRects
 }
 
+const median = (values: number[]): number => {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((lhs, rhs) => lhs - rhs)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0
+    ? ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2
+    : (sorted[middle] ?? 0)
+}
+
+const rectsOverlapWithGap = (lhs: Rect, rhs: Rect, gap: number): boolean =>
+  lhs.x < rhs.x + rhs.width + gap &&
+  lhs.x + lhs.width + gap > rhs.x &&
+  lhs.y < rhs.y + rhs.height + gap &&
+  lhs.y + lhs.height + gap > rhs.y
+
+const distributeFixedRects = (
+  diagram: ModelicaDiagramDto,
+  nodeSizes: Map<string, Size>,
+  authoredRects: Map<string, Rect>,
+): Map<string, Rect> => {
+  if (diagram.components.length === 0) return new Map()
+  const sizes = diagram.components.map(
+    (component) => nodeSizes.get(component.id) ?? { width: 120, height: 70 },
+  )
+  const gridWidth = Math.max(96, Math.round(median(sizes.map((size) => size.width)) + 32))
+  const gridHeight = Math.max(80, Math.round(median(sizes.map((size) => size.height)) + 32))
+  const authoredCenters = Array.from(authoredRects.values()).map(centerOfRect)
+  const originX = authoredCenters.length > 0 ? Math.min(...authoredCenters.map(({ x }) => x)) : 0
+  const originY = authoredCenters.length > 0 ? Math.min(...authoredCenters.map(({ y }) => y)) : 0
+  const fallbackColumns = Math.max(1, Math.ceil(Math.sqrt(diagram.components.length)))
+  const gap = 18
+
+  const entries = diagram.components
+    .map((component, index) => {
+      const authored = authoredRects.get(component.id)
+      const target = authored
+        ? centerOfRect(authored)
+        : {
+            x: originX + (index % fallbackColumns) * gridWidth,
+            y: originY + Math.floor(index / fallbackColumns) * gridHeight,
+          }
+      return { component, index, target }
+    })
+    .sort(
+      (lhs, rhs) =>
+        lhs.target.y - rhs.target.y ||
+        lhs.target.x - rhs.target.x ||
+        lhs.index - rhs.index ||
+        lhs.component.id.localeCompare(rhs.component.id),
+    )
+
+  const placed: Rect[] = []
+  const distributed = new Map<string, Rect>()
+  const candidateCells = (baseColumn: number, baseRow: number, radius: number) => {
+    if (radius === 0) return [{ column: baseColumn, row: baseRow }]
+    const cells: Array<{ column: number; row: number }> = []
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      cells.push({ column: baseColumn + dx, row: baseRow - radius })
+      cells.push({ column: baseColumn + dx, row: baseRow + radius })
+    }
+    for (let dy = -radius + 1; dy < radius; dy += 1) {
+      cells.push({ column: baseColumn - radius, row: baseRow + dy })
+      cells.push({ column: baseColumn + radius, row: baseRow + dy })
+    }
+    return cells
+  }
+
+  entries.forEach(({ component, target }, index) => {
+    const size = nodeSizes.get(component.id) ?? { width: 120, height: 70 }
+    const baseColumn = Math.round((target.x - originX) / gridWidth)
+    const baseRow = Math.round((target.y - originY) / gridHeight)
+    let selected: Rect | null = null
+
+    for (let radius = 0; radius <= 64 && !selected; radius += 1) {
+      const cells = candidateCells(baseColumn, baseRow, radius).sort((lhs, rhs) => {
+        const leftX = originX + lhs.column * gridWidth
+        const leftY = originY + lhs.row * gridHeight
+        const rightX = originX + rhs.column * gridWidth
+        const rightY = originY + rhs.row * gridHeight
+        const leftDistance = (leftX - target.x) ** 2 + (leftY - target.y) ** 2
+        const rightDistance = (rightX - target.x) ** 2 + (rightY - target.y) ** 2
+        return leftDistance - rightDistance || lhs.row - rhs.row || lhs.column - rhs.column
+      })
+      for (const cell of cells) {
+        const center = {
+          x: originX + cell.column * gridWidth,
+          y: originY + cell.row * gridHeight,
+        }
+        const candidate: Rect = {
+          x: center.x - size.width / 2,
+          y: center.y - size.height / 2,
+          width: size.width,
+          height: size.height,
+        }
+        if (placed.every((rect) => !rectsOverlapWithGap(candidate, rect, gap))) {
+          selected = candidate
+          break
+        }
+      }
+    }
+
+    const fallback = selected ?? {
+      x: originX + index * gridWidth - size.width / 2,
+      y: originY + (entries.length + 1) * gridHeight - size.height / 2,
+      width: size.width,
+      height: size.height,
+    }
+    placed.push(fallback)
+    distributed.set(component.id, fallback)
+  })
+
+  return distributed
+}
+
 const toFixedNodeRects = (
   fixedRects: Map<string, Rect>,
 ): Record<string, { x: number; y: number; width: number; height: number }> => {
@@ -434,6 +548,9 @@ export const mapDiagramToGraph = (
 ): DiagramGraphMapped => {
   const nodeSizes = buildNodeSizes(diagram)
   const fixedRects = deriveFixedRects(diagram, nodeSizes)
+  const distributedRects =
+    mode === 'distributed' ? distributeFixedRects(diagram, nodeSizes, fixedRects) : fixedRects
+  const routedRects = mode === 'distributed' ? distributedRects : fixedRects
 
   const nodes: Array<GraphNode<DiagramNodeData>> = diagram.components.map((component) => {
     const hasIcon = Boolean(component.icon && component.icon.graphics.length > 0)
@@ -469,33 +586,40 @@ export const mapDiagramToGraph = (
   const edges: GraphData<DiagramNodeData, DiagramEdgeData>['edges'] = diagram.connections.map(
     (connection) => {
       const explicitPoints = connection.linePoints?.map((point) => toGraphPoint(point))
-      const fromRect = fixedRects.get(connection.from)
-      const toRect = fixedRects.get(connection.to)
+      const fromRect = routedRects.get(connection.from)
+      const toRect = routedRects.get(connection.to)
       const fromPortAnchor = lookupPortAnchor(
         connection.from,
         connection.fromPort,
         nodesById,
-        fixedRects,
+        routedRects,
       )
-      const toPortAnchor = lookupPortAnchor(connection.to, connection.toPort, nodesById, fixedRects)
+      const toPortAnchor = lookupPortAnchor(
+        connection.to,
+        connection.toPort,
+        nodesById,
+        routedRects,
+      )
       const generatedPoints =
-        !explicitPoints && fromRect && toRect
+        fromRect && toRect
           ? [fromPortAnchor ?? centerOfRect(fromRect), toPortAnchor ?? centerOfRect(toRect)]
           : undefined
       const data: DiagramEdgeData = {}
-      if (explicitPoints) {
+      if (explicitPoints && mode === 'authored') {
         const anchoredPoints = [...explicitPoints]
         if (fromPortAnchor && anchoredPoints.length > 0) anchoredPoints[0] = fromPortAnchor
         if (toPortAnchor && anchoredPoints.length > 0)
           anchoredPoints[anchoredPoints.length - 1] = toPortAnchor
         data.linePoints = anchoredPoints
         data.preferredPoints = anchoredPoints
-        if (mode === 'authored') {
-          data.lockPreferredPath = true
-          data.preservePreferredEndpoints = false
-        }
+        data.lockPreferredPath = true
+        data.preservePreferredEndpoints = false
+      } else if (mode === 'distributed' && generatedPoints) {
+        data.preferredPoints = generatedPoints
+        data.preservePreferredEndpoints = true
+      } else if (!explicitPoints && generatedPoints && mode !== 'auto') {
+        data.preferredPoints = generatedPoints
       }
-      if (!explicitPoints && generatedPoints) data.preferredPoints = generatedPoints
       if (connection.lineColor) data.color = connection.lineColor
       if (connection.fromPort) data.fromPort = connection.fromPort
       if (connection.toPort) data.toPort = connection.toPort
@@ -510,7 +634,7 @@ export const mapDiagramToGraph = (
   )
 
   const optionsBase: RenderOptions<DiagramNodeData, DiagramEdgeData> = {
-    direction: 'TB',
+    direction: mode === 'auto' ? 'LR' : 'TB',
     adaptNodeToContent: false,
     routeOnGrid: true,
     nodeWidth: (node) => (node.data as DiagramNodeData | undefined)?.preferredWidth ?? 220,
@@ -534,9 +658,10 @@ export const mapDiagramToGraph = (
     },
   }
 
-  const fixedNodeRects = toFixedNodeRects(fixedRects)
+  const layoutRects = mode === 'distributed' ? distributedRects : fixedRects
+  const fixedNodeRects = toFixedNodeRects(layoutRects)
   const options: RenderOptions<DiagramNodeData, DiagramEdgeData> =
-    mode === 'authored' && Object.keys(fixedNodeRects).length > 0
+    mode !== 'auto' && Object.keys(fixedNodeRects).length > 0
       ? { ...optionsBase, fixedNodeRects }
       : optionsBase
 

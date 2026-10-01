@@ -1,12 +1,13 @@
 import initRumoca from 'rumoca-full-web'
 import * as rumoca from 'rumoca-full-web'
 import { strFromU8, unzipSync } from 'fflate'
-import { handleExtractDiagram } from './modelicadiagramGeneration'
+import { findOriginalModelicaClassSource, handleExtractDiagram } from './modelicadiagramGeneration'
 import { renderRumocaTemplate } from './rumocaTemplateRender'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import {
   buildLazyModelicaLibraryByteArchive,
   buildLazyModelicaLibraryByteSources,
+  buildLazyModelicaLibraryIndexFromArchiveBytes,
   selectLazyModelicaSourceUris,
   sourceUrisForQualifiedName,
   type LazyModelicaLibraryIndex,
@@ -447,49 +448,34 @@ function handleLoadMslZip(payload: {
 
 function handleMergeMslZip(payload: { fileName: string; bytes: ArrayBuffer }): unknown {
   const archive = unzipSync(new Uint8Array(payload.bytes))
-  const libraries: Record<string, string> = {}
-  for (const [rawPath, content] of Object.entries(archive)) {
-    const lowerPath = rawPath.toLowerCase()
-    if (!lowerPath.endsWith('.mo')) continue
-    if (rawPath.includes('Test') || rawPath.includes('Obsolete')) continue
-    libraries[sanitizeLibraryPath(rawPath)] = strFromU8(content)
-  }
-
-  const fileCount = Object.keys(libraries).length
+  const nextSources = buildLazyModelicaLibraryByteSources(archive)
+  const fileCount = Object.keys(nextSources).length
   if (fileCount === 0) {
     throw new Error('No usable .mo files found in archive')
   }
-  const sourceRootUris = Object.keys(libraries).sort((lhs, rhs) => lhs.localeCompare(rhs))
 
-  // Incremental add: parse each file and merge parsed definitions into the existing session.
-  const defs: Array<[string, string]> = []
-  for (const [fileName, source] of Object.entries(libraries)) {
-    try {
-      const parsed = rumoca.parse_source_root_file(source, fileName)
-      defs.push([fileName, String(parsed)])
-    } catch {
-      // Ignore parse failures per-file to match legacy permissive load behavior.
-    }
+  const existingDecodedSources = Object.fromEntries(
+    Object.entries(loadedSourceRootFiles)
+      .filter(([uri]) => !loadedSourceRootBytes[uri])
+      .map(([uri, source]) => [uri, new TextEncoder().encode(source)]),
+  )
+  loadedSourceRootBytes = {
+    ...existingDecodedSources,
+    ...loadedSourceRootBytes,
+    ...nextSources,
   }
-  if (defs.length === 0) {
-    throw new Error('No parseable .mo files found in archive')
-  }
+  lazyLibraryIndex = buildLazyModelicaLibraryIndexFromArchiveBytes(loadedSourceRootBytes)
 
-  const mergedCount = Number(rumoca.merge_parsed_source_roots(JSON.stringify(defs))) || 0
-  loadedSourceRootFiles = {
-    ...loadedSourceRootFiles,
-    ...libraries,
-  }
-  loadedSourceRootBytes = {}
-  lazyLibraryIndex = null
-  materializedSourceRootUris = new Set(Object.keys(loadedSourceRootFiles))
   return {
     fileCount,
-    parsedCount: mergedCount,
+    parsedCount: 0,
     archiveName: payload.fileName,
     documentCount: getSourceRootDocumentCount(),
-    loadMode: 'merge',
-    sourceRootUris,
+    loadMode: 'lazy-merge',
+    classCount: lazyLibraryIndex.totalClasses,
+    sourceRootUris: Object.keys(nextSources).sort((lhs, rhs) => lhs.localeCompare(rhs)),
+    classes: lazyLibraryIndex.classes,
+    lazyIndex: lazyLibraryIndex,
   }
 }
 
@@ -525,7 +511,29 @@ function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
     materializeAllLibraries()
     raw = rumoca.get_class_info(payload.qualifiedName)
   }
-  return JSON.parse(String(raw))
+  const info = JSON.parse(String(raw)) as Record<string, unknown>
+  const serializedSource = asString(info.source_modelica).trim()
+  let serializedSourceParseable = false
+  if (serializedSource) {
+    const className = payload.qualifiedName.split('.').at(-1) || 'Model'
+    try {
+      rumoca.parse_source_root_file(serializedSource, `${className}.mo`)
+      serializedSourceParseable = true
+    } catch {
+      serializedSourceParseable = false
+    }
+  }
+  if (!serializedSourceParseable) {
+    const original = findOriginalModelicaClassSource(
+      payload.qualifiedName,
+      () => loadedSourceRootFiles,
+    )
+    if (original) {
+      info.source_modelica_original = original.source
+      info.source_file = original.fileName
+    }
+  }
+  return info
 }
 
 function handleExtractDiagramPreview(payload: {
