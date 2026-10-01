@@ -604,9 +604,8 @@ const createUnaryCommandDefinition = <
 ): CommandDefinitionFromConfig<TName, TConfig> => {
   const requestType = `${name}Request`
   const responseType = `${name}Response`
-  const request = z
-    .object({
-      ...config.request.shape,
+  const request = config.request
+    .extend({
       type: z.literal(requestType),
       requestId: z.string(),
     })
@@ -694,8 +693,7 @@ const createMessageDefinition = <
   name: TName,
   config: TConfig,
 ): FrpMessageDefinitionFromConfig<TName, TConfig> =>
-  z.object({
-    ...config.shape,
+  config.extend({
     type: z.literal(name),
   }) as FrpMessageDefinitionFromConfig<TName, TConfig>
 
