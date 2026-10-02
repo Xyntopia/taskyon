@@ -1,6 +1,6 @@
 import type { Map as MapLibreMap } from 'maplibre-gl'
-import maplibregl from 'maplibre-gl'
-import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-csp-worker.js?url'
+import * as maplibregl from 'maplibre-gl'
+import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { PMTiles, Protocol, type Source } from 'pmtiles'
 import { buildPmtilesUrlCandidates } from './urlCandidates.js'
 

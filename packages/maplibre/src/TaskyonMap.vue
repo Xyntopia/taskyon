@@ -21,7 +21,7 @@ export interface TaskyonGeoJsonOverlay {
 
 <script setup lang="ts">
 import type { GeoJSONSource, StyleSpecification } from 'maplibre-gl'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {

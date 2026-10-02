@@ -34,7 +34,7 @@
 import type { FeatureCollection, Geometry } from 'geojson'
 import GenericMap from '../components/GenericMap.vue'
 import type { MapSearchLocation, TaskyonMapWidgetState } from './taskyonMapWidget'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
 import type { FilterSpecification } from 'maplibre-gl'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import type { TaskyonStorageClient } from '@taskyon/taskyon/api'

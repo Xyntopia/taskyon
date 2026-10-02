@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@types/geojson": "^7946.0.16",
-    "maplibre-gl": "^5.23.0",
+    "maplibre-gl": "^6.4.1",
     "pmtiles": "^4.4.1"
   },
   "peerDependencies": {
