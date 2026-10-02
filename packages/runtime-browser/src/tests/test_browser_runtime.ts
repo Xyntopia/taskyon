@@ -240,13 +240,14 @@ const createEarlyRequestRuntime = () =>
 export const testBrowserRuntimeDeliversHostRequestsIssuedBeforeReadiness = async () => {
   const runtime = createEarlyRequestRuntime()
   try {
-    const configuration = runtime.host.runtime.configure({
-      toolchainConfig: {},
-      timeoutMs: 5_000,
-    })
+    const configuration = runtime.host.runtime.configure({ toolchainConfig: {} }).then(
+      (result) => ({ ok: true as const, result }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
     await runtime.taskyon
-    const result = await configuration
-    assert(result.ok, 'Expected the early host configuration to arrive after readiness')
+    const outcome = await configuration
+    if (!outcome.ok) throw outcome.error
+    assert(outcome.result.ok, 'Expected the early host configuration to be accepted')
   } finally {
     await runtime.stop('early host request diagnostic cleanup')
   }
@@ -259,13 +260,19 @@ testBrowserRuntimeDeliversHostRequestsIssuedBeforeReadiness.description =
 export const testBrowserRuntimeDeliversStorageRequestsIssuedBeforeReadiness = async () => {
   const runtime = createEarlyRequestRuntime()
   try {
-    const write = runtime.storageClient.set({
-      namespace: 'early-writes',
-      id: 'record',
-      value: { hello: 'world' },
-    })
+    const write = runtime.storageClient
+      .set({
+        namespace: 'early-writes',
+        id: 'record',
+        value: { hello: 'world' },
+      })
+      .then(
+        () => ({ ok: true as const }),
+        (error: unknown) => ({ ok: false as const, error }),
+      )
     await runtime.taskyon
-    await write
+    const written = await write
+    if (!written.ok) throw written.error
     const stored = await runtime.storageClient.get({ namespace: 'early-writes', id: 'record' })
     assert(
       stored.value !== null &&
