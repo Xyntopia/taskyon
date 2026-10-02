@@ -2,6 +2,212 @@
 
 This package contains the JS Modelica CLI and helper scripts to generate OMC reference traces for MSL examples.
 
+## Retained DAE and Solve compilation
+
+The local simulation-enabled Rumoca WASM build provides
+`compile_with_options(source, modelName, optionsJson)`. Request `dae`, `solve`, or both with
+`{"representations":["dae","solve"]}`. The default selection is `dae`; empty and unknown
+selections are rejected. The returned object retains checked Rust artifacts and owns its WASM
+allocation: always call `free()` after rendering or replacing it.
+
+- `representation_json("dae")` returns the original source-analysis DAE, preserving exact JSON
+  source identities. It is independent of the prepared source and solver coordinates.
+- `representation_json("solve")` returns Rumoca's canonical complete Solve model wire value.
+  Constructor-derived artifacts stay in the retained model and Jinja context.
+- `render_target(...)` on that object renders the retained representation without recompiling or
+  lowering. Solve templates start with `{# rumoca-ir: solve #}` and receive both `solve` and
+  `solve_model`; the accompanying DAE metadata is the prepared source used by lowering.
+- `solve_error()` reports a Solve preparation refusal without discarding the original DAE.
+  Unrequested representations cannot be queried or rendered.
+
+`compileRumocaTemplates` owns compilation, rendering, and disposal for the editor worker and CLI.
+Each template has a separate success/error result, so DAE inspection survives a rejected Solve
+view. The editor reports the rendering error after retaining DAE metrics and equations.
+
+The installed `@taskyon/rumoca@0.10.3-taskyon.1` uses complete Solve model schema 5 and
+problem schema 89. Both JavaScript templates use the compiler's checked variable storage runs
+instead of the removed `solver_maps`. The Solve template reads state names through
+`solve.state_names()`, decodes the initial Y/P run buffers from exact binary64 bits, and expands
+continuous projection declaration runs in their issued order. Initialization projection blocks
+retain their separate rows/unknowns contract. Discrete DAE targets carry a variable and an optional
+zero-based scalar selection; array resets preserve that selection.
+
+`javascript_solve.jinja` is an independent JS generator that executes checked Solve programs.
+Its `{# rumoca-linear-ops: native #}` header declares that it executes supported canonical
+`LinearOp` instructions, including typed pure calls and runtime indexing, without requiring
+Rumoca to reduce those operations to its simpler scalar-template vocabulary. The rendering
+adapter inspects the canonical Solve wire's compute-node tags to select the manifest: models
+containing only `ScalarPrograms` use this native program runtime; compact tensor nodes retain
+Rumoca's checked scalar fallback. Generic Solve templates keep scalar admission unless they
+explicitly declare the native program runtime. Unrecognized model schemas or node tags also
+retain scalar admission. Mixed models requiring both compact tensor fallback and operations
+that Rumoca cannot safely scalarize remain explicit rendering refusals.
+Assignment chains are reconstructed at each trial evaluation; coupled algebraics stay in the
+implicit residual. Fully causal algebraic systems with compiler-certified direct assignment
+stages can execute their native checked program prefixes even when those programs cannot use
+the simpler scalar-template projection. Prefix output stores stay in scratch storage; only the
+issued assignment target is committed. The generator retains the compiler's issued order and
+uses Newton for other algebraic systems.
+Coupled event recovery refreshes eliminated algebraics at each trial discrete coordinate and
+after committing the recovered coordinates, so event equations see consistent algebraic values.
+It currently supports scalar arithmetic, compact matrix/tensor operations,
+conditional regions, runtime array indexing, initialization projection through the caller's Newton
+solver, homotopy continuation, scheduled and changing time-event deadlines, and guarded state resets.
+Periodic scalar, guarded and structured clock producers execute Rumoca's issued same-tick order, including
+checked algebraic intermediate refreshes. Exact rational schedules preserve absolute and
+simulation-start origins; clock-owned `previous(...)` history advances only on its clock. Structured discrete maps use
+Rumoca's checked scalar target projection at the JS emission boundary, preserving array ordering.
+Initialization checks every retained consistency row against the caller's absolute Newton tolerance;
+it rejects contradictory constraints instead of ignoring surplus rows. This is not native nominal-scaled
+initialization certification. Initialization disables Newton's relaxed small-update early exit so
+the solver and retained-row certification use the same absolute tolerance. Checked visible-value programs expose private discrete Integer/Boolean
+values without adding Newton unknowns. Event samples retain their own observed values even when
+several deadlines fall within one output step. The runtime reaches the requested simulation horizon
+with a shortened final step, then executes the separate terminal phase. Reusing a generated model
+starts from its retained initial storage and clears action state.
+Typed event transactions preserve source-ordered assignments and commit their complete target tuple
+once. Transaction-owned assertions use their checked predicate outputs: error assertions prevent
+commit, while warnings preserve commit. Ordinary discrete `pre(...)` lanes advance atomically
+between whole event passes through the checked event-iteration runs; continuous event-entry history
+and clock-owned history retain their separate lifetimes. Condition history stays fixed until the
+discrete and algebraic equations have settled together. Event projection and stalled coupled
+recovery use the caller’s Newton solver; only checked algebraic and Real-valued equation targets
+enter that solve. Boolean, Integer, transaction and clock results stay fixed. Runtime and post-commit
+assignment plans propagate derived aliases at trial coordinates and accepted event commits.
+Accepted model histories use optional local `checkpointRuntime`, `commitAcceptedStep` and
+`maxAcceptedStep` callbacks. Rejected RK45 steps, integrator fallbacks and event-localization trials
+restore private model state; accepted internal steps and event left/right limits populate history.
+`maxStep` in the standalone solver options limits numerical steps independently of output spacing.
+Delay programs use the checked source, delay-time and retention-horizon plans, linear continuous
+history and held discrete history. Accepted discontinuities are transported through variable delay
+coordinates, including backward crossings and zero-delay transitions. History pruning preserves
+interval parity and the left/right limits at equal timestamps. Delay histories reset on a new run.
+Algebraic-dependent relations refresh against projected coordinates. Cycles use Rumoca’s checked
+root neighborhoods and bounded joint-mode search, restoring rejected candidate coordinates.
+Eliminated algebraics refresh after mode changes through the same checked assignment owner.
+Model actions preserve initialization edges, latch before condition memory advances, and report
+assertions, warnings, termination, and dynamic String messages at accepted coordinates. Typed pure functions preserve Integer values with checked BigInt
+arithmetic and exact binary64 constant bits. They support nested calls, finite folds and conditionals,
+including early function returns from nested finite `for` loops with checked output definedness,
+array views/updates, transpose, checked Integer and Real matrix products and cross products, diagonal/identity construction,
+and reductions. Compact scalar folds include nested folds and conditional tensor updates.
+Function assertion observations retain failures from each loop iteration, forward nested checks
+through the compiler's bindings, and stop on fatal assertions. Message captures are evaluated only
+when the check fails; messages read those captured values without executing the function again.
+Deterministic random state/result programs preserve all three native generator profiles. Checked
+impure random draws use model-local streams and cache each draw by exact time bits and its issued
+64-bit call-site identity. Runtime checkpoints restore both stream continuation and cached draws;
+failed event passes restore the pre-event stream. Initialization clears streams when a model is reused.
+The synthetic checked-program diagnostic compares native draw values and exercises rollback and
+instance isolation; it does not establish end-to-end MSL random-model coverage. Table
+programs provide bounds, values, slopes, and next events with linear, constant, and Akima
+interpolation and native extrapolation modes. `Model(tableData)` accepts an explicit array of
+Rumoca `ExternalTableData` records; omitting it uses the retained model's tables. Missing table
+data fails explicitly. No table data is downloaded during standalone execution.
+
+The shared diagnostics cover parameter-array overrides, explicit initial equations,
+repeated bouncing, coupled algebraic loops, and the original Modelica Orbit invariants. IRK4
+projects implicit algebraics at the final state instead of retaining the second internal stage;
+fully eliminated systems skip that endpoint projection. Exported
+execution uses ordinary JavaScript and the existing standalone JS solvers.
+The shared solver keeps compiler-declared held algebraics out of Newton's unknown coordinates
+during initialization and SDIRK2, IRK4, and RK45 stages. Initial-guess seeding also preserves them,
+so a held `false` Boolean remains false until its owning event assigns it.
+
+Algebraic projection uses Rumoca's checked tearing programs when available: Newton solves the tear
+coordinates, and causal assignment programs reconstruct the remaining coordinates in their issued
+order. A declined torn solve restores its trial and falls back to the original block. Purely algebraic
+models use the same projection callback when inputs change, independently of event activation.
+This does not yet remove coupled algebraic coordinates from continuous integration stages.
+
+The optional `evalSolveJacobianVector` callback executes Rumoca's checked directional programs
+for derivative RHS and implicit residual rows, including directional pure functions. Its directions
+use full solver coordinates plus separate parameter and input arrays. At a consistent primal point,
+`evalProjectedJacobianVector` accepts state, parameter and input directions and projects algebraic
+tangents through Rumoca's checked blocks before evaluating the derivative RHS. These are local
+Jacobians; they do not yet integrate trajectory sensitivities or differentiate event transitions.
+Delay models omit these optional directional callbacks until delay-history directions are implemented;
+models with emitted impure draws also omit them.
+Returning the frozen-history Jacobian as a complete model derivative would be misleading.
+
+This generator is **not yet the default**. Full contract coverage still requires reduced-chart
+coordinate selection across manifold folds, trajectory and event sensitivities, and complete
+external function/resource bindings. Retained state constraints are reprojected after every
+accepted step from Rumoca's checked `manifold_residual` and its solver-Y JVP; a block whose plan
+carries alternate charts is still rejected explicitly. `javascript.jinja` retains the existing DAE
+generator with its certified-assignment optimization. Neither template relies on computing
+Modelica invariants from returned samples.
+
+## Shared DAE and Solve simulation diagnostics
+
+The normal diagnostic registry expands 16 generated-JavaScript simulation cases into separate
+`Dae` and `Solve` results. Each pair uses the same Modelica source, simulation settings, and
+behavioral assertions. The Modelica-owned collector is shared by the Node CLI, browser diagnostics
+page, and headless browser harness; each variant preserves its setup and timeout and runs even if
+its sibling fails. Filtering by the original base name selects both variants.
+
+For example, run both bouncing-ball localization variants with:
+
+```sh
+yarn diagnostics:modelica:node \
+  --filter "Bouncing Ball Event Localization" \
+  --details
+```
+
+Filtering by ` Dae` or ` Solve` also selects other diagnostics whose names contain that text;
+those filter totals are not the simulation-matrix totals. Compiler, DAE inspection, diagram,
+library, ABI, and native Rumoca checks retain their own contracts. The FirstOrder generated-JS
+check now runs the same source and assertions in both runtimes; its internal Rumoca solver check
+has the separate name `Test Modelica Msl First Order Native Simulation` and requires Node.
+The handwritten static-model fixture remains a solver-only regression, while a generated
+constant-only Modelica case reuses its assertions for both generators.
+
+The duplicate Solve orbit-invariant entry has been replaced by the shared orbit variants.
+Solve-specific checks remain for checked programs, derivatives, clocks, transactions, delays,
+projection, and other generator capabilities. The MSL resistor consistency check additionally
+certifies tear-coordinate projection sizes, and the editor-sample matrix retains all three
+integrators, so their distinct assertions are preserved.
+
+The DAE and Solve templates share one native-table runtime
+(`packages/modelica/nativeTableRuntime.ts`). It is the JavaScript projection of the certified
+`rumoca-eval-solve::table_runtime` evaluator: it keeps descriptor IDs, column selection,
+smoothness modes (linear, Akima, constant segments), and extrapolation modes (hold, last two
+points, periodic, no extrapolation) bit-compatible, including the holding behavior of both
+`NoExtrapolation` and unknown modes. `Test Modelica Native Table Interpolation Regression`
+exercises both generators against a pair of MSL `CombiTable1Ds` tables with reordered columns,
+Akima interpolation, and periodic constant segments.
+
+The matrix intentionally exposes unsupported behavior as failures. It never substitutes the DAE
+output for failed Solve rendering or relaxes behavioral assertions for one generator. Generated-code
+checks specific to the DAE template remain DAE checks; the external-symbol resolver assertion is a
+separate contract diagnostic. Completing this coverage does not certify complete Solve support.
+
+The storage-mapping regression checks exact floating-point starts, array states, aliases, coupled
+algebraics, and outputs through both generators. The discrete-target regression checks independently
+owned Boolean array events and the full analytic state trajectory with all three integrators.
+The Solve assertion regressions additionally check lazy message evaluation, fatal stop, nested
+forwarding, and a warning from an early iteration whose final iteration succeeds.
+
+With `@taskyon/rumoca@0.10.3-taskyon.1`, the full Node run has 105 executed checks passing and
+five Worker/DOM-only checks skipped (the CLI summary currently counts skips as passes: 110/110).
+All 32 paired simulation variants pass. The final focused `Solve Generator` run passes 51/51.
+Typechecking passes. The maintained comparison harness also simulates the MSL resistor example
+with both templates: their 28 shared signals differ by at most 3.24e-7 over 0–0.2 seconds. This is
+agreement between generators, not an independent reference; OpenModelica/Podman were unavailable.
+The Node runs use the real npm WASM package and a verified local MSL archive through a temporary
+download transport shim. Browser verification of the updated templates and solver is still pending;
+earlier browser results do not verify this migration.
+
+`Test Modelica Prepared Metadata Contract` also passes in both runtimes. Rumoca attaches the
+compile provenance to the compile-response envelope, so the diagnostic reads the `version`,
+`git_commit`, and `build_time_utc` fields of `__rumoca_build` from the response root and confirms
+the canonical native DAE payload stays free of it, matching
+Rumoca's `compile_wire_tests` contract. `Test Modelica Solve Generator Manifold Projection` now
+passes as well: the Solve template emits Rumoca's retained `manifold_residual` and
+`manifold_jacobian_v` programs and reprojects every accepted state onto the checked constraint
+through the shared runtime.
+These are test outcomes, not numerical parity evidence against an independent simulator.
+
 ## Prerequisites
 
 - `podman` installed and runnable
@@ -136,8 +342,9 @@ Before merging runtime/solver-related changes, include all items below in the PR
 
 For AI-agent development in this repo:
 
-- Treat `packages/modelica/javascript.jinja` as the **single source of truth**.
-- Edit only this local template while iterating/debugging.
+- Treat the selected local generator (`javascript.jinja` or `javascript_solve.jinja`) as its
+  source of truth.
+- Prove runtime fixes in its generated JS, then edit that local template.
 - Do not edit the duplicate template in `packages/rumoca` during AI-agent iterations.
 - Copy/backport stable changes to `packages/rumoca` afterwards as a separate manual step.
 
@@ -170,7 +377,14 @@ When debugging compiler behavior, this is the practical high-level flow in `pack
 
 5. JS rendering/runtime integration (Taskyon side)
 
-- DAE is rendered to JS via:
+- The JavaScript template declares `{# rumoca-ir: solve #}`. The shared renderer requests a
+  Solve target from Rumoca's simulation-enabled WASM build; Jinja receives the checked Solve
+  plan and its corresponding DAE view.
+- For dynamic models without events, inputs or discrete/output coordinates, a complete certified
+  algebraic assignment schedule is generated as JavaScript and evaluated at every trial state.
+  These algebraics remain in the output but are excluded from Newton's unknown vector. Coupled
+  algebraic systems and unsupported execution shapes retain the full residual solve.
+- JS is generated via:
   - `packages/modelica/javascript.jinja`
 - Runtime solve/execution is handled in:
   - `packages/modelica/simulateModel.js`
@@ -308,7 +522,9 @@ For AI-agent implementation decisions:
 
 4. Single source of truth for generated JS logic
 
-- Keep JS generation policy in `packages/modelica/javascript.jinja`.
+- Keep JS generation policy in the selected local Jinja generator.
+- Keep numerical integration and Newton algorithms in `simulateModel.js`; checked initialization
+  callbacks receive its nonlinear solver explicitly.
 - Avoid duplicate logic paths for expression rendering/comment rendering; prefer shared macros/data paths.
 
 ## Bug Triage Proof Requirements (Mandatory)
@@ -349,21 +565,22 @@ Build the Rumoca npm dev artifact first, then install dependencies:
 ```bash
 set -euo pipefail
 
-cd packages/rumoca/packages/rumoca
-npm run build:dev:full-web
+cd packages/rumoca/packages/rumoca-taskyon
+npm run build
 cd ../../../..
 yarn install
 ```
 
 Notes:
 
-- `npm run build:dev:full-web` produces the browser compiler plus Rumoca's native simulation
-  surface under `packages/rumoca/packages/rumoca/dist/dev-full-web`.
+- `npm run build` in the Taskyon packaging directory produces the browser compiler plus Rumoca's native simulation
+  surface under `packages/rumoca/packages/rumoca-taskyon/dist/dev-full-web`.
 - Use the narrower `build:dev:core` variant only when native simulation is deliberately out of
   scope.
-- For normal usage we install the production Rumoca package from npm.
-- For local compiler testing, temporarily point `rumoca-full-web` at
-  `file:../rumoca/packages/rumoca/dist/dev-full-web`; revert that linkage after validation.
+- The workspace pins `rumoca-full-web` to
+  `npm:@taskyon/rumoca@0.10.3-taskyon.1`. For compiler development, temporarily change the
+  dependency to `file:../rumoca/packages/rumoca-taskyon/dist/dev-full-web` before running
+  `yarn install`, then restore the npm dependency when finished.
 
 3. If solving/runtime fails, isolate via generated JS.
 
@@ -473,3 +690,19 @@ Useful debugger breakpoints:
   - `applyResets(...)`
 - solver:
   - `simulate()` and `solveFlowAtState(...)` in `packages/modelica/simulateModel.js`
+
+## Taskyon Rumoca metadata and releases
+
+The Xyntopia `taskyon` branch receives upstream main merges and maintains the
+opt-in `taskyon-api` feature. Diagrams read generic metadata from loaded session
+documents; unsaved buffers use the same source projector. Taskyon retains archive
+indexing and loading on demand. The explicit AST inspector uses a diagnostic-only
+raw AST export. Connection annotations are not retained by the upstream AST;
+Taskyon continues to route connections dynamically.
+
+Manual release commands and upstream-derived `-taskyon.N` versions are documented
+in `packages/rumoca/packages/rumoca-taskyon/README.md`. After the first release,
+pin the existing `rumoca-full-web` alias to `npm:@taskyon/rumoca@<exact-version>`.
+Until that package is published, the manifest uses the local Taskyon build so
+installation never depends on a nonexistent registry version. For local compiler
+development, temporarily restore that file dependency and rebuild/reinstall.

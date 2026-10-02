@@ -1,3 +1,13 @@
+import { decodeClassMetadata } from './modelicaClassMetadata'
+import {
+  collectModelicaDiagnosticTests,
+  type ModelicaGenerator,
+} from './modelicaDiagnosticVariants'
+import {
+  runDiagnosticsTests,
+  type DiagnosticsTestContext,
+} from '@taskyon/common/modules/diagnosticsRunner'
+import { exampleModels } from './modelicaExamples'
 import {
   buildModelAbiValidationSandboxCode,
   buildWorkerSandboxCode,
@@ -9,7 +19,12 @@ import {
   shouldValidateModelAbiForRenderedOutput,
   validateModelAbiValidationResultV1,
 } from './modelica'
-import { hasRumocaTemplateRenderer, renderRumocaTemplate } from './rumocaTemplateRender'
+import {
+  daeJsonForTemplate,
+  compileRumocaTemplates,
+  hasRumocaTemplateRenderer,
+  renderRumocaTemplate,
+} from './rumocaTemplateRender'
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import {
   executeInWorkerSandbox,
@@ -21,6 +36,9 @@ import { createGraphController } from '@taskyon/common/modules/graph'
 import type { TaskyonStorageClient } from '@taskyon/taskyon/api'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import javascriptTemplate from './javascript.jinja?raw'
+import solveJavascriptTemplate from './javascript_solve.jinja?raw'
+import defaultSolverSource from './simulateModel?raw'
+import checkedSolveFixtures from './fixtures/checked_solve_programs.json?raw'
 import {
   mapDiagramToGraph,
   type DiagramEdgeData,
@@ -53,6 +71,33 @@ const templateChecks = [
     executableAsJs: false,
   },
 ] as const
+
+const MODELICA_CONTEXT_INSPECT_TEMPLATE = `
+schema={{ dae.schema.name }}|{{ dae.schema.version }}
+{% for v in dae.variables -%}
+var|{{ v.role }}|{{ v.name }}|{{ v.scalar_names | join(",") }}|{{ v.scalar_count }}
+{% endfor -%}
+{% for owner in dae.systems.continuous.owners -%}
+owner|continuous|{{ owner.kind }}|{{ owner.scalar_rows if owner.scalar_rows is defined else 0 }}|{{ owner.residual if owner.residual is defined else -1 }}|{{ owner.domain if owner.domain is defined else -1 }}
+{% endfor -%}
+{% for owner in dae.systems.initialization.owners -%}
+owner|initialization|{{ owner.kind }}|{{ owner.scalar_rows if owner.scalar_rows is defined else 0 }}|{{ owner.residual if owner.residual is defined else -1 }}|{{ owner.domain if owner.domain is defined else -1 }}
+{% endfor -%}
+{% for res in dae.systems.discrete_real.residuals -%}
+discrete_real|{{ res.activation.kind }}
+{% endfor -%}
+{% for owner in dae.systems.discrete_values.owners -%}
+{% for branch in owner.branches -%}
+discrete_value|{{ branch.activation.kind }}
+{% endfor -%}
+{% endfor -%}
+{% for cond in dae.systems.conditions.conditions -%}
+condition|{{ cond.operation.kind }}
+{% endfor -%}
+{% for action in dae.systems.events.actions -%}
+event_action|{{ action.operation.kind }}
+{% endfor -%}
+`.trim()
 
 const MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS = {
   format: 'json' as const,
@@ -153,29 +198,44 @@ equation
 end BooleanNetworkShimSmoke;
 `.trim()
 
-function getTemplateModelName(dae: Record<string, unknown>, fallback = 'Model'): string {
-  const raw = dae.model_name
-  return typeof raw === 'string' && raw.trim().length > 0 ? raw : fallback
-}
-
 function assertTemplateRendererAvailable(wasm: DiagnosticsWasm): void {
   if (!hasRumocaTemplateRenderer(wasm)) {
     throw new Error('Rumoca wasm export missing: render_template / render_target')
   }
 }
 
+function compileDiagnosticJavaScript(
+  wasm: DiagnosticsWasm,
+  source: string,
+  modelName: string,
+  generator: ModelicaGenerator,
+) {
+  const template =
+    generator === 'dae'
+      ? { source: javascriptTemplate, path: 'javascript.jinja' }
+      : { source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }
+  const compilation = compileRumocaTemplates({ wasm, source, modelName, templates: [template] })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok)
+    throw new Error(
+      `${modelName} [${generator}] rendering failed: ${generated?.error ?? 'Missing generated model'}`,
+    )
+  return { ...compilation, rendered: generated.content }
+}
+
 function renderDiagnosticsTemplate(
   wasm: DiagnosticsWasm,
-  dae: Record<string, unknown>,
+  daeJson: string,
   templateSource: string,
   templatePath: string,
   outputPath: string,
+  modelName: string,
 ): string {
   const rendered = renderRumocaTemplate({
     wasm,
-    daeJson: JSON.stringify(dae),
+    daeJson,
     templateSource,
-    modelName: getTemplateModelName(dae),
+    modelName,
     templatePath,
     outputPath,
     targetName: 'template',
@@ -333,6 +393,7 @@ async function runTemplateCoverage(source: string, modelName: string) {
     dae_prepared_diagnostics?: unknown
   }
   const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
+  const daeJson = daeJsonForTemplate(parsed, { usePreparedDae: true })
   if (!dae) {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
@@ -348,10 +409,11 @@ async function runTemplateCoverage(source: string, modelName: string) {
 
   const rendered = renderDiagnosticsTemplate(
     wasm,
-    dae,
+    daeJson,
     '{{ dae.model_name | default("unknown") }}',
     'template-check.jinja',
     'template-check.txt',
+    modelName,
   )
 
   const templateResults: Record<
@@ -359,7 +421,14 @@ async function runTemplateCoverage(source: string, modelName: string) {
     { ok: boolean; preview: string; jsExecutable: boolean; expectedJs: boolean; abiOk?: boolean }
   > = {}
   for (const check of templateChecks) {
-    const out = renderDiagnosticsTemplate(wasm, dae, check.source, check.name, check.name)
+    const out = renderDiagnosticsTemplate(
+      wasm,
+      daeJson,
+      check.source,
+      check.name,
+      check.name,
+      modelName,
+    )
     for (const snippet of check.requiredSnippets) {
       if (!out.includes(snippet)) {
         throw new Error(`Template ${check.name} missing expected snippet: ${snippet}`)
@@ -1192,6 +1261,7 @@ end TestPreparedMeta;
     dae_prepared?: unknown
     dae_prepared_status?: unknown
     dae_prepared_diagnostics?: unknown
+    __rumoca_build?: unknown
   }
   const dae = selectDaeForTemplate(parsed, { usePreparedDae: false })
   if (!dae || typeof dae !== 'object' || Array.isArray(dae)) {
@@ -1208,22 +1278,27 @@ end TestPreparedMeta;
     throw new Error('compile_to_json should not expose dae_prepared_diagnostics in native-only API')
   }
 
-  const build = dae.__rumoca_build
+  // Rumoca keeps the canonical DAE wire free of compile metadata (`DaeWire`
+  // denies unknown fields), so provenance lives on the compile-response root.
+  if (dae.__rumoca_build !== undefined) {
+    throw new Error('Compile metadata must not be embedded in the native DAE payload')
+  }
+  const build = parsed.__rumoca_build
   if (!build || typeof build !== 'object' || Array.isArray(build)) {
-    throw new Error('Native DAE is missing __rumoca_build metadata')
+    throw new Error('Compile response is missing __rumoca_build metadata')
   }
   const buildRecord = build as Record<string, unknown>
   const version = buildRecord.version
   const gitCommit = buildRecord.git_commit
   const buildTimeUtc = buildRecord.build_time_utc
   if (typeof version !== 'string' || version.trim().length === 0) {
-    throw new Error('Native DAE __rumoca_build.version must be a non-empty string')
+    throw new Error('Compile response __rumoca_build.version must be a non-empty string')
   }
   if (typeof gitCommit !== 'string' || gitCommit.trim().length === 0) {
-    throw new Error('Native DAE __rumoca_build.git_commit must be a non-empty string')
+    throw new Error('Compile response __rumoca_build.git_commit must be a non-empty string')
   }
   if (typeof buildTimeUtc !== 'string' || buildTimeUtc.trim().length === 0) {
-    throw new Error('Native DAE __rumoca_build.build_time_utc must be a non-empty string')
+    throw new Error('Compile response __rumoca_build.build_time_utc must be a non-empty string')
   }
 
   return {
@@ -1258,17 +1333,20 @@ model BouncingBall             "The bouncing ball model"
   return runTemplateCoverage(source, 'BouncingBall')
 }
 
-export async function testModelicaBooleanNetworkShimRuntime() {
+export async function testModelicaBooleanNetworkShimRuntime(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
   const wasm = await getDiagnosticsWasm()
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
-  }
   assertTemplateRendererAvailable(wasm)
 
-  const compiled = wasm.compile_to_json(
+  const compilation = compileDiagnosticJavaScript(
+    wasm,
     MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE,
     'BooleanNetworkShimSmoke',
+    generator,
   )
+  const compiled = compilation.compileResponse
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -1279,23 +1357,10 @@ export async function testModelicaBooleanNetworkShimRuntime() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = renderDiagnosticsTemplate(
-    wasm,
-    dae,
-    javascriptTemplate,
-    'javascript.jinja',
-    'model.js',
-  )
+  const rendered = compilation.rendered
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
-  if (!rendered.includes('__rumocaResolveExternalSymbol')) {
-    throw new Error('Generated JS is missing external symbol resolver helper')
-  }
-  if (rendered.includes('__RUMOCA_SYMBOL_OVERRIDES__')) {
-    throw new Error('Generated JS still contains hardcoded symbol overrides')
-  }
-
   const runId = 'modelica-boolean-network-shim-runtime'
   const abort = new AbortController()
   try {
@@ -1352,8 +1417,12 @@ export async function testModelicaBooleanNetworkShimRuntime() {
     abort.abort()
   }
 }
+testModelicaBooleanNetworkShimRuntime.modelicaGenerators = ['dae', 'solve'] as const
 
-export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
+export async function testModelicaBooleanSignalGeneratorWaveformRegression(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
   const wasm = await getDiagnosticsWasm()
   assertTemplateRendererAvailable(wasm)
 
@@ -1361,12 +1430,14 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     phase: 'compile',
     model: 'BooleanSignalGenerator',
   }
-  const compiled = await compileToJsonWithAutoMsl(
+  await ensureDiagnosticsMslLoaded(wasm, debug)
+  const compilation = compileDiagnosticJavaScript(
     wasm,
     MODELICA_BOOLEAN_SIGNAL_GENERATOR_SOURCE,
     'BooleanSignalGenerator',
-    debug,
+    generator,
   )
+  const compiled = compilation.compileResponse
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -1377,13 +1448,7 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
 
-  const rendered = renderDiagnosticsTemplate(
-    wasm,
-    dae,
-    javascriptTemplate,
-    'javascript.jinja',
-    'model.js',
-  )
+  const rendered = compilation.rendered
   if (typeof rendered !== 'string' || !rendered.trim()) {
     throw new Error('Rendered JS is empty')
   }
@@ -1509,8 +1574,12 @@ export async function testModelicaBooleanSignalGeneratorWaveformRegression() {
     abort.abort()
   }
 }
+testModelicaBooleanSignalGeneratorWaveformRegression.modelicaGenerators = ['dae', 'solve'] as const
 
-export async function testModelicaBooleanNetwork1RuntimeRegression() {
+export async function testModelicaBooleanNetwork1RuntimeRegression(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'solve',
+) {
   const wasm = await getDiagnosticsWasm()
   if (
     typeof wasm.compile_with_source_roots !== 'function' &&
@@ -1532,27 +1601,7 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
   debug.sourcePath = target.sourcePath
   const sourcePath = target.sourcePath
 
-  const compiled = compileWithDiagnosticsMsl(wasm, '', target.modelName)
-  const parsed = JSON.parse(compiled) as {
-    dae?: unknown
-    dae_native?: unknown
-    dae_prepared?: unknown
-  }
-  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
-  if (!dae) {
-    throw new Error('Rumoca compile_to_json returned no DAE payload')
-  }
-
-  const rendered = renderDiagnosticsTemplate(
-    wasm,
-    dae,
-    javascriptTemplate,
-    'javascript.jinja',
-    'model.js',
-  )
-  if (typeof rendered !== 'string' || !rendered.trim()) {
-    throw new Error('Rendered JS is empty')
-  }
+  const { rendered } = compileDiagnosticJavaScript(wasm, '', target.modelName, generator)
 
   const runId = 'modelica-boolean-network1-runtime-regression'
   const abort = new AbortController()
@@ -1700,6 +1749,7 @@ export async function testModelicaBooleanNetwork1RuntimeRegression() {
     abort.abort()
   }
 }
+testModelicaBooleanNetwork1RuntimeRegression.modelicaGenerators = ['dae', 'solve'] as const
 testModelicaBooleanNetwork1RuntimeRegression.setup = async () => {
   const wasm = await getDiagnosticsWasm()
   const debug: Record<string, unknown> = {}
@@ -1729,6 +1779,10 @@ function Model() {
   }
 }
 `.trim()
+  return runStaticModelExecutionModeRegression(source)
+}
+
+async function runStaticModelExecutionModeRegression(source: string) {
   const runId = 'modelica-static-model-execution-mode-regression'
   const abort = new AbortController()
   try {
@@ -1795,7 +1849,10 @@ function Model() {
   }
 }
 
-export async function testModelicaBouncingBallEventLocalizationRegression() {
+export async function testModelicaBouncingBallEventLocalizationRegression(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
   const source = `
 model BouncingBall             "The bouncing ball model"
   constant Real g = 9.81 "Gravitational acceleration";
@@ -1815,12 +1872,10 @@ model BouncingBall             "The bouncing ball model"
 `.trim()
 
   const wasm = await getDiagnosticsWasm()
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
-  }
   assertTemplateRendererAvailable(wasm)
 
-  const compiled = wasm.compile_to_json(source, 'BouncingBall')
+  const compilation = compileDiagnosticJavaScript(wasm, source, 'BouncingBall', generator)
+  const compiled = compilation.compileResponse
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -1887,19 +1942,14 @@ model BouncingBall             "The bouncing ball model"
   const nativeDaeSummary = summarizeDaeEventShape(parsed.dae_native ?? parsed.dae)
   const preparedDaeSummary = summarizeDaeEventShape(parsed.dae_prepared)
 
-  const rendered = renderDiagnosticsTemplate(
-    wasm,
-    dae,
-    javascriptTemplate,
-    'javascript.jinja',
-    'model.js',
-  )
+  const rendered = compilation.rendered
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for BouncingBall')
   }
   if (
-    rendered.includes('const capabilities = { events: false }') ||
-    rendered.includes('const capabilities = {events: false}')
+    generator === 'dae' &&
+    (rendered.includes('const capabilities = { events: false }') ||
+      rendered.includes('const capabilities = {events: false}'))
   ) {
     throw new Error(
       [
@@ -2164,8 +2214,12 @@ model BouncingBall             "The bouncing ball model"
     generatedCodePreview: rendered.slice(0, 500),
   }
 }
+testModelicaBouncingBallEventLocalizationRegression.modelicaGenerators = ['dae', 'solve'] as const
 
-export async function testModelicaBouncingBallStandardSettingsBounce() {
+export async function testModelicaBouncingBallStandardSettingsBounce(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
   const source = `
 model BouncingBall             "The bouncing ball model"
   constant Real g = 9.81 "Gravitational acceleration";
@@ -2185,12 +2239,10 @@ model BouncingBall             "The bouncing ball model"
 `.trim()
 
   const wasm = await getDiagnosticsWasm()
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
-  }
   assertTemplateRendererAvailable(wasm)
 
-  const compiled = wasm.compile_to_json(source, 'BouncingBall')
+  const compilation = compileDiagnosticJavaScript(wasm, source, 'BouncingBall', generator)
+  const compiled = compilation.compileResponse
   const parsed = JSON.parse(compiled) as {
     dae?: unknown
     dae_native?: unknown
@@ -2201,13 +2253,7 @@ model BouncingBall             "The bouncing ball model"
     throw new Error('Rumoca compile_to_json returned no DAE payload for BouncingBall')
   }
 
-  const rendered = renderDiagnosticsTemplate(
-    wasm,
-    dae,
-    javascriptTemplate,
-    'javascript.jinja',
-    'model.js',
-  )
+  const rendered = compilation.rendered
   if (!rendered || typeof rendered !== 'string') {
     throw new Error('Rendering javascript.jinja failed for BouncingBall')
   }
@@ -2326,10 +2372,14 @@ model BouncingBall             "The bouncing ball model"
         ].join('\n'),
       )
     }
-    if (details.tSeries.length < 20 || details.tSeries.length > 25) {
+    const gridSamples = details.tSeries.filter((tSample) => {
+      const stepIndex = Number(tSample) / 0.1
+      return Math.abs(stepIndex - Math.round(stepIndex)) <= 1e-6
+    }).length
+    if (gridSamples < 20 || gridSamples > 25) {
       throw new Error(
         [
-          `${label} returned unexpected sample count for dt=0.1, tf=2 (expected about 21, got ${details.tSeries.length})`,
+          `${label} returned unexpected grid sample count for dt=0.1, tf=2 (expected about 21, got ${gridSamples} grid samples of ${details.tSeries.length} total)`,
           `summary=${serializeObject(details.summary, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)}`,
         ].join('\n'),
       )
@@ -2398,6 +2448,7 @@ model BouncingBall             "The bouncing ball model"
     generatedCodePreview: rendered.slice(0, 500),
   }
 }
+testModelicaBouncingBallStandardSettingsBounce.modelicaGenerators = ['dae', 'solve'] as const
 
 export async function testModelicaAbiValidationRoutingRegression() {
   const wasm = await getDiagnosticsWasm()
@@ -2420,7 +2471,7 @@ end Test;
   if (!dae) {
     throw new Error('Rumoca compile_to_json returned no DAE payload')
   }
-  const daeJson = JSON.stringify(dae)
+  const daeJson = daeJsonForTemplate(parsed, { usePreparedDae: true })
 
   const cases = [
     {
@@ -2463,7 +2514,7 @@ end Test;
       wasm,
       daeJson,
       templateSource: c.template,
-      modelName: getTemplateModelName(dae),
+      modelName: 'Test',
       templatePath: c.name,
       outputPath: c.name,
       targetName: 'template',
@@ -2615,7 +2666,7 @@ type DiagnosticsMslApi = {
   clear_source_root_cache?: () => void
   list_classes?: () => string
   get_class_info?: (qualifiedName: string) => string
-  parse_source_root_file?: (source: string, filename: string) => string
+  parse?: (source: string) => unknown
   wasm_init?: (numThreads: number) => unknown
   lsp_diagnostics?: (source: string) => string
   lsp_completion_with_timing?: (source: string, line: number, character: number) => string
@@ -3035,48 +3086,19 @@ function compileWithDiagnosticsMsl(
   throw new Error('Rumoca wasm export missing: compile_with_source_roots / compile_with_libraries')
 }
 
-function sourceNeedsMsl(source: string): boolean {
-  return String(source || '').includes('Modelica.')
-}
-
-async function compileToJsonWithAutoMsl(
-  wasm: DiagnosticsMslApi,
-  source: string,
-  modelName: string,
-  debug: Record<string, unknown>,
-): Promise<string> {
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
-  }
-
-  if (sourceNeedsMsl(source)) {
-    await ensureDiagnosticsMslLoaded(wasm, debug)
-    if (
-      typeof wasm.compile_with_source_roots === 'function' ||
-      typeof wasm.compile_with_libraries === 'function'
-    ) {
-      return compileWithDiagnosticsMsl(wasm, source, modelName)
-    }
-  }
-
-  return wasm.compile_to_json(source, modelName)
-}
-
-function parseSourceRootAstOrError(
+function parseSourceSyntaxOrError(
   wasm: DiagnosticsMslApi,
   source: string,
   fileName: string,
-): { ok: true; ast: Record<string, unknown> } | { ok: false; error: string } {
-  if (typeof wasm.parse_source_root_file !== 'function') {
-    return { ok: false, error: 'Rumoca wasm export missing: parse_source_root_file' }
-  }
+): { ok: true } | { ok: false; error: string } {
+  if (typeof wasm.parse !== 'function')
+    return { ok: false, error: 'Rumoca wasm export missing: parse' }
   try {
-    const raw = wasm.parse_source_root_file(source, fileName)
-    const ast = JSON.parse(String(raw))
-    if (!ast || typeof ast !== 'object' || Array.isArray(ast)) {
-      return { ok: false, error: 'parse_source_root_file returned non-object AST payload' }
+    const result: unknown = wasm.parse(source)
+    if (result && typeof result === 'object' && 'success' in result && result.success === true) {
+      return { ok: true }
     }
-    return { ok: true, ast: ast as Record<string, unknown> }
+    return { ok: false, error: `Rumoca rejected source syntax: ${fileName}` }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
@@ -3491,7 +3513,10 @@ export async function testModelicaMslTreeViewData() {
   }
 }
 
-export async function testModelicaMslCompileAndRunSmoke() {
+export async function testModelicaMslCompileAndRunSmoke(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
   const debug: Record<string, unknown> = {
     mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
     phase: 'init',
@@ -3523,7 +3548,8 @@ equation
 end MslConstRamp;
 `.trim()
 
-    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslConstRamp')
+    const compilation = compileDiagnosticJavaScript(wasm, source, 'MslConstRamp', generator)
+    const compiledRaw = compilation.compileResponse
     debug.phase = 'compiled-with-libraries'
     const compiled = JSON.parse(String(compiledRaw)) as {
       dae?: unknown
@@ -3536,13 +3562,7 @@ end MslConstRamp;
       throw new Error('MSL compile returned no DAE payload')
     }
 
-    const rendered = renderDiagnosticsTemplate(
-      wasm,
-      dae,
-      javascriptTemplate,
-      'javascript.jinja',
-      'model.js',
-    )
+    const rendered = compilation.rendered
     if (!rendered || typeof rendered !== 'string') {
       throw new Error('Rendering javascript.jinja failed for MSL smoke model')
     }
@@ -3705,8 +3725,9 @@ end MslConstRamp;
     })
   }
 }
+testModelicaMslCompileAndRunSmoke.modelicaGenerators = ['dae', 'solve'] as const
 
-async function runModelicaMslFirstOrderRumocaSimulationInBrowser() {
+async function runModelicaMslFirstOrderJavaScriptSimulation(generator: ModelicaGenerator) {
   const debug: Record<string, unknown> = {
     phase: 'init',
     mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
@@ -3742,7 +3763,13 @@ end MslFirstOrderRuntimeSmoke;
 `.trim()
 
     debug.phase = 'compile-with-libraries'
-    const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslFirstOrderRuntimeSmoke')
+    const compilation = compileDiagnosticJavaScript(
+      wasm,
+      source,
+      'MslFirstOrderRuntimeSmoke',
+      generator,
+    )
+    const compiledRaw = compilation.compileResponse
     debug.phase = 'compiled'
     const compiled = JSON.parse(String(compiledRaw)) as {
       dae?: unknown
@@ -3756,13 +3783,7 @@ end MslFirstOrderRuntimeSmoke;
     }
 
     debug.phase = 'render-javascript-template'
-    const rendered = renderDiagnosticsTemplate(
-      wasm,
-      dae,
-      javascriptTemplate,
-      'javascript.jinja',
-      'model.js',
-    )
+    const rendered = compilation.rendered
     fullGeneratedCode = rendered
     debug.renderedPreview = rendered.slice(0, 220)
     debug.generatedCodeLength = rendered.length
@@ -3910,10 +3931,21 @@ end MslFirstOrderRuntimeSmoke;
 }
 
 export async function testModelicaMslFirstOrderRumocaSimulation(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  return runModelicaMslFirstOrderJavaScriptSimulation(generator)
+}
+testModelicaMslFirstOrderRumocaSimulation.modelicaGenerators = ['dae', 'solve'] as const
+
+export async function testModelicaMslFirstOrderNativeSimulation(
   storageClient?: TaskyonStorageClient,
 ) {
   if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-    return runModelicaMslFirstOrderRumocaSimulationInBrowser()
+    return {
+      skipped: true,
+      reason: 'Native Rumoca simulation requires the Node diagnostics runtime.',
+    }
   }
   const nodeDiagnosticsModule = './modelicaDiagnosticsCliNode.ts'
   const { runModelicaCliMslFirstOrderRumocaSimulation } = (await import(
@@ -3921,7 +3953,7 @@ export async function testModelicaMslFirstOrderRumocaSimulation(
   )) as {
     runModelicaCliMslFirstOrderRumocaSimulation: (
       storageClient: TaskyonStorageClient,
-    ) => ReturnType<typeof runModelicaMslFirstOrderRumocaSimulationInBrowser>
+    ) => ReturnType<typeof runModelicaMslFirstOrderJavaScriptSimulation>
   }
   if (!storageClient) throw new Error('Node Modelica diagnostics require a StorageClient.')
   return runModelicaCliMslFirstOrderRumocaSimulation(storageClient)
@@ -3993,7 +4025,7 @@ end MslResistorManualFlattened;
         throw new Error(`MSL compile returned no DAE payload for ${modelName}`)
       }
 
-      const daeJson = JSON.stringify(dae)
+      const daeJson = daeJsonForTemplate(compiled, { usePreparedDae: true })
       const prettyText = String(compiled.pretty ?? '')
       const prettyParsed = (() => {
         try {
@@ -4003,59 +4035,50 @@ end MslResistorManualFlattened;
         }
       })()
 
-      const mapKeys = (obj: unknown): string[] =>
-        obj && typeof obj === 'object' ? Object.keys(obj as Record<string, unknown>) : []
-      const xNames = mapKeys(prettyParsed?.x)
-      const yNames = mapKeys(prettyParsed?.y)
-      const eqs = Array.isArray(prettyParsed?.f_x)
-        ? (prettyParsed?.f_x as unknown[])
-        : Array.isArray(prettyParsed?.fx)
-          ? (prettyParsed?.fx as unknown[])
-          : []
-      const condEqs = Array.isArray(prettyParsed?.f_c) ? (prettyParsed?.f_c as unknown[]) : []
-      const whenClauses = Array.isArray(prettyParsed?.when_clauses)
-        ? (prettyParsed?.when_clauses as unknown[])
-        : []
-      const collectVarRefs = (node: unknown): string[] => {
-        const refs = new Set<string>()
-        const walk = (value: unknown) => {
-          if (!value || typeof value !== 'object') return
-          if (Array.isArray(value)) {
-            value.forEach(walk)
-            return
-          }
-          const obj = value as Record<string, unknown>
-          const varRef = obj.VarRef as Record<string, unknown> | undefined
-          if (varRef && typeof varRef.name === 'string') {
-            refs.add(varRef.name)
-          }
-          for (const child of Object.values(obj)) walk(child)
-        }
-        walk(node)
-        return [...refs]
-      }
-      const getLhsName = (eq: unknown): string => {
-        if (!eq || typeof eq !== 'object') return '0'
-        const lhs = (eq as Record<string, unknown>).lhs
-        if (!lhs || typeof lhs !== 'object') return '0'
-        const lhsVarRef = (lhs as Record<string, unknown>).VarRef as
-          | Record<string, unknown>
-          | undefined
-        if (lhsVarRef && typeof lhsVarRef.name === 'string') return lhsVarRef.name
-        return '0'
-      }
-      const hasDerivative = (eq: unknown): boolean => {
-        const text = serializeObject(eq, MODELICA_DIAGNOSTICS_SERIALIZE_OPTIONS)
-        return /"function"\s*:\s*"Der"|der\(/.test(text)
-      }
-      const equationSummaries = eqs.slice(0, 40).map((eq, idx) => {
-        const eqObj = eq as Record<string, unknown>
-        const lhs = getLhsName(eq)
-        const rhs = eqObj.rhs
-        const refs = collectVarRefs(rhs).slice(0, 12)
-        const origin = typeof eqObj.origin === 'string' ? eqObj.origin : ''
-        return `${idx + 1}. ${lhs} = <expr>; refs=[${refs.join(', ')}]${hasDerivative(eq) ? '; der=true' : ''}${origin ? `; origin=${origin}` : ''}`
+      const inspectText = renderRumocaTemplate({
+        wasm,
+        daeJson,
+        templateSource: MODELICA_CONTEXT_INSPECT_TEMPLATE,
+        modelName,
+        templatePath: 'context-inspect.jinja',
+        outputPath: `${modelName}.inspect.txt`,
+        targetName: 'template',
       })
+      const inspectRows = inspectText
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => line.split('|'))
+      const variables = inspectRows
+        .filter((row) => row[0] === 'var')
+        .map((row) => ({
+          role: row[1] ?? '',
+          name: row[2] ?? '',
+          scalarNames: (row[3] ?? '').split(',').filter((name) => name.length > 0),
+        }))
+      const namesForRoles = (roles: string[]): string[] =>
+        variables
+          .filter((v) => roles.includes(v.role))
+          .flatMap((v) => (v.scalarNames.length > 0 ? v.scalarNames : v.name ? [v.name] : []))
+      const countRoles = (roles: string[]): number =>
+        variables.filter((v) => roles.includes(v.role)).length
+      const xNames = namesForRoles(['state'])
+      const yNames = namesForRoles(['algebraic', 'output'])
+      const continuousOwners = inspectRows.filter(
+        (row) => row[0] === 'owner' && row[1] === 'continuous',
+      )
+      const eqs = continuousOwners.filter((row) => row[2] === 'residual')
+      const condEqs = inspectRows.filter((row) => row[0] === 'condition')
+      const whenClauses = inspectRows.filter(
+        (row) => (row[0] === 'discrete_real' || row[0] === 'discrete_value') && row[1] === 'when',
+      )
+      const equationSummaries = continuousOwners
+        .slice(0, 40)
+        .map((row, idx) =>
+          row[2] === 'structured'
+            ? `${idx + 1}. structured family domain=${row[5] ?? '?'} rows=${row[3] ?? '?'}`
+            : `${idx + 1}. residual#${row[4] ?? '?'} = <expr>`,
+        )
 
       let baseDaeRendered = ''
       let baseDaeRenderError = ''
@@ -4064,7 +4087,7 @@ end MslResistorManualFlattened;
           wasm,
           daeJson,
           templateSource: baseDaeTemplate,
-          modelName: getTemplateModelName(dae),
+          modelName,
           templatePath: 'base_dae.jinja',
           outputPath: 'base_dae.txt',
           targetName: 'template',
@@ -4090,12 +4113,16 @@ end MslResistorManualFlattened;
           length: prettyText.length,
           isJson: prettyParsed !== null,
           counts: {
-            p: mapKeys(prettyParsed?.p).length,
-            cp: mapKeys(prettyParsed?.cp ?? prettyParsed?.constants).length,
+            p: countRoles(['parameter']),
+            cp: countRoles(['constant']),
             x: xNames.length,
             y: yNames.length,
-            z: mapKeys(prettyParsed?.z).length,
-            f_x: eqs.length,
+            z: countRoles(['discrete_real']),
+            f_x:
+              eqs.length +
+              continuousOwners
+                .filter((row) => row[2] === 'structured')
+                .reduce((sum, row) => sum + Number(row[3] ?? 0), 0),
             f_c: condEqs.length,
             when_clauses: whenClauses.length,
           },
@@ -4465,7 +4492,11 @@ async function loadResistorWasm(debug: Record<string, unknown>): Promise<Diagnos
   return wasm
 }
 
-async function compileResistorExample(wasm: DiagnosticsWasm, debug: Record<string, unknown>) {
+async function compileResistorExample(
+  wasm: DiagnosticsWasm,
+  debug: Record<string, unknown>,
+  generator: ModelicaGenerator,
+) {
   const { libraryFileCount, loadParsed } = await ensureDiagnosticsMslLoaded(wasm, debug)
   debug.mslLibraryFiles = libraryFileCount
   debug.mslParsedCount = Number(loadParsed.parsed_count ?? 0)
@@ -4479,7 +4510,8 @@ end MslResistorExample;
 `.trim()
 
   debug.phase = 'compile-with-libraries'
-  const compiledRaw = compileWithDiagnosticsMsl(wasm, source, 'MslResistorExample')
+  const compilation = compileDiagnosticJavaScript(wasm, source, 'MslResistorExample', generator)
+  const compiledRaw = compilation.compileResponse
   debug.phase = 'compiled'
   const compiled = JSON.parse(String(compiledRaw)) as {
     dae?: unknown
@@ -4488,27 +4520,29 @@ end MslResistorExample;
     pretty?: string
   }
   const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
+  const daeJson = daeJsonForTemplate(compiled, { usePreparedDae: true })
   if (!dae) {
     throw new Error('compile_to_json returned no DAE payload for MSL resistor example')
   }
   return {
     compiled,
     dae,
-    daeJson: JSON.stringify(dae),
+    daeJson,
     prettyText: String(compiled.pretty ?? ''),
+    rendered: compilation.rendered,
   }
 }
 
 function renderResistorBaseDae(
   wasm: DiagnosticsWasm,
-  dae: Record<string, unknown>,
   daeJson: string,
+  modelName: string,
 ): { rendered: string; derivativeRefs: string[] } {
   const rendered = renderRumocaTemplate({
     wasm,
     daeJson,
     templateSource: baseDaeTemplate,
-    modelName: getTemplateModelName(dae),
+    modelName,
     templatePath: 'base_dae.jinja',
     outputPath: 'base_dae.txt',
     targetName: 'template',
@@ -4521,17 +4555,17 @@ function renderResistorBaseDae(
 
 function collectResistorDerivativeRefs(
   wasm: DiagnosticsWasm,
-  dae: Record<string, unknown>,
   daeJson: string,
   prettyText: string,
   debug: Record<string, unknown>,
+  modelName: string,
 ): string[] {
   debug.compiledPrettyLength = prettyText.length
   debug.compiledPrettyPreview = prettyText.slice(0, 1200)
 
   const derivativeRefsFromPretty = Array.from(new Set(prettyText.match(/der\([^)]+\)/g) ?? []))
   try {
-    const baseDae = renderResistorBaseDae(wasm, dae, daeJson)
+    const baseDae = renderResistorBaseDae(wasm, daeJson, modelName)
     debug.baseDaeDiagnostics = {
       renderedLength: baseDae.rendered.length,
       derivativeRefCount: baseDae.derivativeRefs.length,
@@ -4548,30 +4582,6 @@ function collectResistorDerivativeRefs(
     }
     return derivativeRefsFromPretty
   }
-}
-
-function renderResistorJavaScript(
-  wasm: DiagnosticsWasm,
-  dae: Record<string, unknown>,
-  daeJson: string,
-  debug: Record<string, unknown>,
-): string {
-  debug.phase = 'render-javascript-template'
-  const rendered = renderRumocaTemplate({
-    wasm,
-    daeJson,
-    templateSource: javascriptTemplate,
-    modelName: getTemplateModelName(dae),
-    templatePath: 'javascript.jinja',
-    outputPath: 'model.js',
-    targetName: 'template',
-  })
-  if (!rendered || typeof rendered !== 'string') {
-    throw new Error('Rendering javascript.jinja failed for MSL resistor example')
-  }
-  debug.renderedPreview = rendered.slice(0, 220)
-  debug.generatedCodeLength = rendered.length
-  return rendered
 }
 
 function collectResistorUnitDiagnostics(
@@ -4949,7 +4959,10 @@ function buildResistorDiagnosticFailure(
   )
 }
 
-export async function testModelicaMslResistorExampleSimulation() {
+export async function testModelicaMslResistorExampleSimulation(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
   const debug: Record<string, unknown> = {
     phase: 'init',
     mslZipPath: MSL_DIAGNOSTICS_ZIP_URL,
@@ -4958,15 +4971,15 @@ export async function testModelicaMslResistorExampleSimulation() {
 
   try {
     const wasm = await loadResistorWasm(debug)
-    const compiled = await compileResistorExample(wasm, debug)
+    const compiled = await compileResistorExample(wasm, debug, generator)
     const derivativeRefs = collectResistorDerivativeRefs(
       wasm,
-      compiled.dae,
       compiled.daeJson,
       compiled.prettyText,
       debug,
+      'MslResistorExample',
     )
-    const rendered = renderResistorJavaScript(wasm, compiled.dae, compiled.daeJson, debug)
+    const rendered = compiled.rendered
     fullGeneratedCode = rendered
     collectResistorUnitDiagnostics(compiled.prettyText, rendered, debug)
 
@@ -4991,51 +5004,19 @@ export async function testModelicaMslResistorExampleSimulation() {
     throw buildResistorDiagnosticFailure(err, debug, fullGeneratedCode)
   }
 }
+testModelicaMslResistorExampleSimulation.modelicaGenerators = ['dae', 'solve'] as const
 testModelicaMslResistorExampleSimulation.timeoutMs = 120_000
-
-const ORBIT_MODEL_SOURCE = `
-model SatelliteOrbit2D
-  parameter Real mu = 398600.4418;
-  parameter Real r0 = 7000;
-  parameter Real v0 = sqrt(mu / r0);
-  Real rx(start = r0, fixed = true);
-  Real ry(start = 0, fixed = true);
-  Real vx(start = 0, fixed = true);
-  Real vy(start = v0, fixed = true);
-  Real inv_r;
-  Real inv_v2;
-  Real inv_h;
-  Real inv_energy;
-  Real inv_a;
-  Real inv_rv;
-  Real inv_ex;
-  Real inv_ey;
-  Real inv_ecc;
-equation
-  der(rx) = vx;
-  der(ry) = vy;
-  inv_r = sqrt(rx * rx + ry * ry);
-  inv_v2 = vx * vx + vy * vy;
-  inv_h = rx * vy - ry * vx;
-  inv_energy = 0.5 * inv_v2 - mu / inv_r;
-  inv_a = 1 / (2 / inv_r - inv_v2 / mu);
-  inv_rv = rx * vx + ry * vy;
-  inv_ex = ((inv_v2 - mu / inv_r) * rx - inv_rv * vx) / mu;
-  inv_ey = ((inv_v2 - mu / inv_r) * ry - inv_rv * vy) / mu;
-  inv_ecc = sqrt(inv_ex * inv_ex + inv_ey * inv_ey);
-  der(vx) = -mu * rx / (inv_r ^ 3);
-  der(vy) = -mu * ry / (inv_r ^ 3);
-end SatelliteOrbit2D;
-`.trim()
 
 type OrbitSolverRun = {
   meta?: {
     stopReason?: string
     stopError?: string
     stopDetails?: unknown
+    warnings?: string[]
     model?: {
       stateNames?: string[]
       algebraicNames?: string[]
+      solverAlgebraicNames?: string[]
     }
   }
   data?: {
@@ -5184,7 +5165,7 @@ type OrbitSimulationParams = {
   t0: number
   tf: number
   dt: number
-  x0: number[]
+  x0?: number[]
 }
 
 type OrbitDiagnosticsPreparation = {
@@ -5528,30 +5509,23 @@ function summarizeOrbitGeneratedCode(code: ReturnType<typeof summarizeGeneratedC
   return { length: code.length, lineCount: code.lineCount, checksum: code.checksum }
 }
 
-async function prepareOrbitDiagnostics(mode: OrbitTestMode): Promise<OrbitDiagnosticsPreparation> {
+async function prepareOrbitDiagnostics(
+  mode: OrbitTestMode,
+  templateSource: string,
+): Promise<OrbitDiagnosticsPreparation> {
   const wasm = await getDiagnosticsWasm()
-  if (typeof wasm.compile_to_json !== 'function') {
-    throw new Error('Rumoca wasm export missing: compile_to_json')
-  }
-  assertTemplateRendererAvailable(wasm)
-
-  const compiled = wasm.compile_to_json(ORBIT_MODEL_SOURCE, 'SatelliteOrbit2D')
-  const parsed = JSON.parse(compiled) as OrbitCompiledPayload
-  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
-  if (!dae) {
-    throw new Error('Rumoca compile_to_json returned no DAE payload for SatelliteOrbit2D')
-  }
-
-  const rendered = renderDiagnosticsTemplate(
+  const compilation = compileRumocaTemplates({
     wasm,
-    dae,
-    javascriptTemplate,
-    'javascript.jinja',
-    'model.js',
-  )
-  if (!rendered || typeof rendered !== 'string') {
-    throw new Error('Rendering javascript.jinja failed for SatelliteOrbit2D')
-  }
+    source: exampleModels.orbit,
+    modelName: 'SatelliteOrbit2D',
+    templates: [{ source: templateSource, path: 'model.jinja' }],
+  })
+  const parsed = JSON.parse(compilation.compileResponse) as OrbitCompiledPayload
+  const dae = selectDaeForTemplate(parsed, { usePreparedDae: true })
+  if (!dae) throw new Error('Rumoca returned no DAE payload for SatelliteOrbit2D')
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing generated Orbit model')
+  const rendered = generated.content
   const runCode = await buildWorkerSandboxCodeChecked(
     rendered,
     'modelica-satellite-orbit-2d-runtime',
@@ -6012,8 +5986,8 @@ function renderOrbitDebugCanvas(
   drawOrbitDebugPanels(ctx, canvas, current, irk4)
 }
 
-async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
-  const preparation = await prepareOrbitDiagnostics(mode)
+async function runModelicaOrbitInvariantTest(mode: OrbitTestMode, templateSource: string) {
+  const preparation = await prepareOrbitDiagnostics(mode, templateSource)
   const runs = await runOrbitSolverRuns(preparation)
   const currentSamples = collectOrbitSamples(runs.currentRun)
   const irk4Samples = runs.irk4Run ? collectOrbitSamples(runs.irk4Run) : null
@@ -6042,14 +6016,2570 @@ async function runModelicaOrbitInvariantTest(mode: OrbitTestMode) {
 
 testModelicaMslResistorExampleSimulation.timeoutMs = 120_000
 
-export async function testModelicaOrbitInvariantsCompareSolvers() {
-  return runModelicaOrbitInvariantTest('compare')
+function assertAlgebraicPlanTrajectory(
+  run: OrbitSolverRun,
+  fixture: { name: string; implicitCount: number },
+) {
+  if (run.meta?.stopReason || run.meta?.stopError)
+    throw new Error('Algebraic plan simulation failed')
+  if (run.meta?.model?.solverAlgebraicNames?.length !== fixture.implicitCount) {
+    throw new Error(`${fixture.name}: incorrect Newton algebraic unknown count`)
+  }
+  const xs = getStateSeries(run, 'x')
+  const times = getOrbitTime(run)
+  const a = getAlgebraicSeries(run, 'a')
+  const b = getAlgebraicSeries(run, 'b')
+  if (
+    xs.length < 2 ||
+    a.length !== xs.length ||
+    b.length !== xs.length ||
+    times.length !== xs.length
+  ) {
+    throw new Error('Missing algebraic samples')
+  }
+  if (fixture.implicitCount === 0) {
+    const norms = getAlgebraicSeries(run, 'zeroNorm')
+    if (
+      norms.length !== xs.length ||
+      norms.some((v) => !Number.isFinite(v) || Math.abs(v) > 1e-12)
+    ) {
+      throw new Error('The zero-norm Modelica equation was not evaluated correctly')
+    }
+  }
+  for (let i = 0; i < xs.length; i++) {
+    if (Math.abs(xs[i]! - Math.exp(-times[i]!)) > 1e-4) {
+      throw new Error(`${fixture.name}: the state equation was not integrated correctly`)
+    }
+    const residual =
+      fixture.implicitCount === 0
+        ? Math.max(Math.abs(a[i]! - xs[i]! ** 2), Math.abs(b[i]! - Math.sqrt(a[i]!)))
+        : Math.max(Math.abs(a[i]! - Math.cos(b[i]!) - xs[i]!), Math.abs(b[i]! - Math.sin(a[i]!)))
+    if (!Number.isFinite(residual) || residual > 1e-7)
+      throw new Error(`${fixture.name}: algebraic equations were not satisfied`)
+  }
 }
+
+export async function testModelicaAlgebraicSolvePlan(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  const wasm = await getDiagnosticsWasm()
+  if (typeof wasm.compile_to_json !== 'function') throw new Error('Missing compile_to_json')
+  const cases = [
+    {
+      name: 'AssignmentChain',
+      source: `model AssignmentChain
+        Real x(start=1, fixed=true); Real a; Real b; Real zeroNorm;
+        equation der(x)=-x; a=x*x; b=sqrt(a); zeroNorm=sqrt((b-x)^2);
+        end AssignmentChain;`,
+      implicitCount: 0,
+    },
+    {
+      name: 'AlgebraicLoop',
+      source: `model AlgebraicLoop
+        Real x(start=1, fixed=true); Real a; Real b;
+        equation der(x)=-x; a=cos(b)+x; b=sin(a);
+        end AlgebraicLoop;`,
+      implicitCount: 2,
+    },
+  ]
+  for (const fixture of cases) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      source: fixture.source,
+      modelName: fixture.name,
+      templates: [
+        generator === 'dae'
+          ? { source: javascriptTemplate, path: 'javascript.jinja' }
+          : { source: solveJavascriptTemplate, path: 'javascript_solve.jinja' },
+      ],
+    })
+    for (const generated of compilation.rendered) {
+      if (!generated.ok) throw new Error(generated.error)
+      const code = await buildWorkerSandboxCodeChecked(generated.content, fixture.name)
+      for (const timeIntegrator of ['sdirk2', 'irk4']) {
+        const run = await runOrbitSimulation(
+          code,
+          { t0: 0, tf: 0.2, dt: 0.02, x0: [1] },
+          `${fixture.name}-${timeIntegrator}`,
+          { timeIntegrator, newtonTol: 1e-9 },
+        )
+        assertAlgebraicPlanTrajectory(run, fixture)
+      }
+    }
+  }
+  return { success: true }
+}
+testModelicaAlgebraicSolvePlan.modelicaGenerators = ['dae', 'solve'] as const
+
+export async function testModelicaSolverStorageMapping(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  const wasm = await getDiagnosticsWasm()
+  for (const coupled of [false, true]) {
+    const source = `model StorageMapping
+      Real z[2](start={0.1,-0.2},each fixed=true); Real alias; Real a; Real b;
+      parameter Real gain=2; output Real out;
+      equation der(z[1])=-gain*z[1]; der(z[2])=-gain*z[2]; alias=z[1];
+      a=${coupled ? 'cos(b)+z[1]' : 'z[1]*z[1]'};
+      b=${coupled ? 'sin(a)' : 'sqrt(a)'}; out=z[2]+a;
+      end StorageMapping;`
+    const { rendered } = compileDiagnosticJavaScript(wasm, source, 'StorageMapping', generator)
+    await executeModelicaDiagnosticInSandbox({
+      id: `modelica-storage-mapping-${generator}-${coupled}`,
+      stopSignal: AbortSignal.timeout(10000),
+      maxExecutionMs: 10000,
+      code: `() => {
+        ${rendered}
+        ${defaultSolverSource}
+        const model=Model();
+        if(!Object.is(model.x0[0],0.1)||!Object.is(model.x0[1],-0.2))
+          throw new Error('Initialization did not preserve the exact floating point starts');
+        const run=simulateModel({sim:{t0:0,tf:0.2,dt:0.02,x0:model.x0,
+          solverOptions:{timeIntegrator:'irk4',newtonTol:1e-9}}},{},model);
+        if(run.meta.stopReason||run.meta.stopError||run.data.t.at(-1)!==0.2)
+          throw new Error('Storage mapping simulation stopped: '+run.meta.stopReason);
+        for(let i=0;i<run.data.t.length;i++) {
+          const first=run.data.x['z[1]'][i],second=run.data.x['z[2]'][i];
+          const alias=run.data.y.alias[i],a=run.data.y.a[i],b=run.data.y.b[i];
+          const expected=Math.exp(-2*run.data.t[i]);
+          const residual=${coupled ? 'Math.max(Math.abs(a-Math.cos(b)-first),Math.abs(b-Math.sin(a)))' : 'Math.max(Math.abs(a-first*first),Math.abs(b-Math.sqrt(a)))'};
+          if([first,second,alias,a,b,run.data.y.out[i]].some(value=>!Number.isFinite(value)) ||
+            Math.abs(first-0.1*expected)>1e-6 || Math.abs(second+0.2*expected)>1e-6 ||
+            Math.abs(alias-first)>1e-7 || Math.abs(run.data.y.out[i]-second-a)>1e-7 ||
+            residual>1e-7)
+            throw new Error('State, alias, algebraic or output storage mapping is incorrect');
+        }
+        return {ok:true};
+      }`,
+    })
+  }
+  return { ok: true }
+}
+testModelicaSolverStorageMapping.modelicaGenerators = ['dae', 'solve'] as const
+
+export async function testModelicaDiscreteTargetSelection(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  const wasm = await getDiagnosticsWasm()
+  const { rendered } = compileDiagnosticJavaScript(
+    wasm,
+    `model DiscreteTargetSelection
+      Boolean flags[2](each start=false); Real x(start=0,fixed=true);
+      equation
+      when time>=0.1 then flags[1]=true; end when;
+      when time>=0.2 then flags[2]=true; end when;
+      der(x)=(if flags[1] then 1 else 0)+(if flags[2] then 1 else 0);
+      end DiscreteTargetSelection;`,
+    'DiscreteTargetSelection',
+    generator,
+  )
+  return executeModelicaDiagnosticInSandbox({
+    id: `modelica-discrete-target-selection-${generator}`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${rendered}
+      ${defaultSolverSource}
+      for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+        const model=Model();
+        const run=simulateModel({sim:{t0:0,tf:0.3,dt:0.05,x0:model.x0,
+          solverOptions:{timeIntegrator}}},{},model);
+        if(run.meta.stopReason||run.data.t.at(-1)!==0.3)
+          throw new Error('Discrete target simulation stopped: '+run.meta.stopReason);
+        for(let i=0;i<run.data.t.length;i++) {
+          const t=run.data.t[i],expected=Math.max(t-0.1,0)+Math.max(t-0.2,0);
+          if(!Number.isFinite(run.data.x.x[i])||Math.abs(run.data.x.x[i]-expected)>1e-5)
+            throw new Error('Selected Boolean array elements did not drive the state equation at '+t+
+              ': expected '+expected+', received '+run.data.x.x[i]);
+          for(const [name,deadline] of [['flags[1]',0.1],['flags[2]',0.2]]) {
+            if(Math.abs(t-deadline)>1e-8&&Number(run.data.y[name][i])!==Number(t>deadline))
+              throw new Error('A held Boolean element changed before its owning event');
+          }
+        }
+      }
+      return {ok:true};
+    }`,
+  })
+}
+testModelicaDiscreteTargetSelection.modelicaGenerators = ['dae', 'solve'] as const
+
+export async function testModelicaRetainedWorkerCompilation() {
+  if (typeof Worker === 'undefined' || typeof document === 'undefined') {
+    return { ok: true, skipped: 'retained-worker-compilation requires browser Worker + DOM' }
+  }
+  const worker = new ModelicaWorkerClient()
+  try {
+    await worker.init()
+    const success = await worker.compileRender({
+      modelicaSource:
+        'model WorkerDecay Real x(start=1,fixed=true); equation der(x)=-x; end WorkerDecay;',
+      modelName: 'WorkerDecay',
+      templateSource: solveJavascriptTemplate,
+      usePreparedDae: false,
+      useSourceRoots: false,
+    })
+    if (success.renderError || !success.solveJson || !success.rendered) {
+      throw new Error('Worker did not render retained Solve model')
+    }
+    await buildWorkerSandboxCodeChecked(success.rendered, 'retained-worker-abi')
+    const failure = await worker.compileRender({
+      modelicaSource:
+        'model WorkerNonlinear Real x(start=1,fixed=true); equation der(x)*der(x)=x; end WorkerNonlinear;',
+      modelName: 'WorkerNonlinear',
+      templateSource: solveJavascriptTemplate,
+      usePreparedDae: false,
+      useSourceRoots: false,
+    })
+    if (!failure.renderError || !failure.daePretty || !failure.compiled.dae) {
+      throw new Error('Worker discarded DAE analysis on Solve failure')
+    }
+    return { ok: true }
+  } finally {
+    worker.terminate()
+  }
+}
+
+export async function testModelicaRetainedCompilation() {
+  const wasm = await getDiagnosticsWasm()
+  if (!wasm.compile_with_options) throw new Error('Missing retained compilation API')
+  const source = `model RetainedDecay
+    Real x(start=1, fixed=true); Real a;
+    equation der(x)=-x; a=x*x;
+    end RetainedDecay;`
+  for (const representations of [['dae'], ['solve'], ['dae', 'solve']]) {
+    const compiled = wasm.compile_with_options(
+      source,
+      'RetainedDecay',
+      JSON.stringify({ representations }),
+    )
+    try {
+      for (const representation of ['dae', 'solve'] as const) {
+        let returned = false
+        try {
+          const json = compiled.representation_json(representation)
+          JSON.parse(json)
+          returned = true
+        } catch {
+          if (representations.includes(representation)) throw new Error(`Missing ${representation}`)
+        }
+        if (returned !== representations.includes(representation)) {
+          throw new Error(`Unexpected ${representation} representation`)
+        }
+      }
+    } finally {
+      compiled.free()
+    }
+  }
+  const result = compileRumocaTemplates({
+    wasm,
+    source,
+    modelName: 'RetainedDecay',
+    templates: [
+      { source: '{{ dae.variables|length }}', path: 'dae.jinja' },
+      {
+        source:
+          '{# rumoca-ir: solve #}{{ solve_model.initial_y.count }}:{{ solve.solve_layout.state_scalar_count }}',
+        path: 'solve.jinja',
+      },
+    ],
+  })
+  const [daeView, solveView] = result.rendered
+  if (!daeView?.ok || daeView.content !== '2' || !solveView?.ok || solveView.content !== '2:1') {
+    throw new Error(`Incorrect retained views: ${JSON.stringify(result.rendered)}`)
+  }
+  if (!result.solveJson || result.solveError) throw new Error('Missing complete Solve model')
+  return { ok: true, representations: ['dae', 'solve'], rendered: result.rendered }
+}
+
+export async function testModelicaRetainedCompilationFailureIsolation() {
+  const wasm = await getDiagnosticsWasm()
+  const result = compileRumocaTemplates({
+    wasm,
+    source: `model NonlinearDerivative
+      Real x(start=1,fixed=true);
+      equation der(x)*der(x)=x;
+      end NonlinearDerivative;`,
+    modelName: 'NonlinearDerivative',
+    templates: [
+      { source: '{{ dae.variables|length }}', path: 'dae.jinja' },
+      { source: '{# rumoca-ir: solve #}{{ solve.layout.y_scalars }}', path: 'solve.jinja' },
+    ],
+  })
+  if (!result.daeJson || !result.solveError) throw new Error('Missing DAE or Solve refusal')
+  const [daeView, solveView] = result.rendered
+  if (!daeView?.ok || daeView.content !== '1' || solveView?.ok !== false) {
+    throw new Error('DAE rendering lost or Solve refusal hidden')
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorTargetAdmission() {
+  const wasm = await getDiagnosticsWasm()
+  const indexed = compileRumocaTemplates({
+    wasm,
+    source: `model IndexedAdmission
+      input Real u=1; Real x[2](start={1,2},each fixed=true);
+      equation der(x[1])=x[integer(u)]; der(x[2])=-x[2];
+      end IndexedAdmission;`,
+    modelName: 'IndexedAdmission',
+    templates: [
+      { source: solveJavascriptTemplate, path: 'javascript_solve.jinja' },
+      {
+        source: solveJavascriptTemplate.replace('{# rumoca-linear-ops: native #}\n', ''),
+        path: 'scalar-only.jinja',
+      },
+    ],
+  })
+  const [native, scalar] = indexed.rendered
+  if (!native?.ok) throw new Error(native?.error ?? 'Missing native checked-program output')
+  if (scalar?.ok !== false || !scalar.error.includes('unsupported-feature:scalar.derivative_rhs'))
+    throw new Error('Scalar-only target admitted unsupported runtime indexing')
+
+  const compact = compileRumocaTemplates({
+    wasm,
+    source: `model CompactAdmission
+      Real x[200](each start=1,each fixed=true);
+      equation der(x)=-x;
+      end CompactAdmission;`,
+    modelName: 'CompactAdmission',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  }).rendered[0]
+  if (!compact?.ok) throw new Error(compact?.error ?? 'Compact tensor fallback was lost')
+  await executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-compact-admission',
+    code: `() => {
+      ${compact.content}
+      const model=Model();
+      const residual=model.residual(0,new Array(200).fill(1),new Array(200).fill(-1),[],[],null);
+      if(residual.length!==200 || residual.some(value=>value!==0))
+        throw new Error('Compact tensor fallback changed derivative values');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+
+  const mixed = compileRumocaTemplates({
+    wasm,
+    source: `model MixedAdmission
+      input Real u=1; Real x[200](each start=1,each fixed=true);
+      Real y(start=0,fixed=true);
+      equation der(x)=-x; der(y)=x[integer(u)];
+      end MixedAdmission;`,
+    modelName: 'MixedAdmission',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  }).rendered[0]
+  if (mixed?.ok !== false || !mixed.error.includes('unsupported-feature:scalar.derivative_rhs'))
+    throw new Error('Compact tensor target bypassed scalar admission')
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorEditorSamples() {
+  const wasm = await getDiagnosticsWasm()
+  await ensureDiagnosticsMslLoaded(wasm, {})
+  const cases = [
+    { key: 'bouncingBall', name: 'BouncingBall', tf: 7, dt: 0.1 },
+    { key: 'resistorMsl', name: 'MslResistorExample', tf: 5, dt: 0.1 },
+    { key: 'orbit', name: 'SatelliteOrbit2D', tf: 6000, dt: 20 },
+    { key: 'drivenPendulumPhaseMap', name: 'DrivenPendulumPhaseMap', tf: 200, dt: 0.02 },
+  ] as const
+  const failures: string[] = []
+  for (const sample of cases) {
+    try {
+      const compilation = compileRumocaTemplates({
+        wasm,
+        source: exampleModels[sample.key],
+        modelName: sample.name,
+        templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+      })
+      const generated = compilation.rendered[0]
+      if (!generated?.ok) throw new Error(generated?.error ?? 'Missing sample Solve model')
+      const code = await buildWorkerSandboxCodeChecked(generated.content, sample.name)
+      for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+        try {
+          const run = await runOrbitSimulation(
+            code,
+            { t0: 0, tf: sample.tf, dt: sample.dt },
+            sample.name + '-' + timeIntegrator,
+            { timeIntegrator, newtonTol: 1e-9 },
+          )
+          const times = getOrbitTime(run)
+          if (
+            run.meta?.stopReason ||
+            times.length < 2 ||
+            Math.abs(times.at(-1)! - sample.tf) > 1e-9
+          )
+            throw new Error(run.meta?.stopError ?? 'Sample did not reach its experiment horizon')
+          for (const channels of [run.data?.x, run.data?.y]) {
+            if (!channels) throw new Error('Missing sample channels')
+            for (const values of Object.values(channels)) {
+              if (
+                !Array.isArray(values) ||
+                values.length !== times.length ||
+                values.some((value) => !Number.isFinite(Number(value)))
+              )
+                throw new Error('Sample returned missing or non-finite observations')
+            }
+          }
+        } catch (error) {
+          failures.push(
+            sample.name +
+              '/' +
+              timeIntegrator +
+              ': ' +
+              (error instanceof Error ? error.message : String(error)),
+          )
+        }
+      }
+    } catch (error) {
+      failures.push(
+        sample.name + '/compile: ' + (error instanceof Error ? error.message : String(error)),
+      )
+    }
+  }
+  if (failures.length) throw new Error(failures.join('\n'))
+  return { ok: true, samples: cases.length, integrators: 3 }
+}
+testModelicaSolveGeneratorEditorSamples.setup = async () => {
+  const wasm = await getDiagnosticsWasm()
+  await ensureDiagnosticsMslLoaded(wasm, {})
+}
+testModelicaSolveGeneratorEditorSamples.timeoutMs = 120_000
+
+export async function testModelicaSolveGeneratorMslResistorConsistency() {
+  const wasm = await getDiagnosticsWasm()
+  await ensureDiagnosticsMslLoaded(wasm, {})
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: exampleModels.resistorMsl,
+    modelName: 'MslResistorExample',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing Resistor Solve model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-msl-resistor-consistency',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+        const model=Model(),sizes=[],project=model.projectAlgebraics;
+        model.projectAlgebraics=(...args)=>{
+          const solve=args[5];
+          args[5]=(residual,initial,scales)=>{sizes.push(initial.length);return solve(residual,initial,scales);};
+          return project(...args);
+        };
+        const run=simulateModel({sim:{t0:0,tf:5,dt:0.1,
+          solverOptions:{timeIntegrator,newtonTol:1e-9}}},{},model);
+        if(run.meta.stopReason || run.data.t.at(-1)!==5)
+          throw new Error('Resistor stopped before its experiment horizon');
+        if(!sizes.length || sizes.some(size=>size>2))
+          throw new Error('Resistor projection included coordinates outside its native tear sets');
+        for(let i=0;i<run.data.t.length;i++) {
+          const y=run.meta.model.solverAlgebraicNames.map(name=>run.data.y[name][i]);
+          const residual=model.residual(run.data.t[i],[],[],y,[],undefined);
+          if(residual.some(value=>!Number.isFinite(value)||Math.abs(value)>1e-7))
+            throw new Error('Resistor observations violate their retained Modelica equations');
+        }
+      }
+      return {ok:true};
+    }`,
+  })
+}
+testModelicaSolveGeneratorMslResistorConsistency.setup =
+  testModelicaSolveGeneratorEditorSamples.setup
+testModelicaSolveGeneratorMslResistorConsistency.timeoutMs = 120_000
+
+export async function testModelicaSolveGeneratorArraysAndParameters() {
+  const wasm = await getDiagnosticsWasm()
+  const result = compileRumocaTemplates({
+    wasm,
+    source: `model SolveArrays
+      parameter Real A[2,2]=[1,2;3,4];
+      Real x[2](start={1,2},each fixed=true);
+      equation der(x)=A*x;
+      end SolveArrays;`,
+    modelName: 'SolveArrays',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = result.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing generated model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-arrays-and-parameters',
+    code: `() => {
+${generated.content}
+      const model = Model();
+      if (model.x0.length !== 2 || model.meta.parameters.length !== 4) throw new Error('Incorrect scalar layout');
+      const initial = model.residual(0,[1,2],[5,11],[],[],null);
+      const overridden = model.residual(0,[1,2],[2,4],[],[],[2,0,0,2]);
+      if ([...initial,...overridden].some(v => Math.abs(v)>1e-12)) throw new Error('Incorrect array or parameter evaluation');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorProjectedDerivatives() {
+  const wasm = await getDiagnosticsWasm()
+  const cases = [
+    {
+      name: 'SolveAssignmentDerivative',
+      source: `model SolveAssignmentDerivative
+      parameter Real k=2; input Real u=1;
+      Real x(start=2,fixed=true); Real a; Real b;
+      equation a=x*x; b=3*a; der(x)=-k*b+u;
+      end SolveAssignmentDerivative;`,
+      algebraics: [],
+      stateTangent: [1, 4, 12],
+      rhsTangent: -24,
+      parameterTangent: -12,
+    },
+    {
+      name: 'SolveLoopDerivative',
+      source: `model SolveLoopDerivative
+      parameter Real k=2; input Real u=1;
+      Real x(start=2,fixed=true); Real a(start=1);
+      equation a*a=x; der(x)=-k*a+u;
+      end SolveLoopDerivative;`,
+      algebraics: [Math.sqrt(2)],
+      stateTangent: [1, 1 / (2 * Math.sqrt(2))],
+      rhsTangent: -1 / Math.sqrt(2),
+      parameterTangent: -Math.sqrt(2),
+    },
+    {
+      name: 'SolveCoupledDerivative',
+      source: `model SolveCoupledDerivative
+      parameter Real k=2; input Real u=1;
+      Real x(start=2,fixed=true); Real a(start=3); Real b(start=-1);
+      equation a+b=x; a-b=x*x; der(x)=-k*a+b+u;
+      end SolveCoupledDerivative;`,
+      algebraics: [3, -1],
+      stateTangent: [1, 2.5, -1.5],
+      rhsTangent: -6.5,
+      parameterTangent: -3,
+    },
+  ]
+  for (const fixture of cases) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      source: fixture.source,
+      modelName: fixture.name,
+      templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+    })
+    const generated = compilation.rendered[0]
+    if (!generated?.ok) throw new Error(generated?.error ?? 'Missing projected-derivative model')
+    await executeModelicaDiagnosticInSandbox({
+      id: 'modelica-solve-projected-derivatives-' + fixture.name,
+      code: `() => {
+        ${generated.content}
+        const model=Model(), y=${JSON.stringify(fixture.algebraics)};
+        const result=model.evalProjectedJacobianVector(0,[2],y,[1],[2],{state:[1],parameters:[0],inputs:[0]});
+        const expected=${JSON.stringify(fixture.stateTangent)};
+        if(result.solverY.length!==expected.length || result.solverY.some((value,i)=>Math.abs(value-expected[i])>1e-10) || Math.abs(result.derivativeRhs[0]-(${fixture.rhsTangent}))>1e-10) throw new Error('Algebraic tangent was not projected');
+        const parameter=model.evalProjectedJacobianVector(0,[2],y,[1],[2],{state:[0],parameters:[1],inputs:[0]});
+        if(Math.abs(parameter.derivativeRhs[0]-(${fixture.parameterTangent}))>1e-10) throw new Error('Incorrect projected parameter tangent');
+        const input=model.evalProjectedJacobianVector(0,[2],y,[1],[2],{state:[0],parameters:[0],inputs:[1]});
+        if(Math.abs(input.derivativeRhs[0]-1)>1e-10) throw new Error('Incorrect projected input tangent');
+        return {ok:true};
+      }`,
+      stopSignal: AbortSignal.timeout(10000),
+      maxExecutionMs: 10000,
+    })
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorDerivativePrograms() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function Square
+      input Real x; output Real y;
+      algorithm if x>0 then y:=x*x; else y:=-x; end if;
+      end Square;
+      function Flow
+      input Real x; output Real y;
+      algorithm y:=0;
+      for i in 1:3 loop y:=y+Square(x)/i; end for;
+      end Flow;
+      model SolveDerivatives
+      parameter Real k=3; input Real u=1;
+      Real x(start=2,fixed=true);
+      equation der(x)=k*Flow(x)+u;
+      end SolveDerivatives;`,
+    modelName: 'SolveDerivatives',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing derivative model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-derivative-programs',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      const directions=[
+        [{solverY:[1],parameters:[0],inputs:[0]},22],
+        [{solverY:[0],parameters:[1],inputs:[0]},22/3],
+        [{solverY:[0],parameters:[0],inputs:[1]},1],
+        [{solverY:[2],parameters:[3],inputs:[4]},70],
+      ];
+      for(const [direction,expected] of directions) {
+        const result=model.evalSolveJacobianVector(0,[2],[],[1],[3],direction);
+        if(result.derivativeRhs.length!==1 || Math.abs(result.derivativeRhs[0]-expected)>1e-10 || result.implicitResidual.length!==0) throw new Error('Incorrect compiler-derived tangent');
+      }
+      const negative=model.evalSolveJacobianVector(0,[-2],[],[1],[3],{solverY:[1],parameters:[0],inputs:[0]});
+      if(Math.abs(negative.derivativeRhs[0]+5.5)>1e-10)throw new Error('Incorrect nested conditional tangent');
+      let rejected=false;
+      try {model.evalSolveJacobianVector(0,[2],[],[1],[3],{solverY:[],parameters:[0],inputs:[0]})} catch {rejected=true}
+      if(!rejected)throw new Error('Tangent layout mismatch was accepted');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorIntegerTensors() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function IntegerTensors
+      input Integer n; output Integer y;
+      protected Integer A[2,2]; Integer B[2,2];
+      algorithm A:=[n,2;1,0]; B:=[3,0;4,1];
+      y:=sum(A*B);
+      end IntegerTensors;
+      model SolveIntegerTensors
+      input Real u=1; Real x(start=0,fixed=true);
+      equation der(x)=0.0+IntegerTensors(integer(u));
+      end SolveIntegerTensors;`,
+    modelName: 'SolveIntegerTensors',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing Integer tensor model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-integer-tensors',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      for(const n of [1,3,-3]) {
+        const result=model.residual(0,[0],[3*n+13],[],[n],null);
+        if(result.length!==1 || result[0]!==0) throw new Error('Incorrect Integer tensor product');
+      }
+      let rejected=false;
+      try { model.residual(0,[0],[0],[],[2**62],null) }
+      catch(error) { if(!String(error).includes('Solve Integer overflow')) throw error; rejected=true }
+      if(!rejected) throw new Error('Integer tensor intermediate overflow was accepted');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorTypedTensors() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function TensorFlow
+      input Real x[3]; output Real y;
+      protected Real A[3,3];
+      algorithm A:=[1,2,3;4,5,6;7,8,9];
+      y:=sum(transpose(A)*x)+sum(cross({3.0,1.0,2.0},x))+sum(diagonal(x))+sum(identity(3)*x);
+      end TensorFlow;
+      model SolveTensors
+      Real x[3](start={1,2,3},each fixed=true);
+      equation der(x)=fill(TensorFlow(x),3);
+      end SolveTensors;`,
+    modelName: 'SolveTensors',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing typed-tensor model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-typed-tensors',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      for (const [state,derivative] of [[[1,2,3],117],[[3,2,1],87],[[0,0,0],0]]) {
+        const result=model.residual(0,state,new Array(3).fill(derivative),[],[],null);
+        if (result.length!==3 || result.some(value=>value!==0)) throw new Error('Incorrect typed tensor arithmetic');
+      }
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorTypedFunctions() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function SumFlow
+      input Real x; output Real y;
+      algorithm y:=0;
+      for i in 1:3 loop
+        if i==2 then y:=y+x; else y:=y+i; end if;
+      end for;
+      end SumFlow;
+      function TypedFlow
+      input Real x; input Integer row; output Real y;
+      protected Real a[2,2]; Integer n;
+      algorithm a:=[x,2;3,4]; a[row,:]:={5,6};
+      n:=9007199254740993;
+      if x<0 then n:=9223372036854775807; n:=n+1; end if;
+      y:=a[row,2]+(n-9007199254740992)+SumFlow(x);
+      end TypedFlow;
+      model SolveTyped
+      input Real u=1; Real x(start=1,fixed=true);
+      equation der(x)=TypedFlow(x,integer(u));
+      end SolveTyped;`,
+    modelName: 'SolveTyped',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing typed-function model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-typed-functions',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      for (const input of [1,2]) for (const state of [1,3]) {
+        const result=model.residual(0,[state],[11+state],[],[input],null);
+        if (result.length!==1 || result[0]!==0) throw new Error('Typed function lost Integer precision, array update or loop control');
+      }
+      for (const input of [0,3]) {
+        let rejected=false;
+        try {model.residual(0,[1],[0],[],[input],null)} catch {rejected=true}
+        if (!rejected) throw new Error('Typed function accepted an invalid array index');
+      }
+      let overflowRejected=false;
+      try {model.residual(0,[-1],[0],[],[1],null)} catch {overflowRejected=true}
+      if (!overflowRejected) throw new Error('Typed function accepted Integer overflow');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorBoundedWhileAndIntegerRemainders() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function Halve
+      input Real x; output Real y;
+      protected Integer i;
+      algorithm y:=x; i:=0;
+      while i<100 and y>0.1 loop y:=y*0.5; i:=i+1; end while;
+      end Halve;
+      function IntegerTerms
+      input Integer n; input Integer d; output Real y;
+      algorithm y:=div(n,d)+mod(n,d)+rem(n,d);
+      end IntegerTerms;
+      model SolveWhile
+      input Real u=1; Real x(start=1,fixed=true);
+      equation der(x)=Halve(x)+IntegerTerms(integer(u),-3);
+      end SolveWhile;`,
+    modelName: 'SolveWhile',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing bounded-while model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-while-integer-remainders',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      for(const [state,input,expected] of [[1,7,-2.9375],[0.05,-7,0.05],[2,6,-1.9375]]) {
+        const residual=model.residual(0,[state],[expected],[],[input],null);
+        if(residual.length!==1 || Math.abs(residual[0])>1e-12)throw new Error('Bounded while or signed Integer arithmetic differs from Modelica semantics');
+      }
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorRuntimeIndexing() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveIndex
+      input Real u=1;
+      Real x[2](start={1,2},each fixed=true);
+      equation der(x[1])=x[integer(u)]; der(x[2])=-x[2];
+      end SolveIndex;`,
+    modelName: 'SolveIndex',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing indexed model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-runtime-indexing',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      for (const [input,derivative] of [[1,1],[2,2],[1.9,1]]) {
+        const result=model.residual(0,[1,2],[derivative,-2],[],[input],null);
+        if (result.some(value=>value!==0)) throw new Error('Incorrect runtime array index');
+      }
+      for (const input of [0,3,Infinity,NaN]) {
+        const result=model.residual(0,[1,2],[0,-2],[],[input],null);
+        if (!Number.isNaN(result[0]) || result[1]!==0) throw new Error('Invalid index must produce NaN');
+      }
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorActionLifecycle() {
+  const wasm = await getDiagnosticsWasm()
+  const fixtures = [
+    {
+      name: 'SolveWarning',
+      source: `model SolveWarning Real x(start=0,fixed=true); equation der(x)=1; assert(time<0,"accepted warning",AssertionLevel.warning); end SolveWarning;`,
+      terminal: false,
+    },
+    {
+      name: 'SolveTerminate',
+      source: `model SolveTerminate Real x(start=0,fixed=true); equation der(x)=1; when initial() then terminate("requested stop"); end when; end SolveTerminate;`,
+      terminal: true,
+    },
+  ]
+  for (const fixture of fixtures) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      source: fixture.source,
+      modelName: fixture.name,
+      templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+    })
+    const generated = compilation.rendered[0]
+    if (!generated?.ok) throw new Error(generated?.error ?? 'Missing action lifecycle model')
+    const code = await buildWorkerSandboxCodeChecked(generated.content, fixture.name)
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.1, dt: 0.02, x0: [0] },
+      fixture.name,
+      { timeIntegrator: 'sdirk2' },
+    )
+    if (fixture.terminal) {
+      if (
+        run.meta?.stopReason !== 'modelica_terminate' ||
+        getOrbitTime(run).length !== 1 ||
+        getOrbitTime(run)[0] !== 0
+      )
+        throw new Error('Modelica termination did not end the run cleanly')
+    } else {
+      if (run.meta?.warnings?.filter((warning) => warning === 'accepted warning').length !== 1)
+        throw new Error('Warning site was not reported once at an accepted point')
+      const baselineCode = await buildWorkerSandboxCodeChecked(
+        `${generated.content}
+        Model=((create)=>()=>{const model=create();delete model.evaluateEventActions;return model;})(Model);`,
+        fixture.name + '-baseline',
+      )
+      const baseline = await runOrbitSimulation(
+        baselineCode,
+        { t0: 0, tf: 0.1, dt: 0.02, x0: [0] },
+        fixture.name + '-baseline',
+        { timeIntegrator: 'sdirk2' },
+      )
+      const x = getStateSeries(run, 'x'),
+        reference = getStateSeries(baseline, 'x')
+      if (x.length !== reference.length || x.some((value, i) => value !== reference[i]))
+        throw new Error('Warning changed the trajectory')
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorTerminalPhase() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveTerminalPhase
+      Real x(start=0,fixed=true);
+      discrete Boolean finished(start=false,fixed=true);
+      equation der(x)=1;
+      when initial() then assert(not terminal(),"terminal during initialization"); end when;
+      when terminal() then
+        finished=true;
+        assert(not initial(),"initial during terminal");
+        assert(false,"terminal warning",level=AssertionLevel.warning);
+      end when;
+      end SolveTerminalPhase;`,
+    modelName: 'SolveTerminalPhase',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing terminal model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-terminal-phase')
+  for (const [tf, dt] of [
+    [0.65, 0.2],
+    [0.6, 0.2],
+    [0.1, 0.4],
+    [0, 0.2],
+  ] as const) {
+    const run = await runOrbitSimulation(code, { t0: 0, tf, dt, x0: [0] }, 'solve-terminal-phase', {
+      timeIntegrator: 'sdirk2',
+    })
+    const times = getOrbitTime(run),
+      finished = getAlgebraicSeries(run, 'finished')
+    if (Math.abs(Number(times.at(-1)) - tf) > 1e-12 || times.some((t) => Number(t) > tf))
+      throw new Error('Simulation did not stop at its requested horizon')
+    if (finished.at(-1) !== 1 || finished.slice(0, -1).some((value) => value !== 0))
+      throw new Error('Terminal phase was omitted or activated early')
+    if (run.meta?.warnings?.filter((message) => message === 'terminal warning').length !== 1)
+      throw new Error('Terminal action was omitted or repeated')
+    if (Math.abs(Number(getStateSeries(run, 'x').at(-1)) - tf) > 1e-5)
+      throw new Error('Terminal phase changed the continuous trajectory')
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorPeriodicClocks() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolvePeriodicClocks
+      Real x(start=0,fixed=true);
+      discrete Integer count(start=0,fixed=true);
+      discrete Integer other(start=0,fixed=true);
+      equation der(x)=1;
+      when sample(0,0.1) then count=pre(count)+1; end when;
+      when sample(0.05,0.15) then other=pre(other)+1; end when;
+      when time>=0.075 then reinit(x,5); end when;
+      end SolvePeriodicClocks;`,
+    modelName: 'SolvePeriodicClocks',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing clocked model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-periodic-clocks')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.61, dt: 0.23, x0: [0] },
+      'solve-periodic-clocks',
+      { timeIntegrator },
+    )
+    const times = getOrbitTime(run)
+    for (const [name, phase, period] of [
+      ['count', 0, 0.1],
+      ['other', 0.05, 0.15],
+    ] as const) {
+      const values = getAlgebraicSeries(run, name)
+      if (values.length !== times.length) throw new Error('Missing clock observations: ' + name)
+      for (let i = 0; i < times.length; i++) {
+        const expected = Math.max(0, Math.floor((Number(times[i]) - phase + 1e-12) / period) + 1)
+        if (values[i] !== expected)
+          throw new Error(`Clock update missed or repeated: ${name} at ${times[i]}: ${values[i]}`)
+      }
+    }
+    for (const tick of [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+      if (!times.some((t) => Math.abs(Number(t) - tick) < 1e-12))
+        throw new Error('Missing clock tick sample')
+    if (Math.abs(Number(getStateSeries(run, 'x').at(-1)) - 5.535) > 1e-5)
+      throw new Error('Unrelated time event changed clock execution')
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorClockPulseConditionHistory() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolvePulseHistory
+      Real x(start=0,fixed=true);
+      discrete Integer count(start=0,fixed=true);
+      equation der(x)=1;
+      when sample(0,0.1) or time>=0.25 then count=pre(count)+1; end when;
+      end SolvePulseHistory;`,
+    modelName: 'SolvePulseHistory',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing pulse-history model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-pulse-history')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.41, dt: 0.23 },
+      'solve-pulse-history-' + timeIntegrator,
+      { timeIntegrator },
+    )
+    const times = getOrbitTime(run),
+      counts = getAlgebraicSeries(run, 'count')
+    if (run.meta?.stopReason || counts.length !== times.length || times.length < 5)
+      throw new Error(run.meta?.stopError ?? 'Missing pulse-history samples')
+    for (let i = 0; i < times.length; i++) {
+      if (counts[i] !== (times[i]! >= 0.25 ? 4 : Math.floor((times[i]! + 1e-12) / 0.1) + 1))
+        throw new Error('Clock pulse condition history suppressed or repeated its rising edge')
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorClockHistory() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveClockPrevious
+      Real x(start=0,fixed=true); Clock c=Clock(1,10);
+      Integer count(start=0,fixed=true);
+      equation der(x)=1;
+      when c then count=previous(count)+1; end when;
+      when time>=0.15 then reinit(x,5); end when;
+      end SolveClockPrevious;`,
+    modelName: 'SolveClockPrevious',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing clock history model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-clock-history')
+  for (const t0 of [0, 0.125]) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0, tf: t0 + 0.41, dt: 0.13, x0: [0] },
+      'solve-clock-history',
+      { timeIntegrator: 'sdirk2' },
+    )
+    const times = getOrbitTime(run),
+      counts = getAlgebraicSeries(run, 'count')
+    for (let i = 0; i < times.length; i++) {
+      const expected = Math.max(
+        0,
+        Math.floor((Number(times[i]) + 1e-12) / 0.1) - Math.ceil((t0 - 1e-12) / 0.1) + 1,
+      )
+      if (counts[i] !== expected)
+        throw new Error(`Clock history advanced outside its domain: ${times[i]}: ${counts[i]}`)
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorRelativeClock() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveRelativeClock
+      Real x(start=0,fixed=true);
+      parameter Real startTime(fixed=false);
+      discrete Integer count(start=0,fixed=true);
+      initial equation startTime=time;
+      equation der(x)=1;
+      when sample(startTime,0.1) then count=pre(count)+1; end when;
+      end SolveRelativeClock;`,
+    modelName: 'SolveRelativeClock',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing relative clock model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-relative-clock')
+  for (const t0 of [0, 0.125, -0.125]) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0, tf: t0 + 0.41, dt: 0.13, x0: [0] },
+      'solve-relative-clock',
+      { timeIntegrator: 'sdirk2' },
+    )
+    const times = getOrbitTime(run),
+      counts = getAlgebraicSeries(run, 'count')
+    for (let i = 0; i < times.length; i++) {
+      const expected = 1 + Math.floor((Number(times[i]) - t0 + 1e-12) / 0.1)
+      if (counts[i] !== expected)
+        throw new Error(`Relative clock lost its runtime origin: ${times[i]}: ${counts[i]}`)
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorClockIntermediates() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveClockAlias
+      Real x(start=0,fixed=true);
+      discrete Integer fast(start=0,fixed=true);
+      Integer fastAlias; Integer slow(start=0,fixed=true);
+      equation der(x)=1; fastAlias=fast+10;
+      when sample(0,0.1) then fast=pre(fast)+1; end when;
+      when sample(0,0.2) then slow=fastAlias; end when;
+      end SolveClockAlias;`,
+    modelName: 'SolveClockAlias',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing ordered clock model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-clock-intermediates')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.61, dt: 0.23, x0: [0] },
+      'solve-clock-intermediates',
+      { timeIntegrator },
+    )
+    const times = getOrbitTime(run),
+      fast = getAlgebraicSeries(run, 'fast'),
+      slow = getAlgebraicSeries(run, 'slow')
+    for (let i = 0; i < times.length; i++) {
+      const time = Number(times[i])
+      if (fast[i] !== 1 + Math.floor((time + 1e-12) / 0.1))
+        throw new Error('Fast clock update failed')
+      const expectedSlow = 11 + 2 * Math.floor((time + 1e-12) / 0.2)
+      if (slow[i] !== expectedSlow)
+        throw new Error(`Clock consumer read stale intermediate at ${time}: ${slow[i]}`)
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorEventTransactions() {
+  const wasm = await getDiagnosticsWasm()
+  for (const activation of ['sample(0,0.1)', 'time>=0.15']) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      source: `model SolveTransaction
+        Real x(start=0,fixed=true);
+        discrete Integer first(start=0,fixed=true);
+        discrete Integer second(start=0,fixed=true);
+        equation der(x)=1;
+        algorithm when ${activation} then
+          first:=pre(first)+1;
+          second:=first*2;
+          assert(time>=0,"transaction time changed");
+        end when;
+        end SolveTransaction;`,
+      modelName: 'SolveTransaction',
+      templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+    })
+    const generated = compilation.rendered[0]
+    if (!generated?.ok) throw new Error(generated?.error ?? 'Missing event transaction model')
+    const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-event-transactions')
+    for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+      const run = await runOrbitSimulation(
+        code,
+        { t0: 0, tf: 0.41, dt: 0.23, x0: [0] },
+        'solve-event-transactions',
+        { timeIntegrator },
+      )
+      const times = getOrbitTime(run),
+        first = getAlgebraicSeries(run, 'first'),
+        second = getAlgebraicSeries(run, 'second')
+      for (let i = 0; i < times.length; i++) {
+        const expected = activation.startsWith('sample')
+          ? 1 + Math.floor((Number(times[i]) + 1e-12) / 0.1)
+          : Number(Number(times[i]) >= 0.15 - 1e-12)
+        if (first[i] !== expected || second[i] !== 2 * expected)
+          throw new Error('Source-ordered transaction did not commit exactly once')
+      }
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorTransactionAssertions() {
+  const wasm = await getDiagnosticsWasm()
+  for (const warning of [false, true]) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      source: `model SolveTransactionAssert
+        Real x(start=0,fixed=true);
+        discrete Integer first(start=0,fixed=true);
+        discrete Integer second(start=0,fixed=true);
+        equation der(x)=1;
+        algorithm when sample(0,0.1) then
+          first:=pre(first)+1; second:=first*2;
+          assert(time<0.2,"transaction blocked"${warning ? ',level=AssertionLevel.warning' : ''});
+        end when;
+        end SolveTransactionAssert;`,
+      modelName: 'SolveTransactionAssert',
+      templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+    })
+    const generated = compilation.rendered[0]
+    if (!generated?.ok) throw new Error(generated?.error ?? 'Missing asserted transaction model')
+    await executeModelicaDiagnosticInSandbox({
+      id: 'modelica-solve-transaction-assertions',
+      stopSignal: AbortSignal.timeout(10000),
+      maxExecutionMs: 10000,
+      code: `() => {
+        ${generated.content}
+        ${defaultSolverSource}
+        for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+          const model=Model();
+          const run=simulateModel({sim:{t0:0,tf:0.41,dt:0.13,x0:[0],solverOptions:{timeIntegrator}}},{},model);
+          if(${warning}) {
+            if(run.meta.stopError || run.data.y.first.at(-1)!==5 || run.data.y.second.at(-1)!==10)throw new Error('Warning prevented atomic commit');
+            if(run.meta.warnings.filter(message=>message==='transaction blocked').length!==1)throw new Error('Transaction warning omitted or repeated');
+          } else {
+            if(!String(run.meta.stopError).includes('transaction blocked'))throw new Error('Missing transaction assertion');
+            const values=model.evalAlgebraics(0.2,[0.2],[],[],[]);
+            if(values[0]!==2 || values[1]!==4)throw new Error('Failed transaction committed partial targets');
+            let failed=false;
+            try {model.applyResets(0.2,[0.2],[],[],[],[],[])}catch(error){failed=error.message.includes('transaction blocked')}
+            if(!failed)throw new Error('Failed tick consumed clock or previous history');
+          }
+        }
+        return {ok:true};
+      }`,
+    })
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorPrePropagation() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolvePrePropagation
+      Real x(start=0,fixed=true);
+      Boolean a(start=false,fixed=true); Boolean b(start=false,fixed=true); Boolean c(start=false,fixed=true);
+      equation der(x)=1; a=time>=0.15; b=pre(a); c=pre(b);
+      end SolvePrePropagation;`,
+    modelName: 'SolvePrePropagation',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing event-iteration model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-pre-propagation')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.41, dt: 0.23, x0: [0] },
+      'solve-pre-propagation',
+      { timeIntegrator },
+    )
+    const times = getOrbitTime(run)
+    for (const name of ['a', 'b', 'c']) {
+      const series = getAlgebraicSeries(run, name)
+      for (let i = 0; i < times.length; i++)
+        if (series[i] !== Number(Number(times[i]) >= 0.15 - 1e-12))
+          throw new Error(
+            `Ordinary pre history did not reach its event fixed point: ${name} at ${times[i]}: ${series[i]}`,
+          )
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorStructuredDiscrete() {
+  const wasm = await getDiagnosticsWasm()
+  for (const clocked of [false, true]) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      source: `model SolveStructuredDiscrete
+        Real x(start=0,fixed=true);
+        ${clocked ? 'Clock c=Clock(1,10);' : ''}
+        Integer a(start=0,fixed=true); Integer b[3];
+        equation der(x)=1;
+        when ${clocked ? 'c' : 'sample(0,0.1)'} then a=${clocked ? 'previous(a)' : 'pre(a)'}+1; end when;
+        for i in 1:3 loop b[i]=a+i; end for;
+        end SolveStructuredDiscrete;`,
+      modelName: 'SolveStructuredDiscrete',
+      templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+    })
+    const generated = compilation.rendered[0]
+    if (!generated?.ok) throw new Error(generated?.error ?? 'Missing structured discrete model')
+    const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-structured-discrete')
+    for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+      const run = await runOrbitSimulation(
+        code,
+        { t0: 0, tf: 0.41, dt: 0.23, x0: [0] },
+        'solve-structured-discrete',
+        { timeIntegrator },
+      )
+      const times = getOrbitTime(run)
+      for (let lane = 1; lane <= 3; lane++) {
+        const series = getAlgebraicSeries(run, `b[${lane}]`)
+        for (let i = 0; i < times.length; i++)
+          if (series[i] !== lane + 1 + Math.floor((Number(times[i]) + 1e-12) / 0.1))
+            throw new Error('Structured discrete target or execution order changed')
+      }
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorImplicitEventEquations() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveImplicitWhen
+      Real x(start=0,fixed=true); Real a(start=1); discrete Real z(start=0,fixed=true);
+      equation der(x)=1; a*a+z=3;
+      when time>=0.15 then z=-2*a; end when;
+      end SolveImplicitWhen;`,
+    modelName: 'SolveImplicitWhen',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing implicit event model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-implicit-event')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.41, dt: 0.23, x0: [0] },
+      'solve-implicit-event',
+      { timeIntegrator },
+    )
+    const times = getOrbitTime(run),
+      a = getAlgebraicSeries(run, 'a'),
+      z = getAlgebraicSeries(run, 'z')
+    for (let i = 0; i < times.length; i++) {
+      if (Math.abs(Number(a[i]) ** 2 + Number(z[i]) - 3) > 1e-6)
+        throw new Error('Event lost algebraic consistency')
+      if (Number(times[i]) >= 0.15 && Math.abs(Number(z[i]) + 2 * Number(a[i])) > 1e-6)
+        throw new Error('Condition history deactivated when equation before algebraics settled')
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorCoupledEventRecovery() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveEventRecovery
+      Real x(start=0,fixed=true), a(start=1);
+      discrete Real z(start=0,fixed=true);
+      equation der(x)=1; 2*a=z+3;
+      when time>=0.15 then z=6-2*a; end when;
+      end SolveEventRecovery;`,
+    modelName: 'SolveEventRecovery',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing coupled event model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-event-recovery')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.3, dt: 0.2, x0: [0] },
+      'solve-event-recovery',
+      { timeIntegrator, newtonTol: 1e-9 },
+    )
+    const times = getOrbitTime(run)
+    const a = getAlgebraicSeries(run, 'a')
+    const z = getAlgebraicSeries(run, 'z')
+    if (Number(times[times.length - 1]) !== 0.3)
+      throw new Error('Stalled event equations stopped before the simulation horizon')
+    for (let i = 0; i < times.length; i++) {
+      if (Math.abs(2 * Number(a[i]) - Number(z[i]) - 3) > 1e-6)
+        throw new Error('Coupled recovery lost algebraic consistency')
+      if (Number(times[i]) >= 0.15 && Math.abs(Number(z[i]) + 2 * Number(a[i]) - 6) > 1e-6)
+        throw new Error('Coupled recovery did not satisfy the active event equation')
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorRuntimeAssignments() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveRuntimeAliases
+      Real x(start=0,fixed=true); Boolean a,b,c;
+      equation der(x)=if c then 2 else 1;
+      a=x>=0.15; b=a; c=b;
+      end SolveRuntimeAliases;`,
+    modelName: 'SolveRuntimeAliases',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing runtime assignment model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-runtime-aliases')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.35, dt: 0.2, x0: [0] },
+      'solve-runtime-aliases',
+      { timeIntegrator, newtonTol: 1e-7, eventTolTime: 1e-6 },
+    )
+    const times = getOrbitTime(run)
+    const x = getStateSeries(run, 'x')
+    if (Number(times[times.length - 1]) !== 0.35)
+      throw new Error('Runtime assignment model stopped before its horizon')
+    for (let i = 0; i < times.length; i++) {
+      const t = Number(times[i])
+      if (Math.abs(Number(x[i]) - (t <= 0.15 ? t : 2 * t - 0.15)) > 1e-5)
+        throw new Error('Runtime aliases did not propagate the accepted relation into dynamics')
+      for (const name of ['a', 'b', 'c']) {
+        const series = getAlgebraicSeries(run, name)
+        if (t > 0.15001 && Number(series[i]) !== 1)
+          throw new Error('Post-commit runtime alias observation is stale')
+      }
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorAlgebraicRelations() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveAlgebraicRelations
+      Real x(start=0,fixed=true), a(start=1);
+      discrete Real z(start=0,fixed=true); Boolean b;
+      equation der(x)=if b then 2 else 1;
+      a*a=x+z+1; b=a>=1.5;
+      when time>=0.15 then z=pre(z)+3; end when;
+      end SolveAlgebraicRelations;`,
+    modelName: 'SolveAlgebraicRelations',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing algebraic relation model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-algebraic-relations')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.35, dt: 0.2, x0: [0] },
+      'solve-algebraic-relations',
+      { timeIntegrator, newtonTol: 1e-7 },
+    )
+    const times = getOrbitTime(run)
+    const x = getStateSeries(run, 'x')
+    const a = getAlgebraicSeries(run, 'a')
+    const z = getAlgebraicSeries(run, 'z')
+    const b = getAlgebraicSeries(run, 'b')
+    if (Number(times[times.length - 1]) !== 0.35)
+      throw new Error('Algebraic relation model stopped before its horizon')
+    for (let i = 0; i < times.length; i++) {
+      const t = Number(times[i])
+      if (Math.abs(Number(a[i]) ** 2 - Number(x[i]) - Number(z[i]) - 1) > 1e-6)
+        throw new Error('Relation refresh lost algebraic consistency')
+      if (Math.abs(Number(x[i]) - (t <= 0.15 ? t : 2 * t - 0.15)) > 1e-5)
+        throw new Error('Projected algebraic relation did not update the same-instant dynamics')
+      if (t >= 0.15 && (Number(b[i]) !== 1 || Number(z[i]) !== 3))
+        throw new Error(
+          'Relation iteration advanced condition history before discrete equations settled',
+        )
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorRelationModeSearch() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveRelationCycle
+      Real x(start=0,fixed=true), a(start=-1), b(start=-1); Boolean p,q;
+      equation der(x)=1;
+      a=if time<0.15 then -1 else (if q then 1 else -1);
+      b=if time<0.15 then -1 else (if p then 1 else (if q then -1 else 1));
+      p=a>0; q=b>0;
+      end SolveRelationCycle;`,
+    modelName: 'SolveRelationCycle',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing relation cycle model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-relation-cycle')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.3, dt: 0.2, x0: [0] },
+      'solve-relation-cycle',
+      { timeIntegrator, newtonTol: 1e-7 },
+    )
+    const times = getOrbitTime(run)
+    if (Number(times[times.length - 1]) !== 0.3)
+      throw new Error('Relation cycle stopped before its consistent mode was found')
+    for (const name of ['a', 'b', 'p', 'q']) {
+      const series = getAlgebraicSeries(run, name)
+      for (let i = 0; i < times.length; i++)
+        if (Number(times[i]) >= 0.15 && Math.abs(Number(series[i]) - 1) > 1e-6)
+          throw new Error('Joint mode search left an inconsistent algebraic or Boolean coordinate')
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorAcceptedHistoryLifecycle() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveHistoryLifecycle
+      Real x(start=1,fixed=true);
+      equation der(x)=-20*x;
+      when x<=0.2 then reinit(x,1); end when;
+      end SolveHistoryLifecycle;`,
+    modelName: 'SolveHistoryLifecycle',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing accepted-history model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-history-lifecycle',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+        const model=Model(),points=[];
+        let evaluations=0,totalEvaluations=0,restores=0;
+        const residual=model.residual;
+        model.residual=(...args)=>{evaluations++;totalEvaluations++;return residual(...args);};
+        model.checkpointRuntime=()=>{
+          const saved=points.map(point=>({...point})),count=evaluations;
+          return ()=>{points.splice(0,points.length,...saved);evaluations=count;restores++;};
+        };
+        model.commitAcceptedStep=(t,x)=>{
+          if(points.length&&t<points[points.length-1].t)
+            throw new Error('Speculative future history leaked into an accepted step');
+          points.push({t,x:x[0]});
+        };
+        const run=simulateModel({sim:{t0:0,tf:0.23,dt:0.23,x0:[1],solverOptions:{
+          timeIntegrator,eventTolTime:1e-5,rk45AbsTol:1e-9,rk45RelTol:1e-8,
+        }}},{},model);
+        if(run.meta.stopReason||run.data.t[run.data.t.length-1]!==0.23)
+          throw new Error('Accepted-history lifecycle stopped the simulation');
+        if(!points.length||points[0].t!==0||points[points.length-1].t!==0.23)
+          throw new Error('Accepted-history callbacks missed the initial or final point');
+        if(restores===0||evaluations>=totalEvaluations)
+          throw new Error('Event localization did not rewind speculative runtime state');
+        if(!points.some((point,i)=>i&&point.t===points[i-1].t&&point.x!==points[i-1].x))
+          throw new Error('Event left and right limits were not committed at one timestamp');
+        if(timeIntegrator==='rk45'&&!(run.meta.solverStats.rk45Rejected>0))
+          throw new Error('Fixture did not exercise rejected adaptive steps');
+      }
+      return {ok:true};
+    }`,
+  })
+}
+
+export async function testModelicaSolveGeneratorDelayHistory() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveDelayHistory
+      Real x(start=1,fixed=true); Real y;
+      equation der(x)=-delay(x,0.1,0.3); y=delay(x,0.1,0.3);
+      end SolveDelayHistory;`,
+    modelName: 'SolveDelayHistory',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing delayed feedback model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-delay-history')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.3, dt: 0.23, x0: [1] },
+      'solve-delay-history',
+      { timeIntegrator, newtonTol: 1e-7, maxStep: 0.02 },
+    )
+    const times = getOrbitTime(run)
+    const x = getStateSeries(run, 'x')
+    const delayed = getAlgebraicSeries(run, 'y')
+    const solution = (t: number) =>
+      1 - t + Math.max(0, t - 0.1) ** 2 / 2 - Math.max(0, t - 0.2) ** 3 / 6
+    if (Number(times[times.length - 1]) !== 0.3)
+      throw new Error('Delayed feedback stopped before its horizon')
+    for (let i = 0; i < times.length; i++) {
+      if (Math.abs(Number(x[i]) - solution(Number(times[i]))) > 2e-4)
+        throw new Error('Delay feedback did not use accepted method-of-steps history')
+      if (Math.abs(Number(delayed[i]) - solution(Math.max(0, Number(times[i]) - 0.1))) > 2e-4)
+        throw new Error('Delay observation read speculative or stale history')
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorDelayReversal() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveDelayReversal
+      Real x(start=0,fixed=true), y; discrete Real u(start=0,fixed=true);
+      equation der(x)=1;
+      when time>=0.1 then u=1; end when;
+      y=delay(u,if time<0.7 then 0.2 else 0.8,1.0);
+      end SolveDelayReversal;`,
+    modelName: 'SolveDelayReversal',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing variable delay model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-delay-reversal')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 1.2, dt: 0.4, x0: [0] },
+      'solve-delay-reversal',
+      { timeIntegrator, newtonTol: 1e-7, eventTolTime: 1e-6, maxStep: 0.02 },
+    )
+    const times = getOrbitTime(run)
+    const y = getAlgebraicSeries(run, 'y')
+    if (Number(times[times.length - 1]) !== 1.2)
+      throw new Error('Variable delay stopped before its horizon')
+    for (let i = 0; i < times.length; i++) {
+      const t = Number(times[i])
+      if ([0.3, 0.7, 0.9].some((boundary) => Math.abs(t - boundary) <= 2e-6)) continue
+      const expected = t < 0.3 || (t >= 0.7 && t < 0.9) ? 0 : 1
+      if (Number(y[i]) !== expected)
+        throw new Error('Variable delay lost a forward or backward discontinuity crossing')
+    }
+    for (const boundary of [0.3, 0.7, 0.9])
+      if (!times.some((t) => Math.abs(Number(t) - boundary) <= 2e-6))
+        throw new Error('Transported delay discontinuity did not receive an event sample')
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorZeroDelay() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveZeroDelay
+      Real x(start=0,fixed=true), y; discrete Real u(start=0,fixed=true);
+      equation der(x)=1;
+      when sample(0.1,0.2) then u=pre(u)+1; end when;
+      y=delay(u,if time<0.3 then 0.2 else 0.0,0.5);
+      end SolveZeroDelay;`,
+    modelName: 'SolveZeroDelay',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing zero-delay transition model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-zero-delay')
+  for (const timeIntegrator of ['sdirk2', 'irk4', 'rk45']) {
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 0.41, dt: 0.23, x0: [0] },
+      'solve-zero-delay',
+      { timeIntegrator, newtonTol: 1e-7, maxStep: 0.02 },
+    )
+    const times = getOrbitTime(run)
+    const y = getAlgebraicSeries(run, 'y')
+    const u = getAlgebraicSeries(run, 'u')
+    if (Number(times[times.length - 1]) !== 0.41)
+      throw new Error('Zero-delay transition stopped before its horizon')
+    for (let i = 0; i < times.length; i++) {
+      if (Number(times[i]) < 0.3 && Number(y[i]) !== 0)
+        throw new Error('Positive delay exposed the discrete source too early')
+      if (Number(times[i]) >= 0.3 && (Number(y[i]) !== 2 || Number(u[i]) !== 2))
+        throw new Error('Zero delay missed the same-instant discrete source update')
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorRepeatedRuns() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveRepeated
+      Real x(start=0,fixed=true);
+      discrete Real deadline(start=0.15,fixed=true);
+      discrete Integer count(start=0,fixed=true);
+      equation der(x)=1;
+      when time >= deadline then deadline=pre(deadline)+0.1; count=pre(count)+1; end when;
+      when terminal() then assert(false,"run finished",level=AssertionLevel.warning); end when;
+      end SolveRepeated;`,
+    modelName: 'SolveRepeated',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing reusable model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-repeated-runs',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      const model=Model();
+      const options={sim:{t0:0,tf:0.4,dt:0.2,x0:[0],solverOptions:{timeIntegrator:'sdirk2'}}};
+      const first=simulateModel(options,{},model),second=simulateModel(options,{},model);
+      for(const run of [first,second]) {
+        if(run.meta.stopReason||run.meta.stopError)throw new Error('Reused model failed');
+        if(run.data.y.count[0]!==0||run.data.y.count.at(-1)!==3)throw new Error('Discrete state leaked between runs');
+        if(run.meta.warnings.filter(message=>message==='run finished').length!==1)throw new Error('Action lifecycle leaked between runs');
+      }
+      if(first.data.t.length!==second.data.t.length)throw new Error('Deadline state leaked between runs');
+      for(let i=0;i<first.data.t.length;i++) {
+        if(first.data.t[i]!==second.data.t[i]||first.data.x.x[i]!==second.data.x.x[i]||first.data.y.count[i]!==second.data.y.count[i])throw new Error('Repeated trajectory differs');
+      }
+      return {ok:true};
+    }`,
+  })
+}
+
+export async function testModelicaSolveGeneratorTornAlgebraicProjection() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveTornProjection
+      input Real u=2; Real a(start=1),b(start=1),c;
+      equation a*a+b=u; b=a; c=2*a;
+      end SolveTornProjection;`,
+    modelName: 'SolveTornProjection',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing torn projection model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-torn-projection',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+        const model=Model(),sizes=[],project=model.projectAlgebraics;
+        model.projectAlgebraics=(...args)=>{
+          const solve=args[5];
+          args[5]=(residual,initial,scales)=>{sizes.push(initial.length);return solve(residual,initial,scales);};
+          return project(...args);
+        };
+        const run=simulateModel({sim:{t0:0,tf:0.3,dt:0.1,f_u:t=>[2+100*t],
+          solverOptions:{timeIntegrator,newtonTol:1e-8}}},{},model);
+        if(run.meta.stopReason||run.data.t.at(-1)!==0.3)throw new Error('Torn projection stopped before its horizon');
+        if(sizes.length<3||sizes.some(size=>size!==1))throw new Error('Newton included causal algebraic coordinates outside the native tear set');
+        for(let i=0;i<run.data.t.length;i++) {
+          const a=(-1+Math.sqrt(1+4*(2+100*run.data.t[i])))/2;
+          for(const [name,value] of [['a',a],['b',a],['c',2*a]])
+            if(Math.abs(run.data.y[name][i]-value)>1e-6)throw new Error('Torn projection lost causal back-substitution');
+        }
+      }
+      return {ok:true};
+    }`,
+  })
+}
+
+export async function testModelicaSolveGeneratorFunctionLoopReturns() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `package LoopReturns
+      function first
+        input Boolean b[:]; output Integer index;
+        algorithm index:=0;
+        for i in 1:size(b,1) loop
+          if b[i] then index:=i; return; end if;
+        end for;
+        index:=-1;
+      end first;
+      function nested
+        input Boolean b[2,2]; output Integer index;
+        algorithm index:=0;
+        for i in 1:2 loop
+          for j in 1:2 loop
+            if b[i,j] then index:=10*i+j; return; end if;
+          end for;
+        end for;
+        index:=-1;
+      end nested;
+      function stopBeforeFault
+        input Real v[4]; output Real result;
+        algorithm result:=0;
+        for i in 1:4 loop
+          if i==2 then return; end if;
+          result:=result+v[i]/(i-2);
+        end for;
+        result:=1234;
+      end stopBeforeFault;
+      model Probe
+        input Real u[4]={0,0,0,0}; Integer firstIndex,nestedIndex; Real stopped;
+        equation
+        firstIndex=first({u[1]>0,u[2]>0,u[3]>0,u[4]>0});
+        nestedIndex=nested({{u[1]>0,u[2]>0},{u[3]>0,u[4]>0}});
+        stopped=stopBeforeFault(u);
+      end Probe;
+      end LoopReturns;`,
+    modelName: 'LoopReturns.Probe',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing function loop-return model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-function-loop-returns',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      const cases=[[0,0,0,0],[0,1,0,1],[1,1,1,1],[0,0,0,1]];
+      for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+        const run=simulateModel({sim:{t0:0,tf:0.3,dt:0.1,
+          f_u:t=>cases[Math.min(3,Math.round(t/0.1))],
+          solverOptions:{timeIntegrator}}},{},Model());
+        if(run.meta.stopReason || run.data.t.at(-1)!==0.3)
+          throw new Error('A loop return evaluated its faulting suffix or lost its carried state');
+        for(let i=0;i<run.data.t.length;i++) {
+          const u=cases[Math.min(3,Math.round(run.data.t[i]/0.1))];
+          const first=u.findIndex(value=>value>0);
+          const expected=first<0?-1:first+1;
+          const nested=first<0?-1:10*(1+Math.floor(first/2))+1+first%2;
+          if(run.data.y.firstIndex[i]!==expected || run.data.y.nestedIndex[i]!==nested
+             || run.data.y.stopped[i]!==-u[0])
+            throw new Error('A function loop return failed first-match or enclosing-function exit semantics');
+        }
+      }
+      return {ok:true};
+    }`,
+  })
+}
+
+export async function testModelicaSolveGeneratorNativeExactAssignments() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function NativePair
+      input Real u; output Real a,b;
+      algorithm a:=0; b:=0;
+      for i in 1:3 loop
+        if i==2 then return; end if;
+        a:=a+u; b:=b+2*u;
+      end for;
+      a:=1234; b:=5678;
+      end NativePair;
+      model NativeExactAssignments
+      input Real u=1; Real x(start=1,fixed=true),a,b;
+      equation der(x)=x; (a,b)=NativePair(x+u);
+      end NativeExactAssignments;`,
+    modelName: 'NativeExactAssignments',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing native exact assignment model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-native-exact-assignments',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      for(const input of [1,-2,0.5]) {
+        const y=typeof model.projectAlgebraics==='function'
+          ? model.projectAlgebraics(0,[7],model.y0,[input],null,()=>{
+              throw new Error('Certified direct assignment required a numerical solve');
+            })
+          : model.y0;
+        const observed=model.evalAlgebraics(0,[7],y,[input],null);
+        if(observed.length!==2 || observed[0]!==7+input || observed[1]!==2*(7+input))
+          throw new Error('Native exact assignments changed multiple function outputs');
+        const residual=model.residual(0,[7],[7],y,[input],null);
+        if(residual.some(value=>value!==0))
+          throw new Error('Native assignment prefix overwrote a state coordinate');
+      }
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorRectangularProjection() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveProjectionBoundary
+      Real x(start=0,fixed=true),y(start=0,fixed=true),z(start=0,fixed=true);
+      equation der(x)=1; der(y)=1; der(z)=0;
+      end SolveProjectionBoundary;`,
+    modelName: 'SolveProjectionBoundary',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing projection boundary fixture')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-rectangular-projection',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+        const model=Model();
+        // Synthetic rectangular constraints exercise the same numerical callback the generator uses.
+        model.projectStateManifold=(t,x,y,u,p,project)=>({x:project(
+          coordinates=>[coordinates[0]+coordinates[1]-t,coordinates[1]+coordinates[2]],
+          (coordinates,direction)=>[direction[0]+direction[1],direction[1]+direction[2]],
+          x,[1,2,3]),y});
+        const run=simulateModel({sim:{t0:0,tf:0.3,dt:0.1,x0:[0,0,0],
+          solverOptions:{timeIntegrator,newtonTol:1e-8}}},{},model);
+        if(run.meta.stopReason||run.data.t.at(-1)!==0.3)
+          throw new Error('Rectangular projection stopped before its horizon');
+        for(let i=0;i<run.data.t.length;i++) {
+          const t=run.data.t[i],expected=[40*t/49,9*t/49,-9*t/49];
+          if(['x','y','z'].some((name,k)=>Math.abs(run.data.x[name][i]-expected[k])>1e-7))
+            throw new Error('Projection did not apply the minimum-norm nominal-scaled correction');
+        }
+        const failing=Model(),committed=[];
+        let pending=0;
+        failing.checkpointRuntime=()=>{const before=pending;return()=>{pending=before;};};
+        failing.commitAcceptedStep=t=>committed.push(t);
+        failing.projectStateManifold=(t,x,y,u,p,project)=>{
+          pending++;
+          return {x:project(()=>[1],()=>[0,0,0],x,[1,2,3]),y};
+        };
+        const refused=simulateModel({sim:{t0:0,tf:0.3,dt:0.1,x0:[0,0,0],
+          solverOptions:{timeIntegrator,newtonTol:1e-8}}},{},failing);
+        if(!refused.meta.stopReason || refused.data.t.at(-1)!==0 || pending!==0 || committed.some(t=>t!==0))
+          throw new Error('Failed manifold projection committed a state or leaked its runtime trial');
+      }
+      return {ok:true};
+    }`,
+  })
+}
+
+export async function testModelicaSolveGeneratorManifoldProjection() {
+  const wasm = await getDiagnosticsWasm()
+  // A quaternion with three kinematic rows and the unit-norm constraint is an
+  // index-2 DAE: Rumoca retains `Q*Q = 1` and reprojects every accepted state.
+  // The start is a regular chart point; `{1,0,0,0}` puts the retained
+  // constraint's dependent coordinate at zero, where the reduced system is
+  // singular for Rumoca's own solver as well, so the fixture starts elsewhere.
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveQuaternion
+ Real Q[4](start={0.5,0.5,0.5,0.5},fixed=true);
+ parameter Real w1=0.1,w2=0.2,w3=0.3;
+equation
+ der(Q[1])=0.5*(-Q[2]*w1-Q[3]*w2-Q[4]*w3);
+ der(Q[2])=0.5*(Q[1]*w1+Q[3]*w3-Q[4]*w2);
+ der(Q[3])=0.5*(Q[1]*w2-Q[2]*w3+Q[4]*w1);
+ Q*Q=1;
+end SolveQuaternion;
+`,
+    modelName: 'SolveQuaternion',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing manifold model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-manifold-projection',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      const q0=[0.5,0.5,0.5,0.5],w=[0.1,0.2,0.3],omega=Math.sqrt(0.14);
+      const product=(a,b)=>[
+        a[0]*b[0]-(a[1]*b[1]+a[2]*b[2]+a[3]*b[3]),
+        a[0]*b[1]+b[0]*a[1]+(a[2]*b[3]-a[3]*b[2]),
+        a[0]*b[2]+b[0]*a[2]+(a[3]*b[1]-a[1]*b[3]),
+        a[0]*b[3]+b[0]*a[3]+(a[1]*b[2]-a[2]*b[1])];
+      for(const timeIntegrator of ['sdirk2','irk4','rk45']) {
+        const model=Model(),run=simulateModel({sim:{t0:0,tf:35,dt:0.3,x0:model.x0,
+          solverOptions:{timeIntegrator,newtonTol:1e-8}}},{},model);
+        if(run.meta.stopReason||run.data.t.at(-1)!==35)
+          throw new Error('Manifold simulation stopped before its horizon: '+run.meta.stopReason+' '+(run.meta.stopError||''));
+        for(let i=0;i<run.data.t.length;i++) {
+          const t=run.data.t[i],q=[1,2,3,4].map(k=>run.data.x['Q['+k+']'][i]);
+          if(Math.abs(q.reduce((sum,value)=>sum+value*value,0)-1)>1e-7)
+            throw new Error('Accepted state drifted from the retained quaternion norm');
+          const half=omega*t/2;
+          const exact=product(q0,[Math.cos(half),w[0]/omega*Math.sin(half),w[1]/omega*Math.sin(half),w[2]/omega*Math.sin(half)]);
+          if(q.some((value,k)=>Math.abs(value-exact[k])>0.01))
+            throw new Error('Projection did not preserve the quaternion rotation trajectory');
+        }
+      }
+      return {ok:true};
+    }`,
+  })
+}
+
+export async function testModelicaSolveGeneratorImpureRandomRollback() {
+  const wasm = await getDiagnosticsWasm()
+  const fixtureFunction = `
+    {% set null=none %}
+    {% set program_fixtures=${checkedSolveFixtures} %}
+    function evaluateImpure(t) {
+      const sy=[],sp=[],output=[];
+      {% for fixture in program_fixtures %}
+      {% if fixture.name == 'impure_event_calls' %}
+      {{ evaluate(fixture.plan,'output',effects) }}
+      {% endif %}
+      {% endfor %}
+      return output;
+    }`
+  const template = solveJavascriptTemplate
+    .replace('  const description = {', fixtureFunction + '  const description = {')
+    .replace('    abiRequired: true,', '    evaluateImpure,abiRequired: true,')
+    .replace(
+      '    const output=[],warnings=[],warningSites=[];',
+      '    if(t>=0.1)evaluateImpure(t);const output=[],warnings=[],warningSites=[];',
+    )
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveImpureRollback
+      Real x(start=1,fixed=true);
+      equation der(x)=-x; assert(time<0.1,"event rejected");
+      end SolveImpureRollback;`,
+    modelName: 'SolveImpureRollback',
+    templates: [{ source: template, path: 'impure_rollback.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing impure random fixture')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-impure-rollback',
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+    code: `() => {
+      ${generated.content}
+      ${defaultSolverSource}
+      const expected=${checkedSolveFixtures}.find(fixture=>fixture.name==='impure_event_calls').expected;
+      const model=Model(),other=Model();
+      const options={sim:{t0:0,tf:0.05,dt:0.05,x0:[1]}};
+      simulateModel(options,{},model);simulateModel(options,{},other);
+      const equal=(a,b)=>a.length===b.length&&a.every((value,i)=>Object.is(value,b[i]));
+      const first=model.evaluateImpure(0);
+      if(!equal(first,expected)||!equal(first,model.evaluateImpure(0)))
+        throw new Error('Impure stream differs from native or repeated event draw advanced it');
+      if(first[1]!==first[2]||first[2]===first[3])
+        throw new Error('Distinct u64 call sites collapsed or repeated site was not cached');
+      const restore=model.checkpointRuntime(),next=model.evaluateImpure(1);
+      model.evaluateImpure(2);restore();
+      if(!equal(next,model.evaluateImpure(1)))
+        throw new Error('Runtime rollback did not restore the random continuation');
+      if(!equal(first,other.evaluateImpure(0))||!equal(next,other.evaluateImpure(1)))
+        throw new Error('Random state leaked between generated model instances');
+      const beforeEvent=model.checkpointRuntime();
+      let failed=false;
+      try {model.applyResets(0.2,[1],[],[],[],[true],[false]);}
+      catch(error){if(!String(error).includes('event rejected'))throw error;failed=true;}
+      if(!failed)throw new Error('Fixture did not exercise failed event rollback');
+      const afterFailure=model.evaluateImpure(3);beforeEvent();
+      if(!equal(afterFailure,model.evaluateImpure(3)))
+        throw new Error('Failed event consumed a random draw');
+      simulateModel(options,{},model);
+      if(!equal(first,model.evaluateImpure(0)))
+        throw new Error('Model initialization retained an old random stream');
+      return {ok:true};
+    }`,
+  })
+}
+
+export async function testModelicaSolveGeneratorScalarPrograms() {
+  const wasm = await getDiagnosticsWasm()
+  // These template views were emitted from checked native IR and compared with its evaluator.
+  const fixtureFunction = `
+    {% set null=none %}
+    {% set program_fixtures=${checkedSolveFixtures} %}
+    function evaluateProgramFixtures() {
+      const sy=[],sp=[],t=0,results=[];
+      {% for fixture in program_fixtures %}
+      { const output=[]; {{ evaluate(fixture.plan,'output') }} results.push(output); }
+      {% endfor %}
+      return results;
+    }`
+  const template = solveJavascriptTemplate
+    .replace('  const description = {', fixtureFunction + '  const description = {')
+    .replace('    abiRequired: true,', '    evaluateProgramFixtures,abiRequired: true,')
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source:
+      'model SolveScalarFolds Real x(start=1,fixed=true); equation der(x)=-x; end SolveScalarFolds;',
+    modelName: 'SolveScalarFolds',
+    templates: [{ source: template, path: 'scalar_programs.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing checked scalar-program output')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-scalar-folds',
+    code: `() => {
+      ${generated.content}
+      const fixtures=${checkedSolveFixtures},results=Model(fixtures.flatMap(fixture=>fixture.external_tables)).evaluateProgramFixtures();
+      for(let i=0;i<fixtures.length;i++) {
+        const expected=fixtures[i].expected,actual=results[i];
+        if(actual.length!==expected.length || actual.some((value,k)=>value!==expected[k]))
+          throw new Error('Scalar program differs from native evaluation: '+fixtures[i].name);
+      }
+      let rejected=false;
+      try {Model([]).evaluateProgramFixtures()}
+      catch(error){if(!String(error).includes('External table data was not provided'))throw error;rejected=true}
+      if(!rejected)throw new Error('Missing external table data was silently accepted');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorDiscreteObservations() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveObserved
+      Real x(start=0,fixed=true); Real a;
+      discrete Integer count(start=0,fixed=true);
+      discrete Boolean fired(start=false,fixed=true);
+      equation der(x)=1; a=2*x;
+      when time >= 0.35 then count=pre(count)+1; fired=true; end when;
+      end SolveObserved;`,
+    modelName: 'SolveObserved',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing observed model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-observations')
+  const run = await runOrbitSimulation(
+    code,
+    { t0: 0, tf: 0.6, dt: 0.2, x0: [0] },
+    'solve-observations',
+    { timeIntegrator: 'sdirk2' },
+  )
+  const times = getOrbitTime(run)
+  for (const name of ['count', 'fired']) {
+    const values = getAlgebraicSeries(run, name)
+    if (values.length !== times.length) throw new Error('Missing discrete observations: ' + name)
+    for (let i = 0; i < times.length; i++)
+      if (Number(values[i]) !== (Number(times[i]) >= 0.35 ? 1 : 0))
+        throw new Error('Incorrect discrete observation: ' + name)
+  }
+  const a = getAlgebraicSeries(run, 'a')
+  const x = getStateSeries(run, 'x')
+  if (a.some((value, i) => Math.abs(Number(value) - 2 * Number(x[i])) > 1e-8))
+    throw new Error('Discrete observations changed algebraic projection')
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorEventObservationSnapshots() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveObservationSnapshots
+      Real x(start=0,fixed=true);
+      discrete Real deadline(start=0.15,fixed=true);
+      discrete Integer count(start=0,fixed=true);
+      equation der(x)=1;
+      when time >= deadline then
+        deadline=pre(deadline)+0.1; count=pre(count)+1;
+      end when;
+      end SolveObservationSnapshots;`,
+    modelName: 'SolveObservationSnapshots',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing observation snapshot model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-observation-snapshots')
+  const run = await runOrbitSimulation(
+    code,
+    { t0: 0, tf: 0.8, dt: 0.4, x0: [0] },
+    'solve-observation-snapshots',
+    { timeIntegrator: 'sdirk2' },
+  )
+  const times = getOrbitTime(run),
+    counts = getAlgebraicSeries(run, 'count')
+  for (let i = 0; i < times.length; i++) {
+    const expected = Math.max(0, Math.floor((Number(times[i]) - 0.15 + 1e-12) / 0.1) + 1)
+    if (Number(counts[i]) !== expected)
+      throw new Error(`Event observation was overwritten: t=${times[i]}, count=${counts[i]}`)
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorScheduledEvents() {
+  const wasm = await getDiagnosticsWasm()
+  const cases = [
+    {
+      name: 'SolveScheduled',
+      source: `model SolveScheduled
+      Real x(start=0,fixed=true);
+      equation der(x)=1;
+      when time >= 0.35 then reinit(x,10); end when;
+      when time >= 0.65 then terminate("scheduled stop"); end when;
+      end SolveScheduled;`,
+      time: 0.65,
+      x: 10.3,
+      stop: 'modelica_terminate',
+    },
+    {
+      name: 'SolveDynamicDeadline',
+      source: `model SolveDynamicDeadline
+      Real x(start=0,fixed=true); discrete Real deadline(start=0.35,fixed=true);
+      equation der(x)=1;
+      when time >= deadline then
+        deadline=pre(deadline)+0.3; reinit(x,10);
+      end when;
+      end SolveDynamicDeadline;`,
+      time: 1,
+      x: 10.05,
+      stop: null,
+    },
+  ]
+  for (const fixture of cases) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      source: fixture.source,
+      modelName: fixture.name,
+      templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+    })
+    const generated = compilation.rendered[0]
+    if (!generated?.ok) throw new Error(generated?.error ?? 'Missing scheduled model')
+    const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-scheduled-events')
+    const run = await runOrbitSimulation(
+      code,
+      { t0: 0, tf: 1, dt: 0.2, x0: [0] },
+      'solve-scheduled-events',
+      { timeIntegrator: 'sdirk2' },
+    )
+    const x = getStateSeries(run, 'x'),
+      times = getOrbitTime(run)
+    if (
+      (run.meta?.stopReason ?? null) !== fixture.stop ||
+      Math.abs(Number(times.at(-1)) - fixture.time) > 1e-12
+    )
+      throw new Error('Scheduled termination missed its exact deadline: ' + fixture.name)
+    if (Math.abs(Number(x.at(-1)) - fixture.x) > 1e-6)
+      throw new Error('Scheduled reset was missed or repeated: ' + fixture.name)
+    for (const deadline of fixture.name === 'SolveScheduled' ? [0.35] : [0.35, 0.65, 0.95]) {
+      const index = times.findIndex((time) => Math.abs(Number(time) - deadline) < 1e-12)
+      if (index < 0 || Math.abs(Number(x[index]) - 10) > 1e-6)
+        throw new Error('Missing accepted time-event sample: ' + deadline)
+    }
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorActionMessages() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveActionMessages
+      Real x(start=1,fixed=true);
+      equation der(x)=0.0;
+      assert(x<0,"μ="+String(x,minimumLength=8,leftJustified=false,significantDigits=3)+
+        "; i="+String(integer(x))+"; b="+String(x>0),AssertionLevel.warning);
+      end SolveActionMessages;`,
+    modelName: 'SolveActionMessages',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing action-message model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-action-messages',
+    code: `() => {
+      ${generated.content}
+      for(const [value,expected] of [[12.345,"μ=    12.3; i=12; b=true"],
+          [0.000012345,"μ= 1.23e-5; i=0; b=true"],[0,"μ=       0; i=0; b=false"],[120,"μ=     120; i=120; b=true"]]) {
+        const report=Model().evaluateEventActions(0,[value],[],[],null);
+        if(report.warnings[0]!==expected)
+          throw new Error('Incorrect Modelica action message: '+report.warnings[0]);
+      }
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorActions() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function LoopFlow
+      input Real x; output Real y;
+      algorithm y:=0;
+      for i in 1:3 loop
+        assert(x+i>0,"loop invariant "+String(integer(1/(if x+i>0 then 0 else 1))));
+        y:=y+x;
+      end for;
+      end LoopFlow;
+      model SolveActions
+      Real x(start=1,fixed=true);
+      equation der(x)=LoopFlow(x);
+      assert(x<5,"accepted warning",AssertionLevel.warning);
+      end SolveActions;`,
+    modelName: 'SolveActions',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing action model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-actions',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      const report=model.evaluateEventActions(0,[1],[],[],null);
+      if(report.termination!==undefined || report.warnings.length!==0)throw new Error('Valid assertion produced an action');
+      if(model.evaluateEventActions(0,[6],[],[],null).warnings[0]!=='accepted warning')throw new Error('Warning assertion was not reported');
+      if(model.evaluateEventActions(0,[6],[],[],null).warnings.length!==0)throw new Error('Warning site was repeated');
+      let rejected=false;
+      try {model.evaluateEventActions(0,[-2],[],[],null)}
+      catch(error){if(!String(error).includes('loop invariant 1'))throw error;rejected=true}
+      if(!rejected)throw new Error('Function loop assertion was not evaluated');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorAssertionObservations() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `function CheckFlow
+      input Real x; output Real y;
+      algorithm
+        assert(x>0,"iteration "+String(integer(x))+" exact "+String(9007199254740993+integer(x+1)),AssertionLevel.warning);
+        y:=x;
+      end CheckFlow;
+      function LoopFlow
+      input Real x; output Real y;
+      algorithm y:=0;
+        for i in 1:3 loop y:=y+CheckFlow(x+i); end for;
+      end LoopFlow;
+      model SolveAssertionObservations
+      Real x(start=1,fixed=true);
+      equation der(x)=LoopFlow(x);
+      end SolveAssertionObservations;`,
+    modelName: 'SolveAssertionObservations',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing assertion observation model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-assertion-observations',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      const report=model.evaluateEventActions(0,[-2],[],[],null);
+      if(report.warnings.length!==1 || report.warnings[0]!=='iteration -1 exact 9007199254740993')
+        throw new Error('Nested loop lost the first failed assertion or its message capture');
+      if(model.evaluateEventActions(0,[-2],[],[],null).warnings.length!==0)
+        throw new Error('Nested warning site was repeated');
+      if(Model().evaluateEventActions(0,[1],[],[],null).warnings.length!==0)
+        throw new Error('Accepted nested assertion produced a warning');
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaSolveGeneratorHomotopy() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveHomotopy
+      Real x(start=0,fixed=false);
+      initial equation homotopy(x*x*x+x,x)=2.0;
+      equation der(x)=0.0;
+      end SolveHomotopy;`,
+    modelName: 'SolveHomotopy',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing homotopy model')
+  const instrumented = `${generated.content}
+    Model = ((create) => () => {
+      const model=create(), initialize=model.initialize;
+      let solves=0;
+      model.initialize=(t,x,y,u,p,solve,continueHomotopy) => {
+        const result=initialize(t,x,y,u,p,(residual,initial,scales)=>{
+          if(solves++===0 && Math.abs(residual([2])[0])>1e-10) throw new Error('Homotopy did not start at the simplified system');
+          return solve(residual,initial,scales);
+        },continueHomotopy);
+        if(solves<2)throw new Error('Homotopy did not continue to the actual system');
+        return result;
+      };
+      return model;
+    })(Model);`
+  const code = await buildWorkerSandboxCodeChecked(instrumented, 'solve-homotopy')
+  const run = await runOrbitSimulation(
+    code,
+    { t0: 0, tf: 0.1, dt: 0.02, x0: [0] },
+    'solve-homotopy',
+    { timeIntegrator: 'sdirk2' },
+  )
+  const x = getStateSeries(run, 'x')
+  if (!Array.isArray(x) || x.some((value) => Math.abs(Number(value) - 1) > 1e-6))
+    throw new Error('Homotopy did not preserve the actual initialized trajectory')
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorInitialConsistency() {
+  const wasm = await getDiagnosticsWasm()
+  for (const value of [1, 2]) {
+    const compilation = compileRumocaTemplates({
+      wasm,
+      modelName: 'SolveInitialCheck',
+      source: `model SolveInitialCheck Real x(start=1,fixed=true);
+        initial equation x=${value}; equation der(x)=0; end SolveInitialCheck;`,
+      templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+    })
+    const generated = compilation.rendered[0]
+    if (!generated?.ok) throw new Error(generated?.error ?? 'Missing initialization-check model')
+    const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-initial-check')
+    let rejected = false
+    try {
+      const run = await runOrbitSimulation(
+        code,
+        { t0: 0, tf: 0.1, dt: 0.02, x0: [1] },
+        'solve-initial-check',
+        { timeIntegrator: 'sdirk2' },
+      )
+      if (value === 1 && getStateSeries(run, 'x').some((x) => Math.abs(x - 1) > 1e-8))
+        throw new Error('Consistent initialization changed a fixed state')
+    } catch (error) {
+      if (value === 1 || !String(error).includes('Complete Solve initialization residual'))
+        throw error
+      rejected = true
+    }
+    if (value === 2 && !rejected)
+      throw new Error('Contradictory initialization was silently accepted')
+  }
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorInitialization() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveInitial
+      Real x(start=1,fixed=false);
+      initial equation x*x=4;
+      equation der(x)=-x;
+      end SolveInitial;`,
+    modelName: 'SolveInitial',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing initialized model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-initialization')
+  const run = await runOrbitSimulation(
+    code,
+    { t0: 0, tf: 0.2, dt: 0.02, x0: [1] },
+    'solve-initialization',
+    { timeIntegrator: 'sdirk2' },
+  )
+  const x = getStateSeries(run, 'x')
+  if (!Array.isArray(x) || Math.abs(Number(x[0]) - 2) > 1e-6)
+    throw new Error('Initial equation not settled')
+  if (Math.abs(Number(x.at(-1)) - 2 * Math.exp(-0.2)) > 1e-3)
+    throw new Error('Incorrect initialized trajectory')
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorStateEvents() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveBounce
+      Real h(start=1,fixed=true); Real v(start=0,fixed=true);
+      equation der(h)=v; der(v)=-9.81;
+      when h<=0 then reinit(v,-0.9*pre(v)); end when;
+      end SolveBounce;`,
+    modelName: 'SolveBounce',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing event model')
+  const code = await buildWorkerSandboxCodeChecked(generated.content, 'solve-state-events')
+  const run = await runOrbitSimulation(
+    code,
+    { t0: 0, tf: 2, dt: 0.01, x0: [1, 0] },
+    'solve-state-events',
+    { timeIntegrator: 'sdirk2' },
+  )
+  const h = getStateSeries(run, 'h'),
+    v = getStateSeries(run, 'v')
+  if (run.meta?.stopReason || h.length < 100 || Math.min(...h) < -1e-4)
+    throw new Error('Invalid bounce trajectory')
+  const jumps = v.filter((value, index) => index > 0 && value - (v[index - 1] ?? value) > 1)
+  if (jumps.length < 2) throw new Error('Missing repeated velocity resets')
+  return { ok: true }
+}
+
+export async function testModelicaSolveGeneratorFloatingOperations() {
+  const wasm = await getDiagnosticsWasm()
+  const compilation = compileRumocaTemplates({
+    wasm,
+    source: `model SolveFloating
+      input Real u=1; Real x(start=0,fixed=true);
+      equation der(x)=sign(sqrt(u))+min(sqrt(u),3);
+      end SolveFloating;`,
+    modelName: 'SolveFloating',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? 'Missing floating-point model')
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-solve-floating-operations',
+    code: `() => {
+      ${generated.content}
+      const model=Model();
+      for (const [input,derivative] of [[4,3],[0,0],[-1,3]]) {
+        const result=model.residual(0,[0],[derivative],[],[input],null);
+        if (result.length!==1 || result[0]!==0) throw new Error('Floating operations differ from Rumoca evaluator');
+      }
+      return {ok:true};
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaIndependentSolveGenerator() {
+  const wasm = await getDiagnosticsWasm()
+  const result = compileRumocaTemplates({
+    wasm,
+    source: `model IndependentDecay
+      Real x(start=1, fixed=true); Real a; Real b;
+      equation der(x)=-x; a=x*x; b=sqrt(a);
+      end IndependentDecay;`,
+    modelName: 'IndependentDecay',
+    templates: [{ source: solveJavascriptTemplate, path: 'javascript_solve.jinja' }],
+  })
+  const rendered = result.rendered[0]
+  if (!rendered?.ok) throw new Error(rendered?.error ?? 'Missing generated model')
+  const code = `() => {
+${rendered.content}
+    const m = Model();
+    if (m.meta.generator !== 'solve') throw new Error('Wrong generator');
+    if (m.y0.length !== 0) throw new Error('Assignable variables sent to Newton');
+    const residual = m.residual(0, [2], [-2], [], [], null);
+    const algebraics = m.evalAlgebraics(0, [2], [], [], null);
+    if (residual.length !== 1 || Math.abs(residual[0]) > 1e-12) throw new Error('Wrong residual');
+    if (algebraics.length !== 2 || algebraics[0] !== 4 || algebraics[1] !== 2) throw new Error('Wrong outputs');
+    return { ok: true };
+  }`
+  return executeModelicaDiagnosticInSandbox({
+    id: 'modelica-independent-solve-generator',
+    code,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+}
+
+export async function testModelicaOrbitInvariantsCompareSolvers(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  return runModelicaOrbitInvariantTest(
+    'compare',
+    generator === 'dae' ? javascriptTemplate : solveJavascriptTemplate,
+  )
+}
+testModelicaOrbitInvariantsCompareSolvers.modelicaGenerators = ['dae', 'solve'] as const
 testModelicaOrbitInvariantsCompareSolvers.timeoutMs = 40_000
 
-export async function testModelicaOrbitInvariantsSdirkOnly() {
-  return runModelicaOrbitInvariantTest('sdirk-only')
+export async function testModelicaOrbitInvariantsSdirkOnly(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  return runModelicaOrbitInvariantTest(
+    'sdirk-only',
+    generator === 'dae' ? javascriptTemplate : solveJavascriptTemplate,
+  )
 }
+testModelicaOrbitInvariantsSdirkOnly.modelicaGenerators = ['dae', 'solve'] as const
 testModelicaOrbitInvariantsSdirkOnly.timeoutMs = 40_000
 
 export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
@@ -6063,8 +8593,8 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
     if (typeof wasm.get_class_info !== 'function') {
       throw new Error('Rumoca wasm export missing: get_class_info')
     }
-    if (typeof wasm.parse_source_root_file !== 'function') {
-      throw new Error('Rumoca wasm export missing: parse_source_root_file')
+    if (typeof wasm.parse !== 'function') {
+      throw new Error('Rumoca wasm export missing: parse')
     }
 
     await ensureDiagnosticsMslLoaded(wasm, debug)
@@ -6088,7 +8618,7 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
     const resolvedSourceFile = sourceFile.trim() || fallbackSourceFile
     const sourceModelicaFileName = `${sineVoltageQualified.replaceAll('.', '/')}.mo`
 
-    const sourceModelicaParse = parseSourceRootAstOrError(
+    const sourceModelicaParse = parseSourceSyntaxOrError(
       wasm,
       sourceModelica,
       sourceModelicaFileName,
@@ -6098,7 +8628,7 @@ export async function testModelicaMslResistorSineVoltageIconSourceResolution() {
     if (!sourceFileEntry) {
       throw new Error(`Could not locate SineVoltage source file in MSL zip: ${resolvedSourceFile}`)
     }
-    const sourceFileParse = parseSourceRootAstOrError(
+    const sourceFileParse = parseSourceSyntaxOrError(
       wasm,
       sourceFileEntry.source,
       sourceFileEntry.path,
@@ -6155,8 +8685,8 @@ export async function testModelicaMslResistorSineVoltageClassInfoRoundtripStrict
     if (typeof wasm.get_class_info !== 'function') {
       throw new Error('Rumoca wasm export missing: get_class_info')
     }
-    if (typeof wasm.parse_source_root_file !== 'function') {
-      throw new Error('Rumoca wasm export missing: parse_source_root_file')
+    if (typeof wasm.parse !== 'function') {
+      throw new Error('Rumoca wasm export missing: parse')
     }
     if (
       typeof wasm.compile_with_source_roots !== 'function' &&
@@ -6182,6 +8712,7 @@ end MslResistorStrictIconProbe;
       dae_prepared?: unknown
     }
     const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
+    const daeJson = daeJsonForTemplate(compiled, { usePreparedDae: true })
     if (!dae || typeof dae !== 'object' || Array.isArray(dae)) {
       throw new Error('Top-level resistor compile did not return a DAE object')
     }
@@ -6206,7 +8737,7 @@ end MslResistorStrictIconProbe;
     }
 
     const classInfoFileName = `${sineVoltageQualified.replaceAll('.', '/')}.mo`
-    const sourceModelicaParse = parseSourceRootAstOrError(wasm, sourceModelica, classInfoFileName)
+    const sourceModelicaParse = parseSourceSyntaxOrError(wasm, sourceModelica, classInfoFileName)
     if (!sourceModelicaParse.ok) {
       throw new Error(
         [
@@ -6238,4 +8769,532 @@ end MslResistorStrictIconProbe;
       [baseMessage, `MSL SineVoltage strict class_info roundtrip debug:\n${debugDump}`].join('\n'),
     )
   }
+}
+
+export async function testModelicaDiagnosticGeneratorVariants() {
+  const calls: string[] = []
+  const setup = () => calls.push('setup')
+  const test = Object.assign(
+    (_context?: DiagnosticsTestContext, generator: ModelicaGenerator = 'dae') => {
+      calls.push(generator)
+      if (generator === 'dae') throw new Error('synthetic DAE failure')
+      return { ok: true }
+    },
+    {
+      modelicaGenerators: ['dae', 'solve'] as const,
+      setup,
+      timeoutMs: 1234,
+      description: 'synthetic fixture',
+    },
+  )
+  const tests = collectModelicaDiagnosticTests({ testModelicaSynthetic: test, unrelated: () => {} })
+  const names = Object.keys(tests)
+  if (names.join('|') !== 'testModelicaSyntheticDae|testModelicaSyntheticSolve')
+    throw new Error('Generator variants must have distinct filterable names')
+  const selected = Object.fromEntries(
+    Object.entries(tests).filter(([name]) => name.includes('Synthetic')),
+  )
+  if (Object.keys(selected).length !== 2) throw new Error('Base-name filter lost a generator')
+  for (const variant of Object.values(selected)) {
+    if (
+      variant.setup !== setup ||
+      variant.timeoutMs !== 1234 ||
+      variant.description !== test.description
+    )
+      throw new Error('Variant registration discarded diagnostic metadata')
+  }
+  const results = await runDiagnosticsTests(selected)
+  if (
+    results.length !== 2 ||
+    results[0]?.ok !== false ||
+    results[1]?.ok !== true ||
+    calls.join('|') !== 'setup|dae|setup|solve'
+  )
+    throw new Error('A failing generator prevented independent execution of its sibling')
+  return { ok: true }
+}
+
+testModelicaMslFirstOrderNativeSimulation.timeoutMs = 120_000
+
+export async function testModelicaDaeExternalSymbolResolutionContract() {
+  const wasm = await getDiagnosticsWasm()
+  const { rendered } = compileDiagnosticJavaScript(
+    wasm,
+    MODELICA_BOOLEAN_NETWORK_SHIM_SOURCE,
+    'BooleanNetworkShimSmoke',
+    'dae',
+  )
+  if (!rendered.includes('__rumocaResolveExternalSymbol')) {
+    throw new Error('Generated JS is missing external symbol resolver helper')
+  }
+  if (rendered.includes('__RUMOCA_SYMBOL_OVERRIDES__')) {
+    throw new Error('Generated JS still contains hardcoded symbol overrides')
+  }
+
+  return { ok: true }
+}
+
+export async function testModelicaGeneratedStaticModelExecutionMode(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  const wasm = await getDiagnosticsWasm()
+  const { rendered } = compileDiagnosticJavaScript(
+    wasm,
+    'model StaticOnly parameter Real p=2; constant Real c=3; end StaticOnly;',
+    'StaticOnly',
+    generator,
+  )
+  return runStaticModelExecutionModeRegression(rendered)
+}
+testModelicaGeneratedStaticModelExecutionMode.modelicaGenerators = ['dae', 'solve'] as const
+
+const MODELICA_FUNCTION_CALL_MATRIX_SOURCE = `
+package FunctionCallMatrix
+  function andTrue
+    input Boolean b[:];
+    output Boolean result;
+  algorithm
+    result := true;
+    for i in 1:size(b, 1) loop
+      if not b[i] then
+        result := false;
+        return;
+      end if;
+    end for;
+  end andTrue;
+
+  function firstIndex
+    input Boolean b[4];
+    output Integer index;
+  algorithm
+    index := 0;
+    for i in 1:4 loop
+      if b[i] then
+        index := i;
+        return;
+      end if;
+    end for;
+    index := -1;
+  end firstIndex;
+
+  function nestedFirst
+    input Boolean b[2,2];
+    output Integer index;
+  algorithm
+    index := 0;
+    for i in 1:2 loop
+      for j in 1:2 loop
+        if b[i,j] then
+          index := 10*i + j;
+          return;
+        end if;
+      end for;
+    end for;
+    index := -1;
+  end nestedFirst;
+
+  function norm2
+    input Real x[2];
+    output Real y;
+  protected
+    Real s;
+  algorithm
+    s := 0;
+    for i in 1:2 loop
+      s := s + x[i]*x[i];
+    end for;
+    y := sqrt(s);
+  end norm2;
+
+  function clamp
+    input Real x;
+    input Real lo;
+    input Real hi;
+    output Real y;
+  algorithm
+    y := if x < lo then lo else if x > hi then hi else x;
+  end clamp;
+
+  function combined
+    input Real a;
+    input Real b;
+    output Real y;
+  algorithm
+    y := clamp(norm2({a, b}), 1, 2);
+  end combined;
+
+  model Probe
+    input Real u[4] = {0, 0, 0, 0};
+    Integer firstMatch;
+    Integer noMatch;
+    Integer nestedMatch;
+    Integer nestedNoMatch;
+    Boolean allTrue;
+    Boolean anyFalse;
+    Real combinedNorm;
+  equation
+    firstMatch = firstIndex({u[1] > 0, u[2] > 0, u[3] > 0, u[4] > 0});
+    noMatch = firstIndex({u[1] < 0, u[2] < 0, u[3] < 0, u[4] < 0});
+    nestedMatch = nestedFirst({{u[1] > 0, u[2] > 0}, {u[3] > 0, u[4] > 0}});
+    nestedNoMatch = nestedFirst({{u[1] < 0, u[2] < 0}, {u[3] < 0, u[4] < 0}});
+    allTrue = andTrue({u[1] > 0, u[2] > 0, u[3] > 0, u[4] > 0});
+    anyFalse = andTrue({u[1] > 0, false, u[3] > 0});
+    combinedNorm = combined(u[1], u[2]);
+  end Probe;
+end FunctionCallMatrix;
+`.trim()
+
+export async function testModelicaFunctionCallMatrixRegression(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  const wasm = await getDiagnosticsWasm()
+  const { rendered } = compileDiagnosticJavaScript(
+    wasm,
+    MODELICA_FUNCTION_CALL_MATRIX_SOURCE,
+    'FunctionCallMatrix.Probe',
+    generator,
+  )
+  return executeModelicaDiagnosticInSandbox({
+    id: `modelica-function-call-matrix-${generator}`,
+    code: `() => {
+      ${rendered}
+      ${defaultSolverSource}
+      const cases = [
+        [1, 2, 3, 4],
+        [-1, 2, 3, 4],
+        [-1, -1, 3, 4],
+        [-1, -1, -1, -1],
+        [-3, 4, 0, 0],
+        [2, 3, -1, 0],
+      ];
+      const run = simulateModel(
+        {
+          sim: {
+            t0: 0,
+            tf: 0.5,
+            dt: 0.1,
+            f_u: (t) => cases[Math.min(cases.length - 1, Math.round(t / 0.1))],
+            solverOptions: { timeIntegrator: 'sdirk2', newtonTol: 1e-8 },
+          },
+        },
+        {},
+        Model(),
+      );
+      if (run.meta.stopReason) {
+        throw new Error(
+          'Function-call matrix stopped: ' + String(run.meta.stopReason) + ' / ' + String(run.meta.stopError || ''),
+        );
+      }
+      const expectedFor = (u) => {
+        let first = -1;
+        for (let i = 0; i < 4; i++) if (u[i] > 0) { first = i + 1; break; }
+        let firstNegative = -1;
+        for (let i = 0; i < 4; i++) if (u[i] < 0) { firstNegative = i + 1; break; }
+        let nested = -1;
+        for (let i = 0; i < 2 && nested < 0; i++)
+          for (let j = 0; j < 2; j++) if (u[i * 2 + j] > 0) { nested = 10 * (i + 1) + (j + 1); break; }
+        let nestedNegative = -1;
+        for (let i = 0; i < 2 && nestedNegative < 0; i++)
+          for (let j = 0; j < 2; j++) if (u[i * 2 + j] < 0) { nestedNegative = 10 * (i + 1) + (j + 1); break; }
+        const norm = Math.sqrt(u[0] * u[0] + u[1] * u[1]);
+        return {
+          firstMatch: first,
+          noMatch: firstNegative,
+          nestedMatch: nested,
+          nestedNoMatch: nestedNegative,
+          allTrue: u.every((value) => value > 0),
+          anyFalse: false,
+          combinedNorm: Math.max(1, Math.min(2, norm)),
+        };
+      };
+      for (let i = 0; i < run.data.t.length; i++) {
+        const u = cases[Math.min(cases.length - 1, Math.round(run.data.t[i] / 0.1))];
+        const expected = expectedFor(u);
+        const observed = {
+          firstMatch: run.data.y.firstMatch[i],
+          noMatch: run.data.y.noMatch[i],
+          nestedMatch: run.data.y.nestedMatch[i],
+          nestedNoMatch: run.data.y.nestedNoMatch[i],
+          allTrue: Boolean(run.data.y.allTrue[i]),
+          anyFalse: Boolean(run.data.y.anyFalse[i]),
+        };
+        for (const key of Object.keys(observed)) {
+          if (observed[key] !== expected[key]) {
+            throw new Error(
+              'Function-call matrix mismatch at t=' + run.data.t[i] + ' for ' + key +
+                ': got ' + String(observed[key]) + ', expected ' + String(expected[key]),
+            );
+          }
+        }
+        if (Math.abs(run.data.y.combinedNorm[i] - expected.combinedNorm) > 1e-4) {
+          throw new Error(
+            'Function-call matrix combinedNorm mismatch at t=' + run.data.t[i] +
+              ': got ' + String(run.data.y.combinedNorm[i]) + ', expected ' + String(expected.combinedNorm),
+          );
+        }
+      }
+      return { ok: true, samples: run.data.t.length, executionMode: run.meta.executionMode };
+    }`,
+    stopSignal: AbortSignal.timeout(20000),
+    maxExecutionMs: 20000,
+  })
+}
+testModelicaFunctionCallMatrixRegression.modelicaGenerators = ['dae', 'solve'] as const
+
+export async function testModelicaNativeTableInterpolationRegression(
+  _context?: DiagnosticsTestContext,
+  generator: ModelicaGenerator = 'dae',
+) {
+  const wasm = await getDiagnosticsWasm()
+  await ensureDiagnosticsMslLoaded(wasm, {})
+  const source = `
+model NativeTableInterpolation
+  Modelica.Blocks.Tables.CombiTable1Ds linear(
+    table=[0,10,100; 1,12,104; 2,14,108], columns={3,2});
+  Modelica.Blocks.Tables.CombiTable1Ds periodic(
+    table=[0,20; 1,30; 2,40],
+    smoothness=Modelica.Blocks.Types.Smoothness.ConstantSegments,
+    extrapolation=Modelica.Blocks.Types.Extrapolation.Periodic);
+  Real selected;
+  Real second;
+  Real held;
+equation
+  linear.u = time;
+  periodic.u = time;
+  selected = linear.y[1];
+  second = linear.y[2];
+  held = periodic.y[1];
+end NativeTableInterpolation;
+`
+  const { rendered } = compileDiagnosticJavaScript(
+    wasm,
+    source,
+    'NativeTableInterpolation',
+    generator,
+  )
+  return executeModelicaDiagnosticInSandbox({
+    id: `modelica-native-table-interpolation-${generator}`,
+    code: `() => {
+      ${rendered}
+      ${defaultSolverSource}
+      const run = simulateModel({sim:{t0:0,tf:3.5,dt:0.25,
+        solverOptions:{timeIntegrator:'sdirk2',newtonTol:1e-8}}}, {}, Model());
+      if(run.meta.stopReason) throw new Error(String(run.meta.stopError || run.meta.stopReason));
+      for(let i=0;i<run.data.t.length;i++) {
+        const t=run.data.t[i];
+        // Avoid knot instants: event-side values have a separate contract.
+        if(Math.abs(t-Math.round(t))<1e-8) continue;
+        const expected={selected:100+4*t,second:10+2*t,held:t%2<1?20:30};
+        for(const [name,value] of Object.entries(expected))
+          if(Math.abs(run.data.y[name][i]-value)>1e-5)
+            throw new Error(name+' at '+t+': '+run.data.y[name][i]+' != '+value);
+      }
+      return {ok:true,samples:run.data.t.length};
+    }`,
+    stopSignal: AbortSignal.timeout(20000),
+    maxExecutionMs: 20000,
+  })
+}
+testModelicaNativeTableInterpolationRegression.modelicaGenerators = ['dae', 'solve'] as const
+testModelicaNativeTableInterpolationRegression.setup =
+  testModelicaBooleanNetwork1RuntimeRegression.setup
+testModelicaNativeTableInterpolationRegression.timeoutMs =
+  testModelicaBooleanNetwork1RuntimeRegression.timeoutMs
+
+export async function testModelicaExecutionModeCapabilityClassification() {
+  const expectedModes: Record<string, string> = {
+    'explicit-constant-only': 'static_model',
+    'explicit-algebraic-eliminated': 'algebraic_discrete',
+    'explicit-event-only': 'algebraic_discrete',
+    'dynamic-state': 'dynamic_dae',
+    'legacy-callback-only': 'algebraic_discrete',
+  }
+  const result = await executeModelicaDiagnosticInSandbox<{
+    modes: Record<string, string>
+    staticSeries: { sampleCount: number; p: unknown[]; c: unknown[] } | null
+  }>({
+    id: 'modelica-execution-mode-capability-classification',
+    code: `() => {
+      ${defaultSolverSource}
+      const fixtures = [
+        {
+          name: 'explicit-constant-only',
+          make: () => ({
+            name: 'ExplicitConstantOnly',
+            capabilities: { events: false, algebraics: false },
+            meta: {
+              name: 'ExplicitConstantOnly',
+              parameters: [{ name: 'p', start: 2 }],
+              constants: [{ name: 'c', value: 3 }],
+              states: [],
+              algebraics: [],
+              inputs: [],
+              conditions: [],
+              solverAlgebraics: [],
+              summary: { nx: 0, ny: 0, nc: 0, neqs: 0 },
+            },
+            x0: [],
+            y0: [],
+            c0: [],
+            evalAlgebraics: () => [],
+          }),
+        },
+        {
+          name: 'explicit-algebraic-eliminated',
+          make: () => ({
+            name: 'ExplicitAlgebraicEliminated',
+            capabilities: { events: false, algebraics: true },
+            meta: {
+              name: 'ExplicitAlgebraicEliminated',
+              parameters: [],
+              constants: [],
+              states: [],
+              algebraics: [{ name: 'a', start: 0 }],
+              inputs: [],
+              conditions: [],
+              solverAlgebraics: [],
+              summary: { nx: 0, ny: 1, nc: 0, neqs: 0 },
+            },
+            x0: [],
+            y0: [0],
+            c0: [],
+            evalAlgebraics: () => [3],
+          }),
+        },
+        {
+          name: 'explicit-event-only',
+          make: () => ({
+            name: 'ExplicitEventOnly',
+            capabilities: { events: true, algebraics: false },
+            meta: {
+              name: 'ExplicitEventOnly',
+              parameters: [],
+              constants: [],
+              states: [],
+              algebraics: [],
+              inputs: [],
+              conditions: [],
+              solverAlgebraics: [],
+              summary: { nx: 0, ny: 0, nc: 0, neqs: 0 },
+            },
+            x0: [],
+            y0: [],
+            c0: [],
+            evalConditions: () => [],
+            applyResets: (t, x, y, u, p, cPrev, cCurr) => ({ x, y, c: cCurr }),
+          }),
+        },
+        {
+          name: 'dynamic-state',
+          make: () => ({
+            name: 'DynamicState',
+            capabilities: { events: false, algebraics: false },
+            meta: {
+              name: 'DynamicState',
+              parameters: [],
+              constants: [],
+              states: [{ name: 'x', start: 0 }],
+              algebraics: [],
+              inputs: [],
+              conditions: [],
+              solverAlgebraics: [],
+              summary: { nx: 1, ny: 0, nc: 0, neqs: 1 },
+            },
+            x0: [0],
+            y0: [],
+            c0: [],
+            residual: (t, X, XDot) => [XDot[0] - 1],
+          }),
+        },
+        {
+          name: 'legacy-callback-only',
+          make: () => ({
+            name: 'LegacyCallbackOnly',
+            meta: {
+              name: 'LegacyCallbackOnly',
+              parameters: [],
+              constants: [],
+              states: [],
+              algebraics: [{ name: 'a', start: 0 }],
+              inputs: [],
+              conditions: [],
+              solverAlgebraics: [],
+              summary: { nx: 0, ny: 1, nc: 0, neqs: 0 },
+            },
+            x0: [],
+            y0: [0],
+            c0: [],
+            evalAlgebraics: () => [1],
+          }),
+        },
+      ];
+      const modes = {};
+      let staticSeries = null;
+      for (const fixture of fixtures) {
+        const run = simulateModel(
+          { sim: { t0: 0, tf: 1, dt: 0.25, solverOptions: { timeIntegrator: 'rk4' } } },
+          {},
+          fixture.make(),
+        );
+        if (run.meta.stopReason) {
+          throw new Error(
+            'Execution-mode fixture ' + fixture.name + ' stopped: ' + String(run.meta.stopReason),
+          );
+        }
+        modes[fixture.name] = run.meta.executionMode;
+        if (fixture.name === 'explicit-constant-only') {
+          staticSeries = {
+            sampleCount: run.data.t.length,
+            p: run.data.p.p,
+            c: run.data.constants.c,
+          };
+        }
+      }
+      return { modes, staticSeries };
+    }`,
+    stopSignal: AbortSignal.timeout(10000),
+    maxExecutionMs: 10000,
+  })
+  for (const [name, expected] of Object.entries(expectedModes)) {
+    if (result.modes[name] !== expected)
+      throw new Error(
+        `Execution-mode fixture ${name} reported ${String(result.modes[name])}, expected ${expected}`,
+      )
+  }
+  const series = result.staticSeries
+  if (
+    !series ||
+    series.sampleCount !== 5 ||
+    !Array.isArray(series.p) ||
+    !Array.isArray(series.c) ||
+    series.p.some((value) => value !== 2) ||
+    series.c.some((value) => value !== 3)
+  ) {
+    throw new Error('Execution-mode static fixture lost its five-sample p=2/c=3 series')
+  }
+  return { ok: true, modes: result.modes }
+}
+
+export async function testModelicaTaskyonMetadataContract() {
+  const wasm = await getDiagnosticsWasm()
+  const source =
+    'model MetadataProbe Real x(unit="V") annotation(Placement(transformation(origin={1,2}))); annotation(__FutureTool(data={1,2}), Documentation(info="hello")); end MetadataProbe;'
+  const result = decodeClassMetadata(wasm.taskyon_source_metadata(source, 'MetadataProbe.mo'))
+  const probe = result.classes.MetadataProbe
+  if (!probe || probe.components.x?.type_name !== 'Real')
+    throw new Error('Missing declaration metadata')
+  const text = JSON.stringify(probe)
+  if (!text.includes('__FutureTool') || !text.includes('Placement') || text.includes('span')) {
+    throw new Error('Metadata must preserve unknown annotations without exposing AST internals')
+  }
+  let rejected = false
+  try {
+    decodeClassMetadata('{"schema_version":999}')
+  } catch {
+    rejected = true
+  }
+  if (!rejected) throw new Error('Unknown metadata versions must be rejected')
+  return { ok: true, schemaVersion: result.schema_version }
 }

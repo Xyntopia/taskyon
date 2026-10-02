@@ -1,83 +1,22 @@
-import { get_class_info, parse_source_root_file } from 'rumoca-full-web'
 import type { Thunk } from '@taskyon/common/modules/tsHelpers'
+import { buildTypeLookupCandidates, extractImportAliases } from './qualifiedNameResolution'
 import {
-  buildTypeLookupCandidates,
-  extractImportAliases,
-  type ImportAliasMap,
-} from './qualifiedNameResolution'
+  readClassMetadata,
+  readSourceMetadata,
+  unwrapMetadata,
+  type ClassMetadata,
+  type MetadataExpression,
+} from './modelicaClassMetadata'
 
 type SourceRootMaterializer = (qualifiedName: string) => boolean
-
 export type DiagramResolutionCaches = {
-  astBySource: Map<string, DiagramAstCacheEntry>
   icons: Map<string, DiagramIconSpec | null>
   ports: Map<string, DiagramPort[] | null>
-  connectorTypes: Map<string, boolean>
-  qualifiedNames: Map<string, string | null>
 }
-
-type DiagramAstCacheEntry =
-  | { ok: true; ast: Record<string, unknown> }
-  | { ok: false; error: string }
-
 export const createDiagramResolutionCaches = (): DiagramResolutionCaches => ({
-  astBySource: new Map(),
   icons: new Map(),
   ports: new Map(),
-  connectorTypes: new Map(),
-  qualifiedNames: new Map(),
 })
-
-const ENABLE_DIAGRAM_ICON_DIAGNOSTICS = true
-
-function asString(value: unknown): string {
-  return typeof value === 'string' ? value : ''
-}
-
-const findRecordByTaggedKey = (
-  value: unknown,
-  tag: string,
-  maxDepth = 8,
-): Record<string, unknown> | null => {
-  const visit = (node: unknown, depth: number): Record<string, unknown> | null => {
-    if (depth > maxDepth) return null
-    const record = asRecord(node)
-    if (record) {
-      const tagged = asRecord(record[tag])
-      if (tagged) return tagged
-      for (const child of Object.values(record)) {
-        const found = visit(child, depth + 1)
-        if (found) return found
-      }
-      return null
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        const found = visit(child, depth + 1)
-        if (found) return found
-      }
-    }
-    return null
-  }
-  return visit(value, 0)
-}
-
-const findArrayElements = (value: unknown): unknown[] => {
-  const arrayRecord = asRecord(asRecord(value)?.Array) ?? findRecordByTaggedKey(value, 'Array')
-  return Array.isArray(arrayRecord?.elements) ? (arrayRecord.elements as unknown[]) : []
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
-}
-
-const isUnaryMinusOp = (value: unknown): boolean => {
-  if (value === 'Minus') return true
-  const record = asRecord(value)
-  return record?.Minus != null
-}
 
 type DiagramPlacement = {
   origin?: [number, number]
@@ -182,251 +121,143 @@ type DiagramDto = {
   connections: DiagramConnection[]
 }
 
-const targetName = (value: unknown): string => {
-  const record = asRecord(value)
-  const parts = Array.isArray(record?.parts) ? record.parts : []
-  const last = parts[parts.length - 1]
-  const ident = asRecord(asRecord(last)?.ident)
-  return asString(ident?.text)
+const findArrayElements = (value?: MetadataExpression): MetadataExpression[] => {
+  if (!value) return []
+  const node = unwrapMetadata(value)
+  return node.kind === 'array' || node.kind === 'tuple' ? node.elements : []
 }
 
-const asNumber = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  const terminal = asRecord(asRecord(value)?.Terminal)
-  const token = asRecord(terminal?.token)
-  const terminalValue = Number(token?.text)
-  if (Number.isFinite(terminalValue)) return terminalValue
-  const literal = asRecord(asRecord(value)?.Literal)
-  const integerValue = Number(literal?.Integer)
-  if (Number.isFinite(integerValue)) return integerValue
-  const realValue = Number(literal?.Real)
-  if (Number.isFinite(realValue)) return realValue
-  const unary = asRecord(asRecord(value)?.Unary)
-  if (unary) {
-    const rhs = asNumber(unary.rhs)
-    if (rhs == null) return null
-    return isUnaryMinusOp(unary.op) ? -rhs : rhs
+const asNumber = (value?: MetadataExpression): number | null => {
+  if (!value) return null
+  const node = unwrapMetadata(value)
+  if (node.kind === 'literal' && ['integer', 'real'].includes(node.literal_type)) {
+    const result = Number(node.text)
+    return Number.isFinite(result) ? result : null
+  }
+  if (node.kind === 'unary') {
+    const result = asNumber(node.value)
+    return result == null ? null : node.operator.trim() === '-' ? -result : result
   }
   return null
 }
 
-const asBoolean = (value: unknown): boolean | null => {
-  if (typeof value === 'boolean') return value
-  const terminal = asRecord(asRecord(value)?.Terminal)
-  const tokenText = asString(asRecord(terminal?.token)?.text).trim().toLowerCase()
-  if (tokenText === 'true') return true
-  if (tokenText === 'false') return false
-  const literal = asRecord(asRecord(value)?.Literal)
-  if (typeof literal?.Boolean === 'boolean') return literal.Boolean
-  return null
+const asBoolean = (value?: MetadataExpression): boolean | null => {
+  if (!value) return null
+  const node = unwrapMetadata(value)
+  return node.kind === 'literal' && node.literal_type === 'boolean' ? node.text === 'true' : null
 }
 
-const asPair = (value: unknown): [number, number] | null => {
+const asPair = (value?: MetadataExpression): [number, number] | null => {
   const elements = findArrayElements(value)
   if (elements.length !== 2) return null
-  const first = asNumber(elements[0])
-  const second = asNumber(elements[1])
-  if (first == null || second == null) return null
-  return [first, second]
+  const a = asNumber(elements[0]),
+    b = asNumber(elements[1])
+  return a == null || b == null ? null : [a, b]
 }
-
-const asExtent = (value: unknown): [[number, number], [number, number]] | undefined => {
+const asExtent = (value?: MetadataExpression): [[number, number], [number, number]] | undefined => {
   const elements = findArrayElements(value)
-  if (elements.length !== 2) return undefined
-  const a = asPair(elements[0])
-  const b = asPair(elements[1])
-  if (!a || !b) return undefined
-  return [a, b]
+  const a = asPair(elements[0]),
+    b = asPair(elements[1])
+  return elements.length === 2 && a && b ? [a, b] : undefined
 }
-
-const asColor = (value: unknown): DiagramColor | undefined => {
+const asColor = (value?: MetadataExpression): DiagramColor | undefined => {
   const elements = findArrayElements(value)
-  if (elements.length !== 3) return undefined
-  const r = asNumber(elements[0])
-  const g = asNumber(elements[1])
-  const b = asNumber(elements[2])
-  if (r == null || g == null || b == null) return undefined
-  return [Math.round(r), Math.round(g), Math.round(b)]
+  const a = asNumber(elements[0]),
+    b = asNumber(elements[1]),
+    c = asNumber(elements[2])
+  return elements.length === 3 && a != null && b != null && c != null
+    ? [Math.round(a), Math.round(b), Math.round(c)]
+    : undefined
 }
-
-const asPoints = (value: unknown): Array<[number, number]> | undefined => {
-  const elements = findArrayElements(value)
-  const points = elements
-    .map((entry) => asPair(entry))
-    .filter((entry): entry is [number, number] => entry != null)
-  return points.length > 0 ? points : undefined
+const asPoints = (value?: MetadataExpression): Array<[number, number]> | undefined => {
+  const points = findArrayElements(value)
+    .map(asPair)
+    .filter((v): v is [number, number] => v != null)
+  return points.length ? points : undefined
 }
-
-const asStringLiteral = (value: unknown): string | undefined => {
-  const terminal = asRecord(asRecord(value)?.Terminal)
-  if (terminal?.terminal_type === 'String') {
-    const text = asString(asRecord(terminal.token)?.text)
-    return text || undefined
-  }
-  return undefined
+const asStringLiteral = (value?: MetadataExpression): string | undefined => {
+  if (!value) return undefined
+  const node = unwrapMetadata(value)
+  return node.kind === 'literal' && node.literal_type === 'string' ? node.text : undefined
 }
-
-const expressionToDisplayText = (value: unknown): string => {
-  const directNumber = asNumber(value)
-  if (directNumber != null) return String(directNumber)
-  const strLiteral = asStringLiteral(value)
-  if (strLiteral) return strLiteral
-  const refText = componentRefToString(value)
-  if (refText) return refText
-  const terminal = asRecord(asRecord(value)?.Terminal)
-  const terminalText = asString(asRecord(terminal?.token)?.text).trim()
-  if (terminalText) return terminalText
-  const unary = asRecord(asRecord(value)?.Unary)
-  if (unary) {
-    const rhs = expressionToDisplayText(unary.rhs)
-    if (rhs.length === 0) return ''
-    return isUnaryMinusOp(unary.op) ? `-${rhs}` : rhs
-  }
-  const functionCall = asRecord(asRecord(value)?.FunctionCall)
-  if (functionCall) {
-    const comp = componentRefToString(functionCall.comp)
-    const args = Array.isArray(functionCall.args) ? functionCall.args : []
-    const renderedArgs = args
-      .map((arg) => {
-        const named = asRecord(asRecord(arg)?.NamedArgument)
-        if (named) {
-          const name = asString(asRecord(named.name)?.text)
-          const rendered = expressionToDisplayText(named.value)
-          return name && rendered ? `${name}=${rendered}` : rendered
-        }
-        return expressionToDisplayText(arg)
-      })
-      .filter((argText) => argText.length > 0)
-    return comp ? `${comp}(${renderedArgs.join(', ')})` : renderedArgs.join(', ')
-  }
-  return ''
+const asEnumName = (value?: MetadataExpression): string | undefined => {
+  if (!value) return undefined
+  const node = unwrapMetadata(value)
+  return node.kind === 'reference' ? node.name : node.kind === 'literal' ? node.text : undefined
 }
+const namedArgsMap = (values: MetadataExpression[]): Record<string, MetadataExpression> =>
+  Object.fromEntries(
+    values.flatMap((value) => {
+      const node = unwrapMetadata(value)
+      return node.kind === 'entry' && node.value ? [[node.name, node.value]] : []
+    }),
+  )
 
-const extractIconValueMap = (component: Record<string, unknown>): Record<string, string> => {
-  const mods = asRecord(component.modifications)
-  if (!mods) return {}
-  const out: Record<string, string> = {}
-  Object.entries(mods).forEach(([key, expr]) => {
-    const rendered = expressionToDisplayText(expr).trim()
-    if (rendered.length === 0) return
-    out[key] = rendered
-  })
-  return out
+const findFunctionCallByName = (value: MetadataExpression, name?: string) => {
+  const node = unwrapMetadata(value)
+  return node.kind === 'call' && (!name || node.name === name) ? node : null
 }
-
-const asEnumName = (value: unknown): string | undefined => {
-  const fromRef = componentRefToString(value)
-  if (fromRef) return fromRef
-  const terminal = asRecord(asRecord(value)?.Terminal)
-  const tokenText = asString(asRecord(terminal?.token)?.text).trim()
-  return tokenText || undefined
-}
-
-const namedArgsMap = (argsValue: unknown): Record<string, unknown> => {
-  const args = Array.isArray(argsValue) ? argsValue : []
-  const map: Record<string, unknown> = {}
-  for (const arg of args) {
-    const named = asRecord(asRecord(arg)?.NamedArgument)
-    if (!named) continue
-    const key = asString(asRecord(named.name)?.text)
-    if (!key) continue
-    map[key] = named.value
-  }
-  return map
-}
-
-const componentRefToString = (value: unknown): string => {
-  const record = asRecord(value)
-  const parts = Array.isArray(record?.parts) ? record.parts : []
-  const names = parts
-    .map((part) => asString(asRecord(asRecord(part)?.ident)?.text))
-    .filter((name) => name.length > 0)
-  return names.join('.')
-}
-
-const findFunctionCallByName = (
-  value: unknown,
-  expectedName?: string,
-  maxDepth = 8,
-): Record<string, unknown> | null => {
-  const normalizedExpected = expectedName?.trim().toLowerCase()
-  const visit = (node: unknown, depth: number): Record<string, unknown> | null => {
-    if (depth > maxDepth) return null
-    const directCall = asRecord(asRecord(node)?.FunctionCall)
-    if (directCall) {
-      const name = componentRefToString(directCall.comp).trim().toLowerCase()
-      if (!normalizedExpected || name === normalizedExpected) return directCall
-    }
-    const record = asRecord(node)
-    if (record) {
-      for (const child of Object.values(record)) {
-        const found = visit(child, depth + 1)
-        if (found) return found
-      }
-      return null
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        const found = visit(child, depth + 1)
-        if (found) return found
-      }
-    }
-    return null
-  }
-  return visit(value, 0)
-}
-
-const findNamedModification = (
-  entries: unknown[],
-  name: string,
-): { modifications?: unknown[]; value?: unknown } | null => {
-  for (const entry of entries) {
-    const classMod = asRecord(asRecord(entry)?.ClassModification)
-    if (classMod && targetName(classMod.target) === name) {
-      const mods = Array.isArray(classMod.modifications) ? classMod.modifications : null
-      return mods ? { modifications: mods } : {}
-    }
-    const mod = asRecord(asRecord(entry)?.Modification)
-    if (mod && targetName(mod.target) === name) {
-      return { value: mod.value }
+const findNamedModification = (values: MetadataExpression[], name: string) => {
+  for (const value of values) {
+    const node = unwrapMetadata(value)
+    if ((node.kind === 'entry' || node.kind === 'call') && node.name === name) {
+      return { modifications: node.arguments, value: node.kind === 'entry' ? node.value : null }
     }
   }
   return null
+}
+
+const expressionToDisplayText = (value: MetadataExpression): string => {
+  const node = unwrapMetadata(value)
+  switch (node.kind) {
+    case 'literal':
+      return node.text
+    case 'reference':
+      return node.name
+    case 'unary':
+      return `${node.operator.trim()}${expressionToDisplayText(node.value)}`
+    case 'binary':
+      return `${expressionToDisplayText(node.left)} ${node.operator} ${expressionToDisplayText(node.right)}`
+    case 'call':
+      return `${node.name}(${node.arguments.map(expressionToDisplayText).join(', ')})`
+    case 'entry':
+      return node.value
+        ? `${node.name}=${expressionToDisplayText(node.value)}`
+        : `${node.name}(${node.arguments.map(expressionToDisplayText).join(', ')})`
+    default:
+      return ''
+  }
 }
 
 const extractPlacement = (
-  annotationValue: unknown,
+  annotation: MetadataExpression[],
   options?: { preferIconTransformation?: boolean },
 ): DiagramPlacement | undefined => {
-  const annotations = Array.isArray(annotationValue) ? annotationValue : []
-  const placement = findNamedModification(annotations, 'Placement')
-  const placementMods = placement?.modifications
-  if (!placementMods) return undefined
-  const transform = options?.preferIconTransformation
-    ? (findNamedModification(placementMods, 'iconTransformation') ??
-      findNamedModification(placementMods, 'transformation'))
-    : (findNamedModification(placementMods, 'transformation') ??
-      findNamedModification(placementMods, 'iconTransformation'))
-  const transformMods = transform?.modifications
-  if (!transformMods) return undefined
-
-  const originPair = asPair(findNamedModification(transformMods, 'origin')?.value)
-  const extentPair = asExtent(findNamedModification(transformMods, 'extent')?.value)
-  const rotationValue = asNumber(findNamedModification(transformMods, 'rotation')?.value)
-  if (!originPair && !extentPair && rotationValue == null) return undefined
-
-  const out: DiagramPlacement = {}
-  if (originPair) out.origin = originPair
-  if (extentPair) out.extent = extentPair
-  if (rotationValue != null) out.rotation = rotationValue
-  return out
+  const mods = findNamedModification(annotation, 'Placement')?.modifications
+  if (!mods) return undefined
+  const names = options?.preferIconTransformation
+    ? ['iconTransformation', 'transformation']
+    : ['transformation', 'iconTransformation']
+  const transform = names
+    .map((name) => findNamedModification(mods, name)?.modifications)
+    .find((value) => value != null)
+  if (!transform) return undefined
+  const origin = asPair(findNamedModification(transform, 'origin')?.value ?? undefined)
+  const extent = asExtent(findNamedModification(transform, 'extent')?.value ?? undefined)
+  const rotation = asNumber(findNamedModification(transform, 'rotation')?.value ?? undefined)
+  if (!origin && !extent && rotation == null) return undefined
+  return {
+    ...(origin ? { origin } : {}),
+    ...(extent ? { extent } : {}),
+    ...(rotation != null ? { rotation } : {}),
+  }
 }
 
-const parseIconGraphic = (value: unknown): DiagramIconGraphic | null => {
+const parseIconGraphic = (value: MetadataExpression): DiagramIconGraphic | null => {
   const call = findFunctionCallByName(value)
   if (!call) return null
-  const name = componentRefToString(call.comp)
-  const args = namedArgsMap(call.args)
+  const name = call.name
+  const args = namedArgsMap(call.arguments)
   const commonGraphicFields: {
     visible?: boolean
     origin?: [number, number]
@@ -510,527 +341,107 @@ const parseIconGraphic = (value: unknown): DiagramIconGraphic | null => {
   return null
 }
 
-const extractIconFromClass = (classDef: Record<string, unknown>): DiagramIconSpec | undefined => {
-  const annotation = Array.isArray(classDef.annotation) ? classDef.annotation : []
-  const iconNode = findNamedModification(annotation, 'Icon')
-  const iconMods = iconNode?.modifications
-  let coordinateExtent: [[number, number], [number, number]] | undefined
-  let graphicsArray: unknown[] = []
-  if (iconMods) {
-    const coordinateSystemNode = findNamedModification(iconMods, 'coordinateSystem')
-    const coordinateMods = coordinateSystemNode?.modifications
-    coordinateExtent = coordinateMods
-      ? asExtent(findNamedModification(coordinateMods, 'extent')?.value)
-      : undefined
-    const graphicsValue = findNamedModification(iconMods, 'graphics')?.value
-    graphicsArray = findArrayElements(graphicsValue)
-  } else if (iconNode?.value) {
-    const iconCall = findFunctionCallByName(iconNode.value, 'Icon')
-    if (iconCall) {
-      const iconArgs = namedArgsMap(iconCall.args)
-      const coordinateSystemCall =
-        findFunctionCallByName(iconArgs.coordinateSystem, 'coordinateSystem') ??
-        findFunctionCallByName(iconArgs.coordinateSystem, 'CoordinateSystem')
-      if (coordinateSystemCall) {
-        const coordinateArgs = namedArgsMap(coordinateSystemCall.args)
-        coordinateExtent = asExtent(coordinateArgs.extent)
-      }
-      graphicsArray = findArrayElements(iconArgs.graphics)
-    }
-  } else {
-    for (const entry of annotation) {
-      const call = findFunctionCallByName(entry, 'Icon')
-      if (!call) continue
-      const args = namedArgsMap(call.args)
-      const coordinateSystem =
-        findFunctionCallByName(args.coordinateSystem, 'coordinateSystem') ??
-        findFunctionCallByName(args.coordinateSystem, 'CoordinateSystem')
-      if (coordinateSystem) {
-        const coordinateArgs = namedArgsMap(coordinateSystem.args)
-        coordinateExtent = asExtent(coordinateArgs.extent)
-      }
-      graphicsArray = findArrayElements(args.graphics)
-      break
-    }
-  }
-  const graphics = graphicsArray
-    .map((entry) => parseIconGraphic(entry))
-    .filter((entry): entry is DiagramIconGraphic => entry != null)
-  if (graphics.length === 0 && !coordinateExtent) return undefined
-  const out: DiagramIconSpec = { graphics }
-  if (coordinateExtent) out.coordinateExtent = coordinateExtent
-  return out
+const extractIconFromClass = (value: ClassMetadata): DiagramIconSpec | undefined => {
+  const mods = findNamedModification(value.annotation, 'Icon')?.modifications
+  if (!mods) return undefined
+  const coordinates = findNamedModification(mods, 'coordinateSystem')?.modifications
+  const coordinateExtent = coordinates
+    ? asExtent(findNamedModification(coordinates, 'extent')?.value ?? undefined)
+    : undefined
+  const graphics = findArrayElements(findNamedModification(mods, 'graphics')?.value ?? undefined)
+    .map(parseIconGraphic)
+    .filter((v): v is DiagramIconGraphic => v != null)
+  return graphics.length || coordinateExtent
+    ? { graphics, ...(coordinateExtent ? { coordinateExtent } : {}) }
+    : undefined
 }
 
-const extractTypeName = (value: unknown): string => {
-  if (typeof value === 'string') return value
-  const record = asRecord(value)
-  const nameParts = Array.isArray(record?.name) ? record.name : []
-  if (nameParts.length > 0) {
-    const names = nameParts
-      .map((part) => asString(asRecord(part)?.text))
-      .filter((name) => name.length > 0)
-    if (names.length > 0) return names.join('.')
-  }
-  return componentRefToString(value)
-}
-
-const extractLineFromAnnotation = (
-  annotationValue: unknown,
-): { points?: Array<{ x: number; y: number }>; color?: DiagramColor } | null => {
-  const annotations = Array.isArray(annotationValue) ? annotationValue : []
-  if (annotations.length > 0) {
-    const lineNode = findNamedModification(annotations, 'Line')
-    const lineMods = lineNode?.modifications
-    if (lineMods) {
-      const pointsRaw = asPoints(findNamedModification(lineMods, 'points')?.value)
-      const colorRaw = asColor(findNamedModification(lineMods, 'color')?.value)
-      const points = pointsRaw?.map(([x, y]) => ({ x, y }))
-      if (points || colorRaw) {
-        const out: { points?: Array<{ x: number; y: number }>; color?: DiagramColor } = {}
-        if (points) out.points = points
-        if (colorRaw) out.color = colorRaw
-        return out
-      }
-    }
-  }
-  const parseFunctionCallLine = (
-    value: unknown,
-  ): { points?: Array<{ x: number; y: number }>; color?: DiagramColor } | null => {
-    const call = asRecord(asRecord(value)?.FunctionCall)
-    if (!call) return null
-    if (componentRefToString(call.comp) !== 'Line') return null
-    const args = namedArgsMap(call.args)
-    const pointsRaw = asPoints(args.points)
-    const colorRaw = asColor(args.color)
-    const points = pointsRaw?.map(([x, y]) => ({ x, y }))
-    if (!points && !colorRaw) return null
-    const out: { points?: Array<{ x: number; y: number }>; color?: DiagramColor } = {}
-    if (points) out.points = points
-    if (colorRaw) out.color = colorRaw
-    return out
-  }
-  if (annotations.length > 0) {
-    for (const entry of annotations) {
-      const parsed = parseFunctionCallLine(entry)
-      if (parsed) return parsed
-    }
-    return null
-  }
-  return parseFunctionCallLine(annotationValue)
-}
-
-const extractConnectEquations = (
-  equations: unknown[],
-  push: (
-    lhs: string,
-    rhs: string,
-    meta?: { points?: Array<{ x: number; y: number }>; color?: DiagramColor },
-  ) => void,
-): void => {
-  for (const equation of equations) {
-    const record = asRecord(equation)
-    if (!record) continue
-    const connect = asRecord(record.Connect)
-    if (connect) {
-      const lhs = componentRefToString(connect.lhs)
-      const rhs = componentRefToString(connect.rhs)
-      const lineFromConnect = extractLineFromAnnotation(connect.annotation)
-      const lineFromEquation = extractLineFromAnnotation(record.annotation)
-      const lineMeta = lineFromConnect ?? lineFromEquation ?? undefined
-      if (lhs && rhs) push(lhs, rhs, lineMeta)
-      continue
-    }
-    const forEq = asRecord(record.For)
-    if (forEq) {
-      const nested = Array.isArray(forEq.equations) ? forEq.equations : []
-      extractConnectEquations(nested, push)
-      continue
-    }
-    const whenEq = Array.isArray(record.When) ? record.When : null
-    if (whenEq) {
-      for (const block of whenEq) {
-        const eqs = Array.isArray(asRecord(block)?.eqs) ? (asRecord(block)?.eqs as unknown[]) : []
-        extractConnectEquations(eqs, push)
-      }
-      continue
-    }
-    const ifEq = asRecord(record.If)
-    if (ifEq) {
-      const condBlocks = Array.isArray(ifEq.cond_blocks) ? ifEq.cond_blocks : []
-      for (const block of condBlocks) {
-        const eqs = Array.isArray(asRecord(block)?.eqs) ? (asRecord(block)?.eqs as unknown[]) : []
-        extractConnectEquations(eqs, push)
-      }
-      const elseBlock = Array.isArray(ifEq.else_block) ? ifEq.else_block : []
-      extractConnectEquations(elseBlock, push)
-    }
+const mergeIcons = (a?: DiagramIconSpec, b?: DiagramIconSpec): DiagramIconSpec | undefined => {
+  if (!a) return b
+  if (!b) return a
+  const coordinateExtent = b.coordinateExtent ?? a.coordinateExtent
+  return {
+    ...(coordinateExtent ? { coordinateExtent } : {}),
+    graphics: [...a.graphics, ...b.graphics],
   }
 }
 
-const findClassByLeaf = (
-  classes: Record<string, unknown>,
-  leafName: string,
-): Record<string, unknown> | null => {
-  const direct = asRecord(classes[leafName])
-  if (direct) return direct
-  for (const value of Object.values(classes)) {
-    const classDef = asRecord(value)
-    const nested = asRecord(classDef?.classes)
-    if (!nested) continue
-    const found = findClassByLeaf(nested, leafName)
-    if (found) return found
-  }
-  return null
-}
-
-const firstClassDeep = (classes: Record<string, unknown>): Record<string, unknown> | null => {
-  const firstKey = Object.keys(classes)[0]
-  if (!firstKey) return null
-  const first = asRecord(classes[firstKey])
-  if (!first) return null
-  return first
-}
-
-const classByName = (
-  stored: Record<string, unknown>,
-  qualifiedName?: string,
-): Record<string, unknown> | null => {
-  const classes = asRecord(stored.classes)
-  if (!classes) return null
-  const requestedLeaf = qualifiedName?.split('.').filter(Boolean).pop() ?? ''
-  if (requestedLeaf) {
-    const found = findClassByLeaf(classes, requestedLeaf)
-    if (found) return found
-  }
-  return firstClassDeep(classes)
-}
-
-const exactClassByName = (
-  stored: Record<string, unknown>,
-  qualifiedName: string,
-): Record<string, unknown> | null => {
-  const classes = asRecord(stored.classes)
-  if (!classes) return null
-  const requestedLeaf = qualifiedName.split('.').filter(Boolean).pop() ?? ''
-  return requestedLeaf ? findClassByLeaf(classes, requestedLeaf) : null
-}
-
-const canonicalNodeId = (endpoint: string): string => endpoint.split('.').filter(Boolean)[0] ?? ''
-
-const qualifiedNameToFileName = (qualifiedName: string): string =>
-  `${
-    qualifiedName
-      .split('.')
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join('/') || 'Model'
-  }.mo`
-
-const shortFileNameFromQualifiedName = (qualifiedName: string): string => {
-  const leaf = qualifiedName
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .pop()
-  return `${leaf || 'Model'}.mo`
-}
-
-const withWithinContext = (source: string, qualifiedName: string): string => {
-  const trimmed = source.trim()
-  if (!trimmed) return source
-  if (/^\s*within\s+[A-Za-z_][A-Za-z0-9_.]*\s*;/m.test(source)) return source
-  const parts = qualifiedName
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean)
-  if (parts.length < 2) return source
-  const parent = parts.slice(0, -1).join('.')
-  return `within ${parent};\n\n${source}`
-}
-
-const removeTopLevelImportsForDiagramParse = (source: string): string => {
-  const lines = source.split('\n')
-  let encounteredClassDeclaration = false
-  const classStart = /^\s*(?:model|class|package|block|record|connector|type|function|operator)\b/i
-  const importLine = /^\s*import\b.*;\s*$/
-  const out: string[] = []
-  for (const line of lines) {
-    if (classStart.test(line)) encounteredClassDeclaration = true
-    if (!encounteredClassDeclaration && importLine.test(line)) continue
-    out.push(line)
-  }
-  return out.join('\n')
-}
-
-const normalizeLegacyDeclarationModifiersForDiagramParse = (source: string): string =>
-  source.replace(
-    /(\b(?:parameter|constant|discrete|input|output)\s+[A-Za-z_][A-Za-z0-9_.]*\s+[A-Za-z_][A-Za-z0-9_]*)\s*\(([^()]*)\)\s*\(([^()]*)\)/g,
-    '$1($2, $3)',
-  )
-
-const stripEquationSectionsForDiagramParse = (source: string): string => {
-  const lines = source.split('\n')
-  const result: string[] = []
-  let inEquationBlock = false
-  for (const line of lines) {
-    const trimmed = line.trim().toLowerCase()
-    if (!inEquationBlock && (trimmed === 'equation' || trimmed === 'algorithm')) {
-      inEquationBlock = true
-      continue
-    }
-    if (inEquationBlock) {
-      if (trimmed.startsWith('annotation(') || trimmed.startsWith('end ')) {
-        inEquationBlock = false
-      } else {
-        continue
-      }
-    }
-    result.push(line)
-  }
-  return result.join('\n')
-}
-
-const parseSourceRootAst = (
-  source: string,
-  fileName: string,
+function createDiagramResolver(
+  classes: Record<string, ClassMetadata>,
+  materialize: SourceRootMaterializer,
   caches: DiagramResolutionCaches,
-): Record<string, unknown> => {
-  const cacheKey = `${fileName}\u0000${source}`
-  const cached = caches.astBySource.get(cacheKey)
-  if (cached) {
-    if (cached.ok) return cached.ast
-    throw new Error(cached.error)
+  aliases: ReturnType<typeof extractImportAliases>,
+) {
+  const local = new Map<string, ClassMetadata>()
+  const addClasses = (values: Record<string, ClassMetadata>) => {
+    for (const value of Object.values(values)) {
+      local.set(value.qualified_name, value)
+      addClasses(value.classes)
+    }
   }
-  const parseJson = (input: string): Record<string, unknown> =>
-    JSON.parse(String(parse_source_root_file(input, fileName))) as Record<string, unknown>
-  const fallbacks = [
-    removeTopLevelImportsForDiagramParse(source),
-    normalizeLegacyDeclarationModifiersForDiagramParse(source),
-    stripEquationSectionsForDiagramParse(source),
-    stripEquationSectionsForDiagramParse(
-      normalizeLegacyDeclarationModifiersForDiagramParse(source),
-    ),
-  ]
-  try {
-    const ast = parseJson(source)
-    caches.astBySource.set(cacheKey, { ok: true, ast })
-    return ast
-  } catch (firstError) {
-    const firstMessage = firstError instanceof Error ? firstError.message : String(firstError)
-    let lastError: unknown = firstError
-    for (const fallback of fallbacks) {
-      if (fallback === source) continue
+  addClasses(classes)
+  const resolveClass = (name: string, context?: string): ClassMetadata | undefined => {
+    for (const candidate of buildTypeLookupCandidates(name, context, aliases)) {
+      const value = local.get(candidate)
+      if (value) return value
+      if (!materialize(candidate)) continue
       try {
-        const ast = parseJson(fallback)
-        caches.astBySource.set(cacheKey, { ok: true, ast })
-        return ast
-      } catch (error) {
-        lastError = error
+        const loaded = readClassMetadata(candidate)
+        local.set(candidate, loaded)
+        return loaded
+      } catch {
+        /* Try the next qualified candidate. */
       }
     }
-    const secondMessage =
-      lastError instanceof Error ? lastError.message : String(lastError ?? firstError)
-    const message = `Cannot parse Modelica source for diagram extraction: primary=${firstMessage}; fallback=${secondMessage}`
-    caches.astBySource.set(cacheKey, { ok: false, error: message })
-    throw new Error(message)
+    return undefined
   }
-}
-
-const parseClassInfoAst = (
-  source: string,
-  qualifiedName: string,
-  caches: DiagramResolutionCaches,
-): Record<string, unknown> => {
-  const fileNames = [
-    qualifiedNameToFileName(qualifiedName),
-    shortFileNameFromQualifiedName(qualifiedName),
-    'Model.mo',
-  ]
-  const sourceVariants = [source, withWithinContext(source, qualifiedName)]
-  let lastError: unknown = null
-  for (const candidateSource of sourceVariants) {
-    for (const fileName of fileNames) {
-      try {
-        return parseSourceRootAst(candidateSource, fileName, caches)
-      } catch (error) {
-        lastError = error
-      }
-    }
+  const icon = (
+    name: string,
+    context?: string,
+    visiting = new Set<string>(),
+  ): DiagramIconSpec | undefined => {
+    const value = resolveClass(name, context)
+    if (!value || visiting.has(value.qualified_name)) return undefined
+    const key = value.qualified_name
+    if (caches.icons.has(key)) return caches.icons.get(key) ?? undefined
+    visiting.add(key)
+    const inherited = value.extends.reduce<DiagramIconSpec | undefined>(
+      (result, base) => mergeIcons(result, icon(base.base_name, key, visiting)),
+      undefined,
+    )
+    const result = mergeIcons(inherited, extractIconFromClass(value))
+    visiting.delete(key)
+    caches.icons.set(key, result ?? null)
+    return result
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('Cannot parse Modelica source for diagram extraction')
-}
-
-const extractBalancedAnnotationAt = (source: string, start: number): string => {
-  if (start < 0 || start >= source.length) return ''
-  let depth = 0
-  let i = start
-  let end = -1
-  while (i < source.length) {
-    const ch = source[i]
-    if (ch === '(') depth += 1
-    else if (ch === ')') {
-      depth -= 1
-      if (depth === 0) {
-        end = i
-        break
-      }
-    }
-    i += 1
+  const ports = (name: string, context?: string, visiting = new Set<string>()): DiagramPort[] => {
+    const value = resolveClass(name, context)
+    if (!value || visiting.has(value.qualified_name)) return []
+    const key = value.qualified_name
+    if (caches.ports.has(key)) return caches.ports.get(key) ?? []
+    visiting.add(key)
+    const inherited = value.extends.flatMap((base) => ports(base.base_name, key, visiting))
+    const own = Object.values(value.components).flatMap((component): DiagramPort[] => {
+      if (resolveClass(component.type_name, key)?.class_type !== 'connector') return []
+      const placement = extractPlacement(component.annotation, { preferIconTransformation: true })
+      const portIcon = icon(component.type_name, key)
+      return [
+        {
+          name: component.name,
+          typeName: component.type_name,
+          ...(placement ? { placement } : {}),
+          ...(portIcon ? { icon: portIcon } : {}),
+        },
+      ]
+    })
+    visiting.delete(key)
+    const result = Array.from(
+      new Map([...inherited, ...own].map((port) => [port.name, port])).values(),
+    )
+    caches.ports.set(key, result)
+    return result
   }
-  if (end < 0) return ''
-  const tail = source.slice(end + 1)
-  const semicolonOffset = tail.indexOf(';')
-  if (semicolonOffset < 0) return ''
-  return source.slice(start, end + 1 + semicolonOffset + 1)
-}
-
-const extractAnnotationStatement = (source: string): string => {
-  const starts = Array.from(source.matchAll(/\bannotation\s*\(/g))
-    .map((match) => match.index)
-    .filter((index): index is number => typeof index === 'number')
-  let fallback = ''
-  for (let index = starts.length - 1; index >= 0; index -= 1) {
-    const annotation = extractBalancedAnnotationAt(source, starts[index] ?? -1)
-    if (!annotation) continue
-    if (!fallback) fallback = annotation
-    if (/\bIcon\s*\(/.test(annotation)) return annotation
-  }
-  return fallback
-}
-
-const classDeclarationLinePattern =
-  /^\s*(?:(?:encapsulated|partial|replaceable|expandable|pure|impure|operator|redeclare|final|inner|outer)\s+)*(?:model|class|package|block|record|connector|type|function|operator)\s+([A-Za-z_][A-Za-z0-9_]*)/i
-
-const hasEqualsOutsideString = (text: string): boolean => {
-  let inString = false
-  let escaped = false
-  for (const char of text) {
-    if (inString) {
-      if (escaped) escaped = false
-      else if (char === '\\') escaped = true
-      else if (char === '"') inString = false
-      continue
-    }
-    if (char === '"') inString = true
-    else if (char === '=') return true
-  }
-  return false
-}
-
-const extractTopLevelExtendsStatements = (source: string): string[] => {
-  const openClasses: string[] = []
-  const statements: string[] = []
-  for (const rawLine of source.split('\n')) {
-    const line = rawLine.trim()
-    if (!line) continue
-    const endMatch = /^end\s+([A-Za-z_][A-Za-z0-9_]*)\s*;\s*$/.exec(line)
-    if (endMatch) {
-      if (openClasses.at(-1) === endMatch[1]) openClasses.pop()
-      continue
-    }
-    const declaration = classDeclarationLinePattern.exec(line)
-    if (declaration) {
-      const remainder = line.slice(declaration[0].length)
-      if (!hasEqualsOutsideString(remainder)) openClasses.push(declaration[1] ?? '')
-      continue
-    }
-    if (openClasses.length === 1 && line.startsWith('extends ') && line.endsWith(';')) {
-      statements.push(line)
-    }
-  }
-  return statements
-}
-
-const parseClassInfoAstWithIconStubFallback = (
-  source: string,
-  qualifiedName: string,
-  caches: DiagramResolutionCaches,
-): Record<string, unknown> => {
-  try {
-    return parseClassInfoAst(source, qualifiedName, caches)
-  } catch {
-    const className =
-      qualifiedName
-        .split('.')
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .pop() || 'Model'
-    const extendsStatements = extractTopLevelExtendsStatements(source)
-    const annotationStatement = extractAnnotationStatement(source)
-    if (extendsStatements.length === 0 && !annotationStatement) {
-      throw new Error('Cannot parse Modelica source for diagram extraction')
-    }
-    const bodyLines = [...extendsStatements]
-    if (annotationStatement) bodyLines.push(annotationStatement)
-    const fallbackSource = `model ${className}\n  ${bodyLines.join('\n  ')}\nend ${className};\n`
-    return parseClassInfoAst(fallbackSource, qualifiedName, caches)
-  }
-}
-
-const extractShortClassDeclarationSource = (fileSource: string, className: string): string => {
-  const escapedName = escapeRegExp(className)
-  const declaration = new RegExp(
-    `(?:^|\\n)\\s*(?:(?:encapsulated|partial|expandable|pure|impure|operator)\\s+)*(?:model|block|record|type|package|connector|function|class)\\s+${escapedName}\\s*=`,
-    'm',
-  )
-  const match = declaration.exec(fileSource)
-  if (!match) return ''
-
-  const start = match.index + (match[0].startsWith('\n') ? 1 : 0)
-  let parentheses = 0
-  let braces = 0
-  let brackets = 0
-  let inString = false
-  let escaped = false
-  for (let index = start; index < fileSource.length; index += 1) {
-    const char = fileSource[index] ?? ''
-    if (inString) {
-      if (escaped) escaped = false
-      else if (char === '\\') escaped = true
-      else if (char === '"') inString = false
-      continue
-    }
-    if (char === '"') {
-      inString = true
-      continue
-    }
-    if (char === '(') parentheses += 1
-    else if (char === ')') parentheses = Math.max(0, parentheses - 1)
-    else if (char === '{') braces += 1
-    else if (char === '}') braces = Math.max(0, braces - 1)
-    else if (char === '[') brackets += 1
-    else if (char === ']') brackets = Math.max(0, brackets - 1)
-    else if (char === ';' && parentheses === 0 && braces === 0 && brackets === 0) {
-      return fileSource.slice(start, index + 1).trim()
-    }
-  }
-  return ''
-}
-
-const parseShortClassAnnotationAst = (
-  fileSource: string,
-  fileName: string,
-  qualifiedName: string,
-  caches: DiagramResolutionCaches,
-): Record<string, unknown> | null => {
-  const className = qualifiedName
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .at(-1)
-  if (!className) return null
-  const shortSource = extractShortClassDeclarationSource(fileSource, className)
-  if (!shortSource) return null
-  const annotation = extractAnnotationStatement(shortSource)
-  if (!annotation) return null
-  return parseSourceRootAst(
-    `model ${className}\n  ${annotation}\nend ${className};\n`,
-    fileName,
-    caches,
-  )
+  return { resolveClass, icon, ports }
 }
 
 const sourceRootPathsForQualifiedName = (qualifiedName: string): string[] => {
@@ -1062,48 +473,6 @@ const loadedSourceRootByPath = (
   return match ? { filePath: match[0], source: match[1] } : null
 }
 
-const findLoadedSourceRootClass = (
-  qualifiedName: string,
-  loadedSourceRootFiles: Thunk<Record<string, string>>,
-  caches: DiagramResolutionCaches,
-): { filePath: string; source: string; parsed: Record<string, unknown> } | null => {
-  const files = loadedSourceRootFiles()
-  const attemptedPaths = new Set<string>()
-  const trySourceRoot = (sourceRoot: { filePath: string; source: string } | null) => {
-    if (!sourceRoot || attemptedPaths.has(sourceRoot.filePath)) return null
-    attemptedPaths.add(sourceRoot.filePath)
-    try {
-      const shortParsed = parseShortClassAnnotationAst(
-        sourceRoot.source,
-        sourceRoot.filePath,
-        qualifiedName,
-        caches,
-      )
-      if (shortParsed) return { ...sourceRoot, parsed: shortParsed }
-    } catch {
-      // Fall through to the full source-root AST.
-    }
-    try {
-      const parsed = parseSourceRootAst(sourceRoot.source, sourceRoot.filePath, caches)
-      if (exactClassByName(parsed, qualifiedName)) return { ...sourceRoot, parsed }
-    } catch {
-      // A valid source root can contain legacy syntax unsupported by the diagram parser.
-    }
-    return null
-  }
-
-  for (const path of sourceRootPathsForQualifiedName(qualifiedName)) {
-    const match = trySourceRoot(loadedSourceRootByPath(files, path))
-    if (match) return match
-  }
-
-  for (const [filePath, source] of Object.entries(files)) {
-    const match = trySourceRoot({ filePath, source })
-    if (match) return match
-  }
-  return null
-}
-
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const extractClassSourceFromFile = (fileSource: string, className: string): string | null => {
@@ -1127,643 +496,91 @@ const extractClassSourceFromFile = (fileSource: string, className: string): stri
 export const findOriginalModelicaClassSource = (
   qualifiedName: string,
   loadedSourceRootFiles: Thunk<Record<string, string>>,
-  caches: DiagramResolutionCaches,
 ): { fileName: string; source: string } | null => {
-  const match = findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles, caches)
-  if (!match) return null
-  const className = qualifiedName
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .at(-1)
-  if (!className) return null
-  const source = extractClassSourceFromFile(match.source, className)
-  return source ? { fileName: match.filePath, source } : null
-}
-
-const parseQualifiedFromLoadedSourceRoots = (
-  qualifiedName: string,
-  loadedSourceRootFiles: Thunk<Record<string, string>>,
-  caches: DiagramResolutionCaches,
-): Record<string, unknown> | null =>
-  findLoadedSourceRootClass(qualifiedName, loadedSourceRootFiles, caches)?.parsed ?? null
-
-const readNestedString = (source: Record<string, unknown>, path: string[]): string => {
-  let cursor: unknown = source
-  for (const key of path) {
-    const record = asRecord(cursor)
-    if (!record) return ''
-    cursor = record[key]
+  const files = loadedSourceRootFiles()
+  const name = qualifiedName.split('.').at(-1)
+  if (!name) return null
+  for (const path of sourceRootPathsForQualifiedName(qualifiedName)) {
+    const file = loadedSourceRootByPath(files, path)
+    if (!file) continue
+    const source = extractClassSourceFromFile(file.source, name)
+    if (source) return { fileName: file.filePath, source }
   }
-  return asString(cursor)
-}
-
-const isParameterLikeComponent = (component: Record<string, unknown>): boolean => {
-  const directFlag =
-    component.is_parameter === true ||
-    component.parameter === true ||
-    component.is_constant === true ||
-    component.constant === true
-  if (directFlag) return true
-  const variability = [
-    readNestedString(component, ['variability']),
-    readNestedString(component, ['prefixes', 'variability']),
-    readNestedString(component, ['prefixes', 'variability', 'kind']),
-    readNestedString(component, ['class_prefixes', 'variability']),
-    readNestedString(component, ['class_prefixes', 'variability', 'kind']),
-    readNestedString(component, ['declaration_prefixes', 'variability']),
-    readNestedString(component, ['declaration_prefixes', 'variability', 'kind']),
-  ]
-    .map((value) => value.trim().toLowerCase())
-    .find((value) => value.length > 0)
-  return variability === 'parameter' || variability === 'constant'
-}
-
-const shouldIncludeDiagramComponent = (
-  componentId: string,
-  component: Record<string, unknown>,
-  connectedIds: Set<string>,
-): boolean => {
-  const placement = extractPlacement(component.annotation)
-  if (placement) return true
-  if (connectedIds.has(componentId)) return !isParameterLikeComponent(component)
-  return false
-}
-
-const extractExtendsBaseNames = (classDef: Record<string, unknown>): string[] => {
-  const extendsList = Array.isArray(classDef.extends) ? classDef.extends : []
-  return extendsList
-    .map((entry) => {
-      const extend = asRecord(entry)
-      const base = asRecord(extend?.base_name)
-      return extractTypeName(base)
-    })
-    .filter((name) => name.length > 0)
-}
-
-const mergeIcons = (
-  inherited: DiagramIconSpec | undefined,
-  own: DiagramIconSpec | undefined,
-): DiagramIconSpec | undefined => {
-  if (!inherited && !own) return undefined
-  const inheritedGraphics = inherited?.graphics ?? []
-  const ownGraphics = own?.graphics ?? []
-  const graphics = [...inheritedGraphics, ...ownGraphics]
-  const coordinateExtent = own?.coordinateExtent ?? inherited?.coordinateExtent
-  if (graphics.length === 0 && !coordinateExtent) return undefined
-  const out: DiagramIconSpec = { graphics }
-  if (coordinateExtent) out.coordinateExtent = coordinateExtent
-  return out
-}
-
-const resolveTypeIcon = (
-  typeName: string,
-  classQualifiedName: string | undefined,
-  caches: DiagramResolutionCaches,
-  loadedSourceRootFiles: Thunk<Record<string, string>>,
-  materializeSourceRoot: SourceRootMaterializer,
-  importAliases: ImportAliasMap = {},
-  visited: Set<string> = new Set<string>(),
-): DiagramIconSpec | undefined => {
-  const normalizedType = typeName.trim()
-  if (!normalizedType) return undefined
-  const traceIconResolve =
-    normalizedType.includes('SineVoltage') ||
-    normalizedType.toLowerCase().includes('simplecell') ||
-    normalizedType.toLowerCase().includes('power10')
-  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
-  if (traceIconResolve) {
-    console.log('[diagram][icon] resolveTypeIcon start', {
-      typeName: normalizedType,
-      classQualifiedName,
-      candidates,
-    })
-  }
-  for (const candidate of candidates) {
-    if (visited.has(candidate)) continue
-    if (caches.icons.has(candidate)) {
-      const cached = caches.icons.get(candidate)
-      if (cached) return cached
-      continue
-    }
-    visited.add(candidate)
-    try {
-      if (!materializeSourceRoot(candidate)) continue
-      const rawInfo = get_class_info(candidate)
-      const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
-      const sourceModelica = asString(info.source_modelica)
-      if (traceIconResolve) {
-        console.log('[diagram][icon] candidate class_info', {
-          candidate,
-          qualified: asString(info.qualified_name) || candidate,
-          sourceLength: sourceModelica.length,
-          sourcePreview: sourceModelica.slice(0, 220),
-        })
-      }
-      if (!sourceModelica.trim()) {
-        caches.icons.set(candidate, null)
-        continue
-      }
-      const qualified = asString(info.qualified_name) || candidate
-      let parsed: Record<string, unknown>
-      try {
-        parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified, caches)
-      } catch {
-        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(
-          qualified,
-          loadedSourceRootFiles,
-          caches,
-        )
-        if (!fallbackParsed) throw new Error('Cannot parse Modelica source for diagram extraction')
-        parsed = fallbackParsed
-      }
-      const iconClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
-      let ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
-      if (!ownIcon || ownIcon.graphics.length === 0) {
-        const originalParsed = parseQualifiedFromLoadedSourceRoots(
-          qualified,
-          loadedSourceRootFiles,
-          caches,
-        )
-        const originalClass = originalParsed
-          ? (classByName(originalParsed, qualified) ?? classByName(originalParsed, candidate))
-          : null
-        const originalIcon = originalClass ? extractIconFromClass(originalClass) : undefined
-        if (originalIcon && originalIcon.graphics.length > 0) ownIcon = originalIcon
-      }
-      if (traceIconResolve) {
-        console.log('[diagram][icon] own icon extracted', {
-          candidate,
-          hasIconClass: Boolean(iconClass),
-          ownGraphics: ownIcon?.graphics.length ?? 0,
-          ownHasExtent: Boolean(ownIcon?.coordinateExtent),
-        })
-      }
-      let inheritedIcon: DiagramIconSpec | undefined
-      if (iconClass) {
-        const bases = extractExtendsBaseNames(iconClass)
-        const parentIcons = bases
-          .map((baseName) =>
-            resolveTypeIcon(
-              baseName,
-              qualified,
-              caches,
-              loadedSourceRootFiles,
-              materializeSourceRoot,
-              importAliases,
-              visited,
-            ),
-          )
-          .filter((entry): entry is DiagramIconSpec => entry != null)
-        if (parentIcons.length > 0) {
-          inheritedIcon = parentIcons.reduce<DiagramIconSpec | undefined>(
-            (acc, icon) => mergeIcons(acc, icon),
-            undefined,
-          )
-        }
-      }
-      const icon = mergeIcons(inheritedIcon, ownIcon)
-      if (traceIconResolve) {
-        console.log('[diagram][icon] merge icon result', {
-          candidate,
-          inheritedGraphics: inheritedIcon?.graphics.length ?? 0,
-          mergedGraphics: icon?.graphics.length ?? 0,
-          mergedHasExtent: Boolean(icon?.coordinateExtent),
-        })
-      }
-      caches.icons.set(candidate, icon ?? null)
-      if (icon) return icon
-    } catch (error) {
-      if (traceIconResolve) {
-        console.log('[diagram][icon] candidate failed', {
-          candidate,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-      caches.icons.set(candidate, null)
-    } finally {
-      visited.delete(candidate)
-    }
-  }
-  return undefined
-}
-
-const resolveQualifiedTypeName = (
-  typeName: string,
-  classQualifiedName: string | undefined,
-  caches: DiagramResolutionCaches,
-  materializeSourceRoot: SourceRootMaterializer,
-  importAliases: ImportAliasMap = {},
-): string | undefined => {
-  const normalizedType = typeName.trim()
-  if (!normalizedType) return undefined
-  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
-  for (const candidate of candidates) {
-    if (caches.qualifiedNames.has(candidate)) {
-      const cached = caches.qualifiedNames.get(candidate)
-      if (cached) return cached
-      continue
-    }
-    try {
-      if (!materializeSourceRoot(candidate)) continue
-      const rawInfo = get_class_info(candidate)
-      const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
-      const qualified = asString(info.qualified_name).trim() || candidate
-      caches.qualifiedNames.set(candidate, qualified)
-      return qualified
-    } catch {
-      caches.qualifiedNames.set(candidate, null)
-    }
-  }
-  return undefined
-}
-
-const diagnoseTypeIconResolution = (
-  typeName: string,
-  classQualifiedName: string | undefined,
-  caches: DiagramResolutionCaches,
-  loadedSourceRootFiles: Thunk<Record<string, string>>,
-  materializeSourceRoot: SourceRootMaterializer,
-  importAliases: ImportAliasMap = {},
-): void => {
-  const normalizedType = typeName.trim()
-  if (!normalizedType) return
-  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
-  const diagnostics = candidates.map((candidate) => {
-    try {
-      if (!materializeSourceRoot(candidate)) {
-        return {
-          candidate,
-          status: 'not-materialized',
-        }
-      }
-      const rawInfo = get_class_info(candidate)
-      const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
-      const qualified = asString(info.qualified_name) || candidate
-      const sourceModelica = asString(info.source_modelica)
-      if (!sourceModelica.trim()) {
-        return {
-          candidate,
-          qualified,
-          status: 'empty-source-modelica',
-        }
-      }
-      try {
-        const parsed = parseClassInfoAstWithIconStubFallback(sourceModelica, qualified, caches)
-        const iconClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
-        const ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
-        return {
-          candidate,
-          qualified,
-          status: 'ok',
-          ownGraphics: ownIcon?.graphics.length ?? 0,
-          ownHasExtent: Boolean(ownIcon?.coordinateExtent),
-        }
-      } catch (parseErr) {
-        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(
-          qualified,
-          loadedSourceRootFiles,
-          caches,
-        )
-        if (fallbackParsed) {
-          const iconClass =
-            classByName(fallbackParsed, qualified) ?? classByName(fallbackParsed, candidate)
-          const ownIcon = iconClass ? extractIconFromClass(iconClass) : undefined
-          return {
-            candidate,
-            qualified,
-            status: 'fallback-source-root',
-            ownGraphics: ownIcon?.graphics.length ?? 0,
-            ownHasExtent: Boolean(ownIcon?.coordinateExtent),
-            parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
-          }
-        }
-        return {
-          candidate,
-          qualified,
-          status: 'parse-failed',
-          parseError: parseErr instanceof Error ? parseErr.message : String(parseErr),
-        }
-      }
-    } catch (error) {
-      return {
-        candidate,
-        status: 'class-info-failed',
-        error: error instanceof Error ? error.message : String(error),
-      }
-    }
-  })
-  console.warn('[diagram][icon] unresolved type diagnostic summary', {
-    typeName: normalizedType,
-    classQualifiedName,
-    candidateCount: candidates.length,
-    diagnosticCount: diagnostics.length,
-  })
-  diagnostics.forEach((entry, index) => {
-    console.warn(`[diagram][icon] unresolved type diagnostic #${index + 1}`, entry)
-  })
-}
-
-const endpointPortName = (endpoint: string): string | undefined => {
-  const parts = endpoint
-    .split('.')
-    .map((part) => part.trim())
-    .filter(Boolean)
-  if (parts.length <= 1) return undefined
-  const remainder = parts.slice(1).join('.')
-  return remainder.length > 0 ? remainder : undefined
-}
-
-const isConnectorType = (
-  typeName: string,
-  classQualifiedName: string | undefined,
-  caches: DiagramResolutionCaches,
-  materializeSourceRoot: SourceRootMaterializer,
-  importAliases: ImportAliasMap = {},
-): boolean => {
-  const normalized = typeName.trim()
-  if (!normalized) return false
-  const candidates = buildTypeLookupCandidates(normalized, classQualifiedName, importAliases)
-  for (const candidate of candidates) {
-    if (caches.connectorTypes.has(candidate)) {
-      if (caches.connectorTypes.get(candidate)) return true
-      continue
-    }
-    try {
-      if (!materializeSourceRoot(candidate)) continue
-      const rawInfo = get_class_info(candidate)
-      const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
-      const restriction = asString(info.restriction).trim().toLowerCase()
-      const classType = asString(info.class_type).trim().toLowerCase()
-      const isConnector =
-        restriction.includes('connector') ||
-        classType.includes('connector') ||
-        candidate.endsWith('.Pin') ||
-        candidate.endsWith('.Port')
-      caches.connectorTypes.set(candidate, isConnector)
-      if (isConnector) return true
-    } catch {
-      caches.connectorTypes.set(candidate, false)
-    }
-  }
-  return false
-}
-
-const resolveTypePorts = (
-  typeName: string,
-  classQualifiedName: string | undefined,
-  caches: DiagramResolutionCaches,
-  loadedSourceRootFiles: Thunk<Record<string, string>>,
-  materializeSourceRoot: SourceRootMaterializer,
-  importAliases: ImportAliasMap = {},
-  visited: Set<string> = new Set<string>(),
-): DiagramPort[] => {
-  const normalizedType = typeName.trim()
-  if (!normalizedType) return []
-  const candidates = buildTypeLookupCandidates(normalizedType, classQualifiedName, importAliases)
-  for (const candidate of candidates) {
-    if (visited.has(candidate)) continue
-    if (caches.ports.has(candidate)) {
-      const cached = caches.ports.get(candidate)
-      if (cached) return cached
-      continue
-    }
-    visited.add(candidate)
-    try {
-      if (!materializeSourceRoot(candidate)) continue
-      const rawInfo = get_class_info(candidate)
-      const info = JSON.parse(String(rawInfo)) as Record<string, unknown>
-      const sourceModelica = asString(info.source_modelica)
-      if (!sourceModelica.trim()) {
-        caches.ports.set(candidate, null)
-        continue
-      }
-      const qualified = asString(info.qualified_name) || candidate
-      let parsed: Record<string, unknown>
-      try {
-        parsed = parseClassInfoAst(sourceModelica, qualified, caches)
-      } catch {
-        const fallbackParsed = parseQualifiedFromLoadedSourceRoots(
-          qualified,
-          loadedSourceRootFiles,
-          caches,
-        )
-        if (!fallbackParsed) {
-          caches.ports.set(candidate, null)
-          continue
-        }
-        parsed = fallbackParsed
-      }
-      const typeClass = classByName(parsed, qualified) ?? classByName(parsed, candidate)
-      if (!typeClass) {
-        caches.ports.set(candidate, null)
-        continue
-      }
-      const inherited = extractExtendsBaseNames(typeClass).flatMap((baseName) =>
-        resolveTypePorts(
-          baseName,
-          qualified,
-          caches,
-          loadedSourceRootFiles,
-          materializeSourceRoot,
-          importAliases,
-          visited,
-        ),
-      )
-      const ownComponents = asRecord(typeClass.components) ?? {}
-      const ownPorts: DiagramPort[] = Object.entries(ownComponents)
-        .map(([componentId, value]) => ({ componentId, component: asRecord(value) ?? {} }))
-        .filter(({ component }) =>
-          isConnectorType(
-            extractTypeName(component.type_name),
-            qualified,
-            caches,
-            materializeSourceRoot,
-            importAliases,
-          ),
-        )
-        .map(({ componentId, component }) => {
-          const portTypeName = extractTypeName(component.type_name)
-          const portPlacement = extractPlacement(component.annotation, {
-            preferIconTransformation: true,
-          })
-          const portIcon = resolveTypeIcon(
-            portTypeName,
-            qualified,
-            caches,
-            loadedSourceRootFiles,
-            materializeSourceRoot,
-            importAliases,
-          )
-          const port: DiagramPort = {
-            name: asString(component.name) || componentId,
-            typeName: portTypeName,
-          }
-          if (portPlacement) port.placement = portPlacement
-          if (portIcon) port.icon = portIcon
-          return port
-        })
-      const merged = [...inherited, ...ownPorts]
-      const byName = new Map<string, DiagramPort>()
-      merged.forEach((port) => byName.set(port.name, port))
-      const result = Array.from(byName.values())
-      caches.ports.set(candidate, result.length > 0 ? result : null)
-      if (result.length > 0) return result
-    } catch {
-      caches.ports.set(candidate, null)
-    } finally {
-      visited.delete(candidate)
-    }
-  }
-  return []
+  return null
 }
 
 export function handleExtractDiagram(
-  payload: {
-    source: string
-    qualifiedName?: string
-    fileName?: string
-  },
-  loadedSourceRootFiles: Thunk<Record<string, string>>,
+  payload: { source: string; qualifiedName?: string; fileName?: string },
   materializeSourceRoot: SourceRootMaterializer,
   caches: DiagramResolutionCaches,
 ): DiagramDto {
-  const source = asString(payload.source)
-  if (!source.trim()) throw new Error('Cannot build diagram: source is empty')
-  const fileName = asString(payload.fileName) || 'Model.mo'
-  const parsed = parseSourceRootAst(source, fileName, caches)
-  const importAliases = extractImportAliases(source)
-  const classDef = classByName(parsed, payload.qualifiedName)
-  if (!classDef) throw new Error('Cannot build diagram: no class found in source')
-
-  const className = asString(classDef.name) || 'Model'
-  const classIcon = extractIconFromClass(classDef)
-  const componentsMap = asRecord(classDef.components) ?? {}
-  const equations = Array.isArray(classDef.equations) ? classDef.equations : []
-  const rawConnections: Array<{
-    lhs: string
-    rhs: string
-    points?: Array<{ x: number; y: number }>
-    color?: DiagramColor
-  }> = []
-  extractConnectEquations(equations, (lhs, rhs, meta) => {
-    const item: {
-      lhs: string
-      rhs: string
-      points?: Array<{ x: number; y: number }>
-      color?: DiagramColor
-    } = {
-      lhs,
-      rhs,
-    }
-    if (meta?.points) item.points = meta.points
-    if (meta?.color) item.color = meta.color
-    rawConnections.push(item)
-  })
-  const connectedIds = new Set<string>()
-  rawConnections.forEach((connection) => {
-    const from = canonicalNodeId(connection.lhs)
-    const to = canonicalNodeId(connection.rhs)
-    if (from) connectedIds.add(from)
-    if (to) connectedIds.add(to)
-  })
-
-  const components: DiagramComponent[] = Object.entries(componentsMap)
-    .filter(([componentId, value]) =>
-      shouldIncludeDiagramComponent(componentId, asRecord(value) ?? {}, connectedIds),
+  if (!payload.source.trim()) throw new Error('Cannot build diagram: source is empty')
+  const document = readSourceMetadata(payload.source, payload.fileName ?? 'Model.mo')
+  const resolver = createDiagramResolver(
+    document.classes,
+    materializeSourceRoot,
+    caches,
+    extractImportAliases(payload.source),
+  )
+  const root = payload.qualifiedName
+    ? resolver.resolveClass(payload.qualifiedName)
+    : Object.values(document.classes)[0]
+  if (!root) throw new Error('Cannot build diagram: no class found in source')
+  const nodeId = (endpoint: string) => endpoint.split('.')[0] ?? ''
+  const connected = new Set(root.connections.flatMap((v) => [nodeId(v.lhs), nodeId(v.rhs)]))
+  const components = Object.values(root.components).flatMap((component): DiagramComponent[] => {
+    const placement = extractPlacement(component.annotation)
+    if (
+      !placement &&
+      (!connected.has(component.name) || ['parameter', 'constant'].includes(component.variability))
     )
-    .map(([componentId, value]) => {
-      const component = asRecord(value) ?? {}
-      const placement = extractPlacement(component.annotation)
-      const typeName = extractTypeName(component.type_name)
-      const iconRef = typeName
-      const qualifiedTypeName = resolveQualifiedTypeName(
-        typeName,
-        payload.qualifiedName,
-        caches,
-        materializeSourceRoot,
-        importAliases,
-      )
-      const icon = resolveTypeIcon(
-        iconRef,
-        payload.qualifiedName,
-        caches,
-        loadedSourceRootFiles,
-        materializeSourceRoot,
-        importAliases,
-      )
-      const traceComponentIcon =
-        ENABLE_DIAGRAM_ICON_DIAGNOSTICS &&
-        (componentId.toLowerCase().includes('cell') ||
-          componentId.toLowerCase().includes('power10') ||
-          !icon)
-      if (traceComponentIcon) {
-        console.log('[diagram][component] icon resolution', {
-          className: payload.qualifiedName || className,
-          componentId,
-          typeName,
-          iconResolved: Boolean(icon),
-          iconGraphics: icon?.graphics.length ?? 0,
-          iconHasExtent: Boolean(icon?.coordinateExtent),
-        })
-        if (!icon) {
-          diagnoseTypeIconResolution(
-            typeName,
-            payload.qualifiedName,
-            caches,
-            loadedSourceRootFiles,
-            materializeSourceRoot,
-            importAliases,
-          )
-        }
-      }
-      const ports = resolveTypePorts(
-        typeName,
-        payload.qualifiedName,
-        caches,
-        loadedSourceRootFiles,
-        materializeSourceRoot,
-        importAliases,
-      )
-      const item: DiagramComponent = {
-        id: componentId,
-        name: asString(component.name) || componentId,
-        typeName,
-      }
-      const iconValues = extractIconValueMap(component)
-      const description = asString(component.description) || asString(component.comment)
-      if (description) item.description = description
-      if (qualifiedTypeName) item.qualifiedTypeName = qualifiedTypeName
-      if (Object.keys(iconValues).length > 0) item.iconValues = iconValues
-      if (placement) item.placement = placement
-      if (iconRef) item.iconRef = iconRef
-      if (icon) item.icon = icon
-      if (ports.length > 0) item.ports = ports
-      return item
-    })
-  const componentIds = new Set(components.map((component) => component.id))
-
-  const connections: DiagramConnection[] = []
-  rawConnections.forEach((connection, index) => {
-    const from = canonicalNodeId(connection.lhs)
-    const to = canonicalNodeId(connection.rhs)
-    const fromPort = endpointPortName(connection.lhs)
-    const toPort = endpointPortName(connection.rhs)
-    if (!from || !to) return
-    if (!componentIds.has(from) || !componentIds.has(to)) return
-    connections.push({
-      id: `connect-${index + 1}`,
-      from,
-      to,
-      ...(fromPort ? { fromPort } : {}),
-      ...(toPort ? { toPort } : {}),
-      ...(connection.points ? { linePoints: connection.points } : {}),
-      ...(connection.color ? { lineColor: connection.color } : {}),
-    })
+      return []
+    const values: Record<string, string> = {}
+    for (const modifier of component.modifiers) {
+      const node = unwrapMetadata(modifier)
+      if (node.kind === 'entry' && node.value)
+        values[node.name] = expressionToDisplayText(node.value)
+    }
+    const qualifiedTypeName = resolver.resolveClass(
+      component.type_name,
+      root.qualified_name,
+    )?.qualified_name
+    const icon = resolver.icon(component.type_name, root.qualified_name)
+    return [
+      {
+        id: component.name,
+        name: component.name,
+        typeName: component.type_name,
+        description: component.description,
+        ...(placement ? { placement } : {}),
+        iconRef: component.type_name,
+        ...(qualifiedTypeName ? { qualifiedTypeName } : {}),
+        ...(icon ? { icon } : {}),
+        ports: resolver.ports(component.type_name, root.qualified_name),
+        iconValues: values,
+      },
+    ]
   })
-
+  const ids = new Set(components.map((v) => v.id))
+  const connections = root.connections.flatMap((connection, index): DiagramConnection[] => {
+    const from = nodeId(connection.lhs),
+      to = nodeId(connection.rhs)
+    if (!ids.has(from) || !ids.has(to)) return []
+    const fromPort = connection.lhs.split('.').slice(1).join('.')
+    const toPort = connection.rhs.split('.').slice(1).join('.')
+    return [
+      {
+        id: `connect-${index + 1}`,
+        from,
+        to,
+        ...(fromPort ? { fromPort } : {}),
+        ...(toPort ? { toPort } : {}),
+      },
+    ]
+  })
+  const classIcon = extractIconFromClass(root)
   return {
-    className,
+    className: root.qualified_name || root.name,
     ...(classIcon ? { classIcon } : {}),
     components,
     connections,

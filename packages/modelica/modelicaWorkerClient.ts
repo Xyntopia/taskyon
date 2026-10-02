@@ -336,6 +336,8 @@ export class ModelicaWorkerClient {
     daeForTemplate: Record<string, unknown>
     daePretty: string
     rendered: string
+    renderError?: string
+    solveJson?: string
     modelName: string
     usedLibraries: boolean
   }> {

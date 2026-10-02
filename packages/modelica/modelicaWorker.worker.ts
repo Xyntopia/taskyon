@@ -7,7 +7,7 @@ import {
   handleExtractDiagram,
   type DiagramResolutionCaches,
 } from './modelicadiagramGeneration'
-import { renderRumocaTemplate } from './rumocaTemplateRender'
+import { compileRumocaTemplates } from './rumocaTemplateRender'
 import baseDaeTemplate from './base_dae.jinja?raw'
 import {
   buildLazyModelicaLibraryByteArchive,
@@ -23,7 +23,6 @@ let loadedSourceRootFiles: Record<string, string> = {}
 let loadedSourceRootBytes: Record<string, Uint8Array> = {}
 let lazyLibraryIndex: LazyModelicaLibraryIndex | null = null
 let materializedSourceRootUris = new Set<string>()
-const DIAGRAM_AST_CACHE_LIMIT = 512
 const DIAGRAM_DTO_CACHE_LIMIT = 64
 let diagramResolutionCaches: DiagramResolutionCaches = createDiagramResolutionCaches()
 let diagramDtoCache = new Map<string, ReturnType<typeof handleExtractDiagram>>()
@@ -34,10 +33,9 @@ function resetDiagramCaches(): void {
 }
 
 function resetMaterializationDependentDiagramCaches(): void {
+  diagramDtoCache.clear()
   diagramResolutionCaches.icons.clear()
   diagramResolutionCaches.ports.clear()
-  diagramResolutionCaches.connectorTypes.clear()
-  diagramResolutionCaches.qualifiedNames.clear()
 }
 
 function trimMapOldest<K, V>(map: Map<K, V>, limit: number): void {
@@ -49,7 +47,6 @@ function trimMapOldest<K, V>(map: Map<K, V>, limit: number): void {
 }
 
 function trimDiagramCaches(): void {
-  trimMapOldest(diagramResolutionCaches.astBySource, DIAGRAM_AST_CACHE_LIMIT)
   trimMapOldest(diagramDtoCache, DIAGRAM_DTO_CACHE_LIMIT)
 }
 
@@ -337,20 +334,6 @@ function referencedModelicaClassNames(source: string): string[] {
   return Array.from(new Set(matches))
 }
 
-function compileWithLazySourceRoots(source: string, modelName: string): string {
-  if (typeof rumoca.compile_with_source_roots !== 'function') {
-    return rumoca.compile_to_json(source, modelName)
-  }
-  materializeLibraryClasses([modelName, ...referencedModelicaClassNames(source)])
-  try {
-    return rumoca.compile_with_source_roots(source, modelName, '{}')
-  } catch (error) {
-    if (!errorSuggestsMissingSourceRoot(error)) throw error
-    materializeAllLibraries()
-    return rumoca.compile_with_source_roots(source, modelName, '{}')
-  }
-}
-
 async function handleInit(payload: { threads?: number } | undefined): Promise<unknown> {
   await initRumoca()
   const threads = Math.max(0, Math.floor(Number(payload?.threads ?? 0)))
@@ -387,39 +370,38 @@ async function handleInit(payload: { threads?: number } | undefined): Promise<un
 function handleCompileRender(payload: CompileRenderPayload): unknown {
   const source = payload.modelicaSource
   const modelName = payload.modelName || 'Model'
-  const compileRaw =
-    payload.useSourceRoots && typeof rumoca.compile_with_source_roots === 'function'
-      ? compileWithLazySourceRoots(source, modelName)
-      : rumoca.compile_to_json(source, modelName)
-
-  const compiled = JSON.parse(String(compileRaw)) as Record<string, unknown>
-  const daeForTemplate = selectDaeForTemplate(compiled, payload.usePreparedDae)
-  if (!daeForTemplate) {
-    throw new Error('Compilation did not return a usable DAE object (expected dae)')
+  if (payload.useSourceRoots) {
+    materializeLibraryClasses([modelName, ...referencedModelicaClassNames(source)])
   }
-  const rendered = renderRumocaTemplate({
+  const params = {
     wasm: rumoca,
-    daeJson: JSON.stringify(daeForTemplate),
-    templateSource: payload.templateSource,
+    source,
     modelName,
-    templatePath: 'template.jinja',
-    outputPath: `${modelName}.txt`,
-    targetName: 'template',
-  })
-  const daePretty = renderRumocaTemplate({
-    wasm: rumoca,
-    daeJson: JSON.stringify(daeForTemplate),
-    templateSource: baseDaeTemplate,
-    modelName,
-    templatePath: 'base_dae.jinja',
-    outputPath: `${modelName}.dae.txt`,
-    targetName: 'template',
-  })
+    templates: [
+      { source: payload.templateSource, path: 'template.jinja', outputPath: `${modelName}.txt` },
+      { source: baseDaeTemplate, path: 'base_dae.jinja', outputPath: `${modelName}.dae.txt` },
+    ],
+  }
+  let result: ReturnType<typeof compileRumocaTemplates>
+  try {
+    result = compileRumocaTemplates(params)
+  } catch (error) {
+    if (!payload.useSourceRoots || !errorSuggestsMissingSourceRoot(error)) throw error
+    materializeAllLibraries()
+    result = compileRumocaTemplates(params)
+  }
+  const compiled = JSON.parse(result.compileResponse) as Record<string, unknown>
+  const daeForTemplate = selectDaeForTemplate(compiled, payload.usePreparedDae)
+  if (!daeForTemplate) throw new Error('Compilation did not return a usable DAE object')
+  const [generated, daeView] = result.rendered
+  if (!daeView?.ok) throw new Error(daeView?.error ?? 'Missing DAE view')
   return {
     compiled,
     daeForTemplate,
-    daePretty,
-    rendered,
+    daePretty: daeView.content,
+    rendered: generated?.ok ? generated.content : '',
+    renderError: generated?.ok ? undefined : generated?.error,
+    solveJson: result.solveJson,
     modelName,
     usedLibraries: payload.useSourceRoots,
   }
@@ -548,10 +530,13 @@ function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
   const serializedSource = asString(info.source_modelica).trim()
   let serializedSourceParseable = false
   if (serializedSource) {
-    const className = payload.qualifiedName.split('.').at(-1) || 'Model'
     try {
-      rumoca.parse_source_root_file(serializedSource, `${className}.mo`)
-      serializedSourceParseable = true
+      const validation: unknown = rumoca.parse(serializedSource)
+      serializedSourceParseable =
+        validation !== null &&
+        typeof validation === 'object' &&
+        'success' in validation &&
+        validation.success === true
     } catch {
       serializedSourceParseable = false
     }
@@ -560,7 +545,6 @@ function handleGetClassInfo(payload: { qualifiedName: string }): unknown {
     const original = findOriginalModelicaClassSource(
       payload.qualifiedName,
       () => loadedSourceRootFiles,
-      diagramResolutionCaches,
     )
     if (original) {
       info.source_modelica_original = original.source
@@ -575,12 +559,8 @@ function handleExtractDiagramPreview(payload: {
   qualifiedName?: string
   fileName?: string
 }): unknown {
-  const result = handleExtractDiagram(
-    payload,
-    () => loadedSourceRootFiles,
-    isLibraryClassMaterialized,
-    diagramResolutionCaches,
-  )
+  resetMaterializationDependentDiagramCaches()
+  const result = handleExtractDiagram(payload, isLibraryClassMaterialized, diagramResolutionCaches)
   trimDiagramCaches()
   return result
 }
@@ -600,6 +580,7 @@ function handleExtractDiagramFull(payload: {
     })
     return cached
   }
+  resetMaterializationDependentDiagramCaches()
   materializeLibraryClasses([
     asString(payload.qualifiedName),
     ...referencedModelicaClassNames(payload.source),
@@ -611,7 +592,6 @@ function handleExtractDiagramFull(payload: {
     const requested = new Set<string>()
     const refined = handleExtractDiagram(
       payload,
-      () => loadedSourceRootFiles,
       (qualifiedName) => {
         if (isLibraryClassMaterialized(qualifiedName)) return true
         requested.add(qualifiedName)
@@ -636,12 +616,7 @@ function handleExtractDiagramFull(payload: {
   }
 
   if (!result) {
-    result = handleExtractDiagram(
-      payload,
-      () => loadedSourceRootFiles,
-      isLibraryClassMaterialized,
-      diagramResolutionCaches,
-    )
+    result = handleExtractDiagram(payload, isLibraryClassMaterialized, diagramResolutionCaches)
   }
   if (fullyResolved) {
     diagramDtoCache.set(cacheKey, result)
@@ -661,6 +636,7 @@ function handleMaterializeDiagramClasses(payload: {
   fileName?: string
 }): unknown {
   const startedAt = performance.now()
+  resetMaterializationDependentDiagramCaches()
   materializeLibraryClasses([
     asString(payload.qualifiedName),
     ...referencedModelicaClassNames(payload.source),
@@ -674,7 +650,6 @@ function handleMaterializeDiagramClasses(payload: {
     requested.clear()
     handleExtractDiagram(
       payload,
-      () => loadedSourceRootFiles,
       (qualifiedName) => {
         if (isLibraryClassMaterialized(qualifiedName)) return true
         requested.add(qualifiedName)
@@ -752,7 +727,10 @@ const stripEquationSectionsForDiagramParse = (source: string): string => {
 
 const parseSourceRootAst = (source: string, fileName: string): Record<string, unknown> => {
   const parseJson = (input: string): Record<string, unknown> =>
-    JSON.parse(String(rumoca.parse_source_root_file(input, fileName))) as Record<string, unknown>
+    JSON.parse(String(rumoca.parse_source_root_file_ast(input, fileName))) as Record<
+      string,
+      unknown
+    >
   const fallbacks = [
     removeTopLevelImportsForDiagramParse(source),
     normalizeLegacyDeclarationModifiersForDiagramParse(source),

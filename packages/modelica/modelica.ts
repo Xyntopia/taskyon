@@ -8,6 +8,7 @@ import { validateJavaScriptInSandbox } from '@taskyon/common/modules/sandbox/che
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import { DEFAULT_MODELICA_LIBRARY_URL } from './modelicaLibraryCatalog'
 import {
+  daeJsonForTemplate,
   hasRumocaTemplateRenderer,
   renderRumocaTemplate,
   type RumocaTemplateRenderApi,
@@ -121,6 +122,73 @@ export const TyModelRuntimeResidualV1 = z.object({
         pOverride?: unknown,
       ) => number[]
     >(),
+
+  // Checked initialization blocks use the caller's nonlinear solver.
+  initialize:
+    zFunction<
+      (
+        t: number,
+        x: number[],
+        y: number[],
+        u: number[],
+        pOverride: unknown,
+        solveNonlinear: (
+          residual: (coordinates: number[]) => number[],
+          initial: number[],
+          scales: number[],
+        ) => number[],
+        continueHomotopy?: (
+          solveAtLambda: (lambda: number) => void,
+          checkpoint: () => () => void,
+        ) => void,
+      ) => { x: number[]; y: number[]; initialResidual?: number[] }
+    >().optional(),
+
+  // Modelica actions are observed at accepted coordinates, never at Newton trial points.
+  evaluateEventActions: zFunction<
+    (
+      t: number,
+      x: number[],
+      y: number[],
+      u: number[],
+      pOverride: unknown,
+    ) => {
+      warnings: string[]
+      termination?: string
+    }
+  >().optional(),
+  finishInitialization: zFunction<() => void>().optional(),
+  beginTerminalEvent: zFunction<() => void>().optional(),
+  nextTimeEvent:
+    zFunction<
+      (t: number, x: number[], y: number[], u: number[], pOverride: unknown) => number | undefined
+    >().optional(),
+
+  // Local directional derivatives in Rumoca's full solver coordinates.
+  evalSolveJacobianVector:
+    zFunction<
+      (
+        t: number,
+        x: number[],
+        y: number[],
+        u: number[],
+        pOverride: unknown,
+        directions: { solverY: number[]; parameters: number[]; inputs: number[] },
+      ) => { derivativeRhs: number[]; implicitResidual: number[] }
+    >().optional(),
+
+  // Project algebraic tangents at a consistent primal point before differentiating the RHS.
+  evalProjectedJacobianVector:
+    zFunction<
+      (
+        t: number,
+        x: number[],
+        y: number[],
+        u: number[],
+        pOverride: unknown,
+        directions: { state: number[]; parameters: number[]; inputs: number[] },
+      ) => { solverY: number[]; derivativeRhs: number[] }
+    >().optional(),
 
   // FMI-like event indicators: z_i(t,...) crossing zero triggers events
   evalEventIndicators:
@@ -1276,6 +1344,7 @@ type CompiledDaePayload = {
   dae_prepared?: unknown
   dae_prepared_status?: unknown
   dae_prepared_diagnostics?: unknown
+  pretty?: unknown
 }
 
 export function getPreparedDaeStatus(daeObj: unknown): string | null {
@@ -1527,7 +1596,9 @@ export async function compileModelicaToJs(params: {
     partialDaeForTemplate = daeForTemplate
     partialDaePretty = compiled.pretty ?? ''
 
-    const daeJson = JSON.stringify(daeForTemplate)
+    const daeJson = daeJsonForTemplate(compiled, {
+      usePreparedDae: params.usePreparedDae,
+    })
     compileDebug.daeJsonLength = daeJson.length
     const rendered = renderRumocaTemplate({
       wasm: m,

@@ -176,6 +176,7 @@ import { dump } from 'js-yaml'
 import { exportFile } from 'quasar'
 import TyResetButton from 'src/components/taskyon/TyResetButton.vue'
 import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
+import { collectModelicaDiagnosticTests } from '@taskyon/modelica/modelicaDiagnosticVariants'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import * as TaskyonUiInteractionTests from 'src/modules/taskyon/taskyonUiInteractionTests'
@@ -286,13 +287,12 @@ modules.push({
     testTaskyonUiWebSearchInteraction: { gui: true },
   }),
 })
+const modelicaTests = collectModelicaDiagnosticTests(ModelicaDiagnostics)
 modules.push({
   sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
   mod: withDiagnosticsFlags(
-    ModelicaDiagnostics,
-    Object.fromEntries(
-      Object.keys(ModelicaDiagnostics).map((name) => [name, { experimental: true }]),
-    ),
+    modelicaTests,
+    Object.fromEntries(Object.keys(modelicaTests).map((name) => [name, { experimental: true }])),
   ),
 })
 const registry = buildDiagnosticsRegistry({

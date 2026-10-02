@@ -19,7 +19,7 @@
     "fflate": "^0.8.2",
     "json-schema": "^0.4.0",
     "quasar": "^2.16.0",
-    "rumoca-full-web": "npm:@cognipilot/rumoca@^0.9.20",
+    "rumoca-full-web": "npm:@taskyon/rumoca@0.10.3-taskyon.1",
     "vue": "^3.5.22",
     "zod": "^4.0.5"
   },

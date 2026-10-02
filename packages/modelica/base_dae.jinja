@@ -1,175 +1,330 @@
-{%- set model_name = dae.model_name if dae.model_name is defined else "GeneratedModel" -%}
-{%- set p_map = dae.p if dae.p is defined else {} -%}
-{%- set cp_map = dae.constants if dae.constants is defined else (dae.cp if dae.cp is defined else {}) -%}
-{%- set x_map = dae.x if dae.x is defined else {} -%}
-{%- set y_map = dae.y if dae.y is defined else {} -%}
-{%- set z_map = dae.z if dae.z is defined else {} -%}
-{%- set obs_list = dae.__rumoca_observables if dae.__rumoca_observables is defined else [] -%}
-{%- set eqs = dae.f_x if dae.f_x is defined else (dae.fx if dae.fx is defined else []) -%}
-{%- set cond_eqs = dae.f_c if dae.f_c is defined else [] -%}
-{%- set when_clauses = dae.when_clauses if dae.when_clauses is defined else [] -%}
+{%- set model_name = model_name if model_name is defined and model_name else "GeneratedModel" -%}
 
-{% macro render_cref(cr) -%}
-  {%- if cr is defined and cr.parts is defined and cr.parts|length > 0 -%}
-    {%- for part in cr.parts -%}
-      {{ part.ident.text }}{{ "." if not loop.last }}
-    {%- endfor -%}
+{%- macro q(text) -%}{{ text|string|replace('\\', '\\\\')|replace('"', '\\"') }}{%- endmacro -%}
+
+{%- macro coord_name(coord) -%}
+{%- set kind = coord.kind -%}
+{%- if kind == "time" -%}time
+{%- elif kind in ["parameter", "constant", "input", "state", "algebraic", "discrete_real", "discrete_value"] -%}
+{{- dae.variables[coord.id].name }}
+{%- elif kind == "derivative" -%}
+{{- dae.variables[coord.id].name }}'
+{%- elif kind == "pre_state" or kind == "pre_algebraic" or kind == "pre_discrete_real" or kind == "pre_discrete_value" -%}
+{{- "pre(" }}{{ dae.variables[coord.id].name }}{{ ")" }}
+{%- elif kind == "condition" -%}
+{{- "c" }}{{ coord.id }}
+{%- elif kind == "binder" -%}
+{{- "binder" }}{{ coord.domain }}_{{ coord.ordinal }}
+{%- else -%}
+{{- kind }}#{{ coord.id }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_subscript(sub) -%}
+{%- if sub.kind == "index" or sub.kind == "slice" -%}
+{{- render_expr(sub.expression) }}
+{%- else -%}
+{{- ":" }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_expr(eid) -%}
+{%- set e = dae.expressions[eid] -%}
+{%- set op = e.operation -%}
+{%- set kind = op.kind -%}
+{%- if kind == "literal" -%}
+  {%- set lit = op.value -%}
+  {%- if lit.string is defined -%}{{ '"' }}{{ q(lit.string) }}{{ '"' }}
+  {%- elif lit.boolean is defined -%}{{ "true" if lit.boolean else "false" }}
+  {%- elif lit.integer is defined -%}{{ lit.integer }}
+  {%- elif lit.real is defined -%}{{ lit.real }}
+  {%- elif lit.enumeration is defined -%}{{ lit.enumeration }}
+  {%- else -%}?{%- endif -%}
+{%- elif kind == "coordinate" -%}
+{{- coord_name(op.coordinate) }}
+{%- elif kind == "unary" -%}
+  {%- if op.operator == "negate" -%}(-{{ render_expr(op.operand) }})
+  {%- elif op.operator == "not" -%}(not {{ render_expr(op.operand) }})
+  {%- else -%}(+{{ render_expr(op.operand) }}){%- endif -%}
+{%- elif kind == "binary" -%}
+  {%- set o = op.operator -%}
+  {%- if o == "add" or o == "elementwise_add" -%}({{ render_expr(op.lhs) }} + {{ render_expr(op.rhs) }})
+  {%- elif o == "subtract" or o == "elementwise_subtract" -%}({{ render_expr(op.lhs) }} - {{ render_expr(op.rhs) }})
+  {%- elif o == "multiply" or o == "elementwise_multiply" -%}({{ render_expr(op.lhs) }} * {{ render_expr(op.rhs) }})
+  {%- elif o == "divide" or o == "elementwise_divide" -%}({{ render_expr(op.lhs) }} / {{ render_expr(op.rhs) }})
+  {%- elif o == "power" or o == "elementwise_power" -%}({{ render_expr(op.lhs) }} ^ {{ render_expr(op.rhs) }})
+  {%- elif o == "equal" -%}({{ render_expr(op.lhs) }} == {{ render_expr(op.rhs) }})
+  {%- elif o == "not_equal" -%}({{ render_expr(op.lhs) }} <> {{ render_expr(op.rhs) }})
+  {%- elif o == "less" -%}({{ render_expr(op.lhs) }} < {{ render_expr(op.rhs) }})
+  {%- elif o == "less_equal" -%}({{ render_expr(op.lhs) }} <= {{ render_expr(op.rhs) }})
+  {%- elif o == "greater" -%}({{ render_expr(op.lhs) }} > {{ render_expr(op.rhs) }})
+  {%- elif o == "greater_equal" -%}({{ render_expr(op.lhs) }} >= {{ render_expr(op.rhs) }})
+  {%- elif o == "and" -%}({{ render_expr(op.lhs) }} and {{ render_expr(op.rhs) }})
+  {%- elif o == "or" -%}({{ render_expr(op.lhs) }} or {{ render_expr(op.rhs) }})
+  {%- else -%}[binary:{{ o }}]{%- endif -%}
+{%- elif kind == "conditional" -%}
+{{- render_conditional(op.operands, 0) }}
+{%- elif kind == "array" -%}
+[{%- for el in op.elements -%}{{ render_expr(el) }}{{ ", " if not loop.last }}{%- endfor -%}]
+{%- elif kind == "record" -%}
+{ {%- for el in op.fields -%}{{ render_expr(el) }}{{ ", " if not loop.last }}{%- endfor -%} }
+{%- elif kind == "field" -%}
+  {%- set baseType = dae.expressions[op.base].value_type_id -%}
+  {%- set fields = dae.value_types[baseType].value_type.record_fields -%}
+  {%- set fname = fields[op.field].name if fields is defined and fields|length > op.field else op.field -%}
+{{- render_expr(op.base) }}.{{ fname }}
+{%- elif kind == "index" -%}
+{{- render_expr(op.base) }}[{%- for sub in op.subscripts -%}{{ render_subscript(sub) }}{{ ", " if not loop.last }}{%- endfor -%}]
+{%- elif kind == "range" -%}
+  {%- set start = render_expr(op.start.expression) -%}
+  {%- if op.explicit_step is not none -%}{{ start }}:{{ render_expr(op.explicit_step.expression) }}:{{ render_expr(op.stop.expression) }}
+  {%- else -%}{{ start }}:{{ render_expr(op.stop.expression) }}{%- endif -%}
+{%- elif kind == "comprehension" -%}
+{ {{ render_expr(op.body) }} for domain {{ op.domain }} }
+{%- elif kind == "builtin" -%}
+{{- op.builtin }}({%- for a in op.arguments -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
+{%- elif kind == "call" -%}
+  {%- set fn = dae.functions[op.function] if dae.functions|length > op.function else none -%}
+  {%- set fname = fn.name if fn is not none and fn.name is defined else "function" -%}
+{{- fname }}({%- for a in op.arguments -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
+{%- elif kind == "string_conversion" -%}
+String({{ render_expr(op.value) }})
+{%- else -%}
+[{{ kind }}#{{ eid }}]
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_conditional(operands, i) -%}
+{%- if i + 1 >= operands|length -%}
+{{ render_expr(operands[i]) }}
+{%- else -%}
+(if {{ render_expr(operands[i]) }} then {{ render_expr(operands[i + 1]) }} else {{ render_conditional(operands, i + 2) }})
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_condition(cid) -%}
+{%- set op = dae.systems.conditions.conditions[cid].operation -%}
+{%- if op.kind == "relation" -%}
+{{- render_expr(dae.systems.conditions.relations[op.relation].expression) }}
+{%- elif op.kind == "discrete" -%}
+{{- render_expr(op.expression) }}
+{%- elif op.kind == "initial" -%}Initial()
+{%- elif op.kind == "clock" -%}Clock()
+{%- elif op.kind == "always" -%}true
+{%- elif op.kind == "not" -%}(not {{ render_condition(op.condition) }})
+{%- elif op.kind == "and" -%}({{ render_condition(op.lhs) }} and {{ render_condition(op.rhs) }})
+{%- elif op.kind == "or" -%}({{ render_condition(op.lhs) }} or {{ render_condition(op.rhs) }})
+{%- elif op.kind == "any_rise" -%}(anyRise({{ render_condition(op.lhs) }}, {{ render_condition(op.rhs) }}))
+{%- else -%}[condition:{{ op.kind }}]
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro split_residual(eid) -%}
+  {%- set op = dae.expressions[eid].operation -%}
+  {%- if op.kind == "binary" and op.operator == "subtract" -%}
+{{- render_expr(op.lhs) }} = {{ render_expr(op.rhs) }}
   {%- else -%}
-    [UNKNOWN_CREF]
+{{- render_expr(eid) }} = 0
   {%- endif -%}
 {%- endmacro -%}
 
-{% macro render_expr(e) -%}
-  {%- if e is none -%}
-    0
-  {%- elif e is string -%}
-    {{ e }}
-  {%- elif e is number -%}
-    {{ e }}
-  {%- elif e is boolean -%}
-    {{ "true" if e else "false" }}
-  {%- elif "Literal" in e -%}
-    {%- if "Integer" in e.Literal -%}{{ e.Literal.Integer }}
-    {%- elif "Real" in e.Literal -%}{{ e.Literal.Real }}
-    {%- elif "Bool" in e.Literal -%}{{ "true" if e.Literal.Bool else "false" }}
-    {%- elif "String" in e.Literal -%}"{{ e.Literal.String }}"
-    {%- else -%}0{%- endif -%}
-  {%- elif "VarRef" in e -%}
-    {{ e.VarRef.name }}
-  {%- elif "BuiltinCall" in e -%}
-    {%- set bc = e.BuiltinCall -%}
-    {%- if bc.function == "Der" and bc.args|length == 1 -%}
-      {{ render_expr(bc.args[0]) }}'
-    {%- elif bc.function == "Pre" and bc.args|length == 1 -%}
-      pre({{ render_expr(bc.args[0]) }})
-    {%- else -%}
-      {{ bc.function }}({%- for a in bc.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
-    {%- endif -%}
-  {%- elif "Terminal" in e -%}
-    {{ e.Terminal.token.text }}
-  {%- elif "ComponentReference" in e -%}
-    {{ render_cref(e.ComponentReference) }}
-  {%- elif "Unary" in e -%}
-    {%- set u = e.Unary -%}
-    {%- if "Minus" in u.op -%}
-      -{{ render_expr(u.rhs) }}
-    {%- elif "Not" in u.op -%}
-      not {{ render_expr(u.rhs) }}
-    {%- else -%}
-      {{ render_expr(u.rhs) }}
-    {%- endif -%}
-  {%- elif "Binary" in e -%}
-  {%- set b = e.Binary -%}
-  {%- set op -%}
-      {%- if "Add" in b.op -%}+{%- elif "Sub" in b.op -%}-{%- elif "Mul" in b.op -%}*{%- elif "Div" in b.op -%}/{%- elif "Pow" in b.op or "Power" in b.op or "Caret" in b.op or "Exp" in b.op or "Circumflex" in b.op -%}^{%- elif "LessEq" in b.op or "Le" in b.op -%}<={%- elif "Less" in b.op or "Lt" in b.op -%}<{%- elif "GreaterEq" in b.op or "Ge" in b.op -%}>={%- elif "Greater" in b.op or "Gt" in b.op -%}>{%- elif "Equals" in b.op or "Eq" in b.op -%}=={%- elif "NotEquals" in b.op or "Ne" in b.op -%}!={%- elif "And" in b.op -%}and{%- elif "Or" in b.op -%}or{%- else -%}?{%- endif -%}
-  {%- endset -%}
-    {{ render_expr(b.lhs) }} {{ op }} {{ render_expr(b.rhs) }}
-  {%- elif "FunctionCall" in e -%}
-    {%- set f = e.FunctionCall -%}
-    {%- if f.name is defined and f.name is string -%}
-      {%- set name = f.name -%}
-    {%- elif f.comp is defined and f.comp.parts is defined and f.comp.parts|length > 0 -%}
-      {%- set name -%}{%- for part in f.comp.parts -%}{{ part.ident.text }}{{ "." if not loop.last }}{%- endfor -%}{%- endset -%}
-    {%- else -%}
-      {%- set name = "unknown_function" -%}
-    {%- endif -%}
-    {%- if name == "der" and f.args|length == 1 -%}
-      {{ render_expr(f.args[0]) }}'
-    {%- else -%}
-      {{ name }}({%- for a in f.args -%}{{ render_expr(a) }}{{ ", " if not loop.last }}{%- endfor -%})
-    {%- endif -%}
-  {%- elif "If" in e -%}
-    {%- set ife = e.If -%}
-    {%- if ife.branches is defined and ife.branches|length > 0 -%}
-      {%- set branch = ife.branches[0] -%}
-      (if {{ render_expr(branch[0]) }} then {{ render_expr(branch[1]) }} else {{ render_expr(ife.else_branch if ife.else_branch is defined else 0) }})
-    {%- else -%}
-      {{ render_expr(ife.else_branch if ife.else_branch is defined else 0) }}
-    {%- endif -%}
+{%- macro residual_is_derivative(eid) -%}
+  {%- set op = dae.expressions[eid].operation -%}
+  {%- if op.kind == "binary" and op.operator == "subtract" -%}
+    {%- set lhsOp = dae.expressions[op.lhs].operation -%}
+    {%- if lhsOp.kind == "coordinate" and lhsOp.coordinate.kind == "derivative" -%}true{%- else -%}false{%- endif -%}
+  {%- else -%}false{%- endif -%}
+{%- endmacro -%}
+
+{%- macro residual_rhs(eid) -%}
+{{- render_expr(dae.expressions[eid].operation.rhs if dae.expressions[eid].operation.kind == "binary" and dae.expressions[eid].operation.operator == "subtract" else eid) }}
+{%- endmacro -%}
+
+{%- macro var_unit(v) -%}
+  {%- set u = v.attributes.unit if v.attributes is defined else none -%}
+  {%- if u is not none and (u|string)|trim != '' and (u|string)|trim|lower != 'none' and (u|string)|trim|lower != 'null' %} (unit: {{ u }}){%- endif -%}
+{%- endmacro -%}
+
+{%- macro attr_values(v, attr) -%}
+  {%- set vals = v.attributes[attr ~ '_values'] if v.attributes is defined else none -%}
+  {%- if vals is not none and vals|length > 0 -%}
+    {%- if vals|length == 1 -%}{{ vals[0] }}
+    {%- else -%}[{%- for x in vals -%}{{ x }}{{ ", " if not loop.last }}{%- endfor -%}]{%- endif -%}
   {%- else -%}
-    [UNKNOWN_EXPR {{ e }}]
+    {%- set eid = v.attributes[attr] if v.attributes is defined else none -%}
+    {%- if eid is not none -%}{{ render_expr(eid) }}{%- else -%}?{%- endif -%}
   {%- endif -%}
 {%- endmacro -%}
+
+{%- macro var_line(v) -%}
+{{ v.name }}{%- if v.scalar_count is defined and v.scalar_count > 1 %} [{{ v.scalar_count }}]{%- endif -%}{{ var_unit(v) }}
+{%- endmacro -%}
+
+{%- set continuous = dae.systems.continuous.owners -%}
+{%- set initialization = dae.systems.initialization.owners -%}
+{%- set discreteReal = dae.systems.discrete_real.residuals -%}
+{%- set discreteValues = dae.systems.discrete_values.owners -%}
+{%- set conditions = dae.systems.conditions.conditions -%}
+{%- set actions = dae.systems.events.actions -%}
 
 Model: {{ model_name }}
 Time variable: t
 
+System summary:
+  continuous equations: {{ continuous|length }}
+  initialization equations: {{ initialization|length }}
+  discrete real equations: {{ discreteReal|length }}
+  discrete value owners: {{ discreteValues|length }}
+  conditions: {{ conditions|length }}
+  event actions: {{ actions|length }}
+
 Parameters:
-{% if p_map|length == 0 -%}
-  (none)
-{%- else -%}
-{%- for (name, comp) in p_map|items %}
-  {{ name }} = {{ render_expr(comp.start) }}
+{% set ns = namespace(found=false) -%}
+{%- for v in dae.variables -%}
+{%- if v.role == "parameter" -%}
+{%- set ns.found = true %}
+  {{ var_line(v) }} = {{ attr_values(v, "binding") }}
+{%- endif -%}
 {%- endfor -%}
+{%- if not ns.found %}
+  (none)
+{%- endif %}
+
+Constants:
+{% set ns = namespace(found=false) -%}
+{%- for v in dae.variables -%}
+{%- if v.role == "constant" -%}
+{%- set ns.found = true %}
+  {{ var_line(v) }} = {{ attr_values(v, "binding") }}
+{%- endif -%}
+{%- endfor -%}
+{%- if not ns.found %}
+  (none)
 {%- endif %}
 
 States x(t):
-{% if x_map|length == 0 -%}
-  (none)
-{%- else -%}
-{%- for (name, comp) in x_map|items %}
-  {{ name }}(t) with {{ name }}(0) = {{ render_expr(comp.start) }}
+{% set ns = namespace(found=false) -%}
+{%- for v in dae.variables -%}
+{%- if v.role == "state" -%}
+{%- set ns.found = true %}
+  {{ var_line(v) }} with {{ v.name }}(0) = {{ attr_values(v, "start") }}
+{%- endif -%}
 {%- endfor -%}
+{%- if not ns.found %}
+  (none)
 {%- endif %}
 
 Algebraic variables y(t):
-{% if y_map|length == 0 and z_map|length == 0 and obs_list|length == 0 -%}
+{% set ns = namespace(found=false) -%}
+{%- for v in dae.variables -%}
+{%- if v.role == "algebraic" or v.role == "output" -%}
+{%- set ns.found = true %}
+  {{ var_line(v) }}
+{%- endif -%}
+{%- endfor -%}
+{%- if not ns.found %}
   (none)
-{%- else -%}
-{%- for (name, comp) in y_map|items %}
-  {{ name }}(t)
+{%- endif %}
+
+Discrete variables:
+{% set ns = namespace(found=false) -%}
+{%- for v in dae.variables -%}
+{%- if v.role == "discrete_real" or v.role == "discrete_value" -%}
+{%- set ns.found = true %}
+  {{ var_line(v) }}{{ "    // discrete value" if v.role == "discrete_value" else "    // discrete real" }}
+{%- endif -%}
 {%- endfor -%}
-{%- for (name, comp) in z_map|items %}
-  {{ name }}(t)    // discrete / event-related
+{%- if not ns.found %}
+  (none)
+{%- endif %}
+
+Inputs u(t):
+{% set ns = namespace(found=false) -%}
+{%- for v in dae.variables -%}
+{%- if v.role == "input" -%}
+{%- set ns.found = true %}
+  {{ var_line(v) }}
+{%- endif -%}
 {%- endfor -%}
-{%- for obs in obs_list %}
-  {{ obs.name }}(t)    // retained observable
-{%- endfor %}
+{%- if not ns.found %}
+  (none)
 {%- endif %}
 
 Differential equations (explicit ODE form x' = f(t, x, p)):
-{%- if x_map|length == 0 -%}
+{% set ns = namespace(found=false) -%}
+{%- for owner in continuous -%}
+{%- if owner.kind == "residual" and residual_is_derivative(owner.residual) == "true" -%}
+{%- set ns.found = true %}
+  {{ coord_name(dae.expressions[dae.expressions[owner.residual].operation.lhs].operation.coordinate) }} = {{ residual_rhs(owner.residual) }}
+{%- endif -%}
+{%- endfor -%}
+{%- if not ns.found %}
   (none)
-{%- else -%}
-  (state variables exist, but explicit derivative equations are not directly encoded in this residual form)
 {%- endif %}
 
 Algebraic equations:
-{% set flags = namespace(has_alg=false) %}
-{%- for eq in eqs %}
-  {%- if "Simple" in eq and eq.Simple is defined and eq.Simple.lhs is defined and eq.Simple.rhs is defined -%}
-    {% set flags.has_alg = true %}
-  {{ render_expr(eq.Simple.lhs) }} = {{ render_expr(eq.Simple.rhs) }}
-  {%- elif eq.rhs is defined -%}
-    {% set flags.has_alg = true %}
-  {{ render_expr(eq.lhs if eq.lhs is defined else 0) }} = {{ render_expr(eq.rhs) }}
-  {%- endif -%}
+{% set ns = namespace(found=false) -%}
+{%- for owner in continuous -%}
+{%- if owner.kind == "residual" and residual_is_derivative(owner.residual) != "true" -%}
+{%- set ns.found = true %}
+  {{ split_residual(owner.residual) }}
+{%- elif owner.kind == "structured" -%}
+{%- set ns.found = true %}
+  [structured family: domain {{ owner.domain }}, {{ owner.scalar_rows }} scalar rows]
+{%- endif -%}
 {%- endfor -%}
-{%- for obs in obs_list %}
-  {% set flags.has_alg = true %}
-  {{ obs.name }} = {{ render_expr(obs.expr) }}
-{%- endfor -%}
-{%- if not flags.has_alg -%}
+{%- if not ns.found %}
   (none)
 {%- endif %}
 
+Initialization equations:
+{% set ns = namespace(found=false) -%}
+{%- for owner in initialization -%}
+{%- if owner.kind == "residual" -%}
+{%- set ns.found = true %}
+  {{ split_residual(owner.residual) }}
+{%- elif owner.kind == "structured" -%}
+{%- set ns.found = true %}
+  [structured family: domain {{ owner.domain }}, {{ owner.scalar_rows }} scalar rows]
+{%- endif -%}
+{%- endfor -%}
+{%- if not ns.found %}
+  (none)
+{%- endif %}
+
+Discrete real equations:
+{% if discreteReal|length == 0 %}
+  (none)
+{%- else -%}
+  {%- for res in discreteReal %}
+  {{ split_residual(res.residual) }}{{ "    // when c" ~ res.activation.trigger if res.activation.kind == "when" else "" }}
+  {%- endfor %}
+{%- endif %}
+
+Discrete value assignments:
+{% if discreteValues|length == 0 %}
+  (none)
+{%- else -%}
+  {%- for owner in discreteValues -%}
+    {%- for branch in owner.branches %}
+  ({%- for target in owner.targets -%}{{ dae.variables[target.variable].scalar_names[target.scalar_selection] if target.scalar_selection is not none else dae.variables[target.variable].name }}{{ ", " if not loop.last }}{%- endfor -%}) := ({%- for value in branch.values -%}{{ render_expr(value.expression) }}{{ ", " if not loop.last }}{%- endfor -%}){{ "    // when c" ~ branch.activation.trigger if branch.activation.kind == "when" else "" }}
+    {%- endfor -%}
+  {%- endfor -%}
+{%- endif %}
+
 Events (when-clauses):
-{% if cond_eqs|length == 0 and when_clauses|length == 0 %}
+{% if conditions|length == 0 and actions|length == 0 %}
   (none)
 {%- else -%}
   Conditions:
-  {%- for ce in cond_eqs %}
-  c{{ loop.index }} = {{ render_expr(ce.rhs) }}
+  {%- for cond in conditions %}
+  c{{ cond.id }} = {{ render_condition(cond.id) }}
   {%- endfor %}
-  Resets:
-  {%- if when_clauses|length == 0 %} none
+  Actions:
+  {%- if actions|length == 0 %} none
   {%- else -%}
-    {%- for wc in when_clauses %}
-  when c{{ loop.index }} then
-      {%- for eq in wc.equations %}
-    {{ eq.lhs }} := {{ render_expr(eq.rhs) }}
-      {%- endfor %}
-    end when
+    {%- for action in actions %}
+  {{ "when c" ~ action.guard ~ " then " if true }}{%- if action.operation.kind == "reinitialize" -%}{{ dae.variables[action.operation.state].name }} := {{ render_expr(action.operation.value) }}{%- elif action.operation.kind == "assert" -%}assert({{ render_expr(action.operation.message) }}{{ ", level" if action.operation.level is not none else "" }}){%- elif action.operation.kind == "terminate" -%}terminate({{ render_expr(action.operation.message) }}){%- else -%}[action:{{ action.operation.kind }}]{%- endif -%}
     {%- endfor %}
   {%- endif %}
 {%- endif %}

@@ -1,0 +1,2040 @@
+{# rumoca-ir: solve #}
+{# rumoca-linear-ops: native #}
+{# Standalone execution from checked Solve programs, never DAE equations. #}
+{%- if solve_model is not defined -%}
+{{ fail('unsupported-feature:javascript.solve: requires a retained compiled model') }}
+{%- endif -%}
+
+{# Emit the scalar projection of Rumoca's issued explicit and declaration-run stages. #}
+{%- set projection = namespace(algebraic=[], manifold=[]) -%}
+{%- for kind, plan in [['algebraic', solve.continuous.algebraic_projection_plan], ['manifold', solve.continuous.manifold_projection_plan]] -%}
+{%- set blocks = namespace(values=[]) -%}
+{%- for stage in plan.blocks -%}
+{%- if stage.Explicit is defined -%}
+{%- set blocks.values = blocks.values + [stage.Explicit] -%}
+{%- elif stage.SingletonDeclarationRun is defined -%}
+{%- set run = stage.SingletonDeclarationRun -%}
+{%- for offset in range(run.storage.scalar_count) -%}
+{%- set blocks.values = blocks.values + [{'rows':[run.first_row + offset], 'y_indices':[run.storage.base.Y.index + offset], 'tearing':none, 'alternate_charts':[]}] -%}
+{%- endfor -%}
+{%- else -%}
+{{ fail('unsupported-feature:javascript.solve.projection_stage') }}
+{%- endif -%}
+{%- endfor -%}
+{%- if kind == 'algebraic' -%}{%- set projection.algebraic = blocks.values -%}
+{%- else -%}{%- set projection.manifold = blocks.values -%}{%- endif -%}
+{%- endfor -%}
+
+{%- set manifold_charts = namespace(alternate=false) -%}
+{%- for block in projection.manifold -%}
+{%- if block.alternate_charts is defined and block.alternate_charts|length > 0 -%}{%- set manifold_charts.alternate = true -%}{%- endif -%}
+{%- endfor -%}
+{%- if manifold_charts.alternate -%}
+{{ fail('unsupported-feature:javascript.solve.manifold.chart: reduced-chart coordinate selection is not implemented') }}
+{%- endif -%}
+{%- set has_events = solve.events.root_plan.stored_output_count > 0 or solve.discrete.update_targets|length > 0 or solve.clocks.periodic_event_schedules|length > 0 or solve.discrete.structured_assignments|length > 0 or solve.events.delays.value_parameter_indices|length > 0 -%}
+{%- set effects = namespace(impure=false) -%}
+{%- set exact = solve.continuous.exact_algebraic_assignments -%}
+{%- set reduced = exact is not none -%}
+{# Native direct refresh uses only compiler-certified stages and expression prefixes. #}
+{%- set native_exact = namespace(admitted=false, offsets=[], program_count=0, assignments=[], target_count=0) -%}
+{%- set refresh = solve.continuous.refresh_owners.algebraic -%}
+{%- if not reduced and refresh.causal_solution_certified and solve.continuous.implicit_rhs.tensor_node_count == 0 -%}
+{%- set native_exact.admitted = true -%}
+{%- for node in solve.continuous.implicit_rhs.nodes -%}
+{%- set native_exact.offsets = native_exact.offsets + [native_exact.program_count] -%}
+{%- if node.ScalarPrograms is defined -%}
+{%- set native_exact.program_count = native_exact.program_count + (node.ScalarPrograms.programs|length) -%}
+{%- else -%}{%- set native_exact.admitted = false -%}{%- endif -%}
+{%- endfor -%}
+{%- for stage in refresh.value_stages -%}
+{%- if stage.ExactAssignments is defined -%}
+{%- for index in stage.ExactAssignments.static_rows + stage.ExactAssignments.dynamic_rows -%}
+{%- set row = refresh.rows[index] -%}
+{%- if row.exact_assignment_certified and row.assignment_shape.Direct is defined -%}
+{%- set native_exact.assignments = native_exact.assignments + [{"program": native_exact.offsets[row.source.node] + row.source.program, "shape": row.assignment_shape.Direct}] -%}
+{%- else -%}{%- set native_exact.admitted = false -%}{%- endif -%}
+{%- endfor -%}
+{%- elif stage.CausalSeedSweep is not defined -%}
+{%- set native_exact.admitted = false -%}
+{%- endif -%}
+{%- endfor -%}
+{%- for block in projection.algebraic -%}
+{%- set native_exact.target_count = native_exact.target_count + (block.y_indices|length) -%}
+{%- endfor -%}
+{%- if native_exact.assignments|length != native_exact.target_count -%}
+{%- set native_exact.admitted = false -%}
+{%- endif -%}
+{%- endif -%}
+{%- macro unary(operator, value) -%}
+{%- if operator == 'Neg' -%}(-{{ value }})
+{%- elif operator == 'Not' -%}({{ value }} === 0 ? 1 : 0)
+{%- elif operator == 'Sign' -%}({{ value }}>0 ? 1 : ({{ value }}<0 ? -1 : 0))
+{%- elif operator in ['Abs','Sqrt','Floor','Ceil','Trunc','Sin','Cos','Tan','Asin','Acos','Atan','Sinh','Cosh','Tanh','Exp','Log','Log10'] -%}
+Math.{{ operator|lower }}({{ value }})
+{%- else -%}{{ fail('unsupported-feature:javascript.solve.unary.' ~ operator) }}
+{%- endif -%}
+{%- endmacro -%}
+{%- macro binary(operator, left, right) -%}
+{%- set symbols = {'Add':'+','Sub':'-','Mul':'*','Div':'/','Pow':'**'} -%}
+{%- if operator in symbols -%}({{ left }} {{ symbols[operator] }} {{ right }})
+{%- elif operator == 'And' -%}({{ left }} !== 0 && {{ right }} !== 0 ? 1 : 0)
+{%- elif operator == 'Or' -%}({{ left }} !== 0 || {{ right }} !== 0 ? 1 : 0)
+{%- elif operator in ['Min','Max'] -%}(Number.isNaN({{ left }}) ? {{ right }} : (Number.isNaN({{ right }}) ? {{ left }} : Math.{{ operator|lower }}({{ left }}, {{ right }})))
+{%- elif operator == 'Atan2' -%}Math.atan2({{ left }}, {{ right }})
+{%- else -%}{{ fail('unsupported-feature:javascript.solve.binary.' ~ operator) }}
+{%- endif -%}
+{%- endmacro -%}
+{%- macro typed_literal(value) -%}
+{{ 'realFromBits(' ~ "'" ~ value.kind.bits ~ "')" if value.kind.kind == 'real64' else ('BigInt(' ~ "'" ~ value.kind.bits ~ "')" if value.kind.kind == 'integer' else ('true' if value.kind.bits else 'false')) }}
+{%- endmacro -%}
+{%- macro typed_check(value, ty) -%}
+{%- if ty.scalar.kind == 'integer' %}
+for (const checkedInteger of {{ value }}) if (typeof checkedInteger!=='bigint' || checkedInteger<BigInt('{{ ty.scalar.profile.minimum }}') || checkedInteger>BigInt('{{ ty.scalar.profile.maximum }}')) throw new Error('Solve Integer overflow');
+{%- endif %}
+{%- endmacro -%}
+{%- macro typed_binary(operator, a, b, ty) -%}
+{%- set operators={'add':'Add','subtract':'Sub','multiply':'Mul','divide':'Div','power':'Pow','and':'And','or':'Or','min':'Min','max':'Max','atan2':'Atan2'} -%}
+{%- if ty.scalar.kind == 'integer' and operator in ['min','max'] -%}
+({{ a }} {{ '<' if operator == 'min' else '>' }} {{ b }} ? {{ a }} : {{ b }})
+{%- elif operator == 'integer_quotient' -%}({{ a }}/{{ b }})
+{%- elif operator == 'integer_remainder' -%}({{ a }}%{{ b }})
+{%- elif operator == 'integer_modulo' -%}
+(() => {const remainder={{ a }}%{{ b }};return remainder!==0n && (remainder<0n)!==({{ b }}<0n)?remainder+{{ b }}:remainder;})()
+{%- elif ty.scalar.kind == 'boolean' and operator in ['and','or'] -%}({{ a }} {{ '&&' if operator == 'and' else '||' }} {{ b }})
+{%- elif operator in operators -%}{{ binary(operators[operator],a,b) }}
+{%- else -%}{{ fail('unsupported-feature:javascript.solve.typed.binary.' ~ operator) }}
+{%- endif -%}
+{%- endmacro -%}
+{%- macro typed_definition(program,name,call_prefix='pure_',assertion_outputs=[]) -%}
+{%- for issued in program.operations %}
+{%- set op=issued.operation -%}
+{%- if op.operation == 'conditional' %}
+{{ typed_definition(op.if_true.body,name ~ '_region_' ~ loop.index0 ~ '_true',call_prefix,assertion_outputs) }}
+{{ typed_definition(op.if_false.body,name ~ '_region_' ~ loop.index0 ~ '_false',call_prefix,assertion_outputs) }}
+{%- elif op.operation == 'map' %}
+{{ typed_definition(op.body.body,name ~ '_region_' ~ loop.index0 ~ '_map',call_prefix,assertion_outputs) }}
+{%- elif op.operation == 'fold' %}
+{{ typed_definition(op.transition.body,name ~ '_region_' ~ loop.index0 ~ '_fold',call_prefix,assertion_outputs) }}
+{%- if op.continuation is defined and op.continuation is not none %}
+{{ typed_definition(op.continuation.body,name ~ '_region_' ~ loop.index0 ~ '_continue',call_prefix,assertion_outputs) }}
+{%- endif %}
+{%- elif op.operation == 'check_assertion' and op.message.kind == 'captures' %}
+{{ typed_definition(op.message.program.body,name ~ '_region_' ~ loop.index0 ~ '_message',call_prefix,assertion_outputs) }}
+{%- endif -%}
+{%- endfor %}
+function {{ name }}(args,observer=null) {
+  const r=[], s=[];
+  let input=0;
+  {%- for slot in program.slots %}
+  s[{{ slot.id }}]={{ 'args[input++].slice()' if slot.storage == 'input' else 'undefined' }};
+  {% if slot.storage == 'input' %}{{ typed_check('s[' ~ slot.id ~ ']',slot.value_type) }}{% endif %}
+  {%- endfor %}
+  {%- for issued in program.operations %}
+  {%- set op=issued.operation -%}
+  {%- set ty=program.register_types[op.destination] if op.destination is defined else none -%}
+  {%- set dst='r[' ~ op.destination ~ ']' if op.destination is defined else '' -%}
+  {%- if op.operation == 'load' %}
+  {{ dst }}=s[{{ op.slot }}].slice();
+  {%- elif op.operation == 'store' %}
+  s[{{ op.slot }}]=r[{{ op.source }}].slice();
+  {%- elif op.operation == 'check_assertion' %}
+  // Value calls keep captures lazy; observation calls report each source check.
+  if(r[{{ op.condition }}][0]) {
+    {%- for destination in op.destinations %}
+    {%- set message_type=program.register_types[destination] %}
+    r[{{ destination }}]=[{{ typed_literal(inactive_assertion_message(message_type.scalar)) }}];
+    {%- endfor %}
+  } else {
+    {%- if op.message.kind == 'captures' %}
+    const message={{ name }}_region_{{ loop.index0 }}_message({{ op.captures|tojson }}.map(index=>r[index]),observer);
+    {%- for destination in op.destinations %}
+    r[{{ destination }}]=message[{{ loop.index0 }}];
+    {%- endfor %}
+    {%- elif op.message.kind != 'no_captures' %}
+    {{ fail('unsupported-feature:javascript.solve.assertion_message.' ~ op.message.kind) }}
+    {%- endif %}
+    if(observer) {
+      observer({{ op.predicate_output }},[{{ op.destinations|join(',') }}].map(index=>r[index].slice()));
+      {% if assertion_outputs[op.predicate_output].role.level == 'error' %}throw observer.stop;{% endif %}
+    }
+  }
+  {%- elif op.operation == 'constant' %}
+  {{ dst }}=[{{ typed_literal(op.value) }}];
+  {%- elif op.operation == 'convert' %}
+  {{ dst }}=r[{{ op.operand }}].map(value=>{{ 'Number(value)' if op.operator == 'integer_to_real' else 'integerFromReal(' ~ ('Math.trunc(value)' if op.operator == 'real_to_integer_toward_zero' else 'Math.floor(value)') ~ ')' }});
+  {%- elif op.operation == 'unary' %}
+  {%- set operators={'negate':'Neg','not':'Not','abs':'Abs','sign':'Sign','ceiling':'Ceil','truncate':'Trunc'} -%}
+  {%- set a='value' -%}
+  {{ dst }}=r[{{ op.operand }}].map(value=>
+  {%- if ty.scalar.kind == 'integer' and op.operator == 'abs' -%}(value<0n?-value:value)
+  {%- elif ty.scalar.kind == 'integer' and op.operator == 'sign' -%}(value>0n?1n:(value<0n?-1n:0n))
+  {%- elif op.operator == 'not' -%}!value
+  {%- else -%}{{ unary(operators[op.operator] if op.operator in operators else op.operator|capitalize,a) }}
+  {%- endif -%});
+  {%- elif op.operation in ['binary','broadcast_binary','scale'] %}
+  {{ dst }}=Array.from({length:{{ ty.scalar_count }}},(_,k)=>{{ typed_binary('multiply' if op.operation == 'scale' else op.operator,('r[' ~ op.lhs ~ '][k]' if op.operation == 'binary' else ('r[' ~ op.scalar ~ '][0]' if op.scalar_on_lhs|default(false) else 'r[' ~ op.aggregate ~ '][k]')),('r[' ~ op.rhs ~ '][k]' if op.operation == 'binary' else ('r[' ~ op.aggregate ~ '][k]' if op.scalar_on_lhs|default(false) else 'r[' ~ op.scalar ~ '][0]')),ty) }});
+  {%- elif op.operation == 'compare' %}
+  {%- set symbols={'equal':'===','not_equal':'!==','less':'<','less_equal':'<=','greater':'>','greater_equal':'>='} %}
+  {{ dst }}=r[{{ op.lhs }}].map((value,k)=>value {{ symbols[op.operator] }} r[{{ op.rhs }}][k]);
+  {%- elif op.operation == 'select' %}
+  {{ dst }}=(r[{{ op.condition }}][0]?r[{{ op.if_true }}]:r[{{ op.if_false }}]).slice();
+  {%- elif op.operation == 'conditional' %}
+  {
+    const result=(r[{{ op.condition }}][0]?{{ name }}_region_{{ loop.index0 }}_true:{{ name }}_region_{{ loop.index0 }}_false)([{{ op.captures|join(',') }}].map(index=>r[index]),observer);
+    {%- for destination in op.destinations %}
+    r[{{ destination }}]=result[{{ loop.index0 }}];
+    {%- endfor %}
+  }
+  {%- elif op.operation == 'call' %}
+  {
+    const forwarded=observer ? Object.assign((predicate,captures)=>{
+      const binding={{ op.assertion_forwarding|tojson }}.find(binding=>binding.child_predicate===predicate);
+      if(!binding)throw new Error('Missing checked assertion forwarding');
+      observer(binding.parent_predicate,captures);
+    },{stop:observer.stop}) : null;
+    const result={{ call_prefix }}{{ op.owner }}({{ op.arguments|tojson }}.map(index=>r[index]),forwarded);
+    {%- for destination in op.destinations %}
+    r[{{ destination }}]=result[{{ loop.index0 }}];
+    {%- endfor %}
+  }
+  {%- elif op.operation == 'fold' %}
+  {
+    let carried={{ op.initial|tojson }}.map(index=>r[index].slice());
+    const captures={{ op.captures|tojson }}.map(index=>r[index]);
+    {%- for binder in op.domain.binders %}
+    {{ 'foldLoop:' if loop.first else '' }}
+    for (let b{{ loop.index0 }}=BigInt('{{ binder.lower }}');{{ 'b' ~ loop.index0 ~ '<=' if binder.step > 0 else 'b' ~ loop.index0 ~ '>=' }}BigInt('{{ binder.upper }}');b{{ loop.index0 }}+=BigInt('{{ binder.step }}')) {
+    {%- endfor %}
+    {%- if op.continuation is defined and op.continuation is not none %}
+    if(!{{ name }}_region_{{ loop.index0 }}_continue([...carried,...captures,{% for binder in op.domain.binders %}[b{{ loop.index0 }}],{% endfor %}],observer)[0][0])break foldLoop;
+    {%- endif %}
+    carried={{ name }}_region_{{ loop.index0 }}_fold([...carried,...captures,{% for binder in op.domain.binders %}[b{{ loop.index0 }}],{% endfor %}],observer);
+    {%- for binder in op.domain.binders %}}
+    {%- endfor %}
+    {%- for destination in op.destinations %}
+    r[{{ destination }}]=carried[{{ loop.index0 }}];
+    {%- endfor %}
+  }
+  {%- elif op.operation == 'transpose' %}
+  {
+    const shape={{ program.register_types[op.operand].dimensions|tojson }};
+    const trailing=shape.slice(2).reduce((a,b)=>a*b,1);
+    {{ dst }}=new Array({{ ty.scalar_count }});
+    for(let row=0;row<shape[0];row++)for(let col=0;col<shape[1];col++)for(let k=0;k<trailing;k++){{ dst }}[(col*shape[0]+row)*trailing+k]=r[{{ op.operand }}][(row*shape[1]+col)*trailing+k];
+  }
+  {%- elif op.operation == 'matrix_multiply' %}
+  {
+    const lhsShape={{ program.register_types[op.lhs].dimensions|tojson }},rhsShape={{ program.register_types[op.rhs].dimensions|tojson }};
+    const rows=lhsShape.length===1?1:lhsShape[0],inner=lhsShape.at(-1),columns=rhsShape.length===1?1:rhsShape[1];
+    if(inner===0)throw new Error('Solve typed matrix product requires a nonempty inner dimension');
+    {{ dst }}=[];
+    for(let row=0;row<rows;row++)for(let col=0;col<columns;col++) {
+      let value=r[{{ op.lhs }}][row*inner]*r[{{ op.rhs }}][col];
+      {{ typed_check('[value]',ty) }}
+      for(let k=1;k<inner;k++) {
+        const term=r[{{ op.lhs }}][row*inner+k]*r[{{ op.rhs }}][k*columns+col];
+        {{ typed_check('[term]',ty) }}
+        value+=term;
+        {{ typed_check('[value]',ty) }}
+      }
+      {{ dst }}.push(value);
+    }
+  }
+  {%- elif op.operation == 'cross' %}
+  {{ dst }}=Array.from({length:3},(_,i)=>{
+    const positive=r[{{ op.lhs }}][(i+1)%3]*r[{{ op.rhs }}][(i+2)%3];
+    const negative=r[{{ op.lhs }}][(i+2)%3]*r[{{ op.rhs }}][(i+1)%3];
+    {{ typed_check('[positive,negative]',ty) }}
+    return positive-negative;
+  });
+  {%- elif op.operation == 'linear_solve' %}
+  {{ dst }}=linearSolve(r[{{ op.matrix }}].slice(),r[{{ op.rhs }}].slice());
+  {%- elif op.operation in ['identity','diagonal'] %}
+  {{ dst }}=Array.from({length:{{ ty.scalar_count }}},(_,k)=>Math.floor(k/{{ ty.dimensions[0] }})===k%{{ ty.dimensions[0] }}?{{ ('1n' if ty.scalar.kind == 'integer' else '1') if op.operation == 'identity' else 'r[' ~ op.operand ~ '][k%' ~ ty.dimensions[0] ~ ']' }}:{{ '0n' if ty.scalar.kind == 'integer' else '0' }});
+  {%- elif op.operation == 'reduce' %}
+  {
+    const values=r[{{ op.operand }}];
+    if(values.length===0)throw new Error('Solve typed reduction requires nonempty input');
+    let value=values[0];
+    for(let i=1;i<values.length;i++) {
+      value={{ typed_binary({'sum':'add','product':'multiply','minimum':'min','maximum':'max','all':'and'}[op.operator],'value','values[i]',ty) }};
+      {{ typed_check('[value]',ty) }}
+    }
+    {{ dst }}=[value];
+  }
+  {%- elif op.operation in ['project_slice','update_slice'] %}
+  {
+    const shape={{ program.register_types[op.aggregate].dimensions|tojson }},origin={{ op.origin|tojson }};
+    const resultShape={{ program.register_types[op.value].dimensions|tojson if op.operation == 'update_slice' else ty.dimensions|tojson }};
+    const count={{ program.register_types[op.value].scalar_count if op.operation == 'update_slice' else ty.scalar_count }};
+    {{ dst }}={{ 'r[' ~ op.aggregate ~ '].slice()' if op.operation == 'update_slice' else '[]' }};
+    for(let k=0;k<count;k++) {
+      let rest=k,offset=0,stride=1;
+      for(let axis=shape.length-1;axis>=0;axis--) {
+        const coordinate=origin[axis]+rest%resultShape[axis];rest=Math.floor(rest/resultShape[axis]);
+        if(coordinate>=shape[axis])throw new Error('Solve typed slice out of bounds');
+        offset+=coordinate*stride;stride*=shape[axis];
+      }
+      {{ dst }}[{{ 'offset' if op.operation == 'update_slice' else 'k' }}]=r[{{ op.value if op.operation == 'update_slice' else op.aggregate }}][{{ 'k' if op.operation == 'update_slice' else 'offset' }}];
+    }
+  }
+  {%- elif op.operation == 'map' %}
+  {
+    const captures={{ op.captures|tojson }}.map(index=>r[index]);
+    {{ dst }}=[];
+    {%- for binder in op.domain.binders %}
+    for(let b{{ loop.index0 }}=BigInt('{{ binder.lower }}');{{ 'b' ~ loop.index0 ~ '<=' if binder.step > 0 else 'b' ~ loop.index0 ~ '>=' }}BigInt('{{ binder.upper }}');b{{ loop.index0 }}+=BigInt('{{ binder.step }}')) {
+    {%- endfor %}
+    {{ dst }}.push(...{{ name }}_region_{{ loop.index0 }}_map([...captures,{% for binder in op.domain.binders %}[b{{ loop.index0 }}],{% endfor %}],observer)[0]);
+    {%- for binder in op.domain.binders %}}
+    {%- endfor %}
+  }
+
+  {%- elif op.operation == 'construct_aggregate' %}
+  {{ dst }}={{ op.elements|tojson }}.flatMap(index=>r[index]);
+  {%- elif op.operation == 'fill' %}
+  {{ dst }}=new Array({{ ty.scalar_count }}).fill(r[{{ op.value }}][0]);
+  {%- elif op.operation == 'concatenate' %}
+  {
+    const dimensions={{ ty.dimensions|tojson }}, axis={{ op.axis }};
+    const inner=dimensions.slice(axis+1).reduce((a,b)=>a*b,1);
+    const outer=dimensions.slice(0,axis).reduce((a,b)=>a*b,1);
+    {{ dst }}=[];
+    for (let i=0;i<outer;i++) {
+      {%- for operand in op.operands %}
+      {%- set dims=program.register_types[operand].dimensions %}
+      const width{{ loop.index0 }}={{ dims[op.axis] if dims|length > op.axis else 1 }}*inner;
+      {{ dst }}.push(...r[{{ operand }}].slice(i*width{{ loop.index0 }},(i+1)*width{{ loop.index0 }}));
+      {%- endfor %}
+    }
+  }
+  {%- elif op.operation in ['project_element','project_element_dynamic','update_element','select_element'] %}
+  {
+    const dimensions={{ program.register_types[op.aggregate].dimensions|tojson }};
+    const coordinates=[{% for index in op.indices %}{{ index if op.operation == 'project_element' else 'Number(r[' ~ index ~ '][0])-1' }},{% endfor %}];
+    let offset=0,valid=true;
+    for (let i=0;i<dimensions.length;i++) {
+      valid=valid&&Number.isInteger(coordinates[i])&&coordinates[i]>=0&&coordinates[i]<dimensions[i];
+      offset=offset*dimensions[i]+coordinates[i];
+    }
+    {%- if op.operation == 'select_element' %}
+    {{ dst }}=valid?[r[{{ op.aggregate }}][offset]]:r[{{ op.out_of_range }}].slice();
+    {%- else %}
+    if (!valid) throw new Error('Solve typed array index out of bounds');
+    {%- if op.operation == 'update_element' %}
+    {{ dst }}=r[{{ op.aggregate }}].slice(); {{ dst }}[offset]=r[{{ op.value }}][0];
+    {%- else %}
+    {{ dst }}=[r[{{ op.aggregate }}][offset]];
+    {%- endif %}
+    {%- endif %}
+  }
+  {%- elif op.operation in ['project_view','update_view'] %}
+  {
+    const dimensions={{ program.register_types[op.aggregate].dimensions|tojson }},axes={{ op.axes|tojson }};
+    const count={{ program.register_types[op.value].scalar_count if op.operation == 'update_view' else ty.scalar_count }};
+    {{ dst }}={{ 'r[' ~ op.aggregate ~ '].slice()' if op.operation == 'update_view' else '[]' }};
+    for (let k=0;k<count;k++) {
+      let rest=k,offset=0,stride=1;
+      for (let axis=axes.length-1;axis>=0;axis--) {
+        const view=axes[axis];
+        const coordinate=view.index!==undefined?Number(r[view.index][0])-1:view.span.origin+rest%view.span.extent;
+        if (!Number.isInteger(coordinate)||coordinate<0||coordinate>=dimensions[axis]) throw new Error('Solve typed view out of bounds');
+        if (view.span) rest=Math.floor(rest/view.span.extent);
+        offset+=coordinate*stride;stride*=dimensions[axis];
+      }
+      {{ dst }}[{{ 'offset' if op.operation == 'update_view' else 'k' }}]=r[{{ op.value if op.operation == 'update_view' else op.aggregate }}][{{ 'k' if op.operation == 'update_view' else 'offset' }}];
+    }
+  }
+  {%- else %}
+  {{ fail('unsupported-feature:javascript.solve.typed.operation.' ~ op.operation) }}
+  {%- endif %}
+  {%- if op.destination is defined %}
+  {{ typed_check(dst,ty) }}
+  {%- endif %}
+  {%- endfor %}
+  return [{% for slot in program.slots %}{% if slot.storage == 'output' %}s[{{ slot.id }}],{% endif %}{% endfor %}];
+}
+{%- endmacro -%}
+
+{%- macro fold_expression(op,initial,captures,effects=none,observations='null') -%}
+(() => {
+  let carried={{ initial }};
+  const captures={{ captures }};
+  {%- for binder in op.domain.binders %}
+  {{ 'foldLoop:' if loop.first else '' }}
+  for(let binder{{ loop.index0 }}=BigInt('{{ binder.lower }}');binder{{ loop.index0 }}{{ '<=' if binder.step > 0 else '>=' }}BigInt('{{ binder.upper }}');binder{{ loop.index0 }}+=BigInt('{{ binder.step }}')) {
+  {%- endfor %}
+  {
+    const foldCarried=carried,foldCaptures=captures,foldIndices=[{% for binder in op.domain.binders %}Number(binder{{ loop.index0 }}),{% endfor %}];
+    {%- if op.continuation is defined and op.continuation is not none %}
+    const continuation=[];
+    { {{ operations(op.continuation,'continuation',effects,observations=observations) }} }
+    if(continuation[0]===0)break foldLoop;
+    {%- endif %}
+    const next=[];
+    { {{ operations(op.update,'next',effects,observations=observations) }} }
+    carried=next;
+  }
+  {%- for binder in op.domain.binders %}}
+  {%- endfor %}
+  return carried;
+})()
+{%- endmacro -%}
+{%- macro operations(program, output, effects=none, direct_assignment=none,observations='null') -%}
+{%- set assignment_target = output -%}
+{%- if direct_assignment is not none %}
+const assignmentOutputs=[];
+{%- set output = 'assignmentOutputs' -%}
+{%- endif %}
+const r = new Array({{ program.temporary_count|default(program.register_count|default(0)) }}).fill(0);
+{%- for op in program.ops %}
+{%- if op.kind == 'Const' %}
+r[{{ op.dst }}] = {{ op.value if op.value_class == 'finite' else ('Infinity' if op.value_class == 'positive_infinity' else ('-Infinity' if op.value_class == 'negative_infinity' else 'NaN')) }};
+{%- elif op.kind == 'LoadTime' %}
+r[{{ op.dst }}] = t;
+{%- elif op.kind in ['LoadY','LoadP','LoadSeed'] %}
+r[{{ op.dst }}] = {{ 'sy' if op.kind == 'LoadY' else ('sp' if op.kind == 'LoadP' else 'seed') }}[{{ op.index }}];
+{%- elif op.kind == 'TableBounds' %}
+r[{{ op.dst }}]=tableBounds(lookupTable(r[{{ op.table_id }}]))[{{ '1' if op.max else '0' }}];
+{%- elif op.kind in ['TableLookup','TableLookupSlope'] %}
+r[{{ op.dst }}]=tableLookup(lookupTable(r[{{ op.table_id }}]),r[{{ op.column }}],r[{{ op.input }}]).{{ 'value' if op.kind=='TableLookup' else 'slope' }};
+{%- elif op.kind == 'TableNextEvent' %}
+r[{{ op.dst }}]=tableNextEvent(lookupTable(r[{{ op.table_id }}]),r[{{ op.time }}]);
+{%- elif op.kind == 'RandomInitialState' %}
+r[{{ op.dst }}]=randomInitialState({{ op.generator|tojson }},r[{{ op.local_seed }}],r[{{ op.global_seed }}],{{ op.state_len }})[{{ op.state_index }}];
+{%- elif op.kind in ['RandomResult','RandomState'] %}
+{ const result=randomResult({{ op.generator|tojson }},{{ 'r.slice(' ~ op.state_start ~ ',' ~ (op.state_start+op.state_len) ~ ')' if op.state_len>0 else '[1]' }});
+r[{{ op.dst }}]={{ 'result.value' if op.kind=='RandomResult' else 'result.state[' ~ op.state_index ~ ']' }}; }
+{%- elif op.kind == 'ImpureRandomInit' %}
+r[{{ op.dst }}]=positiveU31(scrambleSeed(BigInt.asUintN(64,randomSeed(r[{{ op.seed }}]))^0x7158278830000001n));
+{%- elif op.kind in ['ImpureRandom','ImpureRandomInteger'] %}
+{%- if effects is not none %}{%- set effects.impure = true %}{%- endif %}
+r[{{ op.dst }}]={{ 'impureSample' if op.kind=='ImpureRandom' else 'impureInteger' }}(r[{{ op.id }}],BigInt('{{ op.call_site }}'),t{% if op.kind=='ImpureRandomInteger' %},r[{{ op.imin }}],r[{{ op.imax }}]{% endif %});
+{%- elif op.kind in ['LoadFoldCarried','LoadFoldCapture','LoadFoldIndex'] %}
+r[{{ op.dst }}]={{ 'foldCarried[' ~ op.index ~ ']' if op.kind == 'LoadFoldCarried' else ('foldCaptures[' ~ op.index ~ ']' if op.kind == 'LoadFoldCapture' else 'foldIndices[' ~ op.dimension ~ ']') }};
+{%- elif op.kind in ['FunctionFold','GuardedFunctionFold'] %}
+{
+  let result=r.slice({{ op.initial_start }},{{ op.initial_start+op.carried_count }});
+  {%- if op.kind == 'GuardedFunctionFold' %}
+  if(r[{{ op.activation }}]!==0) {
+  {%- endif %}
+  result={{ fold_expression(op,'result','r.slice(' ~ op.capture_start ~ ',' ~ (op.capture_start+op.capture_count) ~ ')',effects,observations) }};
+  {%- if op.kind == 'GuardedFunctionFold' %}}
+  {%- endif %}
+  for(let i=0;i<result.length;i++)r[{{ op.dst }}+i]=result[i];
+}
+{%- elif op.kind == 'StoreOutputFunctionFold' %}
+{
+  {%- if op.condition is not none %}
+  if((r[{{ op.condition }}]!==0)==={{ 'true' if op.nested_when_true else 'false' }}) {
+  {%- endif %}
+  const initial=[];
+  {%- for source in op.initial %}
+  {%- if source.Registers is defined %}
+  initial.push(...r.slice({{ source.Registers.start }},{{ source.Registers.start+source.Registers.count }}));
+  {%- else %}
+  initial.push(...foldCarried.slice({{ source.ParentCarried.base }},{{ source.ParentCarried.base+source.ParentCarried.count }}));
+  {%- endif %}
+  {%- endfor %}
+  const result={{ fold_expression(op,'initial','r.slice(' ~ op.capture_start ~ ',' ~ (op.capture_start+op.capture_count) ~ ')',effects,observations) }};
+  {%- for index in op.output_indices %}
+  {{ output }}[{{ index }}]=result[{{ op.result_base+loop.index0 }}];
+  {%- endfor %}
+  {%- if op.condition is not none %}
+  } else {
+    {%- for index in op.output_indices %}
+    {{ output }}[{{ index }}]=foldCarried[{{ op.output_indices[0]+loop.index0 }}];
+    {%- endfor %}
+  }
+  {%- endif %}
+}
+{%- elif op.kind == 'StoreOutputFoldTensorUpdate' %}
+{
+  const dimensions={{ op.dimensions|tojson }},updates={{ op.updates|tojson }},nodes={{ op.nodes|tojson }},targets={{ op.output_indices|tojson }};
+  const count=dimensions.reduce((a,b)=>a*b,1);
+  for(let element=0;element<count;element++) {
+    const offsets=updates.map(update=>{
+      let offset=0,stride=count;
+      for(let axis=0;axis<dimensions.length;axis++) {
+        stride/=dimensions[axis];
+        const coordinate=Math.floor(element/stride)%dimensions[axis],subscript=update.subscripts[axis];
+        if(subscript==='Whole')offset=offset*dimensions[axis]+coordinate;
+        else {
+          const index=subscript.Index;
+          const selected=index.Constant!==undefined?index.Constant:r[index.Runtime]-1;
+          if(!Number.isInteger(selected)||selected<0||selected>=dimensions[axis]||selected!==coordinate)return null;
+        }
+      }
+      return offset;
+    });
+    for(let lane=0;lane<{{ op.lanes }};lane++) {
+      const values=[foldCarried[{{ op.source_base }}+element*{{ op.source_stride }}+lane]];
+      for(const node of nodes) {
+        if(node.Update) {
+          const update=updates[node.Update.update],offset=offsets[node.Update.update];
+          values.push((update.condition===null||r[update.condition]!==0)&&offset!==null?r[update.value_start+offset*update.value_stride+lane]:values[node.Update.base]);
+        } else {
+          const select=node.Select;
+          values.push(values[r[select.condition]!==0?select.if_true:select.if_false]);
+        }
+      }
+      {{ output }}[targets[element*{{ op.lanes }}+lane]]=values[{{ op.result }}];
+    }
+  }
+}
+{%- elif op.kind in ['LoadIndexedP','LoadIndexedSeed'] %}
+r[{{ op.dst }}] = {{ 'sp' if op.kind == 'LoadIndexedP' else 'seed' }}[{{ op.base }} + Math.min({{ op.count - 1 }}, Math.max(0, Math.floor(r[{{ op.index_ref }}] + 0.5)))];
+{%- elif op.kind in ['LoadIndexedRegister','LoadIndexedFoldCarried','LoadIndexedFoldCapture'] %}
+{
+  const dimensions={{ op.dimensions|tojson }}, indices={{ op.indices|tojson }};
+  let offset=0;
+  for (let axis=0; axis<dimensions.length; axis++) {
+    const index=indices[axis];
+    const coordinate=index.Constant !== undefined ? index.Constant : r[index.Runtime]-1;
+    if (!Number.isInteger(coordinate) || coordinate<0 || coordinate>=dimensions[axis]) { offset=NaN; break; }
+    offset=offset*dimensions[axis]+coordinate;
+  }
+  r[{{ op.dst }}]=Number.isNaN(offset) ? NaN : {{ 'r' if op.kind == 'LoadIndexedRegister' else ('foldCarried' if op.kind == 'LoadIndexedFoldCarried' else 'foldCaptures') }}[{{ op.base }}+offset*{{ op.stride }}];
+}
+{%- elif op.kind == 'TensorLoad' %}
+for (let i=0; i<{{ op.count }}; i++) {
+  r[{{ op.dst }}+i*{{ op.lanes }}] = {{ 'sy' if op.input == 'Y' else 'sp' }}[{{ op.input_start }}+i];
+  for (let lane=1; lane<{{ op.lanes }}; lane++) r[{{ op.dst }}+i*{{ op.lanes }}+lane] = {{ '0' if op.seed_start is not defined or op.seed_start is none else 'seed[' ~ op.seed_start ~ '+i*' ~ (op.lanes-1) ~ '+lane-1]' }};
+}
+{%- elif op.kind == 'MatrixMultiply' %}
+for (let row=0; row<{{ op.rows }}; row++) for (let col=0; col<{{ op.columns }}; col++) {
+  const dst={{ op.dst }}+(row*{{ op.columns }}+col)*{{ op.lanes }};
+  const values=new Array({{ op.lanes }}).fill(0);
+  for (let k=0; k<{{ op.inner }}; k++) {
+    const lhs={{ op.lhs_start }}+(row*{{ op.inner }}+k)*{{ op.lanes }};
+    const rhs={{ op.rhs_start }}+(k*{{ op.columns }}+col)*{{ op.lanes }};
+    values[0] += r[lhs]*r[rhs];
+    for (let lane=1; lane<{{ op.lanes }}; lane++) values[lane] += r[lhs+lane]*r[rhs]+r[lhs]*r[rhs+lane];
+  }
+  for (let lane=0; lane<{{ op.lanes }}; lane++) r[dst+lane]=values[lane];
+}
+{%- elif op.kind == 'TensorBinary' %}
+for (let i=0; i<{{ op.count }}; i++) {
+  const lhs={{ op.lhs_start }}+i*{{ op.lhs_stride*op.lanes }};
+  const rhs={{ op.rhs_start }}+i*{{ op.rhs_stride*op.lanes }};
+  const values=new Array({{ op.lanes }}).fill(0);
+  values[0]={{ binary(op.operator, 'r[lhs]', 'r[rhs]') }};
+  {%- if op.operator == 'Div' and op.lanes > 1 %}
+  if (r[lhs]===0 && r[rhs]===0) values[0]=0;
+  {%- endif %}
+  for (let lane=1; lane<{{ op.lanes }}; lane++) {
+    {%- if op.operator in ['Add','Sub'] %}
+    values[lane]={{ binary(op.operator, 'r[lhs+lane]', 'r[rhs+lane]') }};
+    {%- elif op.operator == 'Mul' %}
+    values[lane]=r[lhs+lane]*r[rhs]+r[lhs]*r[rhs+lane];
+    {%- elif op.operator == 'Div' %}
+    const dl=1/r[rhs], dr=-r[lhs]/(r[rhs]*r[rhs]);
+    values[lane]=r[lhs+lane]*(Number.isFinite(dl)?dl:0)+r[rhs+lane]*(Number.isFinite(dr)?dr:0);
+    {%- else %}
+    {{ fail('unsupported-feature:javascript.solve.tensor_tangent.' ~ op.operator) }}
+    {%- endif %}
+  }
+  for (let lane=0; lane<{{ op.lanes }}; lane++) r[{{ op.dst }}+i*{{ op.lanes }}+lane]=values[lane];
+}
+{%- elif op.kind == 'TensorFill' %}
+for (let i=0; i<{{ op.count }}; i++) for (let lane=0; lane<{{ op.lanes }}; lane++) r[{{ op.dst }}+i*{{ op.lanes }}+lane]=r[{{ op.value_start }}+lane];
+{%- elif op.kind == 'TensorIdentity' %}
+r.fill(0,{{ op.dst }},{{ op.dst+op.size*op.size*op.lanes }});
+for (let i=0; i<{{ op.size }}; i++) r[{{ op.dst }}+(i*{{ op.size }}+i)*{{ op.lanes }}]=1;
+{%- elif op.kind == 'TensorTranspose' %}
+for (let row=0; row<{{ op.rows }}; row++) for (let col=0; col<{{ op.columns }}; col++) for (let lane=0; lane<{{ op.element_width*op.lanes }}; lane++) r[{{ op.dst }}+(row*{{ op.columns }}+col)*{{ op.element_width*op.lanes }}+lane]=r[{{ op.src_start }}+(col*{{ op.rows }}+row)*{{ op.element_width*op.lanes }}+lane];
+{%- elif op.kind == 'TensorCross' %}
+{
+  const lhs=r.slice({{ op.lhs_start }},{{ op.lhs_start+3*op.lanes }});
+  const rhs=r.slice({{ op.rhs_start }},{{ op.rhs_start+3*op.lanes }});
+  for (let i=0; i<3; i++) {
+    const a=((i+1)%3)*{{ op.lanes }}, b=((i+2)%3)*{{ op.lanes }};
+    r[{{ op.dst }}+i*{{ op.lanes }}]=lhs[a]*rhs[b]-lhs[b]*rhs[a];
+    for (let lane=1; lane<{{ op.lanes }}; lane++) r[{{ op.dst }}+i*{{ op.lanes }}+lane]=lhs[a+lane]*rhs[b]+lhs[a]*rhs[b+lane]-lhs[b+lane]*rhs[a]-lhs[b]*rhs[a+lane];
+  }
+}
+{%- elif op.kind == 'TensorConcatenate' %}
+{
+  const dims={{ op.dimensions|tojson }};
+  const inner=dims.slice({{ op.axis+1 }}).reduce((a,b)=>a*b,1);
+  let offset=0;
+  for (const source of {{ op.sources|tojson }}) {
+    const block=source.dimensions[{{ op.axis }}]*inner;
+    const count=source.dimensions.reduce((a,b)=>a*b,1);
+    for (let i=0; i<count; i++) {
+      const destination=Math.floor(i/block)*dims[{{ op.axis }}]*inner+offset*inner+i%block;
+      for (let lane=0; lane<{{ op.lanes }}; lane++) r[{{ op.dst }}+destination*{{ op.lanes }}+lane]=r[source.start+i*{{ op.lanes }}+lane];
+    }
+    offset += source.dimensions[{{ op.axis }}];
+  }
+}
+{%- elif op.kind in ['LoadFunctionConditionalCapture','LoadFunctionConditionalCaptureRange'] %}
+{%- if op.kind == 'LoadFunctionConditionalCapture' %}
+r[{{ op.dst }}]=conditionalCaptures[{{ op.index }}];
+{%- else %}
+for (let i=0; i<{{ op.count }}; i++) r[{{ op.dst }}+i]=conditionalCaptures[{{ op.index_start }}+i];
+{%- endif %}
+{%- elif op.kind == 'FunctionConditional' %}
+{
+  const conditionalCaptures=r.slice({{ op.capture_start }},{{ op.capture_start+op.capture_count }});
+  let selected=false;
+  {%- for arm in op.arms %}
+  if (!selected) {
+    const condition=[];
+    { {{ operations(arm.condition,'condition',effects,observations=observations) }} }
+    if (condition[0]!==0) {
+      const result=[];
+      { {{ operations(arm.result,'result',effects,observations=observations) }} }
+      for (let i=0; i<{{ op.result_count }}; i++) r[{{ op.dst }}+i]=result[i];
+      selected=true;
+    }
+  }
+  {%- endfor %}
+  if (!selected) {
+    const result=[];
+    { {{ operations(op.fallback,'result',effects,observations=observations) }} }
+    for (let i=0; i<{{ op.result_count }}; i++) r[{{ op.dst }}+i]=result[i];
+  }
+}
+{%- elif op.kind in ['PureCall','PureCallDirectional','PureCallObservation'] %}
+{
+  const args=[];
+  {%- set selected=namespace(owner=none) %}
+  {%- if op.kind in ['PureCall','PureCallObservation'] %}
+  {%- set selected.owner=solve_model.pure_calls.owners[op.owner] %}
+  {%- else %}
+  {%- for candidate in solve_model.pure_call_directional_owners %}
+  {%- if candidate.id == op.owner %}{%- set selected.owner=candidate %}{%- endif %}
+  {%- endfor %}
+  {%- endif %}
+  {%- if selected.owner is none %}{{ fail('unsupported-feature:javascript.solve.directional_owner.' ~ op.owner) }}{%- endif %}
+  {%- set owner=selected.owner %}
+  {%- for ty in owner.inputs %}
+  args.push(r.slice({{ op.input_starts[loop.index0] }},{{ op.input_starts[loop.index0]+ty.scalar_count }}).map(value=>{{ 'integerFromReal(value)' if ty.scalar.kind == 'integer' else ('booleanFromReal(value)' if ty.scalar.kind == 'boolean' else 'value') }}));
+  {%- endfor %}
+  {%- if op.kind == 'PureCallObservation' %}
+  const predicates={{ op.predicate_outputs|tojson }}.map(()=>1);
+  const observer=Object.assign((predicate,captures)=>{
+    const index={{ op.predicate_outputs|tojson }}.indexOf(predicate);
+    if(index<0)throw new Error('Unknown checked assertion predicate');
+    predicates[index]=0;
+    {% if observations != 'null' %}
+    const values=[];
+    {%- for cell in owner.outputs %}
+    {%- if cell.role.kind == 'assertion_message_value' %}
+    if(predicate==={{ loop.index0-cell.role.predicate_distance }}) {
+      const capture=captures.shift();
+      if(!capture)throw new Error('Missing checked assertion capture');
+      values[{{ loop.index0 }}]=capture;
+    }
+    {%- endif %}
+    {%- endfor %}
+    {{ observations }}.push({owner:{{ op.owner }},predicate,values});
+    {% endif %}
+  },{stop:{}});
+  try {pure_{{ op.owner }}(args,observer);}catch(error){if(error!==observer.stop)throw error;}
+  const result=predicates;
+  {%- else %}
+  const result={{ 'pure_' if op.kind == 'PureCall' else 'pure_directional_' }}{{ op.owner }}(args).flat().map(Number);
+  {%- endif %}
+  for(let i=0;i<result.length;i++)r[{{ op.dst }}+i]=result[i];
+}
+{%- elif op.kind == 'Move' %}
+r[{{ op.dst }}] = r[{{ op.src }}];
+{%- elif op.kind == 'Unary' %}
+r[{{ op.dst }}] = {{ unary(op.operator, 'r[' ~ op.arg ~ ']') }};
+{%- elif op.kind == 'Binary' %}
+r[{{ op.dst }}] = {{ binary(op.operator, 'r[' ~ op.lhs ~ ']', 'r[' ~ op.rhs ~ ']') }};
+{%- elif op.kind == 'Compare' %}
+{%- set symbols = {'Lt':'<','Le':'<=','Gt':'>','Ge':'>=','Eq':'===','Ne':'!=='} %}
+r[{{ op.dst }}] = r[{{ op.lhs }}] {{ symbols[op.operator] }} r[{{ op.rhs }}] ? 1 : 0;
+{%- elif op.kind == 'Select' %}
+r[{{ op.dst }}] = r[{{ op.cond }}] !== 0 ? r[{{ op.if_true }}] : r[{{ op.if_false }}];
+{%- elif op.kind == 'DotProduct' %}
+r[{{ op.dst }}] = 0;
+for (let i=0; i<{{ op.count }}; i++) r[{{ op.dst }}] += r[{{ op.lhs_start }} + i*{{ op.lhs_stride }}] * r[{{ op.rhs_start }} + i*{{ op.rhs_stride }}];
+{%- elif op.kind == 'LinearSolveComponent' %}
+r[{{ op.dst }}] = linearSolve(r.slice({{ op.matrix_start }}, {{ op.matrix_start + op.n*op.n }}), r.slice({{ op.rhs_start }}, {{ op.rhs_start + op.n }}))[{{ op.component }}];
+{%- elif op.kind == 'StoreOutput' %}
+{{ output }}[{{ op.output_index }}] = r[{{ op.src }}];
+{%- elif op.kind == 'StoreOutputRange' %}
+{%- for index in op.output_indices %}
+{{ output }}[{{ index }}] = r[{{ op.start }} + {{ loop.index0 * op.stride }}];
+{%- endfor %}
+{%- else %}
+{{ fail('unsupported-feature:javascript.solve.operation.' ~ op.kind) }}
+{%- endif %}
+{%- endfor %}
+{%- if direct_assignment is not none %}
+{{ assignment_target }}[{{ direct_assignment.target_y_index }}]=r[{{ direct_assignment.expr_reg }}];
+{%- endif %}
+{%- endmacro -%}
+{%- macro evaluate(plan, output, effects=none,observations='null') -%}
+{%- for program in plan.programs %}
+{ {{ operations(program, output,effects,observations=observations) }} }
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro program_evaluators(plan,effects=none) -%}
+[
+  {%- for program in plan.programs %}
+  {indices:{{ program.output_indices|tojson }},evaluate:(t,sy,sp)=>{const output=[];{{ operations(program,'output',effects) }}return output;}},
+  {%- endfor %}
+]
+{%- endmacro -%}
+
+{# Resolve the compiler-issued message selector against its source owner's outputs.
+   Message rows name captures of the failed invocation; never rerun that function. #}
+{%- macro assertion_capture(row,projection,source) -%}
+{%- set selected=namespace(start=none,output=none,offset=0) -%}
+{%- set src=row[-1].StoreOutput.src -%}
+{%- for op in row %}
+{%- if op.PureCall is defined and op.PureCall.site.owner == projection.site.owner %}
+{%- set selected.start=op.PureCall.dst_start -%}
+{%- endif %}
+{%- endfor %}
+{%- if selected.start is none %}{{ fail('unsupported-feature:javascript.solve.assertion_capture.producer') }}{% endif %}
+{%- for cell in solve_model.pure_calls.owners[projection.site.owner].outputs %}
+{%- if selected.start+selected.offset == src and cell.value_type.scalar_count == 1 and cell.role.kind == 'assertion_message_value' and loop.index0-cell.role.predicate_distance == projection.predicate_output and cell.value_type.scalar.kind == source|lower %}
+{%- set selected.output=loop.index0 -%}
+{%- endif %}
+{%- set selected.offset=selected.offset+cell.value_type.scalar_count -%}
+{%- endfor %}
+{%- if selected.output is none %}{{ fail('unsupported-feature:javascript.solve.assertion_capture.output') }}{% endif %}
+notice.values[{{ selected.output }}][0]
+{%- endmacro %}
+
+{%- macro initial_values(name, plan) %}
+  const {{ name }} = new Array({{ plan.count }});
+  {%- for run in plan.runs %}
+  {%- if run.kind == 'repeat' %}
+  {{ name }}.fill(realFromBits('{{ run.bits }}'), {{ run.start }}, {{ run.start + run.count }});
+  {%- elif run.kind == 'literal' %}
+  {%- for bits in run.bits %}
+  {{ name }}[{{ run.start + loop.index0 }}] = realFromBits('{{ bits }}');
+  {%- endfor %}
+  {%- else %}
+  {{ fail('unsupported-feature:javascript.solve.initial_values.' ~ run.kind) }}
+  {%- endif %}
+  {%- endfor %}
+{%- endmacro %}
+
+function Model(externalTables=[
+  {%- for table in solve_model.external_tables.tables %}
+  {id:'{{ table.id }}',data:{{ table.data|tojson }},columns:{{ table.columns|tojson }},smoothness:{{ table.smoothness }},extrapolation:{{ table.extrapolation }}}{% if not loop.last %},{% endif %}
+  {%- endfor %}
+]) {
+  const nx = {{ solve.solve_layout.state_scalar_count }};
+  {{ initial_values('compiledY', solve_model.initial_y) }}
+  {{ initial_values('compiledP', solve_model.parameters) }}
+  const initialY = compiledY.slice();
+  const initialP = compiledP.slice();
+  const names = {{ solve.state_names()|tojson }};
+  {%- for v in dae.variables %}
+  {%- set storage = solve.solve_layout.variable_storage_runs[v.id].base %}
+  {%- if storage.Y is defined and storage.Y.index >= solve.solve_layout.state_scalar_count %}
+  {%- for name in v.scalar_names %}
+  names[{{ storage.Y.index + loop.index0 }}] = {{ name|tojson }};
+  {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
+  const solverNominals={{ solve_model.solver_nominals|tojson }};
+  const variableMeta = {{ solve_model.variable_meta|tojson }};
+  const metaByName = new Map(variableMeta.map(v => [v.name, v]));
+  const x0 = initialY.slice(0, nx);
+  const y0 = {{ '[]' if reduced else 'initialY.slice(nx)' }};
+  const parameterSlots = [];
+  const parameters = [];
+  const inputs = [];
+  {%- for v in dae.variables %}
+  {%- if v.role in ['parameter','input'] %}
+  {%- set storage = solve.solve_layout.variable_storage_runs[v.id].base %}
+  {%- for name in v.scalar_names %}
+  {%- if storage.P is defined %}
+  {{ 'parameters' if v.role == 'parameter' else 'inputs' }}.push({ name: {{ name|tojson }}, start: initialP[{{ storage.P.index + loop.index0 }}], slot: {{ storage.P.index + loop.index0 }} });
+  {%- if v.role == 'parameter' %}
+  parameterSlots.push({{ storage.P.index + loop.index0 }});
+  {%- endif %}
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
+  const constants = [];
+  {%- for v in dae.variables %}
+  {%- if v.role == 'constant' %}
+  {%- set storage = solve.solve_layout.variable_storage_runs[v.id].base %}
+  {%- for name in v.scalar_names %}
+  {%- if storage.P is defined %}
+  constants.push({ name: {{ name|tojson }}, value: initialP[{{ storage.P.index + loop.index0 }}] });
+  {%- endif %}
+  {%- endfor %}
+  {%- endif %}
+  {%- endfor %}
+  const visibleNames = {{ solve_model.visible_names|tojson }};
+  const visibleIndices = new Map(visibleNames.map((name,index)=>[name,index]));
+  const observationNames = [...names.slice(nx), ...visibleNames.filter(name=>
+    !names.includes(name) && ['algebraic','discrete-real','discrete-valued','output'].includes(metaByName.get(name)?.role))];
+  function observe(t,sy,sp) {
+    const output=[];
+    {{ evaluate(solve_model.visible_value_plan,'output',effects) }}
+    return observationNames.map(name=>visibleIndices.has(name) ? output[visibleIndices.get(name)] : sy[names.indexOf(name)]);
+  }
+  const observationStarts = observe(0,initialY,initialP);
+  const meta = {
+    name: {{ model_name|default('GeneratedModel')|tojson }},
+    generator: 'solve',
+    states: names.slice(0, nx).map((name, i) => ({ ...metaByName.get(name), name, start: x0[i] })),
+    algebraics: observationNames.map((name, i) => ({ ...metaByName.get(name), name, start: observationStarts[i] })),
+    solverAlgebraics: {{ '[]' if reduced else 'names.slice(nx)' }},
+    parameters, inputs, constants, conditions: Array.from({length:{{ solve.events.root_plan.output_count + solve.events.delays.value_parameter_indices|length }}},(_,i)=>({name:`condition_${i}`})),
+    summary: { nx, ny: names.length-nx, neqs: nx+y0.length },
+  };
+
+  const clockDefinitions={{ solve.clocks.render_schedules|tojson }};
+  let clockStates=[],clockHistorySchedules=[];
+  function checkedClockInteger(value) {
+    if(value<-(1n<<127n)||value>=(1n<<127n))throw new Error('Solve clock rational overflow');
+    return value;
+  }
+  function clockGcd(a,b) {a=a<0n?-a:a;while(b!==0n){const rest=a%b;a=b;b=rest;}return a;}
+  function clockRational(n,d) {
+    if(d<=0n)throw new Error('Solve clock denominator must be positive');
+    const divisor=clockGcd(n,d);
+    return [checkedClockInteger(n/divisor),checkedClockInteger(d/divisor)];
+  }
+  function addClockRational(a,b) {
+    const divisor=clockGcd(a[1],b[1]),left=b[1]/divisor,right=a[1]/divisor;
+    return clockRational(checkedClockInteger(checkedClockInteger(a[0]*left)+checkedClockInteger(b[0]*right)),checkedClockInteger(a[1]*left));
+  }
+  function multiplyClockInteger(a,index) {
+    checkedClockInteger(index);
+    const divisor=clockGcd(index,a[1]);
+    return clockRational(checkedClockInteger(a[0]*(index/divisor)),a[1]/divisor);
+  }
+  function clockSeconds(a) {return Number(a[0])/Number(a[1]);}
+  function clockRationalFromSeconds(value) {
+    if(!Number.isFinite(value))throw new Error('Solve clock start time must be finite');
+    if(value===0)return [0n,1n];
+    const buffer=new ArrayBuffer(8),view=new DataView(buffer);view.setFloat64(0,Math.abs(value));
+    const bits=view.getBigUint64(0),exponent=Number((bits>>52n)&2047n);
+    let numerator=(bits&((1n<<52n)-1n))+(exponent===0?0n:1n<<52n),shift=exponent===0?-1074:exponent-1075;
+    while(numerator%2n===0n&&shift<0){numerator/=2n;shift++;}
+    if(shift<=-127)throw new Error('Solve clock start time is not rationally representable');
+    let denominator=1n;
+    if(shift>=0){numerator<<=BigInt(shift);checkedClockInteger(value<0?-numerator:numerator);}else denominator<<=BigInt(-shift);
+    let pn=0n,cn=1n,pd=1n,cd=0n;
+    while(denominator!==0n) {
+      const term=numerator/denominator,nextN=term*cn+pn,nextD=term*cd+pd;
+      if(nextN>=(1n<<128n)||nextD>=(1n<<128n))throw new Error('Solve clock start time is not rationally representable');
+      const signed=value<0?-nextN:nextN;
+      if(signed>=-(1n<<127n)&&signed<(1n<<127n)&&nextD>0n&&nextD<(1n<<127n)&&Number(signed)/Number(nextD)===value)return [signed,nextD];
+      pn=cn;cn=nextN;pd=cd;cd=nextD;
+      const rest=numerator%denominator;numerator=denominator;denominator=rest;
+    }
+    throw new Error('Solve clock start time is not rationally representable');
+  }
+  function resolveClock(definition,start) {
+    if(definition===null)return undefined;
+    const period=clockRational(BigInt(definition.period_num),BigInt(definition.period_den));
+    let phase=clockRational(BigInt(definition.phase_num),BigInt(definition.phase_den));
+    if(definition.anchor==='simulation_start')phase=addClockRational(clockRationalFromSeconds(start),phase);
+    return {period,phase,consumed:undefined};
+  }
+  function initializeClocks(start) {
+    clockStates=clockDefinitions.map(definition=>resolveClock(definition,start));
+    clockHistorySchedules={{ solve.clocks.pre_binding_schedules|tojson }}.map(definition=>resolveClock(definition,start));
+  }
+  function clockMatches(a,b) {return Math.abs(a-b)<=1e-12*(1+Math.max(Math.abs(a),Math.abs(b)));}
+  function clockTick(clock,index) {return clockSeconds(addClockRational(clock.phase,multiplyClockInteger(clock.period,index)));}
+  function activeClockIndex(clock,t) {
+    const ticks=(t-clockSeconds(clock.phase))/clockSeconds(clock.period),nearest=Math.round(ticks);
+    if(ticks<0||!Number.isFinite(ticks)||!clockMatches(ticks,nearest))return undefined;
+    const index=checkedClockInteger(BigInt(nearest));
+    return clock.consumed===index?undefined:index;
+  }
+  function nextClockTime(clock,t) {
+    const phase=clockSeconds(clock.phase),period=clockSeconds(clock.period);
+    let index=BigInt(Math.max(0,Math.floor((t-phase)/period)));
+    for(let attempt=0;attempt<4;attempt++) {
+      const deadline=clockTick(clock,index);
+      if(deadline>t&&!clockMatches(deadline,t))return deadline;
+      const distinct=t+1e-12*(1+Math.max(Math.abs(deadline),Math.abs(t)));
+      index=BigInt(Math.max(Number(index)+1,Math.floor((distinct-phase)/period)+1,0));
+    }
+    throw new Error('Solve periodic clock does not advance at this time magnitude');
+  }
+
+  function realFromBits(bits) {
+    const buffer=new ArrayBuffer(8),view=new DataView(buffer);
+    view.setBigUint64(0,BigInt(bits));return view.getFloat64(0);
+  }
+  function integerFromReal(value) {
+    if (!Number.isFinite(value)||!Number.isInteger(value)||value < -9223372036854775808 || value >= 9223372036854775808) throw new Error('Solve Integer conversion out of range');
+    return BigInt(value);
+  }
+  function booleanFromReal(value) {
+    if(value!==0&&value!==1)throw new Error('Solve Boolean conversion requires zero or one');
+    return value!==0;
+  }
+  {%- for owner in solve_model.pure_calls.owners %}
+  {{ typed_definition(owner.body,'pure_' ~ owner.id,assertion_outputs=owner.outputs) }}
+  {%- endfor %}
+  {%- for owner in solve_model.pure_call_directional_owners %}
+  {{ typed_definition(owner.body,'pure_directional_' ~ owner.id,'pure_directional_',owner.outputs) }}
+  {%- endfor %}
+  const { lookupTable, tableBounds, tableLookup, tableNextEvent } = __RUMOCA_NATIVE_TABLE_RUNTIME__(externalTables);
+
+  function randomSeed(value) {
+    if(Number.isNaN(value))return 0n;
+    if(value>=9223372036854775808)return 9223372036854775807n;
+    if(value<=-9223372036854775808)return -9223372036854775808n;
+    return BigInt((value<0?-1:1)*Math.floor(Math.abs(value)+0.5));
+  }
+  function scrambleSeed(value) {
+    let x=BigInt.asUintN(64,value);
+    x^=x>>30n;x=BigInt.asUintN(64,x*0xbf58476d1ce4e5b9n);
+    x^=x>>27n;x=BigInt.asUintN(64,x*0x94d049bb133111ebn);
+    return x^(x>>31n);
+  }
+  function positiveU31(value) {return Number((value&0x7fffffffn)||1n);}
+  let impureRandomStreams=new Map();
+  function impureSample(id,callSite,time) {
+    const streamId=randomSeed(id);
+    const stream=impureRandomStreams.get(streamId)??{
+      state:scrambleSeed(BigInt.asUintN(64,streamId*0xd1b54a32d192ed03n))||1n,cache:new Map(),
+    };
+    const buffer=new ArrayBuffer(8),view=new DataView(buffer);
+    view.setFloat64(0,time);
+    const key=view.getBigUint64(0).toString()+':'+callSite.toString();
+    if(stream.cache.has(key))return stream.cache.get(key);
+    let state=stream.state||0x9e3779b97f4a7c15n;
+    state^=state>>12n;state^=BigInt.asUintN(64,state<<25n);state^=state>>27n;
+    const sample=BigInt.asUintN(64,state*0x2545f4914f6cdd1dn);
+    const value=Math.max(Number.EPSILON,Math.min(1,Number(sample>>11n)/9007199254740992));
+    const cache=new Map(stream.cache);cache.set(key,value);
+    impureRandomStreams=new Map(impureRandomStreams);
+    impureRandomStreams.set(streamId,{state,cache});
+    return value;
+  }
+  function impureInteger(id,callSite,time,minimum,maximum) {
+    const a=randomSeed(minimum),b=randomSeed(maximum),lo=a<b?a:b,hi=a>b?a:b;
+    const value=Number(lo)+Math.floor(impureSample(id,callSite,time)*Number(hi-lo+1n));
+    return Math.max(Number(lo),Math.min(Number(hi),value));
+  }
+
+  function randomGenerator(generator) {
+    switch(generator) {
+      case 'Xorshift64Star':return {length:2,name:'Modelica.Math.Random.Generators.Xorshift64star.random'};
+      case 'Xorshift128Plus':return {length:4,name:'Modelica.Math.Random.Generators.Xorshift128plus.random'};
+      case 'Xorshift1024Star':return {length:33,name:'Modelica.Math.Random.Generators.Xorshift1024star.random'};
+      default:throw new Error('Unknown checked random generator');
+    }
+  }
+  function randomInitialState(generator,localSeed,globalSeed,count) {
+    const length=Math.max(count,randomGenerator(generator).length),out=[];
+    let state=scrambleSeed(BigInt.asUintN(64,randomSeed(localSeed))^(BigInt.asUintN(64,randomSeed(globalSeed))<<1n)^(BigInt(length)*0x9e3779b97f4a7c15n))||1n;
+    for(let i=0;i<length;i++) {state=scrambleSeed(state^BigInt.asUintN(64,BigInt(i+1)*0xd1b54a32d192ed03n))||1n;out.push(positiveU31(state));}
+    return out;
+  }
+  function randomResult(generator,values) {
+    const definition=randomGenerator(generator),length=Math.max(definition.length,values.length,1);
+    const buffer=new ArrayBuffer(8),view=new DataView(buffer);
+    let hash=0n,state=0n;
+    for(const character of definition.name)hash=BigInt.asUintN(64,hash*16777619n)^BigInt(character.charCodeAt(0));
+    for(const value of values) {view.setFloat64(0,value);state^=scrambleSeed(view.getBigUint64(0));}
+    state^=scrambleSeed(hash);if(state===0n)state=0x9e3779b97f4a7c15n;
+    const out=[];
+    for(let i=0;i<length;i++) {state=scrambleSeed(state^BigInt.asUintN(64,BigInt(i+1)*0x94d049bb133111ebn))||1n;out.push(positiveU31(state));}
+    let x=state;x^=x>>12n;x^=BigInt.asUintN(64,x<<25n);x^=x>>27n;
+    const sample=BigInt.asUintN(64,x*0x2545f4914f6cdd1dn);
+    return {value:Math.max(Number.EPSILON,Math.min(1,Number(sample>>11n)/9007199254740992)),state:out};
+  }
+
+  function linearSolve(matrix, rhs) {
+    const n = rhs.length;
+    for (let k=0; k<n; k++) {
+      let pivot=k;
+      for (let i=k+1; i<n; i++) if (Math.abs(matrix[i*n+k]) > Math.abs(matrix[pivot*n+k])) pivot=i;
+      if (!Number.isFinite(matrix[pivot*n+k]) || matrix[pivot*n+k] === 0) throw new Error('Singular Solve linear system');
+      for (let j=k; j<n; j++) [matrix[k*n+j], matrix[pivot*n+j]] = [matrix[pivot*n+j], matrix[k*n+j]];
+      [rhs[k], rhs[pivot]] = [rhs[pivot], rhs[k]];
+      for (let i=k+1; i<n; i++) {
+        const factor=matrix[i*n+k]/matrix[k*n+k];
+        for (let j=k; j<n; j++) matrix[i*n+j] -= factor*matrix[k*n+j];
+        rhs[i] -= factor*rhs[k];
+      }
+    }
+    const result=new Array(n).fill(0);
+    for (let i=n-1; i>=0; i--) {
+      let value=rhs[i];
+      for (let j=i+1; j<n; j++) value -= matrix[i*n+j]*result[j];
+      result[i]=value/matrix[i*n+i];
+    }
+    return result;
+  }
+
+  {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 or solve.discrete.post_commit_assignment_plan.stored_output_count > 0 %}
+  const runtimePrograms={{ program_evaluators(solve.discrete.runtime_assignment_plan,effects) }};
+  const runtimeTargets={{ solve.discrete.runtime_assignment_targets|tojson }};
+  const postCommitPrograms={{ program_evaluators(solve.discrete.post_commit_assignment_plan,effects) }};
+  const postCommitTargets={{ solve.discrete.post_commit_assignment_targets|tojson }};
+  function applyIssuedAssignments(t,sy,sp,programs,targets) {
+    let changedAny=false;
+    for(let iteration=0;iteration<{{ solve.discrete.event_iteration_plan.schedule.fixed_point_cap }};iteration++) {
+      const output=[];
+      for(const program of programs) {
+        const values=program.evaluate(t,sy,sp);
+        for(const row of program.indices)output[row]=values[row];
+      }
+      let changed=false;
+      for(let row=0;row<targets.length;row++) {
+        const target=targets[row],array=target.Y?sy:sp,index=target.Y?target.Y.index:target.P.index;
+        if(!Number.isFinite(output[row]))throw new Error('Non-finite checked runtime assignment');
+        changed=array[index]!==output[row]||changed;array[index]=output[row];
+      }
+      if(!changed)return changedAny;
+      changedAny=true;
+    }
+    throw new Error('Checked runtime assignments did not settle');
+  }
+  {%- endif %}
+
+  {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+  const delaySlots={{ solve.events.delays.value_parameter_indices|tojson }};
+  const discreteDelaySources={{ solve.events.delays.source_is_discrete|tojson }};
+  let delayChannels=[],delayCommitted=false;
+  function delayPartitionPoint(items,predicate) {
+    let low=0,high=items.length;
+    while(low<high) {const mid=low+Math.floor((high-low)/2);if(predicate(items[mid]))low=mid+1;else high=mid;}
+    return low;
+  }
+  function delayRows(t,sy,sp) {
+    const sources=[],times=[],maxima=[];
+    {{ evaluate(solve.events.delays.source_plan,'sources',effects) }}
+    {{ evaluate(solve.events.delays.delay_time_plan,'times',effects) }}
+    {{ evaluate(solve.events.delays.delay_max_plan,'maxima',effects) }}
+    for(let i=0;i<delaySlots.length;i++)if(!Number.isFinite(sources[i])||!Number.isFinite(times[i])||times[i]<0||!Number.isFinite(maxima[i])||maxima[i]<times[i])throw new Error('Invalid checked delay source, delayTime or delayMax');
+    return {sources,times,maxima};
+  }
+  function delayChannel(t,value,amount,maximum) {
+    return {points:[{time:t,value}],amount,maximum,query:t-amount,discontinuities:[],parity:false,suppressed:undefined};
+  }
+  function delayedValue(channel,t,amount,source,discrete) {
+    if(!delayCommitted)return source;
+    const query=t-amount,points=channel.points,last=points[points.length-1];
+    if(amount===0&&(!last||t>=last.time))return source;
+    if(!points.length)return source;
+    if(query<=points[0].time)return points[0].value;
+    const upper=delayPartitionPoint(points,point=>point.time<=query),lower=points[Math.max(0,upper-1)];
+    if(discrete||(upper<points.length&&points[upper].time===lower.time))return lower.value;
+    const next=points[upper]||{time:t,value:source};
+    if(next.time<=lower.time)return next.value;
+    const fraction=Math.max(0,Math.min(1,(query-lower.time)/(next.time-lower.time)));
+    return lower.value+fraction*(next.value-lower.value);
+  }
+  function refreshDelays(t,sy,sp) {
+    const rows=delayRows(t,sy,sp);
+    if(!delayChannels.length)delayChannels=rows.sources.map((source,i)=>delayChannel(t,source,rows.times[i],rows.maxima[i]));
+    let changed=false;
+    for(let i=0;i<delaySlots.length;i++) {
+      const value=delayedValue(delayChannels[i],t,rows.times[i],rows.sources[i],discreteDelaySources[i]);
+      changed=sp[delaySlots[i]]!==value||changed;sp[delaySlots[i]]=value;
+    }
+    return changed;
+  }
+  function delayTimeSpacing(time) {
+    if(time===0)return Number.MIN_VALUE;
+    const buffer=new ArrayBuffer(8),view=new DataView(buffer);view.setFloat64(0,Math.abs(time));
+    const bits=view.getBigUint64(0),upper=realFromBits(bits+1n),lower=realFromBits(bits-1n),value=Math.abs(time);
+    return Math.max(Number.isFinite(upper)?upper-value:0,value-lower);
+  }
+  function matchingDelayTime(a,b) {
+    return a===b||(Number.isFinite(a)&&Number.isFinite(b)&&Math.abs(a-b)<=2*Math.max(delayTimeSpacing(a),delayTimeSpacing(b)));
+  }
+  function matchingDelayDiscontinuity(channel,query) {
+    const index=delayPartitionPoint(channel.discontinuities,time=>time<query&&!matchingDelayTime(time,query));
+    if(index<channel.discontinuities.length&&matchingDelayTime(channel.discontinuities[index],query))return index;
+    if(index>0&&matchingDelayTime(channel.discontinuities[index-1],query))return index-1;
+    return undefined;
+  }
+  function delayRootSign(channel,interval) {return channel.parity!==(interval%2===1)?-1:1;}
+  function delayRoot(channel,query) {
+    if(!channel.discontinuities.length)return 1;
+    const index=matchingDelayDiscontinuity(channel,query);
+    if(index!==undefined) {
+      const sourceTime=channel.discontinuities[index];
+      if(channel.suppressed&&matchingDelayTime(channel.suppressed.time,sourceTime))return delayRootSign(channel,index+(channel.suppressed.right?1:0));
+      return 0;
+    }
+    const next=delayPartitionPoint(channel.discontinuities,time=>time<query);
+    const left=next>0?query-channel.discontinuities[next-1]:Infinity;
+    const right=next<channel.discontinuities.length?channel.discontinuities[next]-query:Infinity;
+    return delayRootSign(channel,next)*Math.min(left,right);
+  }
+  function delayedRoots(t,sy,sp) {
+    if(!delayChannels.length)return delaySlots.map(()=>1);
+    const times=[];
+    {{ evaluate(solve.events.delays.delay_time_plan,'times',effects) }}
+    if(times.some(amount=>!Number.isFinite(amount)||amount<0))throw new Error('Invalid delayTime in transported roots');
+    return delayChannels.map((channel,i)=>delayRoot(channel,t-times[i]));
+  }
+  function acceptedDelayChannel(channel,t,source,amount,maximum,discrete) {
+    const last=channel.points[channel.points.length-1];
+    if(last&&t<last.time)throw new Error('Accepted delay history moved backward without rollback');
+    const changed=!last||!Object.is(last.value,source);
+    const points=last&&t===last.time&&!changed?channel.points:[...channel.points,{time:t,value:source}];
+    let discontinuities=channel.discontinuities;
+    if(last&&changed&&(discrete||t===last.time)) {
+      const index=delayPartitionPoint(discontinuities,time=>time<t);
+      if(!matchingDelayTime(discontinuities[index],t)&&!matchingDelayTime(discontinuities[index-1],t))discontinuities=[...discontinuities.slice(0,index),t,...discontinuities.slice(index)];
+    }
+    const updated={...channel,points,discontinuities,amount,maximum};
+    const query=t-amount,index=matchingDelayDiscontinuity(updated,query);
+    let suppressed;
+    if(index!==undefined) {
+      const time=discontinuities[index];
+      const right=query>time?true:(query<time?false:(channel.query>time?false:(channel.query<time?true:(!channel.suppressed||!matchingDelayTime(channel.suppressed.time,time)||channel.suppressed.right))));
+      suppressed={time,right};
+    }
+    const keepAfter=t-maximum;
+    const pointPrefix=Math.max(0,delayPartitionPoint(points,point=>point.time<keepAfter)-1);
+    const discontinuityPrefix=delayPartitionPoint(discontinuities,time=>time<keepAfter&&!matchingDelayTime(time,keepAfter));
+    const remaining=discontinuities.slice(discontinuityPrefix);
+    if(suppressed&&(!remaining.length||suppressed.time<remaining[0]))suppressed=undefined;
+    return {...updated,points:points.slice(pointPrefix),discontinuities:remaining,parity:channel.parity!==(discontinuityPrefix%2===1),query,suppressed};
+  }
+  function commitAcceptedStep(t,X,Y,U,PIn) {
+    const {sy,sp}=values(t,X,Y,U,PIn),rows=delayRows(t,sy,sp);
+    delayChannels=!delayCommitted?rows.sources.map((source,i)=>delayChannel(t,source,rows.times[i],rows.maxima[i])):
+      delayChannels.map((channel,i)=>acceptedDelayChannel(channel,t,rows.sources[i],rows.times[i],rows.maxima[i],discreteDelaySources[i]));
+    delayCommitted=true;
+  }
+  function maxAcceptedStep() {
+    const minimum=delayChannels.reduce((limit,channel)=>channel.amount>0?Math.min(limit,channel.amount):limit,Infinity);
+    return Number.isFinite(minimum)?minimum:undefined;
+  }
+  {%- endif %}
+  function checkpointRuntime() {
+    const random=impureRandomStreams,y=initialY.slice(),p=initialP.slice();
+    {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+    const channels=delayChannels,committed=delayCommitted;
+    {%- endif %}
+    const clocks=clockStates.map(clock=>({...clock})),warnings=new Set(reportedWarnings);
+    const report=pendingActionReport?{...pendingActionReport,warnings:pendingActionReport.warnings.slice()}:undefined;
+    return ()=>{
+      impureRandomStreams=random;
+      {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+      delayChannels=channels;delayCommitted=committed;
+      {%- endif %}
+      for(let i=0;i<y.length;i++)initialY[i]=y[i];
+      for(let i=0;i<p.length;i++)initialP[i]=p[i];
+      clockStates=clocks.map(clock=>({...clock}));
+      reportedWarnings.clear();for(const warning of warnings)reportedWarnings.add(warning);
+      pendingActionReport=report?{...report,warnings:report.warnings.slice()}:undefined;
+    };
+  }
+
+  function values(t, X, Y, U, PIn) {
+    const sy = initialY.slice();
+    const sp = initialP.slice();
+    const supplied = Array.isArray(PIn) ? PIn : PIn?.P;
+    for (let i=0; i<nx; i++) sy[i]=X[i];
+    for (let i=0; i<Y.length; i++) sy[nx+i]=Y[i];
+    if (supplied) for (let i=0; i<parameterSlots.length; i++) sp[parameterSlots[i]]=supplied[i];
+    for (let i=0; i<inputs.length; i++) if (U[i] !== undefined) sp[inputs[i].slot]=U[i];
+    {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+    applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+    {%- endif %}
+    {%- if reduced and exact.plan.programs|length > 0 %}
+    projectAlgebraicValues(t,sy,sp);
+    {%- endif %}
+    {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+    refreshDelays(t,sy,sp);
+    {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+    applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+    {%- endif %}
+    {%- if reduced and exact.plan.programs|length > 0 %}
+    projectAlgebraicValues(t,sy,sp);
+    {%- endif %}
+    {%- endif %}
+    return { sy, sp };
+  }
+
+{%- if (reduced and exact.plan.programs|length > 0) or (not reduced and projection.algebraic|length > 0) %}
+  {%- if not reduced %}
+  const algebraicTearing=[
+    {%- for tearing in solve.continuous.algebraic_tearing %}
+    {%- if tearing is none %}null,
+    {%- else %}
+    {
+      indices:{{ tearing.tear_y_indices|tojson }},
+      reconstruct(t,sy,sp) {
+        const output=[];
+        {%- for program in tearing.assignment_plan.programs %}
+        {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+        refreshDelays(t,sy,sp);
+        {%- endif %}
+        { {{ operations(program,'output',effects) }} }
+        if(!Number.isFinite(output[{{ loop.index0 }}]))throw new Error('Checked causal algebraic step declined');
+        sy[{{ tearing.assignment_targets[loop.index0] }}]=output[{{ loop.index0 }}];
+        {%- endfor %}
+      },
+      residual(t,sy,sp) {
+        {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+        refreshDelays(t,sy,sp);
+        {%- endif %}
+        const output=[];
+        {{ evaluate(tearing.residual_plan,'output',effects) }}
+        return {{ tearing.residual_outputs|tojson }}.map(index=>output[index]);
+      },
+    },
+    {%- endif %}
+    {%- endfor %}
+  ];
+  function denseProjectionRows(t,sy,sp) {
+    {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+    refreshDelays(t,sy,sp);
+    {%- endif %}
+    const output=[];
+    {{ evaluate(solve.continuous.implicit_rhs.scalar_plan,'output',effects) }}
+    return output;
+  }
+  {%- endif %}
+  function projectAlgebraicValues(t,sy,sp,solveNonlinear) {
+    {%- if reduced %}
+    {%- for index in exact.sequence %}
+    { {{ operations(exact.plan.programs[index], 'sy',effects) }} }
+    {%- endfor %}
+    {%- elif native_exact.admitted %}
+    {%- for assignment in native_exact.assignments %}
+    {%- set program = solve.continuous.implicit_rhs.scalar_plan.programs[assignment.program] %}
+    { {{ operations({"ops":program.ops[:assignment.shape.expr_eval_len], "temporary_count":program.temporary_count},'sy',effects,assignment.shape) }} }
+    {%- endfor %}
+    {%- else %}
+    const blocks={{ projection.algebraic|tojson }};
+    for(let index=0;index<blocks.length;index++) {
+      const block=blocks[index],tearing=algebraicTearing[index];
+      const before=block.y_indices.map(index=>sy[index]);
+      if(tearing) {
+        {%- if solve.events.delays.value_parameter_indices|length > 0 or effects.impure %}
+        const restore=checkpointRuntime();
+        {%- endif %}
+        try {
+          const initial=tearing.indices.map(index=>sy[index]);
+          const scales=tearing.indices.map(index=>solverNominals[index]||1);
+          const coordinates=initial.length?solveNonlinear(coordinates=>{
+            for(let i=0;i<coordinates.length;i++)sy[tearing.indices[i]]=coordinates[i];
+            tearing.reconstruct(t,sy,sp);
+            return tearing.residual(t,sy,sp);
+          },initial,scales):[];
+          for(let i=0;i<coordinates.length;i++)sy[tearing.indices[i]]=coordinates[i];
+          tearing.reconstruct(t,sy,sp);
+          continue;
+        } catch(error) {
+          {%- if solve.events.delays.value_parameter_indices|length > 0 or effects.impure %}
+          restore();
+          {%- endif %}
+          for(let i=0;i<before.length;i++)sy[block.y_indices[i]]=before[i];
+          if(!(error instanceof Error))throw error;
+        }
+      }
+      const scales=block.y_indices.map(index=>solverNominals[index]||1);
+      const projected=solveNonlinear(coordinates=>{
+        for(let i=0;i<coordinates.length;i++)sy[block.y_indices[i]]=coordinates[i];
+        const output=denseProjectionRows(t,sy,sp);
+        return block.rows.map(row=>output[row]);
+      },before,scales);
+      for(let i=0;i<projected.length;i++)sy[block.y_indices[i]]=projected[i];
+    }
+    {%- endif %}
+  }
+  {%- endif %}
+
+  {%- if not reduced and projection.algebraic|length > 0 %}
+  function projectAlgebraics(t,X,Y,U,PIn,solveNonlinear) {
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    projectAlgebraicValues(t,sy,sp,solveNonlinear);
+    return sy.slice(nx);
+  }
+  {%- endif %}
+
+  function initialize(t, X, Y, U, PIn, solveNonlinear, continueHomotopy) {
+    for(let i=0;i<compiledY.length;i++)initialY[i]=compiledY[i];
+    for(let i=0;i<compiledP.length;i++)initialP[i]=compiledP[i];
+    initializeClocks(t);
+    impureRandomStreams=new Map();
+    {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+    delayChannels=[];delayCommitted=false;
+    {%- endif %}
+    const { sy, sp } = values(t, X, Y, U, PIn);
+    {%- if solve.solve_layout.terminal_event_parameter_index is not none %}
+    sp[{{ solve.solve_layout.terminal_event_parameter_index }}]=0;
+    {%- endif %}
+    reportedWarnings.clear();
+    pendingActionReport=undefined;
+    {%- if solve.solve_layout.initial_event_parameter_index is not none %}
+    sp[{{ solve.solve_layout.initial_event_parameter_index }}]=1;
+    {%- endif %}
+    const blocks={{ solve.initialization.projection_plan.blocks|tojson }};
+    const targets={{ solve.initialization.update_targets|tojson }};
+    const nominals=solverNominals;
+    const read = slot => slot.Y ? sy[slot.Y.index] : sp[slot.P.index];
+    const write = (slot,value) => { if (slot.Y) sy[slot.Y.index]=value; else sp[slot.P.index]=value; };
+    function refresh() {
+      {%- if reduced and exact.plan.programs|length > 0 %}
+      projectAlgebraicValues(t,sy,sp);
+      {%- endif %}
+    }
+    function updates() {
+      const output=[];
+      {{ evaluate(solve.initialization.update_plan, 'output',effects) }}
+      for (let i=0; i<targets.length; i++) write(targets[i],output[i]);
+      {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+      applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+      {%- endif %}
+    }
+    function settle() {
+    for (let iteration=0; iteration<20; iteration++) {
+      const beforeY=sy.slice(), beforeP=sp.slice();
+      refresh();
+      updates();
+      for (const block of blocks) {
+        const initial=block.unknowns.map(read);
+        const scales=block.scales.map((scale,i) => {
+          if (scale==='Solver') return nominals[block.unknowns[i].Y.index] || 1;
+          if (scale==='GuessMagnitude') return Math.abs(initial[i]) || 1;
+          return scale.Nominal;
+        });
+        const projected=solveNonlinear(coordinates => {
+          for (let i=0; i<coordinates.length; i++) write(block.unknowns[i],coordinates[i]);
+          refresh();
+          {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+          refreshDelays(t,sy,sp);
+          {%- endif %}
+          const output=[];
+          {{ evaluate(solve.initialization.residual.scalar_plan, 'output',effects) }}
+          return block.rows.map(row=>output[row]);
+        }, initial, scales);
+        for (let i=0; i<projected.length; i++) write(block.unknowns[i],projected[i]);
+      }
+      refresh();
+      {%- if (reduced and exact.plan.programs|length > 0) or (not reduced and projection.algebraic|length > 0) %}
+      projectAlgebraicValues(t,sy,sp,solveNonlinear);
+      {%- endif %}
+      updates();
+      if ([...sy,...sp].some(value=>!Number.isFinite(value))) throw new Error('Non-finite Solve initialization');
+      const changed=(values,previous)=>values.some((value,i)=>Math.abs(value-previous[i])>1e-10*(1+Math.abs(value)));
+      if (!changed(sy,beforeY) && !changed(sp,beforeP)) return;
+    }
+    throw new Error('Solve initialization did not settle');
+    }
+    {%- if solve.solve_layout.initial_homotopy_parameter_index is not none and (solve.initialization.projection_plan.blocks|length > 0 or projection.algebraic|length > 0) %}
+    if(typeof continueHomotopy!=='function')throw new Error('Solve initialization requires a homotopy continuation solver');
+    const lambda={{ solve.solve_layout.initial_homotopy_parameter_index }};
+    try {
+      continueHomotopy(value=>{sp[lambda]=value;settle();},()=>{
+        const beforeY=sy.slice(),beforeP=sp.slice();
+        return ()=>{for(let i=0;i<sy.length;i++)sy[i]=beforeY[i];for(let i=0;i<sp.length;i++)sp[i]=beforeP[i];};
+      });
+    } finally {sp[lambda]=1;}
+    {%- else %}
+    settle();
+    {%- endif %}
+    const initialResidual=[];
+    {{ evaluate(solve.initialization.residual.scalar_plan,'initialResidual',effects) }}
+    for (let i=0; i<sy.length; i++) initialY[i]=sy[i];
+    for (let i=0; i<sp.length; i++) initialP[i]=sp[i];
+    return { x:sy.slice(0,nx), y:{{ '[]' if reduced else 'sy.slice(nx)' }},initialResidual };
+  }
+
+  {%- if has_events %}
+  function rootValues(t,sy,sp) {
+    const output=[];
+    {{ evaluate(solve.events.root_plan,'output',effects) }}
+    {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+    output.push(...delayedRoots(t,sy,sp));
+    {%- endif %}
+    return output;
+  }
+  function evalEventIndicators(t,X,Y,U,PIn) {
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    return rootValues(t,sy,sp);
+  }
+  function evalConditions(t,X,Y,U,PIn) {
+    return evalEventIndicators(t,X,Y,U,PIn).map((value,i) => {
+      if (value!==0) return value<0;
+      const domain={{ solve.events.root_zero_domains|tojson }}[i];
+      if (domain==='NonPositive') return true;
+      if (domain==='Positive') return false;
+      const target={{ solve.events.root_relation_memory_targets|tojson }}[i];
+      return target?.P ? initialP[target.P.index]!==0 : false;
+    });
+  }
+  const discretePrograms={{ program_evaluators(solve.discrete.rhs_plan,effects) }};
+  const guardedPrograms={{ program_evaluators(solve.discrete.guarded_assignment_plan,effects) }};
+  const clockIntermediatePrograms={{ program_evaluators(solve.discrete.clock_partition_intermediate_plan,effects) }};
+  const structuredAssignments={{ solve.discrete.structured_assignments|tojson }};
+  const structuredClockOwners={{ solve.discrete.structured_clock_owners|tojson }};
+  const structuredPrograms={{ program_evaluators(solve.discrete.structured_rhs.scalar_plan,effects) }};
+  const transactions={{ solve.discrete.event_transactions|tojson }};
+  const transactionPrograms=[
+    {%- for transaction in solve.discrete.event_transactions %}
+    (t,sy,sp)=>{
+      const args=[];
+      {%- for input in transaction.inputs %}
+      args.push(Array.from({length:{{ input.value_type.scalar_count }}},(_,i)=>{
+        const value={{ 'sy[' ~ input.source.Y.index ~ '+i]' if input.source.Y is defined else ('sp[' ~ input.source.P.index ~ '+i]' if input.source.P is defined else ('t' if input.source == 'Time' else input.source.Constant)) }};
+        return {{ 'integerFromReal(value)' if input.value_type.scalar.kind == 'integer' else ('booleanFromReal(value)' if input.value_type.scalar.kind == 'boolean' else 'value') }};
+      }));
+      {%- endfor %}
+      return pure_{{ transaction.site.owner }}(args).flat().map(Number);
+    },
+    {%- endfor %}
+  ];
+  function applyResets(t,X,Y,U,PIn,previous,current,solveNonlinear,solveTolerance) {
+    const randomBefore=impureRandomStreams;
+    try {
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    const targets={{ solve.discrete.update_targets|tojson }};
+    const guardedTargets={{ solve.discrete.guarded_assignment_targets|tojson }}.flatMap(ranges=>ranges.flatMap(range=>Array.from({length:range.count},(_,i)=>range.base.Y?{Y:{index:range.base.Y.index+i}}:{P:{index:range.base.P.index+i}})));
+    const clockOwners={{ solve.discrete.clock_owners|tojson }},guardedOwners={{ solve.discrete.guarded_assignment_clock_owners|tojson }};
+    const rowRoles={{ solve.discrete.row_roles|tojson }},structuredRoles={{ solve.discrete.structured_row_roles|tojson }};
+    const isConditionMemory=role=>role==='ConditionMemory'||role==='PulseConditionMemory';
+    const active=clockStates.map(clock=>activeClockIndex(clock,t));
+    const activationSlots={{ solve.clocks.activation_parameter_indices|tojson }};
+    for(let i=0;i<activationSlots.length;i++)sp[activationSlots[i]]=active[i]!==undefined?1:0;
+    const rootTargets={{ solve.events.root_relation_memory_targets|tojson }};
+    const preBindings={{ solve.solve_layout.pre_param_bindings|tojson }};
+    const eventEntryP=sp.slice();
+    for(let i=0;i<preBindings.length;i++)if(!clockHistorySchedules[i]) {
+      const binding=preBindings[i];sp[binding.dest_p_index]=binding.source.Y?sy[binding.source.Y.index]:sp[binding.source.P.index];
+    }
+    for(let i=0;i<rootTargets.length;i++)if(rootTargets[i]?.P)sp[rootTargets[i].P.index]=current[i]?1:0;
+    {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+    applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+    {%- endif %}
+    {%- if (reduced and exact.plan.programs|length > 0) or (not reduced and projection.algebraic|length > 0) %}
+    projectAlgebraicValues(t,sy,sp,solveNonlinear);
+    {%- endif %}
+    const write=(slot,value)=>{
+      const array=slot.Y?sy:sp,index=slot.Y?slot.Y.index:slot.P.index;
+      const changed=array[index]!==value;array[index]=value;return changed;
+    };
+    const coveredRows=new Set(),coveredGuarded=new Set(),coveredStructured=new Set(),transactionActions=[];
+    for(const transaction of transactions)for(let i=0;i<transaction.producer_owners.length;i++) {
+      const owner=transaction.producer_owners[i];
+      if(owner.ScalarRows)for(let row=owner.ScalarRows.start_row;row<owner.ScalarRows.start_row+transaction.targets[i].value_type.scalar_count;row++)coveredRows.add(row);
+      if(owner.GuardedAssignment)coveredGuarded.add(owner.GuardedAssignment.program_index);
+      if(owner.StructuredUpdate)coveredStructured.add(owner.StructuredUpdate.update_index);
+    }
+    for(const transaction of transactions)for(const indices of transaction.assertion_action_indices)for(const index of indices)transactionActions[index]=0;
+    function evaluateTransaction(index) {
+      const transaction=transactions[index],output=transactionPrograms[index](t,sy,sp);
+      const count=transaction.targets.reduce((count,target)=>count+target.value_type.scalar_count,0);
+      let blocked=false;
+      for(let i=0;i<transaction.assertion_action_indices.length;i++) {
+        const failed=output[count+i]===0;
+        for(const action of transaction.assertion_action_indices[i]) {
+          transactionActions[action]=failed?1:0;
+          if(failed&&{{ solve.events.actions|tojson }}[action].kind!=='Warning')blocked=true;
+        }
+      }
+      return {transaction,output,blocked};
+    }
+    function commitTransaction(result) {
+      if(result.blocked)return;
+      let row=0;
+      for(const target of result.transaction.targets)for(let i=0;i<target.value_type.scalar_count;i++) {
+        const slot=target.base.Y?{Y:{index:target.base.Y.index+i}}:{P:{index:target.base.P.index+i}};
+        write(slot,result.output[row++]);
+      }
+    }
+    {%- if 'AlgebraicDependent' in solve.events.root_relation_refresh_roles %}
+    const relationRoles={{ solve.events.root_relation_refresh_roles|tojson }};
+    const zeroDomains={{ solve.events.root_zero_domains|tojson }};
+    const relationHistory=[],overrides=new Map();
+    const schedule={{ solve.discrete.event_iteration_plan.schedule|tojson }};
+    const tolerance=Number.isFinite(solveTolerance)?Math.abs(solveTolerance):1e-8;
+    let relationPass=0;
+    for(let root=0;root<rootTargets.length;root++)if(rootTargets[root]?.P&&previous[root]!==current[root])overrides.set(root,current[root]?1:0);
+    const side=(value,root)=>value===0&&zeroDomains[root]==='NonPositive'?1:(value<0?1:0);
+    function refreshRelations() {
+      const roots=rootValues(t,sy,sp);
+      let changed=false;
+      for(let root=0;root<roots.length;root++) {
+        if(relationRoles[root]!=='AlgebraicDependent'||!rootTargets[root]?.P)continue;
+        if(!Number.isFinite(roots[root]))throw new Error('Non-finite checked event relation');
+        if(overrides.has(root)&&roots[root]!==0&&side(roots[root],root)!==overrides.get(root))overrides.delete(root);
+        const value=overrides.has(root)?overrides.get(root):side(roots[root],root);
+        changed=write(rootTargets[root],value)||changed;
+      }
+      return changed;
+    }
+    function resolveRelationCycle() {
+      const window=schedule.relation_surface_window;
+      if(window===0)return true;
+      const repeated=relationHistory.some(point=>point.sp.every((value,i)=>Object.is(value,sp[i]))&&point.sy.every((value,i)=>Math.abs(value-sy[i])<=tolerance*Math.max(1,Math.abs(value),Math.abs(sy[i]))));
+      relationHistory.push({sy:sy.slice(),sp:sp.slice()});
+      if(relationHistory.length>window)relationHistory.shift();
+      if(!repeated)return true;
+      const neighborhoods={{ solve.events.root_neighborhoods|tojson }},joined=new Set();
+      for(let root=0;root<rootTargets.length;root++)if(rootTargets[root]?.P&&relationHistory.some(point=>point.sp[rootTargets[root].P.index]!==sp[rootTargets[root].P.index]))
+        for(const neighbor of neighborhoods[root])joined.add(neighbor);
+      const candidates=Array.from(joined).sort((a,b)=>a-b).filter(root=>rootTargets[root]?.P);
+      if(!candidates.length||candidates.length>schedule.mode_search_relations)throw new Error('Checked relation cycle exceeds the issued mode search');
+      const baseY=sy.slice(),baseP=sp.slice();
+      for(let mode=0;mode<2**candidates.length;mode++) {
+        for(let i=0;i<sy.length;i++)sy[i]=baseY[i];
+        for(let i=0;i<sp.length;i++)sp[i]=baseP[i];
+        const sides=candidates.map((root,i)=>(mode>>i)&1);
+        for(let i=0;i<candidates.length;i++)write(rootTargets[candidates[i]],sides[i]);
+        try {
+          {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+          applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+          {%- endif %}
+          {%- if (reduced and exact.plan.programs|length > 0) or (not reduced and projection.algebraic|length > 0) %}
+          projectAlgebraicValues(t,sy,sp,solveNonlinear);
+          {%- endif %}
+          const roots=rootValues(t,sy,sp);
+          if(candidates.every((root,i)=>Number.isFinite(roots[root])&&((roots[root]===0&&zeroDomains[root]==='Previous')||side(roots[root],root)===sides[i]))) {
+            for(let i=0;i<candidates.length;i++)overrides.set(candidates[i],sides[i]);
+            relationHistory.length=0;return true;
+          }
+        } catch(error) {
+          // A rejected Newton projection rejects this mode, without committing it.
+          if(!(error instanceof Error))throw error;
+        }
+      }
+      for(let i=0;i<sy.length;i++)sy[i]=baseY[i];
+      for(let i=0;i<sp.length;i++)sp[i]=baseP[i];
+      return false;
+    }
+    {%- endif %}
+    {%- if 'AlgebraicDependent' in solve.events.root_relation_refresh_roles %}
+    refreshRelations();
+    {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+    applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+    {%- endif %}
+    {%- if (reduced and exact.plan.programs|length > 0) or (not reduced and projection.algebraic|length > 0) %}
+    projectAlgebraicValues(t,sy,sp,solveNonlinear);
+    {%- endif %}
+    {%- endif %}
+    // Non-clock transactions all read the event-entry snapshot and commit complete tuples.
+    const ordinaryTransactions=transactions.flatMap((transaction,index)=>transaction.clock_owners.length?[]:[evaluateTransaction(index)]);
+    for(const result of ordinaryTransactions)commitTransaction(result);
+    for(const step of {{ solve.discrete.clock_partition_order|tojson }}) {
+      if(step.GuardedAssignment) {
+        const index=step.GuardedAssignment.program_index,owner=guardedOwners[index];
+        if(active[owner]===undefined)continue;
+        const program=guardedPrograms[index],output=program.evaluate(t,sy,sp);
+        for(const row of program.indices)write(guardedTargets[row],output[row]);
+      } else if(step.ScalarRows) {
+        const {start_row,count}=step.ScalarRows;
+        let cached,output;
+        for(let row=start_row;row<start_row+count;row++) {
+          if(isConditionMemory(rowRoles[row])||active[clockOwners[row]]===undefined)continue;
+          const program=discretePrograms.find(program=>program.indices.includes(row));
+          if(!program)throw new Error('Issued clock row has no producing program');
+          if(cached!==program){output=program.evaluate(t,sy,sp);cached=program;}
+          write(targets[row],output[row]);
+        }
+      } else if(step.Intermediate) {
+        const row=step.Intermediate.row;
+        if(!{{ solve.discrete.clock_partition_intermediate_clocks|tojson }}[row].some(owner=>active[owner]!==undefined))continue;
+        const program=clockIntermediatePrograms.find(program=>program.indices.includes(row));
+        if(!program)throw new Error('Issued clock intermediate has no producing program');
+        const output=program.evaluate(t,sy,sp);
+        write({{ solve.discrete.clock_partition_intermediate_targets|tojson }}[row],output[row]);
+      } else if(step.StructuredUpdate) {
+        const index=step.StructuredUpdate.update_index;
+        if(isConditionMemory(structuredRoles[index])||active[structuredClockOwners[index]]===undefined)continue;
+        for(const [target,row] of structuredAssignments[index]) {
+          const program=structuredPrograms.find(program=>program.indices.includes(row));
+          if(!program)throw new Error('Issued structured row has no producing program');
+          write(target,program.evaluate(t,sy,sp)[row]);
+        }
+      } else if(step.EventTransaction) {
+        const index=step.EventTransaction.program_index;
+        if(!transactions[index].clock_owners.some(owner=>active[owner]!==undefined))continue;
+        commitTransaction(evaluateTransaction(index));
+      } else throw new Error('Unsupported issued clock producer');
+    }
+    function advanceOrdinaryEventHistory() {
+      const writes=[];
+      const storage={{ solve.solve_layout.variable_storage_runs|tojson }};
+      const partitions={{ solve.discrete.event_iteration_plan.partitions|tojson }};
+      for(const run of {{ solve.discrete.event_iteration_plan.runs|tojson }}) {
+        const owner=run.owner;
+        const owners=owner.Partitioned?partitions.slice(
+          owner.Partitioned.first_partition,
+          owner.Partitioned.first_partition+owner.Partitioned.partition_count,
+        ).map(partition=>partition.owner):[owner];
+        const clocks=owners.map(owner=>{
+          if(owner==='Hold')return null;
+          if(owner.ScalarRows)return clockOwners[owner.ScalarRows.start_row];
+          if(owner.GuardedAssignment)return guardedOwners[owner.GuardedAssignment.program_index];
+          if(owner.StructuredUpdate)return structuredClockOwners[owner.StructuredUpdate.update_index];
+          if(owner.EventTransaction)return transactions[owner.EventTransaction.program_index].targets[owner.EventTransaction.target_index].clock_owner;
+          throw new Error('Unsupported issued event-iteration owner');
+        });
+        const clock=clocks[0];
+        if(!clocks.length||clocks.some(value=>value===undefined||value!==clock)||
+          (owner.Partitioned&&clocks.length!==owner.Partitioned.partition_count))
+          throw new Error('Invalid checked event-iteration clock owners');
+        const variable=storage[run.variable];
+        for(let i=0;i<variable.scalar_count;i++) {
+          const binding=preBindings[run.pre_binding_start+i];
+          const value=binding.source.Y?sy[binding.source.Y.index]:sp[binding.source.P.index];
+          const previous=sp[binding.dest_p_index];
+          for(const lane of [value,previous]) {
+            if(!Number.isFinite(lane)||(variable.value_kind!=='Real'&&!Number.isInteger(lane))||(variable.value_kind==='Boolean'&&lane!==0&&lane!==1)||(variable.value_kind==='Enumeration'&&lane<1))throw new Error('Invalid typed event-iteration history');
+          }
+          if(clock===null&&value!==previous)writes.push([binding.dest_p_index,value]);
+        }
+      }
+      for(const [slot,value] of writes)sp[slot]=value;
+      return writes.length>0;
+    }
+    // Recover with the native inventory: implicit algebraics plus unclocked Real
+    // equation targets. Typed discrete lanes, clock results and transactions stay fixed.
+    function recoverEventEquations() {
+      const rows=[],seen=new Set();
+      const realStart={{ solve.solve_layout.parameter_count + solve.solve_layout.input_scalar_names|length }};
+      const realEnd=realStart+{{ solve.solve_layout.discrete_real_scalar_names|length }};
+      const add=(target,kind,row,program)=>{
+        if(!target.Y&&(!target.P||target.P.index<realStart||target.P.index>=realEnd))return;
+        const key=target.Y?'Y'+target.Y.index:'P'+target.P.index;
+        if(seen.has(key))throw new Error('Coupled event inventory has duplicate targets');
+        seen.add(key);rows.push({target,kind,row,program});
+      };
+      {%- if not reduced %}
+      for(const block of {{ projection.algebraic|tojson }}) {
+        if(block.rows.length!==block.y_indices.length)throw new Error('Invalid checked event projection block');
+        for(let i=0;i<block.rows.length;i++)add({Y:{index:block.y_indices[i]}},'implicit',block.rows[i]);
+      }
+      {%- endif %}
+      for(const program of discretePrograms)for(const row of program.indices)
+        if(clockOwners[row]===null&&!coveredRows.has(row)&&!isConditionMemory(rowRoles[row]))add(targets[row],'assignment',row,program);
+      for(let i=0;i<guardedPrograms.length;i++)if(guardedOwners[i]===null&&!coveredGuarded.has(i))
+        for(const row of guardedPrograms[i].indices)add(guardedTargets[row],'assignment',row,guardedPrograms[i]);
+      for(let i=0;i<structuredAssignments.length;i++)if(structuredClockOwners[i]===null&&!coveredStructured.has(i)&&!isConditionMemory(structuredRoles[i]))
+        for(const [target,row] of structuredAssignments[i]) {
+          const program=structuredPrograms.find(program=>program.indices.includes(row));
+          if(!program)throw new Error('Issued event row has no producing program');
+          add(target,'assignment',row,program);
+        }
+      if(!rows.some(row=>row.kind==='assignment'))throw new Error('Stalled event equations have no Real targets for coupled recovery');
+      const read=target=>target.Y?sy[target.Y.index]:sp[target.P.index];
+      const scales=rows.map(({target})=>target.Y?(solverNominals[target.Y.index]||1):Math.max(1,Math.abs(read(target))));
+      const result=solveNonlinear(coordinates=>{
+        for(let i=0;i<rows.length;i++)write(rows[i].target,coordinates[i]);
+        {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+        applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+        {%- endif %}
+        {%- if reduced and exact.plan.programs|length > 0 %}
+        projectAlgebraicValues(t,sy,sp,solveNonlinear);
+        {%- endif %}
+        {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+        refreshDelays(t,sy,sp);
+        {%- endif %}
+        const implicit=[];
+        {%- if not reduced %}
+        {{ evaluate(solve.continuous.implicit_rhs.scalar_plan,'implicit',effects) }}
+        {%- endif %}
+        const cache=new Map();
+        return rows.map(({target,kind,row,program})=>{
+          if(kind==='implicit')return implicit[row];
+          if(!cache.has(program))cache.set(program,program.evaluate(t,sy,sp));
+          return read(target)-cache.get(program)[row];
+        });
+      },rows.map(({target})=>read(target)),scales);
+      for(let i=0;i<rows.length;i++)write(rows[i].target,result[i]);
+      {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+      applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets);
+      {%- endif %}
+      {%- if reduced and exact.plan.programs|length > 0 %}
+      projectAlgebraicValues(t,sy,sp,solveNonlinear);
+      {%- endif %}
+    }
+    const fixedPointCap={{ solve.discrete.event_iteration_plan.schedule.fixed_point_cap }};
+    let wholePass=0,settlePass=0;
+    while(wholePass<fixedPointCap) {
+      let changed=false;
+      {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+      changed=refreshDelays(t,sy,sp)||changed;
+      {%- endif %}
+      {%- if solve.discrete.runtime_assignment_plan.stored_output_count > 0 %}
+      changed=applyIssuedAssignments(t,sy,sp,runtimePrograms,runtimeTargets)||changed;
+      {%- endif %}
+      const output=[],guarded=[];
+      for(const program of discretePrograms) {
+        if(!program.indices.some(row=>clockOwners[row]===null&&!coveredRows.has(row)&&!isConditionMemory(rowRoles[row])))continue;
+        const values=program.evaluate(t,sy,sp);
+        for(const row of program.indices)if(clockOwners[row]===null&&!coveredRows.has(row)&&!isConditionMemory(rowRoles[row]))output[row]=values[row];
+      }
+      for(let i=0;i<guardedPrograms.length;i++)if(guardedOwners[i]===null&&!coveredGuarded.has(i)) {
+        const program=guardedPrograms[i],values=program.evaluate(t,sy,sp);
+        for(const row of program.indices)guarded[row]=values[row];
+      }
+      const structuredWrites=[],cache=new Map();
+      for(let i=0;i<structuredAssignments.length;i++)if(structuredClockOwners[i]===null&&!coveredStructured.has(i)&&!isConditionMemory(structuredRoles[i])) {
+        for(const [target,row] of structuredAssignments[i]) {
+          const program=structuredPrograms.find(program=>program.indices.includes(row));
+          if(!program)throw new Error('Issued structured row has no producing program');
+          if(!cache.has(program))cache.set(program,program.evaluate(t,sy,sp));
+          structuredWrites.push([target,cache.get(program)[row]]);
+        }
+      }
+      for(let i=0;i<targets.length;i++)if(output[i]!==undefined)changed=write(targets[i],output[i])||changed;
+      for(let i=0;i<guardedTargets.length;i++)if(guarded[i]!==undefined)changed=write(guardedTargets[i],guarded[i])||changed;
+      for(const [target,value] of structuredWrites)changed=write(target,value)||changed;
+      if(changed) {
+        {%- if (reduced and exact.plan.programs|length > 0) or (not reduced and projection.algebraic|length > 0) %}
+      projectAlgebraicValues(t,sy,sp,solveNonlinear);
+      {%- endif %}
+        if(++settlePass>=fixedPointCap)recoverEventEquations();
+        else continue;
+      }
+      {%- if 'AlgebraicDependent' in solve.events.root_relation_refresh_roles %}
+      if(refreshRelations()) {
+        if(++relationPass>=fixedPointCap)throw new Error('Checked algebraic relations did not settle');
+        if(resolveRelationCycle()) {settlePass=0;continue;}
+      }
+      relationPass=0;relationHistory.length=0;
+      {%- endif %}
+      const conditionWrites=[];
+      for(const program of discretePrograms) {
+        const rows=program.indices.filter(row=>isConditionMemory(rowRoles[row])&&(clockOwners[row]===null||active[clockOwners[row]]!==undefined));
+        if(!rows.length)continue;
+        const output=program.evaluate(t,sy,sp);
+        for(const row of rows)conditionWrites.push([targets[row],output[row]]);
+      }
+      for(let i=0;i<structuredAssignments.length;i++)if(isConditionMemory(structuredRoles[i])&&(structuredClockOwners[i]===null||active[structuredClockOwners[i]]!==undefined)) {
+        for(const [target,row] of structuredAssignments[i]) {
+          const program=structuredPrograms.find(program=>program.indices.includes(row));
+          if(!program)throw new Error('Issued structured history has no producing program');
+          conditionWrites.push([target,program.evaluate(t,sy,sp)[row]]);
+        }
+      }
+      let historyChanged=false;
+      for(const [target,value] of conditionWrites)historyChanged=write(target,value)||historyChanged;
+      historyChanged=advanceOrdinaryEventHistory()||historyChanged;
+      if(historyChanged) {wholePass++;settlePass=0;continue;}
+      {
+        const actionP=sp.slice();
+        for(const index of {{ solve.events.condition_memory_parameter_indices|tojson }})actionP[index]=eventEntryP[index];
+        const report=actionsAt(t,sy,actionP,transactionActions);
+        pendingActionReport={warnings:[...(pendingActionReport?.warnings||[]),...report.warnings],termination:report.termination??pendingActionReport?.termination};
+        const postEventP=sp.slice();
+        for(let i=0;i<preBindings.length;i++)if(!clockHistorySchedules[i]||activeClockIndex(clockHistorySchedules[i],t)!==undefined) {
+          const binding=preBindings[i];
+          sp[binding.dest_p_index]=binding.source.Y?sy[binding.source.Y.index]:postEventP[binding.source.P.index];
+        }
+        for(const slot of activationSlots)sp[slot]=0;
+        const pulseWrites=[];
+        for(const program of discretePrograms) {
+          const rows=program.indices.filter(row=>rowRoles[row]==='PulseConditionMemory');
+          if(!rows.length)continue;
+          const output=program.evaluate(t,sy,sp);
+          for(const row of rows)pulseWrites.push([targets[row],output[row]]);
+        }
+        for(const [target,value] of pulseWrites)write(target,value);
+        {%- if solve.discrete.post_commit_assignment_plan.stored_output_count > 0 %}
+        applyIssuedAssignments(t,sy,sp,postCommitPrograms,postCommitTargets);
+        {%- endif %}
+        for(let i=0;i<sp.length;i++)initialP[i]=sp[i];
+        for(let i=0;i<active.length;i++)if(active[i]!==undefined)clockStates[i].consumed=active[i];
+        return {x:sy.slice(0,nx),y:{{ '[]' if reduced else 'sy.slice(nx)' }},c:current.slice()};
+      }
+    }
+    throw new Error('Solve event iteration did not settle');
+    } catch(error) {impureRandomStreams=randomBefore;throw error;}
+  }
+  {%- endif %}
+
+  {%- if solve.events.has_terminal_event %}
+  function beginTerminalEvent() {
+    initialP[{{ solve.solve_layout.terminal_event_parameter_index }}]=1;
+  }
+  {%- endif %}
+
+  function finishInitialization() {
+    {%- if solve.solve_layout.initial_event_parameter_index is not none %}
+    initialP[{{ solve.solve_layout.initial_event_parameter_index }}]=0;
+    {%- endif %}
+  }
+
+  // Format binary64 through exact rational decimal rounding, including ties to even.
+  // JS toFixed/toPrecision cap precision at 100; Modelica's checked profile permits 1024.
+  function roundedDecimal(value, places) {
+    const buffer=new ArrayBuffer(8),view=new DataView(buffer);
+    view.setFloat64(0,Math.abs(value));
+    const bits=view.getBigUint64(0),exponent=Number((bits>>52n)&2047n);
+    const mantissa=(bits&((1n<<52n)-1n))+(exponent===0?0n:1n<<52n);
+    const shift=exponent===0?-1074:exponent-1075;
+    let numerator=mantissa,denominator=1n;
+    if(shift>=0)numerator<<=BigInt(shift);else denominator<<=BigInt(-shift);
+    if(places>=0)numerator*=10n**BigInt(places);else denominator*=10n**BigInt(-places);
+    let rounded=numerator/denominator;
+    const remainder=numerator%denominator;
+    if(remainder*2n>denominator||(remainder*2n===denominator&&rounded%2n!==0n))rounded++;
+    return rounded;
+  }
+  function utf8Length(text) {
+    let length=0;
+    for(const character of text) {
+      const code=character.codePointAt(0);
+      length+=code<=0x7f?1:code<=0x7ff?2:code<=0xffff?3:4;
+    }
+    return length;
+  }
+  function formatReal(value,digits) {
+    if(!Number.isFinite(value))return Number.isNaN(value)?'NaN':(value<0?'-inf':'inf');
+    if(value===0)return Object.is(value,-0)?'-0':'0';
+    const sign=value<0?'-':'',exponent=Math.floor(Math.log10(Math.abs(value)));
+    const trim=text=>text.includes('.')?text.replace(/0+$/,'').replace(/\.$/,''):text;
+    if(exponent < -4 || exponent>=digits) {
+      let e=exponent,rounded=roundedDecimal(value,digits-1-e).toString();
+      if(rounded.length>digits){rounded=rounded.slice(0,-1);e++;}
+      rounded=rounded.padStart(digits,'0');
+      const mantissa=digits===1?rounded:rounded[0]+'.'+rounded.slice(1);
+      return sign+trim(mantissa)+'e'+e;
+    }
+    const places=Math.max(0,digits-exponent-1),rounded=roundedDecimal(value,places).toString().padStart(places+1,'0');
+    return sign+trim(places===0?rounded:rounded.slice(0,-places)+'.'+rounded.slice(-places));
+  }
+  function formatMessageConversion(value,source,width,left,digits) {
+    for(const option of [width,digits])if(!Number.isInteger(option)||option < -9223372036854775808 || option>=9223372036854775808)throw new Error('Modelica String option must be an Integer');
+    if(width<0||width>1048576||digits<1||digits>1024||(left!==0&&left!==1))throw new Error('Modelica String option out of range');
+    let text;
+    if(source==='real')text=formatReal(value,digits);
+    else if(source==='integer') {
+      if(typeof value!=='bigint'&&(!Number.isFinite(value)||!Number.isInteger(value)))throw new Error('Modelica String Integer value is invalid');
+      text=BigInt(value).toString();
+    } else {
+      if(value!==0&&value!==1)throw new Error('Modelica String Boolean value is invalid');
+      text=value===1?'true':'false';
+    }
+    return left===1?text.padEnd(width,' '):text.padStart(width,' ');
+  }
+
+  const reportedWarnings=new Set();
+  let pendingActionReport;
+  function evaluateEventActions(t,X,Y,U,PIn) {
+    if(pendingActionReport) {const report=pendingActionReport;pendingActionReport=undefined;return report;}
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    return actionsAt(t,sy,sp);
+  }
+  function actionsAt(t,sy,sp,transactionActions=[]) {
+    const output=[],warnings=[],warningSites=[],assertionObservations=[];
+    {{ evaluate(solve.events.action_plan,'output',effects,'assertionObservations') }}
+    for(let i=0;i<transactionActions.length;i++)if(transactionActions[i]!==undefined)output[i]=transactionActions[i];
+    let termination;
+    {%- for action in solve.events.actions %}
+    if(output[{{ loop.index0 }}]>0.5{% if action.clock_owner is not none %} && sp[{{ solve.clocks.activation_parameter_indices[action.clock_owner] }}]!==0{% endif %}) {
+      {%- if action.assertion_projection is not none %}
+      const notices=assertionObservations.filter(notice=>notice.owner==={{ action.assertion_projection.site.owner }} && notice.predicate==={{ action.assertion_projection.predicate_output }});
+      if(notices.length===0)throw new Error('Missing checked assertion observation');
+      {%- else %}
+      const notices=[null];
+      {%- endif %}
+      for(const notice of notices) {
+      let message='';
+      {%- if action.assertion_projection is not none %}
+      {%- for part in action.message.parts %}
+      {%- if part.Text is defined %}
+      message+={{ part.Text|tojson }};
+      {%- else %}
+      {%- set conversion=part.Conversion %}
+      {%- set options=conversion.format.Options %}
+      message+=formatMessageConversion({{ assertion_capture(conversion.value,action.assertion_projection,conversion.source) if conversion.source == 'Integer' else 'Number(' ~ assertion_capture(conversion.value,action.assertion_projection,conversion.source) ~ ')' }},{{ conversion.source|lower|tojson }},
+        {{ 'Number(' ~ assertion_capture(options.minimum_length,action.assertion_projection,'Integer') ~ ')' if options.minimum_length is not none else '0' }},
+        {{ 'Number(' ~ assertion_capture(options.left_justified,action.assertion_projection,'Boolean') ~ ')' if options.left_justified is not none else '1' }},
+        {{ 'Number(' ~ assertion_capture(options.significant_digits,action.assertion_projection,'Integer') ~ ')' if options.significant_digits is not none else '6' }});
+      {%- endif %}
+      if(utf8Length(message)>1048576)throw new Error('Modelica event message exceeds byte limit');
+      {%- endfor %}
+      {%- else %}
+      {%- for part in solve.events.action_message_parts[loop.index0] %}
+      {%- if part.text is defined %}
+      message+={{ action.message.parts[loop.index0].Text|tojson }};
+      {%- else %}
+      { const messageValues=[];
+        {%- set conversion=part.conversion %}
+        {%- for row in [conversion.value,conversion.minimum_length,conversion.left_justified,conversion.significant_digits] %}
+        {%- if row is not none %}
+        { {{ operations(solve.events.action_message_plan.programs[row],'messageValues',effects) }} }
+        {%- endif %}
+        {%- endfor %}
+        message+=formatMessageConversion(messageValues[{{ conversion.value }}],{{ conversion.source|tojson }},
+          {{ 'messageValues[' ~ conversion.minimum_length ~ ']' if conversion.minimum_length is not none else '0' }},
+          {{ 'messageValues[' ~ conversion.left_justified ~ ']' if conversion.left_justified is not none else '1' }},
+          {{ 'messageValues[' ~ conversion.significant_digits ~ ']' if conversion.significant_digits is not none else '6' }});
+      }
+      {%- endif %}
+      if(utf8Length(message)>1048576)throw new Error('Modelica event message exceeds byte limit');
+      {%- endfor %}
+      {%- endif %}
+      {%- if action.kind == 'Assert' %}
+      throw new Error('Modelica assertion failed: '+message);
+      {%- elif action.kind == 'Warning' %}
+      if(!reportedWarnings.has({{ loop.index0 }}) && !warningSites.includes({{ loop.index0 }})) {warningSites.push({{ loop.index0 }});warnings.push(message);}
+      {%- elif action.kind == 'Terminate' %}
+      termination=message;
+      {%- endif %}
+      }
+    }
+    {%- endfor %}
+    for(const site of warningSites)reportedWarnings.add(site);
+    return {warnings,termination};
+  }
+
+  function nextTimeEvent(t,X,Y,U,PIn) {
+    const {sy,sp}=values(t,X,Y,U,PIn),dynamic=[];
+    {{ evaluate(solve.events.dynamic_time_event_plan,'dynamic',effects) }}
+    let next;
+    for(const deadline of [...{{ solve.events.scheduled_time_events|tojson }},...dynamic,...clockStates.map(clock=>nextClockTime(clock,t))]) {
+      if(!Number.isFinite(deadline))continue;
+      if(deadline>t && (next===undefined||deadline<next))next=deadline;
+    }
+    return next;
+  }
+
+  function residual(t, X, XDot, Y, U, PIn) {
+    const { sy, sp } = values(t, X, Y, U, PIn);
+    const derivatives = new Array(nx).fill(0);
+    {{ evaluate(solve.continuous.derivative_rhs.scalar_plan, 'derivatives',effects) }}
+    const result = derivatives.map((value, i) => XDot[i]-value);
+    {%- if not reduced %}
+    const implicit = [];
+    {{ evaluate(solve.continuous.implicit_rhs.scalar_plan, 'implicit',effects) }}
+    {%- for block in projection.algebraic %}
+    {%- for row in block.rows %}
+    result.push(implicit[{{ row }}]);
+    {%- endfor %}
+    {%- endfor %}
+    {%- endif %}
+    return result;
+  }
+
+  // These checked programs differentiate RHS rows in full solver-Y/P coordinates.
+  // Algebraic directions are explicit here; the projected callback below solves them.
+  function evalSolveJacobianVector(t,X,Y,U,PIn,directions) {
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    for (const [values,count] of [[directions.solverY,names.length],[directions.parameters,parameters.length],[directions.inputs,inputs.length]]) {
+      if(!Array.isArray(values)||values.length!==count||values.some(value=>!Number.isFinite(value))) throw new Error('Solve tangent layout mismatch');
+    }
+    const seed=new Array(names.length+initialP.length).fill(0);
+    for(let i=0;i<names.length;i++)seed[i]=directions.solverY[i];
+    for(let i=0;i<parameters.length;i++)seed[names.length+parameters[i].slot]=directions.parameters[i];
+    for(let i=0;i<inputs.length;i++)seed[names.length+inputs[i].slot]=directions.inputs[i];
+    const derivativeRhs=[],implicitResidual=[];
+    {{ evaluate(solve.artifacts.continuous.full_jacobian_plan,'derivativeRhs',effects) }}
+    {{ evaluate(solve.artifacts.continuous.implicit_full_jacobian_plan,'implicitResidual',effects) }}
+    return {derivativeRhs,implicitResidual};
+  }
+
+  // At a consistent primal point, project the direction through Rumoca's algebraic blocks.
+  function evalProjectedJacobianVector(t,X,Y,U,PIn,directions) {
+    if(!Array.isArray(directions.state)||directions.state.length!==nx) throw new Error('Solve state tangent layout mismatch');
+    const solverY=new Array(names.length).fill(0);
+    for(let i=0;i<nx;i++)solverY[i]=directions.state[i];
+    const tangent={solverY,parameters:directions.parameters,inputs:directions.inputs};
+    for(const block of {{ projection.algebraic|tojson }}) {
+      const count=block.y_indices.length;
+      const residual=evalSolveJacobianVector(t,X,Y,U,PIn,tangent).implicitResidual;
+      const matrix=new Array(count*count).fill(0);
+      for(let column=0;column<count;column++) {
+        const basis=new Array(names.length).fill(0);basis[block.y_indices[column]]=1;
+        const result=evalSolveJacobianVector(t,X,Y,U,PIn,{solverY:basis,parameters:new Array(parameters.length).fill(0),inputs:new Array(inputs.length).fill(0)}).implicitResidual;
+        for(let row=0;row<count;row++)matrix[row*count+column]=result[block.rows[row]];
+      }
+      const correction=linearSolve(matrix,block.rows.map(row=>-residual[row]));
+      for(let i=0;i<count;i++)solverY[block.y_indices[i]]+=correction[i];
+    }
+    const result=evalSolveJacobianVector(t,X,Y,U,PIn,tangent);
+    return {solverY,derivativeRhs:result.derivativeRhs};
+  }
+
+  function evalAlgebraics(t, X, Y, U, PIn) {
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    return observe(t,sy,sp);
+  }
+
+  {%- if projection.manifold|length > 0 %}
+  // Retained index-reduction constraints. `manifold_residual` and its solver-Y
+  // JVP are checked programs; the shared runtime owns the scaled minimum-norm
+  // Newton iteration that reprojects every accepted state back onto them.
+  function evalManifoldResidual(t, X, Y, U, PIn) {
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    const manifold=[];
+    {{ evaluate(solve.continuous.manifold_residual.scalar_plan,'manifold',effects) }}
+    return manifold;
+  }
+  function evalManifoldJacobianVector(t, X, Y, U, PIn, direction) {
+    const {sy,sp}=values(t,X,Y,U,PIn);
+    const seed=new Array(names.length+initialP.length).fill(0);
+    for(let i=0;i<nx;i++)seed[i]=direction[i];
+    const manifoldJacobian=[];
+    {{ evaluate(solve.artifacts.continuous.manifold_jacobian_v.scalar_plan,'manifoldJacobian',effects) }}
+    return manifoldJacobian;
+  }
+  function projectStateManifold(t, X, Y, U, PIn, project) {
+    // Rumoca's `solver_variable_scale`: the declared nominal when finite and
+    // positive, raised to the initial magnitude so large starts keep a
+    // meaningful projection scale.
+    const scales=new Array(nx);
+    for(let i=0;i<nx;i++) {
+      const nominal=Number.isFinite(solverNominals[i])&&solverNominals[i]>0?solverNominals[i]:1;
+      scales[i]=Math.max(nominal,Math.abs(initialY[i]));
+    }
+    const projected=project(
+      coordinates=>evalManifoldResidual(t,coordinates,Y,U,PIn),
+      (coordinates,direction)=>evalManifoldJacobianVector(t,coordinates,Y,U,PIn,direction),
+      X,
+      scales,
+    );
+    return {x:projected,y:Y};
+  }
+  {%- endif %}
+
+  const description = {
+    modelName: meta.name, nx, ny: y0.length, nu: inputs.length, nz: {{ solve.events.root_plan.output_count + solve.events.delays.value_parameter_indices|length }},
+    variables: [
+      ...meta.states.map(v => ({ name:v.name, kind:'state', start:v.start })),
+      ...meta.algebraics.map(v => ({ name:v.name, kind:'algebraic', start:v.start })),
+      ...parameters.map(v => ({ name:v.name, kind:'parameter', start:v.start })),
+      ...inputs.map(v => ({ name:v.name, kind:'input', start:v.start })),
+      ...constants.map(v => ({ name:v.name, kind:'constant', start:v.value })),
+    ],
+  };
+  return {
+    abiRequired: true,
+    abi: { id:'rumoca.model_runtime.residual.v1', version:1 },
+    description, capabilities: { events:{{ 'true' if has_events else 'false' }}, algebraics: observationNames.length > 0 },
+    name: meta.name, meta, x0, y0, residual, evalAlgebraics, evaluateEventActions,
+    {%- if solve.events.delays.value_parameter_indices|length == 0 and not effects.impure %}
+    evalSolveJacobianVector, evalProjectedJacobianVector,
+    {%- endif %}
+    {%- if has_events %}
+    evalEventIndicators,evalConditions,applyResets,
+    {%- endif %}
+    initialize,finishInitialization,nextTimeEvent,
+    {%- if not reduced and projection.algebraic|length > 0 %}
+    projectAlgebraics,
+    {%- endif %}
+    {%- if projection.manifold|length > 0 %}
+    projectStateManifold,
+    {%- endif %}
+    {%- if solve.events.delays.value_parameter_indices|length > 0 or effects.impure %}
+    checkpointRuntime,
+    {%- endif %}
+    {%- if solve.events.delays.value_parameter_indices|length > 0 %}
+    commitAcceptedStep,maxAcceptedStep,
+    {%- endif %}
+    {%- if solve.events.has_terminal_event %}
+    beginTerminalEvent,
+    {%- endif %}
+  };
+}

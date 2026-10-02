@@ -1,4 +1,5 @@
 import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
+import { collectModelicaDiagnosticTests } from '@taskyon/modelica/modelicaDiagnosticVariants'
 import { runDiagnosticsTests, type TestRecord } from '@taskyon/common/modules/diagnosticsRunner'
 import {
   resolveBundledRumocaWasmPath,
@@ -83,13 +84,14 @@ const camelToNormal = (input: string): string => {
 
 const collectModelicaTests = (storageClient: TaskyonStorageClient): TestRecord => {
   const tests: TestRecord = {}
-  for (const [name, value] of Object.entries(ModelicaDiagnostics as Record<string, unknown>)) {
-    if (!name.startsWith('testModelica')) continue
-    if (typeof value !== 'function') continue
+  for (const [name, value] of Object.entries(collectModelicaDiagnosticTests(ModelicaDiagnostics))) {
     tests[camelToNormal(name)] =
-      name === 'testModelicaMslFirstOrderRumocaSimulation'
-        ? () => (value as (client: TaskyonStorageClient) => unknown)(storageClient)
-        : (value as TestRecord[string])
+      name === 'testModelicaMslFirstOrderNativeSimulation'
+        ? Object.assign(
+            () => ModelicaDiagnostics.testModelicaMslFirstOrderNativeSimulation(storageClient),
+            value,
+          )
+        : value
   }
   return tests
 }

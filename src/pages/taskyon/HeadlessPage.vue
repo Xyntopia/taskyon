@@ -12,6 +12,7 @@
 import { chatCompletionProviderSettings } from '@taskyon/taskyon'
 import { dump } from 'js-yaml'
 import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
+import { collectModelicaDiagnosticTests } from '@taskyon/modelica/modelicaDiagnosticVariants'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
 import * as TaskyonTests from 'src/modules/taskyon/tests'
 import { testBuildSlimView } from 'src/modules/vueUtils'
@@ -83,7 +84,7 @@ function getDiagnosticsTests(throughLevel?: DiagnosticsRunLevel) {
   modules.push({ sourcePath: 'src/modules/taskyon/tests.ts', mod: TaskyonTests })
   modules.push({
     sourcePath: 'src/modules/modelica/modelicaDiagnostics.ts',
-    mod: ModelicaDiagnostics,
+    mod: collectModelicaDiagnosticTests(ModelicaDiagnostics),
   })
   const builtins: Array<{ testName: string; func: TaskyonTestFn; sourcePath: string }> = [
     {

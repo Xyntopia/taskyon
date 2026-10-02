@@ -1,801 +1,591 @@
-{# -------------------------------------------------------------------------
- # JS generator for Rumoca DAE JSON.
- # Supports both legacy and redesign_v3 DAE field naming.
- # ------------------------------------------------------------------------- #}
-
-{%- set model_name = dae.model_name if dae.model_name is defined else "GeneratedModel" -%}
-{%- set p_map = dae.p if dae.p is defined else {} -%}
-{%- set cp_map = dae.constants if dae.constants is defined else (dae.cp if dae.cp is defined else {}) -%}
-{%- set x_map = dae.x if dae.x is defined else {} -%}
-{%- set y_map = dae.y if dae.y is defined else {} -%}
-{%- if dae.__rumoca_observables is defined -%}
-{%- set obs_list = dae.__rumoca_observables -%}
-{%- else -%}
-{%- set obs_list = [] -%}
-{%- endif -%}
-{%- set u_map = dae.u if dae.u is defined else {} -%}
-{%- set w_map = dae.w if dae.w is defined else {} -%}
-{%- set z_map = dae.z if dae.z is defined else {} -%}
-{%- set m_map = dae.m if dae.m is defined else {} -%}
-{%- set hidden_condition_m_name = "__rumoca_c" -%}
-{%- set hidden_condition_m_count = 1 if hidden_condition_m_name in m_map else 0 -%}
-{%- set visible_m_count = m_map|length - hidden_condition_m_count -%}
-{%- set x_dot_alias_map = dae.x_dot_alias if dae.x_dot_alias is defined else {} -%}
-{%- set emit_generated_expr_comments = dae.__rumoca_emit_expr_comments if dae.__rumoca_emit_expr_comments is defined else false -%}
-{%- set eqs = dae.f_x if dae.f_x is defined else (dae.fx if dae.fx is defined else []) -%}
-{%- set relation_eqs = dae.relation if dae.relation is defined else [] -%}
-{%- set synthetic_root_conditions = dae.synthetic_root_conditions if dae.synthetic_root_conditions is defined else [] -%}
-{%- if dae.f_c is defined and dae.f_c|length > 0 -%}
-{%- set cond_eqs = dae.f_c -%}
-{%- elif relation_eqs|length > 0 -%}
-{%- set cond_eqs = relation_eqs -%}
-{%- else -%}
-{%- set cond_eqs = synthetic_root_conditions -%}
-{%- endif -%}
-{%- set when_clauses = dae.when_clauses if dae.when_clauses is defined else [] -%}
-{%- set reset_eqs = (dae.f_z if dae.f_z is defined else []) + (dae.f_m if dae.f_m is defined else []) -%}
-
-{%- macro render_cref(cr) -%}
-{%- if cr.parts is defined -%}
-{%- for part in cr.parts -%}{{ part.ident.text }}{{ "." if not loop.last }}{%- endfor -%}
-{%- elif cr.ident is defined and cr.ident.text is defined -%}
-{{ cr.ident.text }}
-{%- elif cr.name is defined -%}
-{{ cr.name }}
-{%- else -%}
-0
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro render_symbol_name(value) -%}
-{%- if value is string -%}
-{{ value }}
-{%- elif value is mapping and value.name is defined and value.name is string -%}
-{{ value.name }}
-{%- elif value is mapping and value.component_ref is defined -%}
-{{ render_cref(value.component_ref) }}
-{%- elif value is mapping and value.ComponentReference is defined -%}
-{{ render_cref(value.ComponentReference) }}
-{%- elif value is mapping and value.VarRef is defined and value.VarRef is string -%}
-{{ value.VarRef }}
-{%- else -%}
-{{ value|string }}
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro render_varref_name(varref) -%}
-{%- if varref is mapping and varref.name is defined -%}
-{{ render_symbol_name(varref.name) }}
-{%- else -%}
-{{ render_symbol_name(varref) }}
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro render_varref_first_subscript_index0(varref, mode="safe", symbol_mode="indexed") -%}
-{%- set subs = varref.subscripts if varref is mapping and varref.subscripts is defined else [] -%}
-{%- if subs|length == 0 -%}0
-{%- elif subs[0].Index is defined and subs[0].Index.value is defined -%}
-{{ (subs[0].Index.value|int) - 1 }}
-{%- elif subs[0].Expr is defined and subs[0].Expr.expr is defined -%}
-(({{ render_expr(subs[0].Expr.expr, mode, symbol_mode) }}) - 1)
-{%- else -%}0
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro js_ident(name) -%}
-{{- ('v_' ~ (name|string)
-  |replace('.', '__')
-  |replace('[', '_')
-  |replace(']', '')
-  |replace('(', '_')
-  |replace(')', '')
-  |replace(',', '_')
-  |replace(' ', '_')
-  |replace('-', '_')
-  |replace('/', '_')
-  |replace(':', '_')
-  |replace(';', '_')
-  |replace('*', '_')
-  |replace('+', '_')
-  |replace('%', '_')
-  |replace('>', '_')
-  |replace('<', '_')
-  |replace('=', '_')
-  |replace('!', '_')
-  |replace('?', '_')
-  |replace('&', '_')
-  |replace('|', '_')
-  |replace('"', '_')
-  |replace("'", '_')) -}}
-{%- endmacro -%}
-
-{%- macro render_static_literal(e) -%}
-{%- if e is number -%}
-{{ e }}
-{%- elif e is boolean -%}
-{{ "true" if e else "false" }}
-{%- elif e is mapping and e.Literal is defined -%}
-  {%- set literal = e.Literal.value if e.Literal.value is defined else e.Literal -%}
-  {%- if literal.Integer is defined -%}{{ literal.Integer }}
-  {%- elif literal.Real is defined -%}{{ literal.Real }}
-  {%- elif literal.Bool is defined or literal.Boolean is defined -%}{{ "true" if (literal.Bool if literal.Bool is defined else literal.Boolean) else "false" }}
-  {%- else -%}0
-  {%- endif -%}
-{%- else -%}
-0
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro comp_start_or_value(comp) -%}
-{%- if comp.value is defined -%}
-{{ render_static_literal(comp.value) }}
-{%- elif comp.start is defined -%}
-{{ render_static_literal(comp.start) }}
-{%- else -%}
-0
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro comp_expr_or_value(comp) -%}
-{%- if comp.value is defined -%}
-{{ render_expr(comp.value) }}
-{%- elif comp.start is defined -%}
-{{ render_expr(comp.start) }}
-{%- else -%}
-0
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro comp_expr_or_nan(comp) -%}
-{%- if comp.value is defined -%}
-{{ render_expr(comp.value) }}
-{%- elif comp.start is defined and comp.fixed is defined and comp.fixed is not none -%}
-{{ render_expr(comp.start) }}
-{%- elif comp.start is defined and comp.start is mapping and comp.start.Literal is defined and comp.start.Literal.Real is defined and (comp.start.Literal.Real|string) in ["0", "0.0", "0."] -%}
-Number.NaN
-{%- elif comp.start is defined and comp.start is mapping and comp.start.Literal is defined and comp.start.Literal.Integer is defined and (comp.start.Literal.Integer|string) == "0" -%}
-Number.NaN
-{%- elif comp.start is defined -%}
-{{ render_expr(comp.start) }}
-{%- else -%}
-Number.NaN
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro inferred_unit_from_name(name) -%}
-{%- set __n = (name|string)|trim -%}
-{%- set __nl = __n|lower -%}
-{%- if __nl == 'i' or __nl[-2:] == '.i' -%}A
-{%- elif __nl == 'v' or __nl[-2:] == '.v' -%}V
-{%- elif __nl[-7:] == 'q_flow' or __nl[-10:] == '.q_flow' -%}W
-{%- elif __nl[-9:] == 'losspower' or __nl[-10:] == '.losspower' -%}W
-{%- elif __nl[-9:] == 'r_actual' or __nl[-10:] == '.r_actual' or __nl == 'r' or __nl[-2:] == '.r' -%}Ohm
-{%- elif __nl == 'g' or __nl[-2:] == '.g' -%}W/K
-{%- elif __nl[-3:] == '.dt' or __nl == 'dt' -%}K
-{%- elif __nl == 't' or __nl[-2:] == '.t' -%}K
-{%- elif __nl == 'f' or __nl[-2:] == '.f' -%}Hz
-{%- elif __nl[-6:] == '.phase' or __nl == 'phase' -%}rad
-{%- elif __nl[-6:] == '.omega' or __nl == 'omega' -%}rad/s
-{%- elif __nl[-6:] == '.alpha' or __nl == 'alpha' -%}1/K
-{%- else -%}
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro comp_unit_prop(comp) -%}
-{%- if comp.unit is defined and comp.unit is not none -%}
-  {%- set __u = (comp.unit|string)|trim -%}
-  {%- if __u != '' and __u|lower != 'none' and __u|lower != 'null' -%}
-, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"
-  {%- endif -%}
-{%- elif comp.displayUnit is defined and comp.displayUnit is not none -%}
-  {%- set __u = (comp.displayUnit|string)|trim -%}
-  {%- if __u != '' and __u|lower != 'none' and __u|lower != 'null' -%}
-, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"
-  {%- endif -%}
-{%- elif comp.display_unit is defined and comp.display_unit is not none -%}
-  {%- set __u = (comp.display_unit|string)|trim -%}
-  {%- if __u != '' and __u|lower != 'none' and __u|lower != 'null' -%}
-, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"
-  {%- endif -%}
-{%- else -%}
-  {%- set __u = inferred_unit_from_name(comp.name if comp.name is defined else '')|trim -%}
-  {%- if __u != '' -%}
-, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"
-  {%- endif -%}
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro render_js_function_name(fname) -%}
-{%- set f = render_symbol_name(fname)|trim -%}
-{%- set f_norm = f|replace('::', '.') -%}
-{%- set f_leaf = f_norm
-  |replace('Modelica.Math.', '')
-  |replace('Modelica.Blocks.Math.', '')
-  |replace('Units.', '')
-  |replace('units.', '')
-  |replace('SI.Conversions.', '')
-  |replace('si.conversions.', '')
-  |replace('Conversions.', '')
-  |replace('conversions.', '')
-  |replace('Math.', '')
--%}
-{%- set fl = f_leaf|lower -%}
-{%- if fl == "sin" -%}Math.sin
-{%- elif fl == "cos" -%}Math.cos
-{%- elif fl == "tan" -%}Math.tan
-{%- elif fl == "asin" -%}Math.asin
-{%- elif fl == "acos" -%}Math.acos
-{%- elif fl == "atan" -%}Math.atan
-{%- elif fl == "atan2" -%}Math.atan2
-{%- elif fl == "sqrt" -%}Math.sqrt
-{%- elif fl == "abs" -%}Math.abs
-{%- elif fl == "exp" -%}Math.exp
-{%- elif fl == "log" -%}Math.log
-{%- elif fl == "log10" -%}Math.log10
-{%- elif fl == "sinh" -%}Math.sinh
-{%- elif fl == "cosh" -%}Math.cosh
-{%- elif fl == "tanh" -%}Math.tanh
-{%- elif fl == "floor" -%}Math.floor
-{%- elif fl == "ceil" -%}Math.ceil
-{%- elif fl == "min" -%}Math.min
-{%- elif fl == "max" -%}Math.max
-{%- else -%}{{ f_leaf }}
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro normalize_expr_text(txt) -%}
-{{- (txt|string)
-  |replace('::', '.')
-  |replace('Modelica.Blocks.Math.', 'Math.')
-  |replace('Modelica.Math.', 'Math.')
-  |replace('Modelica.Units.', '')
-  |replace('modelica.units.', '')
-  |replace('Units.', '')
-  |replace('units.', '')
-  |replace('modelica.blocks.math.', 'Math.')
-  |replace('modelica.math.', 'Math.')
-  |replace('Modelica.Constants.pi', 'Math.PI')
-  |replace('Modelica.Constants.e', 'Math.E')
-  |replace('modelica.constants.pi', 'Math.PI')
-  |replace('modelica.constants.e', 'Math.E')
--}}
-{%- endmacro -%}
-
-{%- macro compact_expr_text(expr) -%}
-{{- (expr|string)|replace(' ', '')|replace('\n', '')|replace('\r', '')|replace('\t', '') -}}
-{%- endmacro -%}
-
-{%- macro is_string_zero_sub(expr) -%}
-{%- if expr is string -%}
-  {%- set s = compact_expr_text(expr) -%}
-  {%- if s.startswith("(0)-(") and s.endswith(")") -%}true{%- else -%}false{%- endif -%}
-{%- else -%}
-false
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro strip_string_zero_sub(expr) -%}
-{{ normalize_expr_text(expr)|replace('(0) - (', '(')|replace('(0)-(', '(')|replace('0 - (', '(')|replace('0-(', '(') }}
-{%- endmacro -%}
-
-{%- macro safe_symbol_ref_runtime(name) -%}
-{%- if name in x_map -%}
-X[{%- for (n, _comp) in x_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in y_map -%}
-Y[{%- for (n, _comp) in y_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in z_map -%}
-Y[{%- for (n, _comp) in z_map|items -%}{%- if n == name -%}{{ y_map|length + loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in m_map -%}
-Y[{%- for (n, _comp) in m_map|items -%}{%- if n == name -%}{{ y_map|length + z_map|length + loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in w_map -%}
-Y[{%- for (n, _comp) in w_map|items -%}{%- if n == name -%}{{ y_map|length + z_map|length + m_map|length + loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in u_map -%}
-U[{%- for (n, _comp) in u_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in p_map -%}
-P[{%- for (n, _comp) in p_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in cp_map -%}
-constants["{{ name }}"]
-{%- else -%}
-__rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') }}")
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro safe_symbol_ref_safe(name) -%}
-{%- if name in x_map -%}
-__rumocaReadSymbol("{{ name }}", (typeof X !== "undefined"), ((typeof X !== "undefined") ? X[{%- for (n, _comp) in x_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}] : undefined))
-{%- elif name in y_map -%}
-__rumocaReadSymbol("{{ name }}", (typeof Y !== "undefined"), ((typeof Y !== "undefined") ? Y[{%- for (n, _comp) in y_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}] : undefined))
-{%- elif name in z_map -%}
-__rumocaReadSymbol("{{ name }}", (typeof Y !== "undefined"), ((typeof Y !== "undefined") ? Y[{%- for (n, _comp) in z_map|items -%}{%- if n == name -%}{{ y_map|length + loop.index0 }}{%- endif -%}{%- endfor -%}] : undefined))
-{%- elif name in m_map -%}
-__rumocaReadSymbol("{{ name }}", (typeof Y !== "undefined"), ((typeof Y !== "undefined") ? Y[{%- for (n, _comp) in m_map|items -%}{%- if n == name -%}{{ y_map|length + z_map|length + loop.index0 }}{%- endif -%}{%- endfor -%}] : undefined))
-{%- elif name in w_map -%}
-__rumocaReadSymbol("{{ name }}", (typeof Y !== "undefined"), ((typeof Y !== "undefined") ? Y[{%- for (n, _comp) in w_map|items -%}{%- if n == name -%}{{ y_map|length + z_map|length + m_map|length + loop.index0 }}{%- endif -%}{%- endfor -%}] : undefined))
-{%- elif name in u_map -%}
-__rumocaReadSymbol("{{ name }}", (typeof U !== "undefined"), ((typeof U !== "undefined") ? U[{%- for (n, _comp) in u_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}] : undefined))
-{%- elif name in p_map -%}
-P[{%- for (n, _comp) in p_map|items -%}{%- if n == name -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-{%- elif name in cp_map -%}
-constants["{{ name }}"]
-{%- else -%}
-__rumocaResolveSymbol("{{ name|string|replace('\\', '\\\\')|replace('"', '\\"') }}")
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro render_symbol_expr(e) -%}
-{%- if e is mapping and e.VarRef is defined and e.VarRef.name == "time" -%}
-  t
-{%- elif e is mapping and e.VarRef is defined -%}
-  {{- js_ident(e.VarRef.name) -}}
-{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "time" -%}
-  t
-{%- elif e is mapping and e.ComponentReference is defined -%}
-  {{- js_ident(render_cref(e.ComponentReference)) -}}
-{%- else -%}
-  {{- render_expr(e) -}}
-{%- endif -%}
-{%- endmacro -%}
-
-{%- macro render_if_condition(cond, mode="safe", symbol_mode="indexed") -%}
-{%- if cond is mapping and cond.Array is defined -%}
-  {%- set elements = cond.Array.elements if cond.Array.elements is defined else [] -%}
-  {%- if elements|length == 0 -%}
-  false
-  {%- else -%}
-  (
-    {%- for el in elements -%}
-      Boolean({{ render_expr(el, mode, symbol_mode) }}){{ " || " if not loop.last else "" }}
+{# rumoca-ir: solve #}
+{%- set model_name = model_name if model_name is defined and model_name else "GeneratedModel" -%}
+{%- set varn = namespace(
+  x_names=[], y_names=[], z_names=[], m_names=[], w_names=[], u_names=[], p_names=[], cp_names=[],
+  x_base=[], y_base=[], z_base=[], m_base=[], w_base=[], u_base=[], p_base=[], cp_base=[],
+  x_solve_slots=[], y_solve_slots=[]
+) -%}
+{%- for v in dae.variables -%}
+  {%- set sn = v.scalar_names if v.scalar_names is defined else [] -%}
+  {%- if v.role == "state" -%}
+    {%- set varn.x_base = varn.x_base + [varn.x_names|length] -%}
+    {%- set storage = solve.solve_layout.variable_storage_runs[v.id].base.Y.index -%}
+    {%- for n in sn -%}
+      {%- set varn.x_names = varn.x_names + [n] -%}
+      {%- set varn.x_solve_slots = varn.x_solve_slots + [storage + loop.index0] -%}
     {%- endfor -%}
-  )
+  {%- else -%}{%- set varn.x_base = varn.x_base + [-1] -%}{%- endif -%}
+  {%- if v.role == "algebraic" -%}
+    {%- set varn.y_base = varn.y_base + [varn.y_names|length] -%}
+    {%- set storage = solve.solve_layout.variable_storage_runs[v.id].base.Y.index -%}
+    {%- for n in sn -%}
+      {%- set varn.y_names = varn.y_names + [n] -%}
+      {%- set varn.y_solve_slots = varn.y_solve_slots + [storage + loop.index0] -%}
+    {%- endfor -%}
+  {%- else -%}{%- set varn.y_base = varn.y_base + [-1] -%}{%- endif -%}
+  {%- if v.role == "discrete_real" -%}
+    {%- set varn.z_base = varn.z_base + [varn.z_names|length] -%}
+    {%- for n in sn -%}{%- set varn.z_names = varn.z_names + [n] -%}{%- endfor -%}
+  {%- else -%}{%- set varn.z_base = varn.z_base + [-1] -%}{%- endif -%}
+  {%- if v.role == "discrete_value" -%}
+    {%- set varn.m_base = varn.m_base + [varn.m_names|length] -%}
+    {%- for n in sn -%}{%- set varn.m_names = varn.m_names + [n] -%}{%- endfor -%}
+  {%- else -%}{%- set varn.m_base = varn.m_base + [-1] -%}{%- endif -%}
+  {%- if v.role == "output" -%}
+    {%- set varn.w_base = varn.w_base + [varn.w_names|length] -%}
+    {%- for n in sn -%}{%- set varn.w_names = varn.w_names + [n] -%}{%- endfor -%}
+  {%- else -%}{%- set varn.w_base = varn.w_base + [-1] -%}{%- endif -%}
+  {%- if v.role == "input" -%}
+    {%- set varn.u_base = varn.u_base + [varn.u_names|length] -%}
+    {%- for n in sn -%}{%- set varn.u_names = varn.u_names + [n] -%}{%- endfor -%}
+  {%- else -%}{%- set varn.u_base = varn.u_base + [-1] -%}{%- endif -%}
+  {%- if v.role == "parameter" -%}
+    {%- set varn.p_base = varn.p_base + [varn.p_names|length] -%}
+    {%- for n in sn -%}{%- set varn.p_names = varn.p_names + [n] -%}{%- endfor -%}
+  {%- else -%}{%- set varn.p_base = varn.p_base + [-1] -%}{%- endif -%}
+  {%- if v.role == "constant" -%}
+    {%- set varn.cp_base = varn.cp_base + [varn.cp_names|length] -%}
+    {%- for n in sn -%}{%- set varn.cp_names = varn.cp_names + [n] -%}{%- endfor -%}
+  {%- else -%}{%- set varn.cp_base = varn.cp_base + [-1] -%}{%- endif -%}
+{%- endfor -%}
+{%- set ny_var = varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_names|length -%}
+{%- set evt = namespace(n_eqs=0, n_init=0, n_conditions=dae.systems.conditions.conditions|length, n_discrete_when=0, has_any_when=false) -%}
+{%- for owner in dae.systems.continuous.owners -%}
+  {%- set evt.n_eqs = evt.n_eqs + (1 if owner.kind == "residual" else owner.scalar_rows) -%}
+{%- endfor -%}
+{%- for owner in dae.systems.initialization.owners -%}
+  {%- set evt.n_init = evt.n_init + (1 if owner.kind == "residual" else owner.scalar_rows) -%}
+{%- endfor -%}
+{%- for res in dae.systems.discrete_real.residuals -%}
+  {%- if res.activation.kind == "when" -%}
+    {%- set evt.has_any_when = true -%}
+    {%- set evt.n_discrete_when = evt.n_discrete_when + 1 -%}
   {%- endif -%}
-{%- else -%}
-  {{ render_expr(cond, mode, symbol_mode) }}
+{%- endfor -%}
+{%- for owner in dae.systems.discrete_values.owners -%}
+  {%- for branch in owner.branches -%}
+    {%- if branch.activation.kind == "when" -%}
+      {%- set evt.has_any_when = true -%}
+      {%- set evt.n_discrete_when = evt.n_discrete_when + 1 -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- set n_events = evt.n_conditions + evt.n_discrete_when + dae.systems.events.actions|length -%}
+
+{# Checked Solve programs are emitted as ordinary JavaScript expressions. #}
+{%- macro solve_unary(op) -%}
+{%- if op.operator == 'Neg' -%}(-r{{ op.arg }})
+{%- elif op.operator == 'Not' -%}(r{{ op.arg }} === 0 ? 1 : 0)
+{%- elif op.operator == 'Sign' -%}Math.sign(r{{ op.arg }})
+{%- else -%}Math.{{ op.operator|lower }}(r{{ op.arg }})
+{%- endif -%}
+{%- endmacro -%}
+{%- macro solve_binary(op) -%}
+{%- set operators = {'Add': '+', 'Sub': '-', 'Mul': '*', 'Div': '/', 'Pow': '**'} -%}
+{%- if op.operator in operators -%}(r{{ op.lhs }} {{ operators[op.operator] }} r{{ op.rhs }})
+{%- elif op.operator == 'And' -%}((r{{ op.lhs }} !== 0 && r{{ op.rhs }} !== 0) ? 1 : 0)
+{%- elif op.operator == 'Or' -%}((r{{ op.lhs }} !== 0 || r{{ op.rhs }} !== 0) ? 1 : 0)
+{%- else -%}Math.{{ op.operator|lower }}(r{{ op.lhs }}, r{{ op.rhs }})
+{%- endif -%}
+{%- endmacro -%}
+{%- macro solve_op(op, output) %}
+{%- if op.kind == 'Const' %}
+      const r{{ op.dst }} = {{ op.value if op.value_class == 'finite' else ('Infinity' if op.value_class == 'positive_infinity' else ('-Infinity' if op.value_class == 'negative_infinity' else 'NaN')) }};
+{%- elif op.kind == 'LoadTime' %}
+      const r{{ op.dst }} = t;
+{%- elif op.kind == 'LoadY' %}
+      const r{{ op.dst }} = sy[{{ op.index }}];
+{%- elif op.kind == 'LoadP' %}
+      const r{{ op.dst }} = sp[{{ op.index }}];
+{%- elif op.kind == 'Move' %}
+      const r{{ op.dst }} = r{{ op.src }};
+{%- elif op.kind == 'Unary' %}
+      const r{{ op.dst }} = {{ solve_unary(op) }};
+{%- elif op.kind == 'Binary' %}
+      const r{{ op.dst }} = {{ solve_binary(op) }};
+{%- elif op.kind == 'Compare' %}
+{%- set operators = {'Lt': '<', 'Le': '<=', 'Gt': '>', 'Ge': '>=', 'Eq': '===', 'Ne': '!=='} %}
+      const r{{ op.dst }} = (r{{ op.lhs }} {{ operators[op.operator] }} r{{ op.rhs }}) ? 1 : 0;
+{%- elif op.kind == 'Select' %}
+      const r{{ op.dst }} = r{{ op.cond }} !== 0 ? r{{ op.if_true }} : r{{ op.if_false }};
+{%- elif op.kind == 'StoreOutput' %}
+      {{ output }}[{{ op.output_index }}] = r{{ op.src }};
+{%- elif op.kind == 'StoreOutputRange' %}
+{%- for index in op.output_indices %}
+      {{ output }}[{{ index }}] = r{{ op.start + loop.index0 * op.stride }};
+{%- endfor %}
+{%- else %} {{ fail('unsupported-feature:javascript.solve.' ~ op.kind) }}
+{%- endif %}
+{%- endmacro %}
+{%- set reduction = namespace(enabled=false) -%}
+{%- if solve is defined and solve.continuous.exact_algebraic_assignments is not none
+    and varn.x_names|length > 0 and n_events == 0
+    and varn.u_names|length == 0 and varn.z_names|length == 0
+    and varn.m_names|length == 0 and varn.w_names|length == 0
+    and solve.solve_layout.state_scalar_count == varn.x_names|length
+    and solve.solve_layout.algebraic_scalar_count == varn.y_names|length -%}
+{%- set reduction.enabled = true -%}
+{%- for plan in [solve.continuous.exact_algebraic_assignments.plan, solve.continuous.derivative_rhs.scalar_plan] -%}
+{%- for program in plan.programs -%}
+{%- for op in program.ops -%}
+{%- if op.kind not in ['Const','LoadTime','LoadY','LoadP','Move','Unary','Binary','Compare','Select','StoreOutput','StoreOutputRange'] -%}
+{%- set reduction.enabled = false -%}
+{%- elif op.kind == 'Unary' and op.operator not in ['Neg','Not','Abs','Sign','Sqrt','Floor','Ceil','Trunc','Sin','Cos','Tan','Asin','Acos','Atan','Sinh','Cosh','Tanh','Exp','Log','Log10'] -%}
+{%- set reduction.enabled = false -%}
+{%- elif op.kind == 'Binary' and op.operator not in ['Add','Sub','Mul','Div','Pow','And','Or','Atan2','Min','Max'] -%}
+{%- set reduction.enabled = false -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endfor -%}
+{%- endfor -%}
+{%- endif -%}
+{%- macro q(text) -%}{{ text|string|replace('\\', '\\\\')|replace('"', '\\"') }}{%- endmacro -%}
+
+{%- macro var_unit_prop(v) -%}
+{%- set u = v.attributes.unit if v.attributes is defined and v.attributes.unit is defined else none -%}
+{%- if u is not none and (u|string)|trim != '' and (u|string)|trim|lower != 'none' and (u|string)|trim|lower != 'null' %}, unit: "{{ q((u|string)|trim) }}"{%- endif -%}
+{%- endmacro -%}
+
+{%- macro coord_name(vid) -%}{{ dae.variables[vid].name }}{%- endmacro -%}
+
+{%- macro coord_ref(coord, mode="code", symbol_mode="indexed") -%}
+{%- set kind = coord.kind -%}
+{%- if kind == "time" -%}t
+{%- elif kind == "parameter" -%}
+  {%- set v = dae.variables[coord.id] -%}
+  {%- if v.role == "constant" -%}constants["{{ q(v.name) }}"]
+  {%- else -%}P[{{ varn.p_base[coord.id] }}]
+  {%- endif -%}
+{%- elif kind == "constant" -%}
+  {%- set v = dae.variables[coord.id] -%}
+  constants["{{ q(v.name) }}"]
+{%- elif kind == "input" -%}U[{{ varn.u_base[coord.id] }}]
+{%- elif kind == "state" -%}X[{{ varn.x_base[coord.id] }}]
+{%- elif kind == "derivative" -%}XDot[{{ varn.x_base[coord.id] }}]
+{%- elif kind == "algebraic" -%}
+  {%- set v = dae.variables[coord.id] -%}
+  {%- if v.role == "output" -%}Y[{{ varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[coord.id] }}]
+  {%- else -%}Y[{{ varn.y_base[coord.id] }}]
+  {%- endif -%}
+{%- elif kind == "discrete_real" -%}Y[{{ varn.y_names|length + varn.z_base[coord.id] }}]
+{%- elif kind == "discrete_value" -%}Y[{{ varn.y_names|length + varn.z_names|length + varn.m_base[coord.id] }}]
+{%- elif kind == "pre_state" -%}__rumocaPre("{{ q(dae.variables[coord.id].name) }}", X[{{ varn.x_base[coord.id] }}])
+{%- elif kind == "pre_algebraic" -%}
+  {%- set v = dae.variables[coord.id] -%}
+  {%- if v.role == "output" -%}__rumocaPre("{{ q(v.name) }}", Y[{{ varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[coord.id] }}])
+  {%- else -%}__rumocaPre("{{ q(v.name) }}", Y[{{ varn.y_base[coord.id] }}])
+  {%- endif -%}
+{%- elif kind == "pre_discrete_real" -%}__rumocaPre("{{ q(dae.variables[coord.id].name) }}", Y[{{ varn.y_names|length + varn.z_base[coord.id] }}])
+{%- elif kind == "pre_discrete_value" -%}__rumocaPre("{{ q(dae.variables[coord.id].name) }}", Y[{{ varn.y_names|length + varn.z_names|length + varn.m_base[coord.id] }}])
+{%- elif kind == "condition" -%}(Array.isArray(cCurr) ? Boolean(cCurr[{{ coord.id }}]) : false)
+{%- elif kind == "binder" -%}__rb_{{ coord.domain }}_{{ coord.ordinal }}
+{%- elif kind == "function_parameter" -%}__p{{ coord.ordinal }}
+{%- else -%}__rumocaUnsupported("coordinate:{{ kind }}", __rumocaFunctionName)
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro render_expr(e, mode="safe", symbol_mode="indexed", emit_comment=false, comment_label="") -%}
+{%- macro coord_indexed(coord, offset, mode="code", symbol_mode="indexed") -%}
+{%- set kind = coord.kind -%}
+{%- if kind == "state" -%}X[{{ varn.x_base[coord.id] }} + ({{ offset }})]
+{%- elif kind == "derivative" -%}XDot[{{ varn.x_base[coord.id] }} + ({{ offset }})]
+{%- elif kind == "algebraic" -%}
+  {%- set v = dae.variables[coord.id] -%}
+  {%- if v.role == "output" -%}Y[{{ varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[coord.id] }} + ({{ offset }})]
+  {%- else -%}Y[{{ varn.y_base[coord.id] }} + ({{ offset }})]
+  {%- endif -%}
+{%- elif kind == "discrete_real" -%}Y[{{ varn.y_names|length + varn.z_base[coord.id] }} + ({{ offset }})]
+{%- elif kind == "discrete_value" -%}Y[{{ varn.y_names|length + varn.z_names|length + varn.m_base[coord.id] }} + ({{ offset }})]
+{%- elif kind == "parameter" -%}
+  {%- set v = dae.variables[coord.id] -%}
+  {%- if v.role == "constant" -%}constants["{{ q(v.name) }}"]
+  {%- else -%}P[{{ varn.p_base[coord.id] }} + ({{ offset }})]
+  {%- endif -%}
+{%- elif kind == "constant" -%}constants["{{ q(dae.variables[coord.id].name) }}"]
+{%- elif kind == "input" -%}U[{{ varn.u_base[coord.id] }} + ({{ offset }})]
+{%- elif kind == "pre_state" -%}__rumocaPre("{{ q(dae.variables[coord.id].name) }}", X[{{ varn.x_base[coord.id] }} + ({{ offset }})])
+{%- elif kind == "pre_algebraic" -%}
+  {%- set v = dae.variables[coord.id] -%}
+  {%- if v.role == "output" -%}__rumocaPre("{{ q(v.name) }}", Y[{{ varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[coord.id] }} + ({{ offset }})])
+  {%- else -%}__rumocaPre("{{ q(v.name) }}", Y[{{ varn.y_base[coord.id] }} + ({{ offset }})])
+  {%- endif -%}
+{%- elif kind == "pre_discrete_real" -%}__rumocaPre("{{ q(dae.variables[coord.id].name) }}", Y[{{ varn.y_names|length + varn.z_base[coord.id] }} + ({{ offset }})])
+{%- elif kind == "pre_discrete_value" -%}__rumocaPre("{{ q(dae.variables[coord.id].name) }}", Y[{{ varn.y_names|length + varn.z_names|length + varn.m_base[coord.id] }} + ({{ offset }})])
+{%- elif kind == "function_parameter" -%}__p{{ coord.ordinal }}[{{ offset }}]
+{%- else -%}{{ coord_ref(coord, mode, symbol_mode) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro subscript_value(sid, mode, symbol_mode) -%}
+{%- set s = dae.expressions[sid].operation -%}
+{%- if s.kind == "literal" and s.value.integer is defined -%}{{ s.value.integer }}
+{%- elif s.kind == "literal" and s.value.real is defined -%}{{ s.value.real }}
+{%- else -%}{{ render_expr(sid, mode, symbol_mode) }}{%- endif -%}
+{%- endmacro -%}
+
+{%- macro flat_subscript_offset(subscripts, dims, mode, symbol_mode) -%}
+{%- if subscripts|length == 1 and dims|length <= 1 -%}
+{%- set s0 = subscripts[0] -%}
+{%- if s0.kind == "index" -%}({{ subscript_value(s0.expression, mode, symbol_mode) }}) - 1{%- else -%}__rumocaUnsupported("subscript:{{ s0.kind }}", __rumocaFunctionName){%- endif -%}
+{%- elif subscripts|length == dims|length -%}
+{%- set parts = namespace(text="") -%}
+{%- for s in subscripts -%}
+  {%- if s.kind == "index" -%}
+    {%- set stride = namespace(value=1) -%}
+    {%- for d in dims[loop.index0 + 1:] -%}{%- set stride.value = stride.value * d -%}{%- endfor -%}
+    {%- if loop.index0 > 0 -%}{%- set parts.text = parts.text ~ " + " -%}{%- endif -%}
+    {%- set parts.text = parts.text ~ "((" ~ subscript_value(s.expression, mode, symbol_mode) ~ ") - 1) * " ~ stride.value -%}
+  {%- else -%}
+    {%- set parts.text = parts.text ~ "__rumocaUnsupported(\"subscript:" ~ s.kind ~ "\", __rumocaFunctionName)" -%}
+  {%- endif -%}
+{%- endfor -%}
+{{ parts.text }}
+{%- else -%}
+__rumocaUnsupported("subscript-count", __rumocaFunctionName)
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_expr(eid, mode="code", symbol_mode="indexed", emit_comment=false, comment_label="") -%}
 {%- if emit_comment -%}
-/* {{ comment_label }}{{ render_expr(e, mode, "named")|replace('\n', ' ')|replace('\r', ' ') }} */ {{ render_expr(e, mode, symbol_mode) }}
-{%- elif e is string -%}
-  {{- normalize_expr_text(e) -}}
-{%- elif e is number -%}
-  {{- e -}}
-{%- elif e is boolean -%}
-  {{- "true" if e else "false" -}}
-{%- elif e is mapping and e.Literal is defined -%}
-  {%- set literal = e.Literal.value if e.Literal.value is defined else e.Literal -%}
-  {%- if literal.Integer is defined -%}{{ literal.Integer }}
-  {%- elif literal.Real is defined -%}{{ literal.Real }}
-  {%- elif literal.Bool is defined or literal.Boolean is defined -%}{{ "true" if (literal.Bool if literal.Bool is defined else literal.Boolean) else "false" }}
-  {%- elif literal.String is defined -%}"{{ literal.String }}"
+/* {{ comment_label }}{{ render_expr(eid, mode, "named")|replace('\n', ' ')|replace('\r', ' ') }} */ {{ render_expr(eid, mode, symbol_mode) }}
+{%- else -%}
+{%- set e = dae.expressions[eid] -%}
+{%- set op = e.operation -%}
+{%- set kind = op.kind -%}
+{%- if kind == "literal" -%}
+  {%- set lit = op.value -%}
+  {%- if lit.integer is defined -%}{{ lit.integer }}
+  {%- elif lit.real is defined -%}{{ lit.real }}
+  {%- elif lit.boolean is defined -%}{{ "true" if lit.boolean else "false" }}
+  {%- elif lit.enumeration is defined -%}{{ lit.enumeration }}
+  {%- elif lit.string is defined -%}"{{ q(lit.string) }}"
   {%- else -%}0{%- endif -%}
-{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim == "time" -%}
-  t
-{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim == "Modelica.Constants.pi" -%}
-  Math.PI
-{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim == "Modelica.Constants.e" -%}
-  Math.E
-{%- elif e is mapping and e.VarRef is defined and render_varref_name(e.VarRef)|trim in ["c", "__pre__.c", "__rumoca_c", "__pre__.__rumoca_c"] and e.VarRef.subscripts is defined and e.VarRef.subscripts|length > 0 -%}
-  {%- set varref_name = render_varref_name(e.VarRef)|trim -%}
-  {%- set slot_index = render_varref_first_subscript_index0(e.VarRef, mode, symbol_mode)|trim -%}
-  {%- if symbol_mode == "named" -%}
-    {{ varref_name }}[{{ slot_index }}]
-  {%- elif varref_name in ["__pre__.c", "__pre__.__rumoca_c"] -%}
-    (Array.isArray(cPrev) ? Boolean(cPrev[{{ slot_index }}]) : false)
+{%- elif kind == "coordinate" -%}
+  {{ coord_ref(op.coordinate, mode, symbol_mode) }}
+{%- elif kind in ["function_value", "function_conditional_output"] -%}
+  __v[{{ op.value }}]
+{%- elif kind == "function_fold_parameter" or kind == "function_fold_output" -%}
+  __c{{ op.fold }}_{{ op.carried }}
+{%- elif kind == "unary" -%}
+  {%- if op.operator == "negate" -%}(-({{ render_expr(op.operand, mode, symbol_mode) }}))
+  {%- elif op.operator == "not" -%}(!({{ render_expr(op.operand, mode, symbol_mode) }}))
+  {%- else -%}(+{{ render_expr(op.operand, mode, symbol_mode) }}){%- endif -%}
+{%- elif kind == "binary" -%}
+  {%- set o = op.operator -%}
+  {%- if o == "add" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} + {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "subtract" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} - {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "multiply" or o == "elementwise_multiply" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} * {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "divide" or o == "elementwise_divide" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} / {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "power" or o == "elementwise_power" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} ** {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "elementwise_add" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} + {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "elementwise_subtract" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} - {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "equal" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} === {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "not_equal" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} !== {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "less" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} < {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "less_equal" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} <= {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "greater" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} > {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "greater_equal" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} >= {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "and" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} && {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- elif o == "or" -%}({{ render_expr(op.lhs, mode, symbol_mode) }} || {{ render_expr(op.rhs, mode, symbol_mode) }})
+  {%- else -%}__rumocaUnsupported("binary:{{ o }}", __rumocaFunctionName){%- endif -%}
+{%- elif kind == "conditional" -%}
+  {{ render_conditional(op.operands, 0, mode, symbol_mode) }}
+{%- elif kind == "array" -%}
+  [{%- for el in op.elements -%}{{ render_expr(el, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%}]
+{%- elif kind == "record" -%}
+  [{%- for el in op.fields -%}{{ render_expr(el, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%}]
+{%- elif kind == "field" -%}
+  {%- set baseT = dae.expressions[op.base].value_type_id -%}
+  {%- set fields = dae.value_types[baseT].value_type.record_fields -%}
+  {%- set fname = fields[op.field].name if fields|length > op.field else op.field -%}
+  ({{ render_expr(op.base, mode, symbol_mode) }})["{{ q(fname) }}"]
+{%- elif kind == "index" -%}
+  {%- set baseExpr = dae.expressions[op.base] -%}
+  {%- set dims = baseExpr.value_type.dimensions if baseExpr.value_type.dimensions is defined else [] -%}
+  {%- set offset = flat_subscript_offset(op.subscripts, dims, mode, symbol_mode) -%}
+  {%- if baseExpr.operation.kind == "coordinate" -%}
+    {{ coord_indexed(baseExpr.operation.coordinate, offset, mode, symbol_mode) }}
   {%- else -%}
-    (Array.isArray(cCurr) ? Boolean(cCurr[{{ slot_index }}]) : false)
+    {{ render_expr(op.base, mode, symbol_mode) }}[{{ offset }}]
   {%- endif -%}
-{%- elif e is mapping and e.VarRef is defined -%}
-  {%- set varref_name = render_varref_name(e.VarRef)|trim -%}
-  {%- if symbol_mode == "named" -%}
-    {{ varref_name }}
-  {%- elif varref_name[:8] == "__pre__." -%}
-    {%- set current_name = varref_name[8:] -%}
-    {%- if mode == "runtime" -%}
-      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_runtime(current_name) }})
-    {%- else -%}
-      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_safe(current_name) }})
-    {%- endif -%}
-  {%- elif mode == "runtime" -%}
-    {{- safe_symbol_ref_runtime(varref_name) -}}
-  {%- else -%}
-    {{- safe_symbol_ref_safe(varref_name) -}}
-  {%- endif -%}
-{%- elif e is mapping and e.BuiltinCall is defined -%}
-  {%- set bc = e.BuiltinCall -%}
-  {%- if bc.function|lower == "der" and bc.args|length == 1 -%}
-    {%- if symbol_mode == "named" -%}
-    der({{ render_expr(bc.args[0], mode, "named") }})
-    {%- elif bc.args[0] is mapping and bc.args[0].VarRef is defined and render_varref_name(bc.args[0].VarRef)|trim in x_map -%}
-    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_varref_name(bc.args[0].VarRef)|trim -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-    {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined and render_cref(bc.args[0].ComponentReference) in x_map -%}
-    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_cref(bc.args[0].ComponentReference) -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-    {%- else -%}
-    0
-    {%- endif -%}
-  {%- elif bc.function|lower == "pre" and bc.args|length == 1 -%}
-    {%- if bc.args[0] is mapping and bc.args[0].VarRef is defined -%}
-    __rumocaPre("{{ render_varref_name(bc.args[0].VarRef)|trim }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
-    {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined -%}
-    __rumocaPre("{{ render_cref(bc.args[0].ComponentReference) }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
-    {%- else -%}
-    {{ render_expr(bc.args[0], mode, symbol_mode) }}
-    {%- endif -%}
-  {%- elif bc.function|lower == "edge" and bc.args|length == 1 -%}
-    {%- if bc.args[0] is mapping and bc.args[0].VarRef is defined -%}
-    __rumocaEdge("{{ render_varref_name(bc.args[0].VarRef)|trim }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
-    {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined -%}
-    __rumocaEdge("{{ render_cref(bc.args[0].ComponentReference) }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
-    {%- else -%}
-    {{ render_expr(bc.args[0], mode, symbol_mode) }}
-    {%- endif -%}
-  {%- elif bc.function|lower == "change" and bc.args|length == 1 -%}
-    {%- if bc.args[0] is mapping and bc.args[0].VarRef is defined -%}
-    __rumocaChange("{{ render_varref_name(bc.args[0].VarRef)|trim }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
-    {%- elif bc.args[0] is mapping and bc.args[0].ComponentReference is defined -%}
-    __rumocaChange("{{ render_cref(bc.args[0].ComponentReference) }}", {{ render_expr(bc.args[0], mode, symbol_mode) }})
-    {%- else -%}
-    {{ render_expr(bc.args[0], mode, symbol_mode) }}
-    {%- endif -%}
-  {%- elif bc.function|lower == "noevent" and bc.args|length >= 1 -%}
-    {{ render_expr(bc.args[0], mode, symbol_mode) }}
-  {%- elif bc.function|lower == "homotopy" and bc.args|length >= 1 -%}
-    {{ render_expr(bc.args[0], mode, symbol_mode) }}
-  {%- elif render_js_function_name(bc.function)|trim|lower == "from_degc" and bc.args|length == 1 -%}
-    (({{ render_expr(bc.args[0], mode, symbol_mode) }}) + 273.15)
-  {%- elif render_js_function_name(bc.function)|trim|lower == "to_degc" and bc.args|length == 1 -%}
-    (({{ render_expr(bc.args[0], mode, symbol_mode) }}) - 273.15)
-  {%- elif render_js_function_name(bc.function)|trim|lower == "from_deg" and bc.args|length == 1 -%}
-    (({{ render_expr(bc.args[0], mode, symbol_mode) }}) * Math.PI / 180)
-  {%- elif render_js_function_name(bc.function)|trim|lower == "to_deg" and bc.args|length == 1 -%}
-    (({{ render_expr(bc.args[0], mode, symbol_mode) }}) * 180 / Math.PI)
-  {%- else -%}
-    {{ render_js_function_name(bc.function) }}({%- for a in bc.args -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%})
-  {%- endif -%}
-{%- elif e is mapping and e.Terminal is defined -%}
-  {{- normalize_expr_text(e.Terminal.token.text) -}}
-{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "time" -%}
-  t
-{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "Modelica.Constants.pi" -%}
-  Math.PI
-{%- elif e is mapping and e.ComponentReference is defined and render_cref(e.ComponentReference) == "Modelica.Constants.e" -%}
-  Math.E
-{%- elif e is mapping and e.ComponentReference is defined -%}
-  {%- set cref_name = render_cref(e.ComponentReference) -%}
-  {%- if symbol_mode == "named" -%}
-    {{ cref_name }}
-  {%- elif cref_name[:8] == "__pre__." -%}
-    {%- set current_name = cref_name[8:] -%}
-    {%- if mode == "runtime" -%}
-      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_runtime(current_name) }})
-    {%- else -%}
-      __rumocaPre("{{ current_name }}", {{ safe_symbol_ref_safe(current_name) }})
-    {%- endif -%}
-  {%- elif mode == "runtime" -%}
-    {{- safe_symbol_ref_runtime(cref_name) -}}
-  {%- else -%}
-    {{- safe_symbol_ref_safe(cref_name) -}}
-  {%- endif -%}
-{%- elif e is mapping and e.Parenthesized is defined -%}
-  ({{ render_expr(e.Parenthesized.inner, mode, symbol_mode) }})
-{%- elif e is mapping and e.Unary is defined -%}
-  {%- set u = e.Unary -%}
-  {%- set op_name = u.op if u.op is string else "" -%}
-  {%- if u.op.Minus is defined or op_name == "Minus" -%}
-    {%- if is_guaranteed_zero(u.rhs)|trim == "true" -%}0{%- else -%}-({{ render_expr(u.rhs, mode, symbol_mode) }}){%- endif -%}
-  {%- elif u.op.Not is defined or op_name == "Not" -%}
-    !({{ render_expr(u.rhs, mode, symbol_mode) }})
-  {%- else -%}
-    {{ render_expr(u.rhs, mode, symbol_mode) }}
-  {%- endif -%}
-{%- elif e is mapping and e.Binary is defined -%}
-  {%- set b = e.Binary -%}
-  {%- set op_name = b.op if b.op is string else "" -%}
-  {%- set op -%}
-    {%- if b.op.Add is defined or op_name == "Add" -%}+{% elif b.op.Sub is defined or op_name == "Sub" -%}-{% elif b.op.Mul is defined or op_name == "Mul" -%}*{% elif b.op.Div is defined or op_name == "Div" -%}/{% elif b.op.Pow is defined or b.op.Power is defined or b.op.Caret is defined or b.op.Exp is defined or b.op.Circumflex is defined or op_name == "Pow" or op_name == "Power" or op_name == "Caret" or op_name == "Exp" or op_name == "Circumflex" -%}**
-    {%- elif b.op is string and (b.op == "^" or b.op == "**" or b.op|lower == "pow" or b.op|lower == "power" or b.op|lower == "caret" or b.op|lower == "exp" or b.op|lower == "circumflex") -%}**
-    {%- elif b.op.token is defined and b.op.token.text is defined and (b.op.token.text == "^" or b.op.token.text == "**") -%}**
-    {%- elif b.op.Le is defined or b.op.LessEq is defined or op_name == "Le" or op_name == "LessEq" -%}<={% elif b.op.Lt is defined or b.op.Less is defined or op_name == "Lt" or op_name == "Less" -%}<{% elif b.op.Ge is defined or b.op.GreaterEq is defined or op_name == "Ge" or op_name == "GreaterEq" -%}>={% elif b.op.Gt is defined or b.op.Greater is defined or op_name == "Gt" or op_name == "Greater" -%}>{% elif b.op.Eq is defined or b.op.Equals is defined or op_name == "Eq" or op_name == "Equals" -%}==={% elif b.op.Ne is defined or b.op.NotEquals is defined or op_name == "Ne" or op_name == "NotEquals" -%}!==
-    {%- elif b.op.And is defined or op_name == "And" -%}&&{% elif b.op.Or is defined or op_name == "Or" -%}||{% else -%}+{% endif -%}
-  {%- endset -%}
-  {%- if (b.op.Add is defined or op_name == "Add") and is_guaranteed_zero(b.lhs)|trim == "true" -%}
-    {{ render_expr(b.rhs, mode, symbol_mode) }}
-  {%- elif (b.op.Add is defined or op_name == "Add") and is_guaranteed_zero(b.rhs)|trim == "true" -%}
-    {{ render_expr(b.lhs, mode, symbol_mode) }}
-  {%- elif (b.op.Sub is defined or op_name == "Sub") and is_guaranteed_zero(b.rhs)|trim == "true" -%}
-    {{ render_expr(b.lhs, mode, symbol_mode) }}
-  {%- elif (b.op.Sub is defined or op_name == "Sub") and is_guaranteed_zero(b.lhs)|trim == "true" -%}
-    -({{ render_expr(b.rhs, mode, symbol_mode) }})
-  {%- else -%}
-    ({{ render_expr(b.lhs, mode, symbol_mode) }} {{ op }} {{ render_expr(b.rhs, mode, symbol_mode) }})
-  {%- endif -%}
-{%- elif e is mapping and e.FunctionCall is defined -%}
-  {%- set f = e.FunctionCall -%}
-  {%- set args = f.args if f.args is defined else [] -%}
-  {%- set fname -%}
-    {%- if f.comp is defined and f.comp.parts is defined -%}
-      {%- for part in f.comp.parts -%}{{ part.ident.text }}{{ "." if not loop.last }}{%- endfor -%}
-    {%- elif f.function is defined -%}
-      {{- render_symbol_name(f.function) -}}
-    {%- elif f.name is defined -%}
-      {{- render_symbol_name(f.name) -}}
-    {%- elif f.comp is defined and f.comp.ident is defined and f.comp.ident.text is defined -%}
-      {{- f.comp.ident.text -}}
-    {%- elif f.comp is defined -%}
-      {{- render_symbol_name(f.comp) -}}
-    {%- else -%}
-      function_call
-    {%- endif -%}
-  {%- endset -%}
-  {%- if fname|lower == "der" and args|length == 1 -%}
-    {%- if symbol_mode == "named" -%}
-    der({{ render_expr(args[0], mode, "named") }})
-    {%- elif args[0] is mapping and args[0].VarRef is defined and render_varref_name(args[0].VarRef)|trim in x_map -%}
-    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_varref_name(args[0].VarRef)|trim -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-    {%- elif args[0] is mapping and args[0].ComponentReference is defined and render_cref(args[0].ComponentReference) in x_map -%}
-    XDot[{%- for (n, _comp) in x_map|items -%}{%- if n == render_cref(args[0].ComponentReference) -%}{{ loop.index0 }}{%- endif -%}{%- endfor -%}]
-    {%- else -%}
-    0
-    {%- endif -%}
-  {%- elif fname|lower == "pre" and args|length == 1 -%}
-    {%- if args[0] is mapping and args[0].VarRef is defined -%}
-    __rumocaPre("{{ render_varref_name(args[0].VarRef)|trim }}", {{ render_expr(args[0], mode, symbol_mode) }})
-    {%- elif args[0] is mapping and args[0].ComponentReference is defined -%}
-    __rumocaPre("{{ render_cref(args[0].ComponentReference) }}", {{ render_expr(args[0], mode, symbol_mode) }})
-    {%- else -%}
-    {{ render_expr(args[0], mode, symbol_mode) }}
-    {%- endif -%}
-  {%- elif fname|lower == "edge" and args|length == 1 -%}
-    {%- if args[0] is mapping and args[0].VarRef is defined -%}
-    __rumocaEdge("{{ render_varref_name(args[0].VarRef)|trim }}", {{ render_expr(args[0], mode, symbol_mode) }})
-    {%- elif args[0] is mapping and args[0].ComponentReference is defined -%}
-    __rumocaEdge("{{ render_cref(args[0].ComponentReference) }}", {{ render_expr(args[0], mode, symbol_mode) }})
-    {%- else -%}
-    {{ render_expr(args[0], mode, symbol_mode) }}
-    {%- endif -%}
-  {%- elif fname|lower == "change" and args|length == 1 -%}
-    {%- if args[0] is mapping and args[0].VarRef is defined -%}
-    __rumocaChange("{{ render_varref_name(args[0].VarRef)|trim }}", {{ render_expr(args[0], mode, symbol_mode) }})
-    {%- elif args[0] is mapping and args[0].ComponentReference is defined -%}
-    __rumocaChange("{{ render_cref(args[0].ComponentReference) }}", {{ render_expr(args[0], mode, symbol_mode) }})
-    {%- else -%}
-    {{ render_expr(args[0], mode, symbol_mode) }}
-    {%- endif -%}
-  {%- elif fname|lower == "noevent" and args|length >= 1 -%}
-    {{ render_expr(args[0], mode, symbol_mode) }}
-  {%- elif fname|lower == "homotopy" and args|length >= 1 -%}
-    {{ render_expr(args[0], mode, symbol_mode) }}
-  {%- elif render_js_function_name(fname)|trim|lower == "from_degc" and args|length == 1 -%}
-    (({{ render_expr(args[0], mode, symbol_mode) }}) + 273.15)
-  {%- elif render_js_function_name(fname)|trim|lower == "to_degc" and args|length == 1 -%}
-    (({{ render_expr(args[0], mode, symbol_mode) }}) - 273.15)
-  {%- elif render_js_function_name(fname)|trim|lower == "from_deg" and args|length == 1 -%}
-    (({{ render_expr(args[0], mode, symbol_mode) }}) * Math.PI / 180)
-  {%- elif render_js_function_name(fname)|trim|lower == "to_deg" and args|length == 1 -%}
-    (({{ render_expr(args[0], mode, symbol_mode) }}) * 180 / Math.PI)
-  {%- else -%}
-    {{ render_js_function_name(fname) }}({%- for a in args -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%})
-  {%- endif -%}
-{%- elif e is mapping and e.If is defined -%}
-  {%- set branches = e.If.branches if e.If.branches is defined else [] -%}
-  {%- set else_expr = e.If.else_branch if e.If.else_branch is defined else 0 -%}
-  {%- if branches|length == 0 -%}
-    {{ render_expr(else_expr, mode, symbol_mode) }}
-  {%- else -%}
-    (
-    {%- for branch in branches -%}
-      {%- if branch is mapping -%}
-        {%- set branch_cond = (
-          branch.condition
-          if branch.condition is defined else (
-            branch.cond
-            if branch.cond is defined else (
-              branch.if_expr
-              if branch.if_expr is defined else (
-                branch.if_
-                if branch.if_ is defined else 0
-              )
-            )
-          )
-        ) -%}
-        {%- set branch_then = (
-          branch.then
-          if branch.then is defined else (
-            branch.value
-            if branch.value is defined else (
-              branch.rhs
-              if branch.rhs is defined else 0
-            )
-          )
-        ) -%}
-        ({{ render_if_condition(branch_cond, mode, symbol_mode) }}) ? ({{ render_expr(branch_then, mode, symbol_mode) }}) :
-      {%- else -%}
-        ({{ render_if_condition(branch[0], mode, symbol_mode) }}) ? ({{ render_expr(branch[1], mode, symbol_mode) }}) :
-      {%- endif -%}
-    {%- endfor -%}
-      ({{ render_expr(else_expr, mode, symbol_mode) }})
-    )
-  {%- endif -%}
-{%- elif e is mapping and e.FieldAccess is defined -%}
-  (({{ render_expr(e.FieldAccess.base, mode, symbol_mode) }})?.{{ e.FieldAccess.field }})
-{%- elif e is mapping and e.Index is defined -%}
-  {%- set subs = e.Index.subscripts if e.Index.subscripts is defined else [] -%}
-  {%- if subs|length > 0 and subs[0].Expr is defined -%}
-    (({{ render_expr(e.Index.base, mode, symbol_mode) }})[{{ render_expr(subs[0].Expr, mode, symbol_mode) }}])
-  {%- else -%}
-    ({{ render_expr(e.Index.base, mode, symbol_mode) }})
-  {%- endif -%}
+{%- elif kind == "range" -%}
+  {%- set step = op.explicit_step if op.explicit_step is not none else none -%}
+  __rumocaRange({{ subscript_value(op.start.expression, mode, symbol_mode) }}, {% if step is not none %}{{ subscript_value(step.expression, mode, symbol_mode) }}{% else %}1{% endif %}, {{ subscript_value(op.stop.expression, mode, symbol_mode) }})
+{%- elif kind == "comprehension" -%}
+  {{ render_comprehension(op.domain, op.body, mode, symbol_mode) }}
+{%- elif kind == "builtin" -%}
+  {{ render_builtin(op, mode, symbol_mode) }}
+{%- elif kind == "call" -%}
+  {{ render_call(op, mode, symbol_mode) }}
+{%- elif kind == "string_conversion" -%}
+  String({{ render_expr(op.value, mode, symbol_mode) }})
 {%- else -%}
-  0
+  __rumocaUnsupported("expr:{{ kind }}", __rumocaFunctionName)
+{%- endif -%}
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro is_derivative_eq_legacy(eq) -%}
-  {%- if eq.Simple is defined and eq.Simple.lhs.FunctionCall is defined -%}
-    {%- set f = eq.Simple.lhs.FunctionCall -%}
-    {%- if f.comp is defined and f.comp.parts is defined and f.comp.parts|length == 1 and f.comp.parts[0].ident.text == "der" -%}
-      1
-    {%- elif f.function is defined and f.function|lower == "der" -%}
-      1
-    {%- elif f.name is defined and f.name|lower == "der" -%}
-      1
-    {%- endif -%}
-  {%- endif -%}
-{%- endmacro -%}
-
-{%- macro lhs_state_name_legacy(eq) -%}
-  {%- set f = eq.Simple.lhs.FunctionCall -%}
-  {%- if f.args is defined and f.args|length > 0 -%}
-    {%- set arg0 = f.args[0] -%}
-    {%- if arg0.ComponentReference is defined and arg0.ComponentReference.parts is defined and arg0.ComponentReference.parts|length > 0 -%}
-      {{ arg0.ComponentReference.parts[0].ident.text }}
-    {%- elif arg0.VarRef is defined and arg0.VarRef.name is defined -%}
-      {{ arg0.VarRef.name }}
-    {%- else -%}
-      x
-    {%- endif -%}
-  {%- else -%}
-    x
-  {%- endif -%}
-{%- endmacro -%}
-
-{%- macro is_zero_literal(expr) -%}
-{%- if expr is number and (expr|string) in ["0", "0.0", "0."] -%}
-true
-{%- elif expr is mapping and expr.Literal is defined and ((expr.Literal.Integer is defined and (expr.Literal.Integer|string) == "0") or (expr.Literal.Real is defined and ((expr.Literal.Real|string) == "0" or (expr.Literal.Real|string) == "0.0" or (expr.Literal.Real|string) == "0."))) -%}
-true
-{%- elif expr is string -%}
-  {%- set s = compact_expr_text(expr) -%}
-  {%- if s == "0" or s == "(0)" -%}true{%- else -%}false{%- endif -%}
+{%- macro render_conditional(operands, i, mode, symbol_mode) -%}
+{%- if i + 1 >= operands|length -%}
+{{ render_expr(operands[i], mode, symbol_mode) }}
 {%- else -%}
-false
+(({{ render_expr(operands[i], mode, symbol_mode) }}) ? ({{ render_expr(operands[i + 1], mode, symbol_mode) }}) : ({{ render_conditional(operands, i + 2, mode, symbol_mode) }}))
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro is_guaranteed_zero(expr) -%}
-{%- if is_zero_literal(expr) == "true" -%}
-true
-{%- elif expr is mapping and expr.Parenthesized is defined -%}
-{{ is_guaranteed_zero(expr.Parenthesized.inner) }}
-{%- elif expr is mapping and expr.Unary is defined and (expr.Unary.op.Minus is defined or expr.Unary.op == "Minus") -%}
-{{ is_guaranteed_zero(expr.Unary.rhs) }}
-{%- elif expr is mapping and expr.Binary is defined and (expr.Binary.op.Add is defined or expr.Binary.op == "Add") -%}
-{%- if is_guaranteed_zero(expr.Binary.lhs)|trim == "true" and is_guaranteed_zero(expr.Binary.rhs)|trim == "true" -%}true{%- else -%}false{%- endif -%}
-{%- elif expr is mapping and expr.Binary is defined and (expr.Binary.op.Sub is defined or expr.Binary.op == "Sub") -%}
-{%- if is_guaranteed_zero(expr.Binary.lhs)|trim == "true" and is_guaranteed_zero(expr.Binary.rhs)|trim == "true" -%}true{%- else -%}false{%- endif -%}
-{%- elif expr is string -%}
-  {%- set s = compact_expr_text(expr) -%}
-  {%- if s == "0" or s == "(0)" -%}
-true
-  {%- elif is_string_zero_sub(expr)|trim == "true" -%}
-false
-  {%- else -%}
-false
-  {%- endif -%}
-{%- else -%}
-false
+{%- macro binder_assignments(domain_id, loop_var) -%}
+{%- set domain = dae.domains[domain_id].domain -%}
+{%- set binders = domain.binders -%}
+{%- for b in binders -%}
+  {%- set stride = 1 -%}
+  {%- for other in binders[loop.index0 + 1:] -%}{%- set size = ((other.upper - other.lower) // other.step) + 1 -%}{%- set stride = stride * size -%}{%- endfor -%}
+  {%- set size = ((b.upper - b.lower) // b.step) + 1 -%}
+  const __rb_{{ domain_id }}_{{ b.id }} = {{ b.lower }} + Math.floor({{ loop_var }} / {{ stride }}) % {{ size }} * {{ b.step }};
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro render_comprehension(domain_id, body, mode, symbol_mode) -%}
+(() => {
+  const __rumocaOut = [];
+  const __rumocaCount = {{ dae.domains[domain_id].scalar_count }};
+  for (let __rumocaRp = 0; __rumocaRp < __rumocaCount; __rumocaRp++) {
+    {{ binder_assignments(domain_id, "__rumocaRp") }}
+    __rumocaOut.push({{ render_expr(body, mode, symbol_mode) }});
+  }
+  return __rumocaOut;
+})()
+{%- endmacro -%}
+
+{%- macro render_builtin(op, mode, symbol_mode) -%}
+{%- set name = op.builtin -%}
+{%- set args = op.arguments -%}
+{%- if name == "abs" -%}Math.abs({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "sign" -%}Math.sign({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "sqrt" -%}Math.sqrt({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "floor" -%}Math.floor({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "ceil" -%}Math.ceil({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "integer" -%}Integer({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "sin" -%}Math.sin({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "cos" -%}Math.cos({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "tan" -%}Math.tan({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "asin" -%}Math.asin({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "acos" -%}Math.acos({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "atan" -%}Math.atan({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "atan2" -%}Math.atan2({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "sinh" -%}Math.sinh({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "cosh" -%}Math.cosh({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "tanh" -%}Math.tanh({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "exp" -%}Math.exp({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "log" -%}Math.log({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "log10" -%}Math.log10({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "div" -%}__rumocaDiv({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "mod" -%}__rumocaMod({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "rem" -%}({{ render_expr(args[0], mode, symbol_mode) }} % {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "no_event" or name == "noevent" -%}({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "smooth" -%}({{ render_expr(args[args|length - 1], mode, symbol_mode) }})
+{%- elif name == "homotopy" -%}homotopy({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "semi_linear" -%}semiLinear({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }}, {{ render_expr(args[2], mode, symbol_mode) }})
+{%- elif name == "min" -%}__rumocaMin([{%- for a in args -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%}])
+{%- elif name == "max" -%}__rumocaMax([{%- for a in args -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%}])
+{%- elif name == "sum" -%}__rumocaSum({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "product" -%}__rumocaProduct({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "size" -%}Size({{ render_expr(args[0], mode, symbol_mode) }}, {% if args|length > 1 %}{{ render_expr(args[1], mode, symbol_mode) }}{% else %}1{% endif %})
+{%- elif name == "zeros" -%}zeros({%- for a in args -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%})
+{%- elif name == "ones" -%}ones({%- for a in args -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%})
+{%- elif name == "fill" -%}Fill({{ render_expr(args[0], mode, symbol_mode) }}{%- for a in args[1:] -%}, {{ render_expr(a, mode, symbol_mode) }}{%- endfor -%})
+{%- elif name == "linspace" -%}__rumocaLinspace({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }}, {{ render_expr(args[2], mode, symbol_mode) }})
+{%- elif name == "cross" -%}Cross({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "transpose" -%}Transpose({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "diagonal" -%}Diagonal({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "identity" -%}__rumocaIdentity({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "vector" -%}Vector({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "outer_product" -%}__rumocaOuterProduct({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "skew" -%}__rumocaSkew({{ render_expr(args[0], mode, symbol_mode) }})
+{%- elif name == "linear_solve" -%}__rumocaLinearSolve({{ render_expr(args[0], mode, symbol_mode) }}, {{ render_expr(args[1], mode, symbol_mode) }})
+{%- elif name == "promoted_cat1" or name == "promoted_cat2" -%}__rumocaCat([{%- for a in args -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%}])
+{%- else -%}__rumocaUnsupported("builtin:{{ name }}", __rumocaFunctionName)
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro is_zero_sub(expr) -%}
-{%- if expr is mapping and expr.Binary is defined and expr.Binary.op.Sub is defined and is_guaranteed_zero(expr.Binary.lhs)|trim == "true" -%}
-true
-{%- elif expr is string -%}
-  {{ is_string_zero_sub(expr) }}
+{%- macro render_function_argument(fn, index, argument, mode, symbol_mode) -%}
+{%- if fn is not none and index < fn.parameters|length -%}
+{%- set dims = dae.value_types[fn.parameters[index].value_type].value_type.dimensions -%}
+{%- if dims|length > 1 -%}
+__rumocaFlatArray({{ render_expr(argument, mode, symbol_mode) }}, {{ dims|length }})
 {%- else -%}
-false
+{{ render_expr(argument, mode, symbol_mode) }}
+{%- endif -%}
+{%- else -%}
+{{ render_expr(argument, mode, symbol_mode) }}
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro render_mode_expr(mode, expr) -%}
-{%- if mode == "comment" -%}{{ render_expr(expr, "runtime", "named") }}{%- else -%}{{ render_expr(expr, "runtime", "indexed") }}{%- endif -%}
-{%- endmacro -%}
-
-{%- macro strip_zero_sub(mode, expr) -%}
-{%- if expr is mapping and expr.Parenthesized is defined -%}
-  {{ strip_zero_sub(mode, expr.Parenthesized.inner) }}
-{%- elif is_zero_sub(expr) == "true" -%}
-  {%- if expr is mapping and expr.Binary is defined -%}
-    {{ strip_zero_sub(mode, expr.Binary.rhs) }}
-  {%- elif expr is string -%}
-    {{ strip_string_zero_sub(expr) }}
-  {%- else -%}
-    {{ render_mode_expr(mode, expr) }}
-  {%- endif -%}
+{%- macro render_call(op, mode, symbol_mode) -%}
+{%- set fn = dae.functions[op.function] if dae.functions|length > op.function else none -%}
+{%- set fname = fn.name if fn is not none and fn.name is defined else "" -%}
+{%- set leaf = fname|replace("Modelica.Math.", "")|replace("Modelica.Units.Conversions.", "")|replace("Modelica.", "")|replace("Math.", "")|replace("Units.Conversions.", "") -%}
+{%- if fn is not none and fn.external is not none and fn.external.native_table_operator is defined and fn.external.native_table_operator is not none -%}
+__rumocaFunction_{{ op.function }}({%- for a in op.arguments -%}{{ render_function_argument(fn, loop.index0, a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%})[{{ op.output }}]
+{%- elif fn is not none and fn.external is not none and fn.external.symbol is defined -%}
+__rumocaResolveExternalSymbol("{{ q(fn.external.symbol) }}")
+{%- elif leaf in ["sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "exp", "log", "log10", "sqrt", "abs", "floor", "ceil"] -%}
+Math.{{ leaf }}({%- for a in op.arguments -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%})
+{%- elif leaf == "atan2" -%}
+Math.atan2({{ render_expr(op.arguments[0], mode, symbol_mode) }}, {{ render_expr(op.arguments[1], mode, symbol_mode) }})
+{%- elif leaf == "mod" -%}
+__rumocaMod({{ render_expr(op.arguments[0], mode, symbol_mode) }}, {{ render_expr(op.arguments[1], mode, symbol_mode) }})
+{%- elif leaf == "div" -%}
+__rumocaDiv({{ render_expr(op.arguments[0], mode, symbol_mode) }}, {{ render_expr(op.arguments[1], mode, symbol_mode) }})
+{%- elif leaf == "integer" -%}
+Integer({{ render_expr(op.arguments[0], mode, symbol_mode) }})
+{%- elif leaf == "from_degC" -%}
+(({{ render_expr(op.arguments[0], mode, symbol_mode) }}) + 273.15)
+{%- elif leaf == "to_degC" -%}
+(({{ render_expr(op.arguments[0], mode, symbol_mode) }}) - 273.15)
+{%- elif leaf == "from_deg" -%}
+(({{ render_expr(op.arguments[0], mode, symbol_mode) }}) * 0.017453292519943295)
+{%- elif leaf == "to_deg" -%}
+(({{ render_expr(op.arguments[0], mode, symbol_mode) }}) * 57.29577951308232)
+{%- elif leaf == "max" -%}
+__rumocaMax([{%- for a in op.arguments -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%}])
+{%- elif leaf == "min" -%}
+__rumocaMin([{%- for a in op.arguments -%}{{ render_expr(a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%}])
 {%- else -%}
-  {{ render_mode_expr(mode, expr) }}
+__rumocaFunction_{{ op.function }}({%- for a in op.arguments -%}{{ render_function_argument(fn, loop.index0, a, mode, symbol_mode) }}{{ ", " if not loop.last }}{%- endfor -%})[{{ op.output }}]
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro residual_core(mode, eq) -%}
-{%- if eq.lhs is defined and eq.lhs is not none and eq.rhs is defined and eq.rhs is not none -%}
-  {%- if is_guaranteed_zero(eq.lhs)|trim == "true" and is_guaranteed_zero(eq.rhs)|trim == "true" -%}
-    0
-  {%- elif is_guaranteed_zero(eq.lhs)|trim == "true" -%}
-    {{ strip_zero_sub(mode, eq.rhs) }}
-  {%- elif is_guaranteed_zero(eq.rhs)|trim == "true" -%}
-    {{ render_mode_expr(mode, eq.lhs) }}
-  {%- else -%}
-    ({{ render_mode_expr(mode, eq.lhs) }}) - ({{ render_mode_expr(mode, eq.rhs) }})
-  {%- endif -%}
-{%- elif eq.rhs is defined and eq.rhs is not none -%}
-  {{ strip_zero_sub(mode, eq.rhs) }}
-{%- elif eq.Simple is defined and eq.Simple.lhs is defined and eq.Simple.lhs is not none and eq.Simple.rhs is defined and eq.Simple.rhs is not none -%}
-  {%- if is_guaranteed_zero(eq.Simple.lhs)|trim == "true" and is_guaranteed_zero(eq.Simple.rhs)|trim == "true" -%}
-    0
-  {%- elif is_guaranteed_zero(eq.Simple.lhs)|trim == "true" -%}
-    {{ strip_zero_sub(mode, eq.Simple.rhs) }}
-  {%- elif is_guaranteed_zero(eq.Simple.rhs)|trim == "true" -%}
-    {{ render_mode_expr(mode, eq.Simple.lhs) }}
-  {%- else -%}
-    ({{ render_mode_expr(mode, eq.Simple.lhs) }}) - ({{ render_mode_expr(mode, eq.Simple.rhs) }})
-  {%- endif -%}
+{%- macro fn_assignment(fn, definition_ordinal) -%}
+  __v[{{ fn.definitions[definition_ordinal].target }}] = {{ render_expr(fn.definitions[definition_ordinal].rhs) }};
+{%- endmacro -%}
+
+{%- macro fn_fold(fn, fold, body) -%}
+{
+  {%- for j in range(fold.targets|length) %}
+  let __c{{ fold.ordinal }}_{{ j }} = {{ render_expr(fn.definitions[fold.initial_definitions[j]].rhs) }};
+  {%- endfor %}
+  const __rumocaFoldCount{{ fold.ordinal }} = {{ dae.domains[fold.domain].scalar_count }};
+  for (let __rumocaFoldIter{{ fold.ordinal }} = 0; __rumocaFoldIter{{ fold.ordinal }} < __rumocaFoldCount{{ fold.ordinal }}; __rumocaFoldIter{{ fold.ordinal }} += 1) {
+    {{ binder_assignments(fold.domain, "__rumocaFoldIter" ~ fold.ordinal) }}
+    {%- for definition in fold.parameter_definitions %}
+    {{ fn_assignment(fn, definition) }}
+    {%- endfor %}
+    {%- if fold.continuation is not none %}
+    if (!({{ render_expr(fold.continuation) }})) break;
+    {%- endif %}
+    {{ fn_statements(fn, body) }}
+    {%- for j in range(fold.targets|length) %}
+    __c{{ fold.ordinal }}_{{ j }} = __v[{{ fold.targets[j] }}];
+    {%- endfor %}
+  }
+  {%- for definition in fold.output_definitions %}
+  {{ fn_assignment(fn, definition) }}
+  {%- endfor %}
+}
+{%- endmacro -%}
+
+{%- macro fn_statements(fn, statements) -%}
+{%- for statement in statements -%}
+{%- if statement.kind == "assignment" -%}
+{{ fn_assignment(fn, statement.definition) }}
+{%- elif statement.kind == "assignment_group" -%}
+{{ fn_statements(fn, statement.statements) }}
+{%- elif statement.kind == "for" -%}
+{{ fn_fold(fn, fn.folds[statement.fold], statement.statements) }}
+{%- elif statement.kind == "conditional" -%}
+{%- for branch in statement.branches %}
+{{ "if" if loop.first else "else if" }} ({{ render_expr(branch.condition) }}) {
+  {{ fn_statements(fn, branch.statements) }}
+}
+{%- endfor %}
+else {
+  {{ fn_statements(fn, statement.fallback) }}
+}
+{%- for definition in statement.outputs %}
+{{ fn_assignment(fn, definition) }}
+{%- endfor %}
+{%- elif statement.kind == "require_assigned" -%}
+if (typeof __v[{{ statement.value }}] === "undefined") throw new Error("Modelica function " + __rumocaFunctionName + " read an unassigned value");
+{{ fn_assignment(fn, statement.definition) }}
+{%- elif statement.kind == "assertion" -%}
+{%- if statement.level == "Error" %}
+  if (!({{ render_expr(statement.condition) }})) throw new Error("Modelica function " + __rumocaFunctionName + " assertion failed: " + String({{ render_expr(statement.message) }}));
+{%- endif %}
 {%- else -%}
-  0
+  __rumocaUnsupported("function statement:{{ statement.kind }}", __rumocaFunctionName);
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro cond_expression(cid, mode="code", symbol_mode="indexed") -%}
+{%- set cond = dae.systems.conditions.conditions[cid] -%}
+{%- set op = cond.operation -%}
+{%- if op.kind == "relation" -%}
+  {%- set rel = dae.systems.conditions.relations[op.relation] -%}
+  Boolean({{ render_expr(rel.expression, mode, symbol_mode) }})
+{%- elif op.kind == "discrete" -%}
+  Boolean({{ render_expr(op.expression, mode, symbol_mode) }})
+{%- elif op.kind == "initial" -%}Initial()
+{%- elif op.kind == "clock" -%}
+  {%- set clk = dae.systems.clocks.clocks[op.clock] -%}
+  {%- if clk.operation.kind == "periodic" -%}
+  Sample(({{ clk.operation.lattice.phase.num }}) / ({{ clk.operation.lattice.phase.den }}), ({{ clk.operation.lattice.period.num }}) / ({{ clk.operation.lattice.period.den }}))
+  {%- else -%}
+  {{ cond_expression(clk.operation.condition, mode, symbol_mode) }}
+  {%- endif -%}
+{%- elif op.kind == "always" -%}true
+{%- elif op.kind == "not" -%}(!{{ cond_expression(op.condition, mode, symbol_mode) }})
+{%- elif op.kind == "and" -%}({{ cond_expression(op.lhs, mode, symbol_mode) }} && {{ cond_expression(op.rhs, mode, symbol_mode) }})
+{%- elif op.kind == "or" -%}({{ cond_expression(op.lhs, mode, symbol_mode) }} || {{ cond_expression(op.rhs, mode, symbol_mode) }})
+{%- elif op.kind == "any_rise" -%}({{ cond_expression(op.lhs, mode, symbol_mode) }} || {{ cond_expression(op.rhs, mode, symbol_mode) }})
+{%- else -%}__rumocaUnsupported("condition:{{ op.kind }}")
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro residual_expr(eq) -%}{{ residual_core("code", eq) }}{%- endmacro -%}
-
-{%- macro render_comment_expr(e) -%}{{ render_expr(e, "runtime", "named") }}{%- endmacro -%}
-
-{%- macro residual_expr_comment(eq) -%}{{ residual_core("comment", eq) }}{%- endmacro -%}
-
-{%- macro condition_expr(ce, mode="code") -%}
-{%- if ce is mapping and ce.rhs is defined -%}
-  {%- if mode == "comment" -%}
-    {{ render_mode_expr("comment", ce.rhs) }}
+{%- macro cond_indicator(cid, mode="code", symbol_mode="indexed") -%}
+{%- set cond = dae.systems.conditions.conditions[cid] -%}
+{%- set op = cond.operation -%}
+{%- if op.kind == "relation" -%}
+  {%- set rel = dae.systems.conditions.relations[op.relation] -%}
+  {%- set re = dae.expressions[rel.expression].operation -%}
+  {%- if re.kind == "binary" and re.operator in ["less", "less_equal", "equal", "not_equal"] -%}
+  (({{ render_expr(re.lhs, mode, symbol_mode) }}) - ({{ render_expr(re.rhs, mode, symbol_mode) }}))
+  {%- elif re.kind == "binary" and re.operator in ["greater", "greater_equal"] -%}
+  (({{ render_expr(re.rhs, mode, symbol_mode) }}) - ({{ render_expr(re.lhs, mode, symbol_mode) }}))
   {%- else -%}
-    {{ render_expr(ce.rhs, "runtime", "indexed", emit_generated_expr_comments, "") }}
+  (({{ cond_expression(cid, mode, symbol_mode) }}) ? -1 : 1)
   {%- endif -%}
 {%- else -%}
-  {%- if mode == "comment" -%}
-    {{ render_mode_expr("comment", ce) }}
-  {%- else -%}
-    {{ render_expr(ce, "runtime", "indexed", emit_generated_expr_comments, "") }}
-  {%- endif -%}
+  (({{ cond_expression(cid, mode, symbol_mode) }}) ? -1 : 1)
 {%- endif -%}
 {%- endmacro -%}
 
-{%- macro event_indicator_expr(e, mode="code") -%}
-{%- set m = "comment" if mode == "comment" else "code" -%}
-{%- if e is mapping and e.Binary is defined -%}
-  {%- set b = e.Binary -%}
-  {%- if b.op.Le is defined or b.op.Lt is defined or b.op.LessEq is defined or b.op.Less is defined -%}
-    (({{ render_mode_expr(m, b.lhs) }}) - ({{ render_mode_expr(m, b.rhs) }}))
-  {%- elif b.op.Ge is defined or b.op.Gt is defined or b.op.GreaterEq is defined or b.op.Greater is defined -%}
-    (({{ render_mode_expr(m, b.rhs) }}) - ({{ render_mode_expr(m, b.lhs) }}))
-  {%- elif b.op.Eq is defined or b.op.Ne is defined or b.op.Equals is defined or b.op.NotEquals is defined -%}
-    (({{ render_mode_expr(m, b.lhs) }}) - ({{ render_mode_expr(m, b.rhs) }}))
-  {%- else -%}
-    (({{ render_mode_expr(m, e) }}) ? -1 : 1)
-  {%- endif -%}
-{%- else -%}
-  (({{ render_mode_expr(m, e) }}) ? -1 : 1)
-{%- endif -%}
+{%- macro reset_condition(activation, indent) -%}
+{%- if activation.kind == "always" -%}true
+{%- elif activation.kind == "when" -%}(!cPrev[{{ activation.trigger }}] && cCurr[{{ activation.trigger }}] && Boolean(cCurr[{{ activation.guard }}]))
+{%- else -%}false{%- endif -%}
 {%- endmacro -%}
 
+{%- macro var_start_js(v, attr, kind) -%}
+{%- set vals = v.attributes[attr ~ '_values'] if v.attributes[attr ~ '_values'] is defined else none -%}
+{%- if vals is not none and vals|length > 0 -%}
+  {%- if vals|length == 1 -%}{{ vals[0] }}
+  {%- else -%}[{%- for x in vals -%}{{ x }}{{ ", " if not loop.last }}{%- endfor -%}]
+  {%- endif -%}
+{%- else -%}
+  {%- set eid = v.attributes[attr] if v.attributes[attr] is defined else none -%}
+  {%- if eid is not none -%}{{ render_expr(eid, "code", "indexed") }}
+  {%- elif kind == "algebraic" -%}Number.NaN
+  {%- else -%}0{%- endif -%}
+{%- endif -%}
+{%- endmacro -%}
 function Model() {
+  {%- if dae.external_tables is not defined %}
+  throw new Error('Rumoca DAE renderer does not expose retained external table descriptors; rebuild Rumoca');
+  {%- endif %}
+  const externalTables = [{% for table in dae.external_tables %}
+    {id:'{{ table.id }}',data:{{ table.data|tojson }},columns:{{ table.columns|tojson }},smoothness:{{ table.smoothness }},extrapolation:{{ table.extrapolation }}}{{ "," if not loop.last }}
+  {% endfor %}];
+  const { lookupTable, tableBounds, tableLookup, tableNextEvent } = __RUMOCA_NATIVE_TABLE_RUNTIME__(externalTables);
   const __rumocaHasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
   const __rumocaExternalSymbols = {};
   const __rumocaResolveExternalSymbol = (name) => {
@@ -1145,440 +935,579 @@ function Model() {
     __rumocaEventLog = [];
   }
 
+  let __rumocaFunctionName = "";
+  const __rumocaUnsupported = (kind, functionName) => {
+    const scope = functionName ? "function " + functionName + ": " : "";
+    throw new Error("rumoca checked-DAE: unsupported " + scope + kind);
+  };
+  const __rumocaElement = (value, index) => (Array.isArray(value) ? value[index] : value);
+  const __rumocaFlatArray = (value, rank) =>
+    Array.isArray(value) && rank > 1 ? value.flat(rank - 1) : value;
+  const __rumocaRange = (start, step, stop) => {
+    const out = [];
+    const s = Number(start);
+    const st = Number(step) || 1;
+    const e = Number(stop);
+    if (st > 0) for (let v = s; v <= e + 1e-12; v += st) out.push(v);
+    else if (st < 0) for (let v = s; v >= e - 1e-12; v += st) out.push(v);
+    else out.push(s);
+    return out;
+  };
+  const __rumocaDiv = (a, b) => Math.trunc(Number(a) / Number(b));
+  const __rumocaMod = (a, b) => {
+    const x = Number(a);
+    const y = Number(b);
+    return x - Math.floor(x / y) * y;
+  };
+  const __rumocaMin = (values) =>
+    Array.isArray(values) ? Math.min(...values.flat(Infinity)) : Math.min(values);
+  const __rumocaMax = (values) =>
+    Array.isArray(values) ? Math.max(...values.flat(Infinity)) : Math.max(values);
+  const __rumocaSum = (values) =>
+    Array.isArray(values) ? values.flat(Infinity).reduce((a, b) => a + b, 0) : values;
+  const __rumocaProduct = (values) =>
+    Array.isArray(values) ? values.flat(Infinity).reduce((a, b) => a * b, 1) : values;
+  const __rumocaLinspace = (a, b, n) => {
+    const count = Math.max(0, Math.floor(Number(n)));
+    if (count <= 0) return [];
+    if (count === 1) return [Number(a)];
+    return Array.from({ length: count }, (_v, i) => Number(a) + ((Number(b) - Number(a)) * i) / (count - 1));
+  };
+  const __rumocaIdentity = (n) => {
+    const size = Math.max(0, Math.floor(Number(n)));
+    return Array.from({ length: size }, (_v, r) =>
+      Array.from({ length: size }, (_w, c) => (r === c ? 1 : 0)),
+    );
+  };
+  const __rumocaOuterProduct = (a, b) =>
+    (Array.isArray(a) ? a : [a]).map((x) => (Array.isArray(b) ? b : [b]).map((y) => x * y));
+  const __rumocaSkew = (v) => [
+    [0, -Number(v[2]), Number(v[1])],
+    [Number(v[2]), 0, -Number(v[0])],
+    [-Number(v[1]), Number(v[0]), 0],
+  ];
+  const __rumocaLinearSolve = (a, b) => __rumocaUnsupported("linear_solve", __rumocaFunctionName);
+  const __rumocaCat = (parts) => parts.flat(1);
+{%- for fn in dae.functions %}
+{%- if fn.external is none %}
+  function __rumocaFunction_{{ fn.id }}({% for parameter in fn.parameters %}__p{{ parameter.ordinal }}{{ ", " if not loop.last }}{% endfor %}) {
+    const __rumocaFunctionName = "{{ q(fn.name) }}";
+    const __v = new Array({{ fn.values|length }}).fill(undefined);
+{{ fn_statements(fn, fn.statements) }}
+    return [{% for definition in fn.results %}__v[{{ fn.definitions[definition].target }}]{{ ", " if not loop.last }}{% endfor %}];
+  }
+{%- else %}
+  function __rumocaFunction_{{ fn.id }}({% for parameter in fn.parameters %}__p{{ parameter.ordinal }}{{ ", " if not loop.last }}{% endfor %}) {
+    const __rumocaFunctionName = "{{ q(fn.name) }}";
+    {%- if fn.external.native_table_operator is defined and fn.external.native_table_operator is not none %}
+    const __args = [{% for argument in fn.external.arguments %}{% if argument.input is not defined %}__rumocaUnsupported('external table output argument', __rumocaFunctionName){% else %}{{ render_expr(argument.input) }}{% endif %}{{ ", " if not loop.last }}{% endfor %}];
+    const __table = lookupTable(__args[0]);
+    {%- if fn.external.native_table_operator == 'lookup' %}
+    return [tableLookup(__table, __args[1], __args[2]).value];
+    {%- elif fn.external.native_table_operator == 'slope' %}
+    return [tableLookup(__table, __args[1], __args[2]).slope * __args.at(-1)];
+    {%- elif fn.external.native_table_operator == 'bounds_min' %}
+    return [tableBounds(__table)[0]];
+    {%- elif fn.external.native_table_operator == 'bounds_max' %}
+    return [tableBounds(__table)[1]];
+    {%- elif fn.external.native_table_operator == 'next_event' %}
+    return [tableNextEvent(__table, __args[1])];
+    {%- else %}
+    return __rumocaUnsupported('native table operator', __rumocaFunctionName);
+    {%- endif %}
+    {%- else %}
+    return __rumocaResolveExternalSymbol("{{ q(fn.external.symbol) }}");
+    {%- endif %}
+  }
+{%- endif %}
+{%- endfor %}
+{%- macro var_scalar_js(v, attr, kind, i) -%}
+{%- set vals = v.attributes[attr ~ '_values'] if v.attributes[attr ~ '_values'] is defined else none -%}
+{%- set count = v.scalar_count if v.scalar_count is defined and v.scalar_count is not none else 1 -%}
+{%- if vals is not none and vals|length > 0 -%}
+{%- if vals|length == 1 -%}{{ vals[0] }}
+{%- elif i < vals|length -%}{{ vals[i] }}
+{%- else -%}{{ vals[0] }}
+{%- endif -%}
+{%- else -%}
+{%- set eid = v.attributes[attr] if v.attributes[attr] is defined else none -%}
+{%- if eid is not none -%}
+{%- if count <= 1 -%}{{ render_expr(eid, "code", "indexed") }}
+{%- else -%}__rumocaElement({{ render_expr(eid, "code", "indexed") }}, {{ i }})
+{%- endif -%}
+{%- elif kind == "algebraic" -%}Number.NaN
+{%- else -%}0{%- endif -%}
+{%- endif -%}
+{%- endmacro -%}
+
   const pDefaults = {};
-  const P_DEFAULT = new Array({{ p_map|length }}).fill(0);
+  const P_DEFAULT = new Array({{ varn.p_names|length }}).fill(0);
   const P = P_DEFAULT;
   const p = pDefaults;
-  {%- for (name, comp) in p_map|items %}
-  pDefaults["{{ name }}"] = 0;
-  __rumocaFallbackSymbols["{{ name }}"] = 0;
-  {%- endfor %}
-  {%- for (name, comp) in p_map|items %}
+  {%- for v in dae.variables %}
+  {%- if v.role == "parameter" %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
   {
-    const __rumocaP = {{ comp_expr_or_value(comp) }};
-    pDefaults["{{ name }}"] = __rumocaSignalOr(__rumocaP, pDefaults["{{ name }}"]);
-    P_DEFAULT[{{ loop.index0 }}] = pDefaults["{{ name }}"];
-    __rumocaFallbackSymbols["{{ name }}"] = pDefaults["{{ name }}"];
+    const __rumocaP = {{ var_scalar_js(v, "binding", "parameter", i) }};
+    pDefaults["{{ q(varn.p_names[varn.p_base[v.id] + i]) }}"] = __rumocaSignalOr(__rumocaP, 0);
+    P_DEFAULT[{{ varn.p_base[v.id] + i }}] = pDefaults["{{ q(varn.p_names[varn.p_base[v.id] + i]) }}"];
+    __rumocaFallbackSymbols["{{ q(varn.p_names[varn.p_base[v.id] + i]) }}"] = pDefaults["{{ q(varn.p_names[varn.p_base[v.id] + i]) }}"];
   }
+  {%- endfor %}
+  {%- endif %}
   {%- endfor %}
 
-  // constants was initialized near runtime helper declarations
-  {%- for (name, comp) in cp_map|items %}
-  constants["{{ name }}"] = 0;
-  __rumocaFallbackSymbols["{{ name }}"] = 0;
-  {%- endfor %}
-  {%- for (name, comp) in cp_map|items %}
+  {%- for v in dae.variables %}
+  {%- if v.role == "constant" %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
   {
-    const __rumocaC = {{ comp_expr_or_value(comp) }};
-    constants["{{ name }}"] = __rumocaSignalOr(__rumocaC, constants["{{ name }}"]);
-    __rumocaFallbackSymbols["{{ name }}"] = constants["{{ name }}"];
+    const __rumocaC = {{ var_scalar_js(v, "binding", "constant", i) }};
+    constants["{{ q(varn.cp_names[varn.cp_base[v.id] + i]) }}"] = __rumocaSignalOr(__rumocaC, 0);
+    if ({{ i }} === 0) constants["{{ q(v.name) }}"] = constants["{{ q(varn.cp_names[varn.cp_base[v.id] + i]) }}"];
+    __rumocaFallbackSymbols["{{ q(varn.cp_names[varn.cp_base[v.id] + i]) }}"] = constants["{{ q(varn.cp_names[varn.cp_base[v.id] + i]) }}"];
   }
+  {%- endfor %}
+  {%- endif %}
   {%- endfor %}
 
   const x0 = [];
-  {%- for (name, comp) in x_map|items %}
+  {%- for v in dae.variables %}
+  {%- if v.role == "state" %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
   {
-    const __rumocaX0 = {{ comp_expr_or_value(comp) }};
-    x0.push(__rumocaFiniteOr(__rumocaX0, 0));
-    __rumocaFallbackSymbols["{{ name }}"] = x0[{{ loop.index0 }}];
+    const __rumocaX0 = {{ var_scalar_js(v, "start", "algebraic", i) }};
+    x0[{{ varn.x_base[v.id] + i }}] = __rumocaFiniteOr(__rumocaX0, 0);
+    __rumocaFallbackSymbols["{{ q(varn.x_names[varn.x_base[v.id] + i]) }}"] = x0[{{ varn.x_base[v.id] + i }}];
   }
+  {%- endfor %}
+  {%- endif %}
   {%- endfor %}
 
   const y0 = [];
-  {%- for (name, comp) in y_map|items %}
+  {%- for v in dae.variables %}
+  {%- if v.role == "algebraic" %}
+  {%- set slot = varn.y_base[v.id] %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
   {
-    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
-    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
-    __rumocaFallbackSymbols["{{ name }}"] = y0[{{ loop.index0 }}];
+    const __rumocaY0 = {{ var_scalar_js(v, "start", "algebraic", i) }};
+    y0[{{ slot + i }}] = __rumocaSignalOr(__rumocaY0, Number.NaN);
+    __rumocaFallbackSymbols["{{ q(varn.y_names[varn.y_base[v.id] + i]) }}"] = y0[{{ slot + i }}];
   }
   {%- endfor %}
-  {%- for (name, comp) in z_map|items %}
+  {%- elif v.role == "discrete_real" %}
+  {%- set slot = varn.y_names|length + varn.z_base[v.id] %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
   {
-    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
-    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
-    __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + loop.index0 }}];
+    const __rumocaY0 = {{ var_scalar_js(v, "start", "algebraic", i) }};
+    y0[{{ slot + i }}] = __rumocaSignalOr(__rumocaY0, Number.NaN);
+    __rumocaFallbackSymbols["{{ q(varn.z_names[varn.z_base[v.id] + i]) }}"] = y0[{{ slot + i }}];
   }
   {%- endfor %}
-  {%- for (name, comp) in m_map|items %}
+  {%- elif v.role == "discrete_value" %}
+  {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_base[v.id] %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
   {
-    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
-    {%- if name == hidden_condition_m_name %}
-    __rumocaFallbackSymbols["{{ name }}"] = __rumocaSignalOr(__rumocaY0, Number.NaN);
-    {%- else %}
-    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
-    __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count if name != hidden_condition_m_name else 0 }}];
-    {%- endif %}
+    const __rumocaY0 = {{ var_scalar_js(v, "start", "algebraic", i) }};
+    y0[{{ slot + i }}] = __rumocaSignalOr(__rumocaY0, Number.NaN);
+    __rumocaFallbackSymbols["{{ q(varn.m_names[varn.m_base[v.id] + i]) }}"] = y0[{{ slot + i }}];
   }
   {%- endfor %}
-  {%- for (name, comp) in w_map|items %}
+  {%- elif v.role == "output" %}
+  {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[v.id] %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
   {
-    const __rumocaY0 = {{ comp_expr_or_nan(comp) }};
-    y0.push(__rumocaSignalOr(__rumocaY0, Number.NaN));
-    __rumocaFallbackSymbols["{{ name }}"] = y0[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}];
+    const __rumocaY0 = {{ var_scalar_js(v, "start", "algebraic", i) }};
+    y0[{{ slot + i }}] = __rumocaSignalOr(__rumocaY0, Number.NaN);
+    __rumocaFallbackSymbols["{{ q(varn.w_names[varn.w_base[v.id] + i]) }}"] = y0[{{ slot + i }}];
   }
   {%- endfor %}
-  {%- for (name, comp) in x_dot_alias_map|items %}
-  {
-    const __rumocaAlias = {{ comp_expr_or_value(comp) }};
-    __rumocaFallbackSymbols["{{ name }}"] = __rumocaFiniteOr(__rumocaAlias, 0);
-  }
-  {%- endfor %}
-  {%- for obs in obs_list %}
-  {
-    const __rumocaObs0 = {% if obs.start is defined %}{{ render_expr(obs.start) }}{% else %}0{% endif %};
-    __rumocaFallbackSymbols["{{ obs.name }}"] = __rumocaSignalOr(__rumocaObs0, 0);
-  }
+  {%- endif %}
   {%- endfor %}
 
   const c0 = [
-  {%- if cond_eqs|length > 0 -%}
-    {%- for ce in cond_eqs %}false{% if not loop.last %},{% endif %}{%- endfor %}
-  {%- endif -%}
+  {%- for cond in dae.systems.conditions.conditions %}false,{%- endfor %}
   ];
 
+
+{%- macro held_slot(vid) -%}
+{%- set v = dae.variables[vid] -%}
+{%- if v.role == "algebraic" -%}{{ varn.y_base[vid] }}
+{%- elif v.role == "discrete_real" -%}{{ varn.y_names|length + varn.z_base[vid] }}
+{%- elif v.role == "discrete_value" -%}{{ varn.y_names|length + varn.z_names|length + varn.m_base[vid] }}
+{%- elif v.role == "output" -%}{{ varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[vid] }}
+{%- else -%}-1
+{%- endif -%}
+{%- endmacro -%}
+
   const meta = {
-    name: "{{ model_name }}",
+    name: "{{ q(model_name) }}",
 
     parameters: [
-    {%- for (name, comp) in p_map|items %}
-      { name: "{{ name }}", start: pDefaults["{{ name }}"]{{ comp_unit_prop(comp) }} }{% if not loop.last %},{% endif %}
+    {%- for v in dae.variables %}
+    {%- if v.role == "parameter" %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      { name: "{{ q(varn.p_names[varn.p_base[v.id] + i]) }}", start: pDefaults["{{ q(varn.p_names[varn.p_base[v.id] + i]) }}"]{{ var_unit_prop(v) }}},
+    {%- endfor %}
+    {%- endif %}
     {%- endfor %}
     ],
 
     constants: [
-    {%- for (name, comp) in cp_map|items %}
-      { name: "{{ name }}", value: constants["{{ name }}"]{{ comp_unit_prop(comp) }} }{% if not loop.last %},{% endif %}
+    {%- for v in dae.variables %}
+    {%- if v.role == "constant" %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      { name: "{{ q(varn.cp_names[varn.cp_base[v.id] + i]) }}", value: constants["{{ q(varn.cp_names[varn.cp_base[v.id] + i]) }}"]{{ var_unit_prop(v) }}},
+    {%- endfor %}
+    {%- endif %}
     {%- endfor %}
     ],
 
     states: [
-    {%- for (name, comp) in x_map|items %}
-      { name: "{{ name }}", start: x0[{{ loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last %},{% endif %}
+    {%- for v in dae.variables %}
+    {%- if v.role == "state" %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      { name: "{{ q(varn.x_names[varn.x_base[v.id] + i]) }}", start: x0[{{ varn.x_base[v.id] + i }}]{{ var_unit_prop(v) }}},
+    {%- endfor %}
+    {%- endif %}
     {%- endfor %}
     ],
 
     algebraics: [
-    {%- for (name, comp) in y_map|items %}
-      { name: "{{ name }}", start: y0[{{ loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or z_map|length > 0 or visible_m_count > 0 or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
-    {%- endfor %}
-    {%- for (name, comp) in z_map|items %}
-      { name: "{{ name }}", start: y0[{{ y_map|length + loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or visible_m_count > 0 or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
-    {%- endfor %}
-    {%- for (name, comp) in m_map|items %}
-    {%- if name != hidden_condition_m_name %}
-      { name: "{{ name }}", start: y0[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}]{{ comp_unit_prop(comp) }} }{% if (loop.index0 - hidden_condition_m_count) < (visible_m_count - 1) or w_map|length > 0 or obs_list|length > 0 %},{% endif %}
-    {%- endif %}
-    {%- endfor %}
-    {%- for (name, comp) in w_map|items %}
-      { name: "{{ name }}", start: y0[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}]{{ comp_unit_prop(comp) }} }{% if not loop.last or obs_list|length > 0 %},{% endif %}
-    {%- endfor %}
-    {%- for obs in obs_list %}
-      { name: "{{ obs.name }}", start: {% if obs.start is defined %}__rumocaSignalOr({{ render_expr(obs.start) }}, 0){% else %}0{% endif %}{% if obs.unit is defined and obs.unit is not none and (obs.unit|string)|trim != '' and (obs.unit|string)|trim|lower != 'none' and (obs.unit|string)|trim|lower != 'null' %}, unit: "{{ (obs.unit|string)|trim|replace('\\', '\\\\')|replace('"', '\\"') }}"{% else %}{% set __u = inferred_unit_from_name(obs.name)|trim %}{% if __u != '' %}, unit: "{{ __u|replace('\\', '\\\\')|replace('"', '\\"') }}"{% endif %}{% endif %} }{% if not loop.last %},{% endif %}
-    {%- endfor %}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "algebraic" -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      { name: "{{ q(varn.y_names[varn.y_base[v.id] + i]) }}", start: y0[{{ varn.y_base[v.id] + i }}]{{ var_unit_prop(v) }}},
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "discrete_real" -%}
+    {%- set slot = varn.y_names|length + varn.z_base[v.id] -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      { name: "{{ q(varn.z_names[varn.z_base[v.id] + i]) }}", start: y0[{{ slot + i }}]{{ var_unit_prop(v) }}},
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "discrete_value" -%}
+    {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_base[v.id] -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      { name: "{{ q(varn.m_names[varn.m_base[v.id] + i]) }}", start: y0[{{ slot + i }}]{{ var_unit_prop(v) }}},
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "output" -%}
+    {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[v.id] -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      { name: "{{ q(varn.w_names[varn.w_base[v.id] + i]) }}", start: y0[{{ slot + i }}]{{ var_unit_prop(v) }}},
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
     ],
 
     solverAlgebraics: [
-    {%- for (name, comp) in y_map|items %}
-      "{{ name }}"{% if not loop.last or z_map|length > 0 or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
-    {%- endfor %}
-    {%- for (name, comp) in z_map|items %}
-      "{{ name }}"{% if not loop.last or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
-    {%- endfor %}
-    {%- for (name, comp) in m_map|items %}
-    {%- if name != hidden_condition_m_name %}
-      "{{ name }}"{% if (loop.index0 - hidden_condition_m_count) < (visible_m_count - 1) or w_map|length > 0 %},{% endif %}
-    {%- endif %}
-    {%- endfor %}
-    {%- for (name, comp) in w_map|items %}
-      "{{ name }}"{% if not loop.last %},{% endif %}
-    {%- endfor %}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "algebraic" -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      "{{ q(varn.y_names[varn.y_base[v.id] + i]) }}",
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "discrete_real" -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      "{{ q(varn.z_names[varn.z_base[v.id] + i]) }}",
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "discrete_value" -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      "{{ q(varn.m_names[varn.m_base[v.id] + i]) }}",
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- for v in dae.variables -%}
+    {%- if v.role == "output" -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}
+      "{{ q(varn.w_names[varn.w_base[v.id] + i]) }}",
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
     ],
 
     inputs: [
-    {%- for (name, comp) in u_map|items %}
-      { name: "{{ name }}"{{ comp_unit_prop(comp) }} }{% if not loop.last %},{% endif %}
+    {%- for v in dae.variables %}
+    {%- if v.role == "input" %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      { name: "{{ q(varn.u_names[varn.u_base[v.id] + i]) }}"{{ var_unit_prop(v) }}},
+    {%- endfor %}
+    {%- endif %}
     {%- endfor %}
     ],
 
     conditions: [
-    {%- if cond_eqs|length > 0 -%}
-      {%- for ce in cond_eqs %}
-      { name: "c[{{ loop.index }}]", start: false }{% if not loop.last %},{% endif %}
-      {%- endfor %}
-    {%- endif %}
+    {%- for cond in dae.systems.conditions.conditions %}
+      { name: "c[{{ loop.index }}]", start: false },
+    {%- endfor %}
+    ],
+
+    heldAlgebraics: [
+    {%- for owner in dae.systems.discrete_values.owners -%}{%- for target in owner.targets -%}
+    {%- for offset in ([target.scalar_selection] if target.scalar_selection is not none else range(dae.variables[target.variable].scalar_count)) -%}
+    {{ held_slot(target.variable) }} + {{ offset }},
+    {%- endfor -%}{%- endfor -%}{%- endfor -%}
+    {%- for res in dae.systems.discrete_real.residuals -%}{%- set re = dae.expressions[res.residual].operation -%}{%- if re.kind == "binary" and re.operator == "subtract" -%}{%- set lhs = dae.expressions[re.lhs].operation -%}{%- if lhs.kind == "coordinate" -%}{{ held_slot(lhs.coordinate.id) }},
+    {%- endif -%}{%- endif -%}{%- endfor -%}
+    ],
+
+    booleanAlgebraics: [
+    {%- for v in dae.variables -%}
+    {%- if v.value_type.scalar == "boolean" and (v.role == "algebraic" or v.role == "discrete_real" or v.role == "discrete_value" or v.role == "output") -%}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 -%}
+    {%- for i in range(count) -%}{{ held_slot(v.id) }} + {{ i }},
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endfor -%}
     ],
 
     summary: {
-      nx: {{ x_map|length }},
-      ny: {{ y_map|length + z_map|length + visible_m_count + w_map|length }},
-      nc: {{ cond_eqs|length }},
-      neqs: {{ eqs|length }}
+      nx: {{ varn.x_names|length }},
+      ny: {{ ny_var }},
+      nc: {{ dae.systems.conditions.conditions|length }},
+      neqs: {{ evt.n_eqs }}
     }
   };
 
   const stateIndex = {
-  {%- for (name, comp) in x_map|items %}
-    "{{ name }}": {{ loop.index0 }}{% if not loop.last %},{% endif %}
+  {%- for v in dae.variables %}
+  {%- if v.role == "state" %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
+    "{{ q(varn.x_names[varn.x_base[v.id] + i]) }}": {{ varn.x_base[v.id] + i }},
+  {%- endfor %}
+  {%- endif %}
   {%- endfor %}
   };
 
   const algebraicIndex = {
-  {%- for (name, comp) in y_map|items %}
-    "{{ name }}": {{ loop.index0 }}{% if not loop.last or z_map|length > 0 or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
+  {%- for v in dae.variables %}
+  {%- if v.role == "algebraic" %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
+    "{{ q(varn.y_names[varn.y_base[v.id] + i]) }}": {{ varn.y_base[v.id] + i }},
   {%- endfor %}
-  {%- for (name, comp) in z_map|items %}
-    "{{ name }}": {{ y_map|length + loop.index0 }}{% if not loop.last or visible_m_count > 0 or w_map|length > 0 %},{% endif %}
+  {%- elif v.role == "discrete_real" %}
+  {%- set slot = varn.y_names|length + varn.z_base[v.id] %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
+    "{{ q(varn.z_names[varn.z_base[v.id] + i]) }}": {{ slot + i }},
   {%- endfor %}
-  {%- for (name, comp) in m_map|items %}
-  {%- if name != hidden_condition_m_name %}
-    "{{ name }}": {{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}{% if (loop.index0 - hidden_condition_m_count) < (visible_m_count - 1) or w_map|length > 0 %},{% endif %}
+  {%- elif v.role == "discrete_value" %}
+  {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_base[v.id] %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
+    "{{ q(varn.m_names[varn.m_base[v.id] + i]) }}": {{ slot + i }},
+  {%- endfor %}
+  {%- elif v.role == "output" %}
+  {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[v.id] %}
+  {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+  {%- for i in range(count) %}
+    "{{ q(varn.w_names[varn.w_base[v.id] + i]) }}": {{ slot + i }},
+  {%- endfor %}
   {%- endif %}
-  {%- endfor %}
-  {%- for (name, comp) in w_map|items %}
-    "{{ name }}": {{ y_map|length + z_map|length + visible_m_count + loop.index0 }}{% if not loop.last %},{% endif %}
   {%- endfor %}
   };
 
   function residual(t, X, XDot, Y, U, PIn, cPrev = [], cCurr = []) {
-    // For large algebraic-only systems, avoid expensive residual projection loops.
-    if (
-      (!Array.isArray(X) || X.length === 0) &&
-      Array.isArray(Y) &&
-      Y.length > 32
-    ) {
-      return [];
-    }
-    {%- if p_map|length > 0 -%}
     const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
-    {%- endif -%}
-
-    return [
-{% for eq in eqs %}
-      // eq_{{ "%03d"|format(loop.index) }}: {{ residual_expr_comment(eq)|replace('\n', ' ')|replace('\r', ' ') }}
-      {{ residual_expr(eq) }}{% if not loop.last %},{% endif %}
-{% endfor %}
-    ];
+    const __rumocaRows = [];
+    {%- for owner in dae.systems.continuous.owners %}
+    {%- if owner.kind == "residual" %}
+    __rumocaRows.push({{ render_expr(owner.residual, "code", "indexed") }});
+    {%- elif owner.scalar_view == "BinderSubstitution" %}
+    for (let __rumocaRp = 0; __rumocaRp < {{ owner.scalar_rows }}; __rumocaRp++) {
+      {{ binder_assignments(owner.domain, "__rumocaRp") }}
+      {%- for body in owner.bodies %}
+      __rumocaRows.push({{ render_expr(body, "code", "indexed") }});
+      {%- endfor %}
+    }
+    {%- else %}
+    __rumocaRows.push(__rumocaUnsupported("structured-view:{{ owner.scalar_view }}"));
+    {%- endif %}
+    {%- endfor %}
+    return __rumocaRows;
   }
 
   function evalConditions(t, X, Y, U, PIn, cPrev = [], cCurr = []) {
     __rumocaCurrentTime = t;
-    {%- if p_map|length > 0 -%}
     const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
-    {%- endif -%}
-
     return [
-{% for ce in cond_eqs %}
-      // cond_{{ "%03d"|format(loop.index) }}: {{ condition_expr(ce, "comment")|replace('\n', ' ')|replace('\r', ' ') }}
-      {{ condition_expr(ce, "code") }}{% if not loop.last %},{% endif %}
-{% endfor %}
+    {%- for cond in dae.systems.conditions.conditions %}
+      {{ cond_expression(cond.id, "code", "indexed") }},
+    {%- endfor %}
     ];
   }
 
   function evalEventIndicators(t, X, Y, U, PIn, cPrev = [], cCurr = []) {
     __rumocaCurrentTime = t;
-    {%- if p_map|length > 0 -%}
     const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
-    {%- endif -%}
-
     return [
-{% for ce in cond_eqs %}
-      {%- set ce_expr = ce.rhs if ce is mapping and ce.rhs is defined else ce -%}
-      // indicator_{{ "%03d"|format(loop.index) }}: {{ event_indicator_expr(ce_expr, "comment")|replace('\n', ' ')|replace('\r', ' ') }}
-      {{ event_indicator_expr(ce_expr, "code") }}{% if not loop.last %},{% endif %}
-{% endfor %}
+    {%- for cond in dae.systems.conditions.conditions %}
+      {{ cond_indicator(cond.id, "code", "indexed") }},
+    {%- endfor %}
     ];
   }
 
   function evalAlgebraics(t, X, Y, U, PIn, cPrev = [], cCurr = []) {
     __rumocaCurrentTime = t;
-    const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
-
-  {%- for (name, comp) in cp_map|items %}
-    var {{ js_ident(name) }} = constants["{{ name }}"];
-  {%- endfor %}
-
-    var out = new Array(meta.algebraics.length).fill(0);
-  {%- for (name, comp) in y_map|items %}
-    out[{{ loop.index0 }}] = __rumocaSignalOr(Y[{{ loop.index0 }}], 0);
-  {%- endfor %}
-  {%- for (name, comp) in z_map|items %}
-    out[{{ y_map|length + loop.index0 }}] = __rumocaSignalOr(Y[{{ y_map|length + loop.index0 }}], 0);
-  {%- endfor %}
-  {%- for (name, comp) in m_map|items %}
-  {%- if name != hidden_condition_m_name %}
-    out[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}] = __rumocaSignalOr(Y[{{ y_map|length + z_map|length }} + {{ loop.index0 - hidden_condition_m_count }}], 0);
-  {%- endif %}
-  {%- endfor %}
-  {%- for (name, comp) in w_map|items %}
-    out[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}] = __rumocaSignalOr(Y[{{ y_map|length + z_map|length + visible_m_count + loop.index0 }}], 0);
-  {%- endfor %}
-  {%- for obs in obs_list %}
-    var {{ js_ident(obs.name) }} = __rumocaSignalOr(__rumocaResolveSymbol("{{ obs.name|string|replace('\\', '\\\\')|replace('"', '\\"') }}"), 0);
-  {%- endfor %}
-  {%- if obs_list|length > 0 %}
-    for (let __rumocaObsPass = 0; __rumocaObsPass < {{ obs_list|length }}; __rumocaObsPass++) {
-    {%- for obs in obs_list %}
-      {{ js_ident(obs.name) }} = __rumocaSignalOr({{ render_expr(obs.expr) }}, 0);
-      __rumocaFallbackSymbols["{{ obs.name }}"] = {{ js_ident(obs.name) }};
-    {%- endfor %}
+    const boolSet = new Set(
+      Array.isArray(meta.booleanAlgebraics)
+        ? meta.booleanAlgebraics.filter((index) => Number.isInteger(index) && index >= 0)
+        : [],
+    );
+    const out = new Array(meta.algebraics.length).fill(0);
+    for (let __rumocaI = 0; __rumocaI < out.length; __rumocaI++) {
+      out[__rumocaI] = boolSet.has(__rumocaI)
+        ? Number(Y[__rumocaI]) >= 0.5
+          ? 1
+          : 0
+        : __rumocaSignalOr(Y[__rumocaI], 0);
     }
-  {%- endif %}
-  {%- for obs in obs_list %}
-    out[{{ y_map|length + z_map|length + visible_m_count + w_map|length + loop.index0 }}] = {{ js_ident(obs.name) }};
-  {%- endfor %}
     return out;
   }
 
   function applyResets(t, xVec, yVec, uVec, PIn, cPrev, cCurr) {
     __rumocaCurrentTime = t;
     __rumocaRuntimeOverrides = Object.create(null);
-    __rumocaDebugPush({
-      kind: "step",
-      time: t,
-      cPrev: Array.isArray(cPrev) ? cPrev.slice() : [],
-      cCurr: Array.isArray(cCurr) ? cCurr.slice() : [],
-    });
     const P = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
     const X = xVec;
     const Y = yVec;
     const U = uVec;
-
-  {%- for (name, comp) in cp_map|items %}
-    const {{ js_ident(name) }} = constants["{{ name }}"];
-  {%- endfor %}
-
-  {%- for (name, comp) in x_map|items %}
-    const {{ js_ident(name) }} = xVec[{{ loop.index0 }}];
-  {%- endfor %}
-
-  {%- for (name, comp) in y_map|items %}
-    const {{ js_ident(name) }} = yVec[{{ loop.index0 }}];
-  {%- endfor %}
-  {%- for (name, comp) in z_map|items %}
-    const {{ js_ident(name) }} = yVec[{{ y_map|length + loop.index0 }}];
-  {%- endfor %}
-  {%- for (name, comp) in m_map|items %}
-    const {{ js_ident(name) }} = yVec[{{ y_map|length + z_map|length + loop.index0 }}];
-  {%- endfor %}
-  {%- for (name, comp) in w_map|items %}
-    const {{ js_ident(name) }} = yVec[{{ y_map|length + z_map|length + m_map|length + loop.index0 }}];
-  {%- endfor %}
-
-  {%- for (name, comp) in u_map|items %}
-    const {{ js_ident(name) }} = uVec[{{ loop.index0 }}];
-  {%- endfor %}
-
     let xNew = xVec.slice();
     let yNew = yVec.slice();
     let cNew = Array.isArray(cCurr) ? cCurr.slice() : [];
 
-  {%- for wc in when_clauses %}
-    {
-      const idx = {{ loop.index0 }};
-      const fired = !cPrev[idx] && cCurr[idx];
-      if (fired) {
-        {%- for eq in wc.equations %}
-        {%- if eq.lhs is defined %}
-        {%- set lhs_name = render_symbol_name(eq.lhs)|trim %}
-        {
-          const __rumocaAssigned = {{ render_expr(eq.rhs) }};
-          if (stateIndex["{{ lhs_name }}"] !== undefined) {
-            xNew[stateIndex["{{ lhs_name }}"]] = __rumocaAssigned;
-          } else if (algebraicIndex["{{ lhs_name }}"] !== undefined) {
-            yNew[algebraicIndex["{{ lhs_name }}"]] = __rumocaAssigned;
-          }
-          __rumocaAssignSymbol("{{ lhs_name }}", __rumocaAssigned);
-        }
-        
+    {%- for owner in dae.systems.discrete_values.owners %}
+    {%- for branch in owner.branches %}
+    if ({{ reset_condition(branch.activation) }}) {
+      {%- for value in branch.values %}
+      {
+        const __rumocaVal = {{ render_expr(value.expression, "code", "indexed") }};
+        {%- set target = owner.targets[loop.index0] if owner.targets|length > loop.index0 else owner.targets[0] -%}
+        {%- set targetRef = target.variable -%}
+        {%- set tv = dae.variables[targetRef] %}
+        const __rumocaValues = Array.isArray(__rumocaVal) ? __rumocaVal.flat(Infinity) : [__rumocaVal];
+        {%- set offsets = [target.scalar_selection] if target.scalar_selection is not none else range(tv.scalar_count) %}
+        if (__rumocaValues.length !== {{ offsets|length }}) __rumocaUnsupported("discrete-target-shape");
+        {%- for offset in offsets %}
+        {%- if tv.role == "state" %}xNew[{{ varn.x_base[targetRef] + offset }}] = __rumocaValues[{{ loop.index0 }}];
+        {%- else %}yNew[{{ held_slot(targetRef) }} + {{ offset }}] = __rumocaValues[{{ loop.index0 }}];
         {%- endif %}
+        __rumocaAssignSymbol("{{ q(tv.scalar_names[offset]) }}", __rumocaValues[{{ loop.index0 }}]);
         {%- endfor %}
       }
+      {%- endfor %}
     }
-  {%- endfor %}
+    {%- endfor %}
+    {%- endfor %}
 
-  {%- if when_clauses|length == 0 and reset_eqs|length > 0 %}
-    const __rumocaFallbackWhenFired =
-      Array.isArray(cPrev) &&
-      Array.isArray(cCurr) &&
-      cCurr.some((value, idx) => Boolean(value) && !Boolean(cPrev[idx]));
-    {# Pass 1: propagate direct wiring first (lhs = rhs VarRef/ComponentReference). #}
-    {%- for eq in reset_eqs %}
-      {%- if eq.lhs is defined and eq.rhs is defined and (eq.rhs.VarRef is defined or eq.rhs.ComponentReference is defined) %}
-      {%- set lhs_name = render_symbol_name(eq.lhs)|trim %}
+    {%- for res in dae.systems.discrete_real.residuals %}
+    if ({{ reset_condition(res.activation) }}) {
+      {%- set re = dae.expressions[res.residual].operation %}
+      {%- if re.kind == "binary" and re.operator == "subtract" %}
+      {%- set lhsExpr = dae.expressions[re.lhs] %}
+      {%- if lhsExpr.operation.kind == "coordinate" and lhsExpr.operation.coordinate.kind == "discrete_real" %}
       {
-        const __rumocaIsStateTarget = stateIndex["{{ lhs_name }}"] !== undefined;
-        const __rumocaApplyResetEq = __rumocaIsStateTarget ? __rumocaFallbackWhenFired : true;
-        if (__rumocaApplyResetEq) {
-        const __rumocaAssigned = {{ render_expr(eq.rhs) }};
-        if (stateIndex["{{ lhs_name }}"] !== undefined) {
-          xNew[stateIndex["{{ lhs_name }}"]] = __rumocaAssigned;
-        } else if (algebraicIndex["{{ lhs_name }}"] !== undefined) {
-          yNew[algebraicIndex["{{ lhs_name }}"]] = __rumocaAssigned;
-        }
-        __rumocaAssignSymbol("{{ lhs_name }}", __rumocaAssigned);
-        }
+        const __rumocaVal = {{ render_expr(re.rhs, "code", "indexed") }};
+        yNew[{{ varn.y_names|length + varn.z_base[lhsExpr.operation.coordinate.id] }}] = __rumocaVal;
+        __rumocaAssignSymbol("{{ q(dae.variables[lhsExpr.operation.coordinate.id].name) }}", __rumocaVal);
       }
-      {%- endif %}
-    {%- endfor %}
-    {# Pass 2: evaluate remaining reset/discrete expressions. #}
-    {%- for eq in reset_eqs %}
-      {%- if eq.lhs is defined and not (eq.rhs is defined and (eq.rhs.VarRef is defined or eq.rhs.ComponentReference is defined)) %}
-      {%- set lhs_name = render_symbol_name(eq.lhs)|trim %}
+      {%- elif lhsExpr.operation.kind == "index" and dae.expressions[lhsExpr.operation.base].operation.kind == "coordinate" and dae.expressions[lhsExpr.operation.base].operation.coordinate.kind == "discrete_real" %}
       {
-        const __rumocaIsStateTarget = stateIndex["{{ lhs_name }}"] !== undefined;
-        const __rumocaApplyResetEq = __rumocaIsStateTarget ? __rumocaFallbackWhenFired : true;
-        if (__rumocaApplyResetEq) {
-        const __rumocaAssigned = {{ render_expr(eq.rhs) }};
-        if (stateIndex["{{ lhs_name }}"] !== undefined) {
-          xNew[stateIndex["{{ lhs_name }}"]] = __rumocaAssigned;
-        } else if (algebraicIndex["{{ lhs_name }}"] !== undefined) {
-          yNew[algebraicIndex["{{ lhs_name }}"]] = __rumocaAssigned;
-        }
-        __rumocaAssignSymbol("{{ lhs_name }}", __rumocaAssigned);
-        }
+        const __rumocaCoord = dae.expressions[lhsExpr.operation.base].operation.coordinate;
+        const __rumocaOffset = {{ flat_subscript_offset(lhsExpr.operation.subscripts, lhsExpr.value_type.dimensions, "code", "indexed") }};
+        const __rumocaVal = {{ render_expr(re.rhs, "code", "indexed") }};
+        yNew[{{ varn.y_names|length + varn.z_base[__rumocaCoord.id] }} + __rumocaOffset] = __rumocaVal;
+        __rumocaAssignSymbol("{{ q(dae.variables[__rumocaCoord.id].name) }}", __rumocaVal);
       }
+      {%- else %}
+      __rumocaUnsupported("discrete-residual-target");
       {%- endif %}
+      {%- else %}
+      __rumocaUnsupported("discrete-residual");
+      {%- endif %}
+    }
     {%- endfor %}
-  {%- endif %}
+
+    {%- for action in dae.systems.events.actions %}
+    if (!cPrev[{{ action.guard }}] && cCurr[{{ action.guard }}]) {
+      {%- if action.operation.kind == "reinitialize" %}
+      {
+        const __rumocaVal = {{ render_expr(action.operation.value, "code", "indexed") }};
+        xNew[{{ varn.x_base[action.operation.state] }}] = __rumocaVal;
+        __rumocaAssignSymbol("{{ q(dae.variables[action.operation.state].name) }}", __rumocaVal);
+      }
+      {%- else %}
+      __rumocaUnsupported("event-action:{{ action.operation.kind }}");
+      {%- endif %}
+    }
+    {%- endfor %}
 
     const __rumocaCanCommitPre =
       !Number.isFinite(__rumocaLastPreCommitTime) ||
       Math.abs(Number(t) - Number(__rumocaLastPreCommitTime)) > __rumocaTimeTol;
     if (__rumocaCanCommitPre) {
-    {%- for (name, comp) in x_map|items %}
-      if (stateIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-      } else if (algebraicIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-      }
+    {%- for v in dae.variables %}
+    {%- if v.role == "state" %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      __rumocaPreStore["{{ q(varn.x_names[varn.x_base[v.id] + i]) }}"] = xNew[{{ varn.x_base[v.id] + i }}];
     {%- endfor %}
-    {%- for (name, comp) in y_map|items %}
-      if (stateIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-      } else if (algebraicIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-      }
+    {%- elif v.role == "algebraic" %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      __rumocaPreStore["{{ q(varn.y_names[varn.y_base[v.id] + i]) }}"] = yNew[{{ varn.y_base[v.id] + i }}];
     {%- endfor %}
-    {%- for (name, comp) in z_map|items %}
-      if (stateIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-      } else if (algebraicIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-      }
+    {%- elif v.role == "discrete_real" %}
+    {%- set slot = varn.y_names|length + varn.z_base[v.id] %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      __rumocaPreStore["{{ q(varn.z_names[varn.z_base[v.id] + i]) }}"] = yNew[{{ slot + i }}];
     {%- endfor %}
-    {%- for (name, comp) in m_map|items %}
-      if (stateIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-      } else if (algebraicIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-      }
+    {%- elif v.role == "discrete_value" %}
+    {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_base[v.id] %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      __rumocaPreStore["{{ q(varn.m_names[varn.m_base[v.id] + i]) }}"] = yNew[{{ slot + i }}];
     {%- endfor %}
-    {%- for (name, comp) in w_map|items %}
-      if (stateIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = xNew[stateIndex["{{ name }}"]];
-      } else if (algebraicIndex["{{ name }}"] !== undefined) {
-        __rumocaPreStore["{{ name }}"] = yNew[algebraicIndex["{{ name }}"]];
-      }
+    {%- elif v.role == "output" %}
+    {%- set slot = varn.y_names|length + varn.z_names|length + varn.m_names|length + varn.w_base[v.id] %}
+    {%- set count = v.scalar_count if v.scalar_count is not none else 1 %}
+    {%- for i in range(count) %}
+      __rumocaPreStore["{{ q(varn.w_names[varn.w_base[v.id] + i]) }}"] = yNew[{{ slot + i }}];
+    {%- endfor %}
+    {%- endif %}
     {%- endfor %}
       __rumocaLastPreCommitTime = Number(t);
     }
@@ -1587,13 +1516,67 @@ function Model() {
     return { x: xNew, y: yNew, c: cNew };
   }
 
+  {%- if reduction.enabled %}
+  // Execute certified assignments during every trial state, including Newton probes.
+  function solveValues(t, X, PIn) {
+    const sy = new Array({{ solve.layout.y_scalars }}).fill(0);
+    const sp = new Array({{ solve.layout.p_scalars }}).fill(0);
+    const supplied = Array.isArray(PIn) ? PIn : (PIn && Array.isArray(PIn.P) ? PIn.P : P_DEFAULT);
+    {%- for name in varn.x_names %}
+    sy[{{ varn.x_solve_slots[loop.index0] }}] = X[{{ loop.index0 }}];
+    {%- endfor %}
+    {%- for v in dae.variables %}
+    {%- if v.role == 'parameter' %}
+    {%- for i in range(v.scalar_count) %}
+    sp[{{ solve.layout.bindings[v.name].P.index + i }}] = supplied[{{ varn.p_base[v.id] + i }}];
+    {%- endfor %}
+    {%- endif %}
+    {%- endfor %}
+    {%- for index in solve.continuous.exact_algebraic_assignments.sequence %}
+    {%- if solve.continuous.exact_algebraic_assignments.plan.programs|length > 0 %}
+    {
+      {%- for op in solve.continuous.exact_algebraic_assignments.plan.programs[index].ops %}
+      {{ solve_op(op, 'sy') }}
+      {%- endfor %}
+    }
+    {%- endif %}
+    {%- endfor %}
+    return { sy, sp };
+  }
+
+  function solveAlgebraics(t, X, Y, U, PIn) {
+    const { sy } = solveValues(t, X, PIn);
+    return [
+      {%- for name in varn.y_names %}
+      sy[{{ varn.y_solve_slots[loop.index0] }}],
+      {%- endfor %}
+    ];
+  }
+
+  function solveResidual(t, X, XDot, Y, U, PIn) {
+    const { sy, sp } = solveValues(t, X, PIn);
+    const derivatives = new Array({{ solve.solve_layout.state_scalar_count }}).fill(0);
+    {%- for program in solve.continuous.derivative_rhs.scalar_plan.programs %}
+    {
+      {%- for op in program.ops %}
+      {{ solve_op(op, 'derivatives') }}
+      {%- endfor %}
+    }
+    {%- endfor %}
+    return [
+      {%- for name in varn.x_names %}
+      XDot[{{ loop.index0 }}] - derivatives[{{ varn.x_solve_slots[loop.index0] }}],
+      {%- endfor %}
+    ];
+  }
+  meta.solverAlgebraics = [];
+  meta.summary.neqs = x0.length;
+  {%- endif %}
+
   const abiRequired = true;
   const abi = { id: 'rumoca.model_runtime.residual.v1', version: 1 };
-  if (typeof evalAlgebraics === 'function' && Array.isArray(y0) && y0.length > 0) {
+  if (Array.isArray(y0) && y0.length > 0) {
     try {
-      const __rumocaY0HadFinite = y0.some(
-        (v) => typeof v === 'number' && Number.isFinite(v),
-      );
       const __rumocaInferredY0 = evalAlgebraics(
         0,
         x0.slice(),
@@ -1602,17 +1585,11 @@ function Model() {
         null,
       );
       if (Array.isArray(__rumocaInferredY0) && __rumocaInferredY0.length === y0.length) {
-        const __rumocaInferredAllZero = __rumocaInferredY0.every(
-          (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 0,
-        );
-        const __rumocaAcceptInferred = __rumocaY0HadFinite || !__rumocaInferredAllZero;
-        if (__rumocaAcceptInferred) {
         for (let i = 0; i < y0.length; i++) {
           const __rumocaValue = __rumocaInferredY0[i];
           if (typeof __rumocaValue === 'boolean' || (typeof __rumocaValue === 'number' && Number.isFinite(__rumocaValue))) {
             y0[i] = __rumocaValue;
           }
-        }
         }
       }
     } catch (_err) {
@@ -1628,11 +1605,11 @@ function Model() {
       .concat(meta.algebraics.map((v) => ({ name: v.name, kind: 'algebraic', start: v.start, unit: v.unit })))
       .concat(meta.inputs.map((v) => ({ name: v.name, kind: 'input', unit: v.unit }))),
     nx: meta.summary.nx,
-    ny: meta.summary.ny,
+    ny: {{ "0" if reduction.enabled else "meta.summary.ny" }},
     nu: meta.inputs.length,
-    nz: {{ cond_eqs|length }}
+    nz: {{ dae.systems.conditions.conditions|length }}
   };
-  const capabilities = { events: {{ "true" if cond_eqs|length > 0 or when_clauses|length > 0 or reset_eqs|length > 0 else "false" }} };
+  const capabilities = { events: {{ "true" if n_events > 0 else "false" }}, algebraics: {{ "true" if ny_var > 0 else "false" }} };
 
   return {
     abiRequired,
@@ -1642,10 +1619,10 @@ function Model() {
     name: meta.name,
     meta,
     x0,
-    y0,
+    y0: {{ "[]" if reduction.enabled else "y0" }},
     c0,
-    residual,
-    evalAlgebraics,
+    residual: {{ "solveResidual" if reduction.enabled else "residual" }},
+    evalAlgebraics: {{ "solveAlgebraics" if reduction.enabled else "evalAlgebraics" }},
     evalEventIndicators,
     evalConditions,
     applyResets,

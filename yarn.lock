@@ -4557,7 +4557,7 @@ __metadata:
     fflate: "npm:^0.8.2"
     json-schema: "npm:^0.4.0"
     quasar: "npm:^2.16.0"
-    rumoca-full-web: "npm:@cognipilot/rumoca@^0.9.20"
+    rumoca-full-web: "npm:@taskyon/rumoca@0.10.3-taskyon.1"
     vue: "npm:^3.5.22"
     zod: "npm:^4.0.5"
   peerDependencies:
@@ -15985,10 +15985,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rumoca-full-web@npm:@cognipilot/rumoca@^0.9.20":
-  version: 0.9.20
-  resolution: "@cognipilot/rumoca@npm:0.9.20"
-  checksum: 10c0/795489e73fb92ec32ac6956d3d59d139ad87d9c451cc2c5bbd4e780428346300c0216eec24dbb922fde1b8eb591d6ad97271ffb2e673cf4f058f1a62c8b01192
+"rumoca-full-web@npm:@taskyon/rumoca@0.10.3-taskyon.1":
+  version: 0.10.3-taskyon.1
+  resolution: "@taskyon/rumoca@npm:0.10.3-taskyon.1"
+  checksum: 10c0/ad2061cf3ef0d623bdf39a5c307248b0acb4f877154e57d785967422dfdf5100761126aadb4d5db82ede8604d393e0a256d7a5191351954e8d9a2b0bd637efa9
   languageName: node
   linkType: hard
 

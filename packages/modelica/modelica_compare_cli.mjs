@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import readline from 'node:readline/promises'
 import { stdin as input, stdout as output } from 'node:process'
 import initRumoca from 'rumoca-full-web'
+import { compileRumocaTemplates } from './rumocaTemplateRender.ts'
 import * as rumoca from 'rumoca-full-web'
 import { strFromU8, unzipSync } from 'fflate'
 
@@ -244,43 +245,6 @@ function normalizeRumocaRuntime(value) {
   if (runtime === 'template' || runtime === 'js' || runtime === 'js-template') return 'template'
   if (runtime === 'native' || runtime === 'rumoca-native') return 'native'
   throw new Error(`Unsupported --rumoca-runtime ${value}`)
-}
-
-function renderWithRumoca({ dae, templateSource, modelName }) {
-  const daeJson = JSON.stringify(dae)
-  if (typeof rumoca.render_template === 'function') {
-    return String(rumoca.render_template(daeJson, templateSource) || '')
-  }
-  if (typeof rumoca.render_target === 'function') {
-    const manifestSource = [
-      'version = 1',
-      'ir = "dae"',
-      'name = "javascript"',
-      '',
-      '[[files]]',
-      'path = "{{ model_name }}.js"',
-      'template = "javascript.jinja"',
-      '',
-    ].join('\n')
-    const templatesJson = JSON.stringify({ 'javascript.jinja': templateSource })
-    const rendered = rumoca.render_target(
-      daeJson,
-      modelName,
-      'javascript',
-      manifestSource,
-      templatesJson,
-    )
-    const renderedObj = asObj(rendered)
-    const files = Array.isArray(renderedObj?.files) ? renderedObj.files : []
-    const firstFile = files[0]
-    const firstContent = firstFile && typeof firstFile === 'object' ? firstFile.content : null
-    if (typeof firstContent === 'string') return firstContent
-    if (typeof rendered === 'string') return rendered
-    throw new Error(
-      `render_target returned unexpected payload: ${JSON.stringify(rendered).slice(0, 500)}`,
-    )
-  }
-  throw new Error('WASM module is missing render_template / render_target exports')
 }
 
 function sanitizeLibraryPath(path) {
@@ -1138,21 +1102,18 @@ async function runSolverForModel({
   debug,
 }) {
   const compileStartedAt = Date.now()
-  const { compiled, dae } = compileModelForTemplate({ modelName, sourceModelica })
+  const compilation = compileRumocaTemplates({
+    wasm: rumoca,
+    source: '',
+    modelName,
+    templates: [{ source: templateSource, path: 'model.jinja' }],
+  })
   const compileElapsedMs = Date.now() - compileStartedAt
-
-  if (!dae) {
-    const preparedStatus = asString(compiled?.dae_prepared_status)
-    const preparedError = asString(compiled?.dae_prepared_error)
-    const diagnostics = asObj(compiled?.dae_prepared_diagnostics) ?? {}
-    const planErrors = Array.isArray(compiled?.__compile_plan_errors)
-      ? compiled.__compile_plan_errors
-      : []
-    throw new Error(
-      `compile returned no usable DAE for ${modelName}: dae_prepared_status=${preparedStatus || 'n/a'}, dae_prepared_error=${preparedError || 'n/a'}, diagnostics=${JSON.stringify(diagnostics).slice(0, 500)}${planErrors.length ? `, plan_errors=${planErrors.join(' || ')}` : ''}`,
-    )
-  }
-  const rendered = renderWithRumoca({ dae, templateSource, modelName })
+  const compiled = parseJson(compilation.compileResponse)
+  const dae = selectDaeForTemplate(compiled, true)
+  const generated = compilation.rendered[0]
+  if (!generated?.ok) throw new Error(generated?.error ?? `No generated model for ${modelName}`)
+  const rendered = generated.content
   let runFn
   try {
     runFn = new Function(
@@ -1275,11 +1236,6 @@ function compileModelForTemplateDetailed({ modelName, compileOptionsJson = '{}' 
     compiled.__compile_plan_errors = planErrors
   }
   return { compiled, dae, planStats, planErrors }
-}
-
-function compileModelForTemplate({ modelName }) {
-  const { compiled, dae } = compileModelForTemplateDetailed({ modelName })
-  return { compiled, dae }
 }
 
 async function runSingleModelCompileProbe(options) {

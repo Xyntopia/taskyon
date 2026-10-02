@@ -50,11 +50,20 @@ const simulateModel = (params, context, model) => {
   const nx = Array.isArray(model.x0) ? model.x0.length : 0
   const ny = Array.isArray(model.y0) ? model.y0.length : 0
   const nu = inputNames.length
+  const fixedAlgebraicIndices = Array.isArray(meta.heldAlgebraics)
+    ? meta.heldAlgebraics.filter((index) => Number.isInteger(index) && index >= 0 && index < ny)
+    : []
 
   const haveEvents =
     typeof model.evalConditions === 'function' && typeof model.applyResets === 'function'
   const haveEventIndicators = typeof model.evalEventIndicators === 'function'
   const haveAlgebraicEval = typeof model.evalAlgebraics === 'function'
+  const modelCapabilities =
+    model.capabilities && typeof model.capabilities === 'object' ? model.capabilities : null
+  const explicitAlgebraics =
+    modelCapabilities && typeof modelCapabilities.algebraics === 'boolean'
+      ? modelCapabilities.algebraics
+      : null
 
   const x0_model = Array.isArray(model.x0) ? model.x0.slice() : new Array(nx).fill(0)
   const y0_model = Array.isArray(model.y0) ? model.y0.slice() : new Array(ny).fill(0)
@@ -68,7 +77,9 @@ const simulateModel = (params, context, model) => {
     : null
   const hasRealDynamicState = nx > 0 && !hasOnlyDummyState
   const hasAlgebraicOrEventWork =
-    ny > 0 || haveAlgebraicEval || haveEvents || conditionNames.length > 0
+    explicitAlgebraics !== null
+      ? explicitAlgebraics || modelCapabilities.events === true
+      : ny > 0 || haveAlgebraicEval || haveEvents || conditionNames.length > 0
   const executionMode = hasRealDynamicState
     ? 'dynamic_dae'
     : hasAlgebraicOrEventWork
@@ -150,6 +161,96 @@ const simulateModel = (params, context, model) => {
     }
 
     return x
+  }
+
+  // QR of the transposed Jacobian solves the underdetermined constraint correction
+  // without squaring its condition number. Pivoting orders independent constraint rows.
+  function minimumNormCorrection(jacobian, residual) {
+    const rows = residual.length,
+      columns = jacobian[0]?.length ?? 0
+    if (!rows || rows > columns) throw new Error('Invalid manifold Jacobian dimensions')
+    const vectors = jacobian.map((row) => row.slice()),
+      order = residual.map((_, i) => i)
+    const triangular = Array.from({ length: rows }, () => new Array(rows).fill(0)),
+      basis = []
+    const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0)
+    const scale = Math.max(...vectors.map((vector) => Math.sqrt(dot(vector, vector))))
+    for (let k = 0; k < rows; k++) {
+      let pivot = k
+      for (let j = k + 1; j < rows; j++)
+        if (dot(vectors[j], vectors[j]) > dot(vectors[pivot], vectors[pivot])) pivot = j
+      ;[vectors[k], vectors[pivot]] = [vectors[pivot], vectors[k]]
+      ;[order[k], order[pivot]] = [order[pivot], order[k]]
+      for (let i = 0; i < k; i++) {
+        ;[triangular[i][k], triangular[i][pivot]] = [triangular[i][pivot], triangular[i][k]]
+      }
+      const norm = Math.sqrt(dot(vectors[k], vectors[k]))
+      if (!Number.isFinite(norm) || norm <= Number.EPSILON * Math.max(rows, columns) * scale)
+        throw new Error('Rank-deficient manifold Jacobian')
+      triangular[k][k] = norm
+      const direction = vectors[k].map((value) => value / norm)
+      basis.push(direction)
+      for (let j = k + 1; j < rows; j++)
+        for (let pass = 0; pass < 2; pass++) {
+          const coefficient = dot(direction, vectors[j])
+          triangular[k][j] += coefficient
+          vectors[j] = vectors[j].map((value, i) => value - coefficient * direction[i])
+        }
+    }
+    const weights = []
+    for (let i = 0; i < rows; i++) {
+      let rhs = -residual[order[i]]
+      for (let j = 0; j < i; j++) rhs -= triangular[j][i] * weights[j]
+      weights.push(rhs / triangular[i][i])
+    }
+    return Array.from({ length: columns }, (_, column) =>
+      basis.reduce((sum, direction, row) => sum + direction[column] * weights[row], 0),
+    )
+  }
+
+  function projectManifoldCoordinates(evaluate, directional, initial, scales, tolerance) {
+    if (
+      scales.length !== initial.length ||
+      scales.some((value) => !Number.isFinite(value) || value <= 0) ||
+      initial.some((value) => !Number.isFinite(value))
+    )
+      throw new Error('Invalid manifold coordinates or nominal scales')
+    let coordinates = initial.slice()
+    for (let iteration = 0; iteration < 16; iteration++) {
+      const residual = evaluate(coordinates)
+      const columns = coordinates.map((_, column) => {
+        const seed = coordinates.map((_, i) => (i === column ? 1 : 0))
+        return directional(coordinates, seed)
+      })
+      const jacobian = residual.map((_, row) => columns.map((column, i) => column[row] * scales[i]))
+      if (
+        residual.some((value) => !Number.isFinite(value)) ||
+        jacobian.some((row) => row.some((value) => !Number.isFinite(value)))
+      )
+        throw new Error('Non-finite manifold constraint or derivative')
+      const rowScales = jacobian.map((row) => Math.max(...row.map(Math.abs)) || 1)
+      const norm = (values) =>
+        Math.max(...values.map((value, row) => Math.abs(value) / rowScales[row]))
+      const before = norm(residual)
+      if (before <= tolerance) return coordinates
+      const correction = minimumNormCorrection(
+        jacobian.map((row, i) => row.map((value) => value / rowScales[i])),
+        residual.map((value, i) => value / rowScales[i]),
+      )
+      let accepted
+      for (let alpha = 1; alpha >= 2 ** -20; alpha *= 0.5) {
+        const candidate = coordinates.map((value, i) => value + alpha * correction[i] * scales[i])
+        if (candidate.some((value) => !Number.isFinite(value))) continue
+        const after = norm(evaluate(candidate))
+        if (Number.isFinite(after) && (after <= tolerance || after < before)) {
+          accepted = candidate
+          break
+        }
+      }
+      if (!accepted) throw new Error('Manifold projection did not reduce the constraint residual')
+      coordinates = accepted
+    }
+    throw new Error('Manifold projection did not converge')
   }
 
   function solveDampedLeastSquares(J, r, lambda) {
@@ -292,7 +393,7 @@ const simulateModel = (params, context, model) => {
     }
     return out
   }
-  function seedAlgebraicGuessFromState(yValues, xValues, minAbs = 1e-6) {
+  function seedAlgebraicGuessFromState(yValues, xValues, minAbs, fixedIndices) {
     const y = Array.isArray(yValues) ? yValues.slice() : []
     const xs = Array.isArray(xValues) ? xValues : []
     let xScale = 1
@@ -302,6 +403,7 @@ const simulateModel = (params, context, model) => {
     }
     const floor = Number.isFinite(minAbs) ? Math.max(0, minAbs) : 1e-6
     for (let i = 0; i < y.length; i++) {
+      if (fixedIndices.has(i)) continue
       const v = Number(y[i])
       if (!Number.isFinite(v) || Math.abs(v) <= floor) {
         y[i] = xScale
@@ -354,6 +456,34 @@ const simulateModel = (params, context, model) => {
   }
 
   // ---------- Newton solver ----------
+  function continueHomotopy(solveAtLambda, checkpoint) {
+    const restoreOriginal = checkpoint()
+    let accepted = 0,
+      step = 0.125
+    try {
+      solveAtLambda(0)
+      for (let attempt = 0; attempt < 256; attempt++) {
+        if (accepted === 1) return
+        const candidate = Math.min(1, accepted + step),
+          restore = checkpoint()
+        try {
+          solveAtLambda(candidate)
+          accepted = candidate
+          step = Math.min(Math.max(step * 1.5, 1 / 16384), 1 - accepted)
+        } catch (error) {
+          restore()
+          step *= 0.5
+          if (step < 1 / 16384)
+            throw new Error('Solve homotopy continuation failed', { cause: error })
+        }
+      }
+      throw new Error('Solve homotopy continuation exceeded 256 attempts')
+    } catch (error) {
+      restoreOriginal()
+      throw error
+    }
+  }
+
   function newtonSolve(residualFn, z0, newtonOpts, trace) {
     const maxIter = Number.isFinite(newtonOpts?.maxIter) ? newtonOpts.maxIter : 12
     const tol = Number.isFinite(newtonOpts?.tol) ? newtonOpts.tol : 1e-8
@@ -513,7 +643,10 @@ const simulateModel = (params, context, model) => {
         Number.isFinite(firstResidualNorm) &&
         firstResidualNorm > 0 &&
         maxAbs <= firstResidualNorm * 1e-10
-      if ((nearTolResidual && tinyUpdate) || (stronglyReduced && tinyUpdate)) {
+      if (
+        !newtonOpts?.requireResidualTolerance &&
+        ((nearTolResidual && tinyUpdate) || (stronglyReduced && tinyUpdate))
+      ) {
         return z
       }
       const improved = maxAbs <= prevResidualNorm * 0.99
@@ -575,6 +708,15 @@ const simulateModel = (params, context, model) => {
     throw new Error(
       `Newton failed to converge within maxIter=${maxIter} (stage=${trace?.stage || 'unknown'}, t=${Number(trace?.t).toPrecision(8)}, residualInfNorm=${lastResidualNorm}, debug=${JSON.stringify(debugPayload)})`,
     )
+  }
+
+  function solveScaledNonlinear(residual, initial, scales, newtonOpts, trace) {
+    return newtonSolve(
+      (normalized) => residual(normalized.map((value, i) => value * scales[i])),
+      initial.map((value, i) => value / scales[i]),
+      { ...newtonOpts, initialGuessMinAbs: 0, requireResidualTolerance: true },
+      trace,
+    ).map((value, i) => value * scales[i])
   }
 
   function solveNonlinearWithFallback(residualFn, z0, newtonOpts, trace) {
@@ -656,6 +798,35 @@ const simulateModel = (params, context, model) => {
   const stageUnknownNames = stateNames.concat(solverAlgebraicNames)
   const flowUnknownNames = stateNames.map((name) => `${name}_dot`).concat(solverAlgebraicNames)
 
+  function solveWithHeldAlgebraics(residual, initial, heldStages, heldIndices, options, trace) {
+    const fixed = new Map()
+    for (const { offset, values } of heldStages) {
+      for (const index of heldIndices) {
+        const value = Number(values[index])
+        if (!Number.isFinite(value)) throw new Error('Held algebraic value is not finite')
+        fixed.set(offset + index, value)
+      }
+    }
+    if (!fixed.size) return solveNonlinearWithFallback(residual, initial, options, trace)
+    const free = initial.map((_, index) => index).filter((index) => !fixed.has(index))
+    const restore = (coordinates) => {
+      const result = initial.slice()
+      for (const [index, value] of fixed) result[index] = value
+      for (let i = 0; i < free.length; i++) result[free[i]] = coordinates[i]
+      return result
+    }
+    const result = solveNonlinearWithFallback(
+      (coordinates) => residual(restore(coordinates)),
+      free.map((index) => initial[index]),
+      options,
+      {
+        ...trace,
+        unknownNames: trace.unknownNames?.filter((_, index) => !fixed.has(index)),
+      },
+    )
+    return restore(result)
+  }
+
   function implicitStage(
     tStage,
     xBase,
@@ -685,11 +856,18 @@ const simulateModel = (params, context, model) => {
       return model.residual(tStage, xS, xDot, yS, u, pOverride)
     }
 
-    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, {
-      stage: stageName,
-      t: tStage,
-      unknownNames: stageUnknownNames,
-    })
+    const sol = solveWithHeldAlgebraics(
+      residual,
+      z0,
+      [{ offset: nx, values: yGuess }],
+      fixedAlgebraicIndices,
+      newtonOpts,
+      {
+        stage: stageName,
+        t: tStage,
+        unknownNames: stageUnknownNames,
+      },
+    )
     return {
       x: sol.slice(0, nx),
       y: snapNearBinaryValues(sol.slice(nx)),
@@ -729,11 +907,18 @@ const simulateModel = (params, context, model) => {
       return model.residual(t + dt, x2, xDot, y2, u, pOverride)
     }
 
-    const sol2 = solveNonlinearWithFallback(residualStage2, z0, newtonOpts, {
-      stage: 'sdirk2_stage2',
-      t: t + dt,
-      unknownNames: stageUnknownNames,
-    })
+    const sol2 = solveWithHeldAlgebraics(
+      residualStage2,
+      z0,
+      [{ offset: nx, values: y }],
+      fixedAlgebraicIndices,
+      newtonOpts,
+      {
+        stage: 'sdirk2_stage2',
+        t: t + dt,
+        unknownNames: stageUnknownNames,
+      },
+    )
 
     return {
       x: sol2.slice(0, nx),
@@ -801,21 +986,33 @@ const simulateModel = (params, context, model) => {
     const stageUnknowns = stageUnknownNames
       .map((name) => `${name}@s1`)
       .concat(stageUnknownNames.map((name) => `${name}@s2`))
-    const sol = solveNonlinearWithFallback(residualStages, z0, newtonOpts, {
-      stage: 'irk4_stages',
-      t: t + dt,
-      unknownNames: stageUnknowns,
-    })
+    const sol = solveWithHeldAlgebraics(
+      residualStages,
+      z0,
+      [
+        { offset: nx, values: y },
+        { offset: 2 * nx + ny, values: y },
+      ],
+      fixedAlgebraicIndices,
+      newtonOpts,
+      {
+        stage: 'irk4_stages',
+        t: t + dt,
+        unknownNames: stageUnknowns,
+      },
+    )
     const { x2, y2, x1 } = unpack(sol)
     const { k1, k2 } = stageDerivativesFromStates(x1, x2)
 
     const xNext = new Array(nx)
     for (let i = 0; i < nx; i++) xNext[i] = x[i] + dt * 0.5 * (k1[i] + k2[i])
 
-    return {
-      x: xNext,
-      y: snapNearBinaryValues(y2.slice()),
-    }
+    // Gauss stages are inside the step; their algebraics do not belong to xNext.
+    const endpoint =
+      ny > 0
+        ? solveFlowAtState(t + dt, xNext, y2, k2, u, pOverride, newtonOpts, 'irk4_endpoint')
+        : null
+    return { x: xNext, y: endpoint ? endpoint.y : [] }
   }
 
   // ---------- Explicit RK4 (for ODE-like systems) ----------
@@ -826,11 +1023,18 @@ const simulateModel = (params, context, model) => {
       const yS = z.slice(nx)
       return model.residual(tEval, xEval, xDotS, yS, u, pOverride)
     }
-    const sol = solveNonlinearWithFallback(residual, z0, newtonOpts, {
-      stage: stageName,
-      t: tEval,
-      unknownNames: flowUnknownNames,
-    })
+    const sol = solveWithHeldAlgebraics(
+      residual,
+      z0,
+      [{ offset: nx, values: yGuess }],
+      fixedAlgebraicIndices,
+      newtonOpts,
+      {
+        stage: stageName,
+        t: tEval,
+        unknownNames: flowUnknownNames,
+      },
+    )
     return {
       xDot: sol.slice(0, nx),
       y: snapNearBinaryValues(sol.slice(nx)),
@@ -1049,8 +1253,8 @@ const simulateModel = (params, context, model) => {
     const solverOptionsHas = (key) =>
       Boolean(
         opts?.solverOptions &&
-          typeof opts.solverOptions === 'object' &&
-          Object.prototype.hasOwnProperty.call(opts.solverOptions, key),
+        typeof opts.solverOptions === 'object' &&
+        Object.prototype.hasOwnProperty.call(opts.solverOptions, key),
       )
     const resolveIntegratorTol = (integratorName) => {
       if (solverOptionsHas('newtonTol')) return solverOptions.newtonTol
@@ -1160,7 +1364,7 @@ const simulateModel = (params, context, model) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const f_u = typeof opts.f_u === 'function' ? opts.f_u : (_t) => new Array(nu).fill(0)
 
-    const nSteps = Math.max(1, Math.floor((tf - t0) / dt))
+    const nSteps = Math.max(1, Math.ceil((tf - t0) / dt))
     const tArr = []
     const xArr = []
     const yArr = []
@@ -1197,7 +1401,7 @@ const simulateModel = (params, context, model) => {
     let t = t0
     let x = (opts.x0 || x0_model).slice()
     let y = y0_model.slice()
-    const heldAlgebraicIndices = new Set()
+    const heldAlgebraicIndices = new Set(fixedAlgebraicIndices)
     let c = c0.slice()
     let xDotPrev = new Array(nx).fill(0)
 
@@ -1249,10 +1453,42 @@ const simulateModel = (params, context, model) => {
       )
     }
 
+    if (typeof model.initialize === 'function') {
+      const initialized = model.initialize(
+        t,
+        x,
+        y,
+        f_u(t) || new Array(nu).fill(0),
+        pOverride,
+        (residual, initial, scales) =>
+          solveScaledNonlinear(residual, initial, scales, newtonOpts, {
+            stage: 'model_initialization',
+            t,
+          }),
+        continueHomotopy,
+      )
+      if (Array.isArray(initialized.initialResidual)) {
+        const tolerance = Number(newtonOpts.tol) || 1e-8
+        const row = initialized.initialResidual.findIndex(
+          (value) => !Number.isFinite(value) || Math.abs(value) > tolerance,
+        )
+        if (row >= 0)
+          throw new Error(
+            `Complete Solve initialization residual is unsatisfied (row=${row}, value=${initialized.initialResidual[row]}, tolerance=${tolerance})`,
+          )
+      }
+      x = initialized.x
+      y = initialized.y
+    }
     const shouldInitializeConsistently = initializeConsistently && executionMode === 'dynamic_dae'
     if (shouldInitializeConsistently) {
       const u0 = f_u(t) || new Array(nu).fill(0)
-      y = seedAlgebraicGuessFromState(y, x, Math.max(newtonOpts.initialGuessMinAbs || 0, 1e-6))
+      y = seedAlgebraicGuessFromState(
+        y,
+        x,
+        Math.max(newtonOpts.initialGuessMinAbs || 0, 1e-6),
+        heldAlgebraicIndices,
+      )
       const retryCount = Number.isFinite(solverOptions.initRetryCount)
         ? Math.max(1, Math.floor(solverOptions.initRetryCount))
         : 5
@@ -1292,6 +1528,7 @@ const simulateModel = (params, context, model) => {
                 ),
         })
         const yGuess = attempt === 0 ? y.slice() : regularizeGuessVector(y.slice(), attemptOpts)
+        for (const index of heldAlgebraicIndices) yGuess[index] = y[index]
         const xDotGuess =
           attempt === 0 ? xDotPrev.slice() : regularizeGuessVector(xDotPrev.slice(), attemptOpts)
         try {
@@ -1421,7 +1658,21 @@ const simulateModel = (params, context, model) => {
       let cNext = Array.isArray(cCurr) ? cCurr.slice() : []
       if (!haveEvents || !model.applyResets) return { xNext, yNext, cNext }
       try {
-        const applied = model.applyResets(tLocal, xLocal, yLocal, uLocal, pOverride, cPrev, cCurr)
+        const applied = model.applyResets(
+          tLocal,
+          xLocal,
+          yLocal,
+          uLocal,
+          pOverride,
+          cPrev,
+          cCurr,
+          (residual, initial, scales) =>
+            solveScaledNonlinear(residual, initial, scales, newtonOpts, {
+              stage: 'model_event_projection',
+              t: tLocal,
+            }),
+          newtonOpts.tol,
+        )
         if (applied?.x) xNext = applied.x.slice()
         if (applied?.y) yNext = applied.y.slice()
         if (applied?.c) cNext = applied.c.slice()
@@ -1430,6 +1681,7 @@ const simulateModel = (params, context, model) => {
           error: (e && e.message) || String(e),
           stack: e && e.stack,
         })
+        throw e
       }
       if (hasOnlyDummyState) {
         return { xNext, yNext, cNext }
@@ -1534,6 +1786,65 @@ const simulateModel = (params, context, model) => {
       )
     }
 
+    // Optional private model-state lifecycle for histories and stateful calls.
+    // Statistics describe attempted work; checkpoint rollback restores physical model state.
+    function acceptedStepLimit() {
+      const modelLimit = model.maxAcceptedStep?.(),
+        callerLimit = solverOptions.maxStep
+      for (const limit of [modelLimit, callerLimit])
+        if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0))
+          throw new Error('Invalid model or caller accepted-step limit')
+      const limit = Math.min(modelLimit ?? Infinity, callerLimit ?? Infinity)
+      return Number.isFinite(limit) ? limit : undefined
+    }
+    function checkpointRuntime() {
+      if (typeof model.checkpointRuntime !== 'function') return undefined
+      const restore = model.checkpointRuntime()
+      if (typeof restore !== 'function')
+        throw new Error('Model runtime checkpoint must return a restore function')
+      return restore
+    }
+    function projectAcceptedState(tLocal, accepted) {
+      if (typeof model.projectStateManifold !== 'function') return accepted
+      const uLocal = f_u(tLocal) || new Array(nu).fill(0)
+      const projected = model.projectStateManifold(
+        tLocal,
+        accepted.xNext,
+        accepted.yNext,
+        uLocal,
+        pOverride,
+        (residual, directional, initial, scales) =>
+          projectManifoldCoordinates(
+            residual,
+            directional,
+            initial,
+            scales,
+            Math.abs(newtonOpts.tol) || 1e-8,
+          ),
+      )
+      assertRuntimeVectors('manifold_projection', tLocal, projected.x, projected.y, uLocal)
+      const flow = solveFlowAtState(
+        tLocal,
+        projected.x,
+        projected.y,
+        accepted.xDotNext,
+        uLocal,
+        pOverride,
+        newtonOpts,
+        'manifold_flow',
+      )
+      return { ...accepted, xNext: projected.x, yNext: flow.y, xDotNext: flow.xDot }
+    }
+
+    function commitModelPoint(tLocal, xLocal, yLocal) {
+      if (typeof model.commitAcceptedStep !== 'function') return
+      if (typeof model.checkpointRuntime !== 'function')
+        throw new Error('Accepted model history requires runtime checkpoints')
+      const uLocal = f_u(tLocal) || new Array(nu).fill(0)
+      assertRuntimeVectors('accepted_model_point', tLocal, xLocal, yLocal, uLocal)
+      model.commitAcceptedStep(tLocal, xLocal, yLocal, uLocal, pOverride)
+    }
+
     function performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed) {
       solverStats.flowStepCalls += 1
       const uLocal = f_u(tLocal) || new Array(nu).fill(0)
@@ -1554,6 +1865,7 @@ const simulateModel = (params, context, model) => {
           xEmbedded: null,
         }
       }
+      const restoreAttempt = checkpointRuntime()
       let step = null
       let lastError = null
       let succeededIntegrator = null
@@ -1572,6 +1884,7 @@ const simulateModel = (params, context, model) => {
           succeededIntegrator = integratorName
           break
         } catch (e) {
+          restoreAttempt?.()
           lastError = e
         }
       }
@@ -1605,9 +1918,16 @@ const simulateModel = (params, context, model) => {
       depth,
       retryState,
     ) {
+      const restoreAttempt = checkpointRuntime()
       try {
-        return performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed)
+        const accepted = projectAcceptedState(
+          tLocal + dtLocal,
+          performFlowStepOnce(tLocal, xLocal, yLocal, dtLocal, xDotSeed),
+        )
+        commitModelPoint(tLocal + dtLocal, accepted.xNext, accepted.yNext)
+        return accepted
       } catch (e) {
+        restoreAttempt?.()
         if (!adaptiveSubsteps || depth >= maxSubstepDepth || dtLocal * 0.5 < minSubstepDt) throw e
         const state =
           retryState && typeof retryState === 'object' ? retryState : { count: 0, failures: [] }
@@ -1660,16 +1980,29 @@ const simulateModel = (params, context, model) => {
           )
         }
         const half = dtLocal * 0.5
-        const a = advanceAdaptiveOnFailure(tLocal, xLocal, yLocal, half, xDotSeed, depth + 1, state)
-        return advanceAdaptiveOnFailure(
-          tLocal + half,
-          a.xNext,
-          a.yNext,
-          half,
-          a.xDotNext,
-          depth + 1,
-          state,
-        )
+        try {
+          const a = advanceAdaptiveOnFailure(
+            tLocal,
+            xLocal,
+            yLocal,
+            half,
+            xDotSeed,
+            depth + 1,
+            state,
+          )
+          return advanceAdaptiveOnFailure(
+            tLocal + half,
+            a.xNext,
+            a.yNext,
+            half,
+            a.xDotNext,
+            depth + 1,
+            state,
+          )
+        } catch (error) {
+          restoreAttempt?.()
+          throw error
+        }
       }
     }
 
@@ -1701,18 +2034,22 @@ const simulateModel = (params, context, model) => {
 
       while (tCur < tEnd - 1e-15) {
         const remaining = tEnd - tCur
+        const limit = acceptedStepLimit()
+        if (limit !== undefined) h = Math.min(h, limit)
         if (h > remaining) h = remaining
-        if (h < rk45MinDt) {
+        if (h < rk45MinDt && h < remaining) {
           throw new Error(
             `RK45 minimum step reached before interval end (t=${Number(tCur).toPrecision(8)}, remaining=${remaining})`,
           )
         }
 
+        const restoreAttempt = checkpointRuntime()
         let attempt
         try {
           solverStats.rk45Attempts += 1
           attempt = performFlowStepOnce(tCur, xCur, yCur, h, xDotCur)
         } catch (e) {
+          restoreAttempt?.()
           solverStats.rk45Rejected += 1
           h *= 0.5
           if (h < rk45MinDt) throw e
@@ -1721,15 +2058,26 @@ const simulateModel = (params, context, model) => {
 
         const err = attempt.xEmbedded ? rk45ErrorNorm(xCur, attempt.xNext, attempt.xEmbedded) : 0
         if (err <= 1 || h <= rk45MinDt) {
+          try {
+            attempt = projectAcceptedState(tCur + h, attempt)
+          } catch (error) {
+            restoreAttempt?.()
+            solverStats.rk45Rejected += 1
+            h *= 0.5
+            if (h < rk45MinDt) throw error
+            continue
+          }
           solverStats.rk45Accepted += 1
           tCur += h
           xCur = attempt.xNext
           yCur = attempt.yNext
           xDotCur = attempt.xDotNext
+          commitModelPoint(tCur, xCur, yCur)
           const factor = err > 0 ? rk45Safety * Math.pow(err, -0.2) : rk45MaxFactor
           const clipped = Math.min(rk45MaxFactor, Math.max(rk45MinFactor, factor))
           h = Math.min(remaining, Math.max(rk45MinDt, h * clipped))
         } else {
+          restoreAttempt?.()
           solverStats.rk45Rejected += 1
           const factor = rk45Safety * Math.pow(err, -0.25)
           const clipped = Math.min(1, Math.max(rk45MinFactor, factor))
@@ -1753,11 +2101,14 @@ const simulateModel = (params, context, model) => {
       let cr = cRight.slice()
       let xDotR = xDotL.slice()
 
+      let restoreLeft = checkpointRuntime(),
+        restoreRight
       let bisectionIters = 0
       for (let iter = 0; iter < maxEventBisectionIter; iter++) {
         bisectionIters = iter + 1
         if (tr - tl <= eventTolTime) break
         const tm = 0.5 * (tl + tr)
+        restoreLeft?.()
         const mid = advanceFlowInterval(tl, xl, yl, tm - tl, xDotL)
         const uMid = f_u(tm) || new Array(nu).fill(0)
         const cm = evalConditionsSafe(tm, mid.xNext, mid.yNext, uMid, cl, cl, cl)
@@ -1768,13 +2119,20 @@ const simulateModel = (params, context, model) => {
           yr = mid.yNext
           cr = cm
           xDotR = mid.xDotNext
+          restoreRight = checkpointRuntime()
         } else {
           tl = tm
           xl = mid.xNext
           yl = mid.yNext
           cl = cm
           xDotL = mid.xDotNext
+          restoreLeft = checkpointRuntime()
         }
+      }
+      if (restoreRight) restoreRight()
+      else if (restoreLeft) {
+        restoreLeft()
+        advanceFlowInterval(tl, xl, yl, tr - tl, xDotL)
       }
 
       return {
@@ -1786,6 +2144,32 @@ const simulateModel = (params, context, model) => {
         xDotEventPre: xDotR,
         bisectionIters,
       }
+    }
+
+    const observedWarnings = []
+    let terminationPoint = null
+    function observeModelActions(tAccepted, xAccepted, yAccepted, uAccepted, cAccepted) {
+      if (typeof model.evaluateEventActions !== 'function') return true
+      const report = model.evaluateEventActions(
+        tAccepted,
+        xAccepted,
+        yAccepted,
+        uAccepted,
+        pOverride,
+      )
+      observedWarnings.push(...report.warnings)
+      for (const warning of report.warnings)
+        log('Modelica warning', { time: tAccepted, message: warning })
+      if (report.termination === undefined) return true
+      terminationPoint = {
+        time: tAccepted,
+        x: xAccepted.slice(),
+        y: yAccepted.slice(),
+        c: cAccepted.slice(),
+      }
+      stopReason = 'modelica_terminate'
+      stopDetails = { time: tAccepted, message: report.termination }
+      return false
     }
 
     function settleEventAtTime(tEvent, xEventPre, yEventPre, cPrevStep) {
@@ -1814,11 +2198,15 @@ const simulateModel = (params, context, model) => {
         if (!conditionsChanged(cPrev, cAfter)) {
           const iterations = iter + 1
           solverStats.eventIterationPasses += iterations
+          commitModelPoint(tEvent, xCurr, yCurr)
+          if (!observeModelActions(tEvent, xCurr, yCurr, uEvent, cAfter))
+            throw new Error('Modelica termination')
           return { x: xCurr, y: yCurr, c: cAfter, iterations }
         }
         cPrev = cAfter
       }
       solverStats.eventIterationPasses += eventIterationMaxIter
+      commitModelPoint(tEvent, xCurr, yCurr)
       return { x: xCurr, y: yCurr, c: cCurr, iterations: eventIterationMaxIter, clipped: true }
     }
 
@@ -1843,6 +2231,22 @@ const simulateModel = (params, context, model) => {
     }
 
     function evaluateAlgebraicState(tLocal, xLocal, yLocal, uLocal) {
+      if (executionMode === 'algebraic_discrete' && typeof model.projectAlgebraics === 'function') {
+        const projected = model.projectAlgebraics(
+          tLocal,
+          xLocal,
+          yLocal,
+          uLocal,
+          pOverride,
+          (residual, initial, scales) =>
+            solveScaledNonlinear(residual, initial, scales, newtonOpts, {
+              stage: 'model_algebraic_projection',
+              t: tLocal,
+            }),
+        )
+        assertRuntimeVectors('model_algebraic_projection', tLocal, xLocal, projected, uLocal)
+        return evaluateAlgebraicVector(tLocal, xLocal, projected, uLocal).slice(0, ny)
+      }
       return evaluateAlgebraicVector(tLocal, xLocal, yLocal, uLocal).slice(0, ny)
     }
 
@@ -1884,6 +2288,34 @@ const simulateModel = (params, context, model) => {
             uNext,
           )
           cNext = Array.isArray(applied.cNext) ? applied.cNext : cNext
+        }
+
+        if (
+          ny > 0 &&
+          residualEquationCount !== null &&
+          residualEquationCount > 0 &&
+          typeof model.residual === 'function'
+        ) {
+          try {
+            const uProject = f_u(tTarget) || new Array(nu).fill(0)
+            const heldAlgebraics = Array.isArray(meta.heldAlgebraics)
+              ? meta.heldAlgebraics.filter((index) => Number.isInteger(index) && index >= 0)
+              : []
+            const yAssigned = new Set(heldAlgebraics)
+            yNext = projectAlgebraicsWithFixedY(
+              tTarget,
+              xNext,
+              yNext,
+              uProject,
+              yAssigned,
+              newtonOpts,
+              pOverride,
+            )
+          } catch (e) {
+            log(`algebraic projection threw at t=${tTarget}`, {
+              error: (e && e.message) || String(e),
+            })
+          }
         }
 
         return {
@@ -1931,6 +2363,7 @@ const simulateModel = (params, context, model) => {
 
       while (tCur < tTarget - 1e-15) {
         const remaining = tTarget - tCur
+        const restoreEntry = checkpointRuntime()
         const flow = advanceFlowInterval(tCur, xCur, yCur, remaining, xDotCur)
         const uEnd = f_u(tTarget) || new Array(nu).fill(0)
         const cEnd = evalConditionsSafe(tTarget, flow.xNext, flow.yNext, uEnd, cCur, cCur, cCur)
@@ -1950,6 +2383,7 @@ const simulateModel = (params, context, model) => {
           )
         }
 
+        restoreEntry?.()
         const localized = localizeEvent(
           tCur,
           xCur,
@@ -2011,6 +2445,12 @@ const simulateModel = (params, context, model) => {
               x: settled.x.slice(),
               y: settled.y.slice(),
               c: settled.c.slice(),
+              algebraics: evaluateAlgebraicsAtSample(
+                localized.tEvent,
+                settled.x,
+                settled.y,
+                f_u(localized.tEvent) || new Array(nu).fill(0),
+              ),
             })
             lastEventSampleTime = localized.tEvent
           } else {
@@ -2048,19 +2488,27 @@ const simulateModel = (params, context, model) => {
         y = settled0.y
         c = settled0.c
       } catch (e) {
-        log('Initial event settling failed', {
-          error: (e && e.message) || String(e),
-          stack: e && e.stack,
-        })
+        if (terminationPoint) {
+          x = terminationPoint.x
+          y = terminationPoint.y
+          c = terminationPoint.c
+        } else {
+          log('Initial event settling failed', {
+            error: (e && e.message) || String(e),
+            stack: e && e.stack,
+          })
+          throw e
+        }
       }
     }
 
+    commitModelPoint(t, x, y)
     log('Simulation started', { t0, tf, dt, nx, ny, nu, haveEvents })
-    const appendOutputSample = (tSample, xSample, ySample, uSample, cSample) => {
+    const appendOutputSample = (tSample, xSample, ySample, uSample, cSample, algebraics) => {
       tArr.push(tSample)
       xArr.push(xSample.slice())
       yArr.push(ySample.slice())
-      yOutArr.push(evaluateAlgebraicsAtSample(tSample, xSample, ySample, uSample))
+      yOutArr.push(algebraics ?? evaluateAlgebraicsAtSample(tSample, xSample, ySample, uSample))
       uArr.push(uSample.slice())
       cArr.push(cSample.slice())
       zArr.push(evalEventIndicatorsSafe(tSample, xSample, ySample, uSample, cSample))
@@ -2069,32 +2517,125 @@ const simulateModel = (params, context, model) => {
     for (let k = 0; k <= nSteps; k++) {
       const u = f_u(t) || new Array(nu).fill(0)
 
+      if (t >= tf && !terminationPoint && typeof model.beginTerminalEvent === 'function') {
+        if (k === 0) {
+          observeModelActions(t, x, y, u, c)
+          if (typeof model.finishInitialization === 'function') model.finishInitialization()
+        }
+        if (!terminationPoint) model.beginTerminalEvent()
+        if (haveEvents) {
+          try {
+            const settled = settleEventAtTime(t, x, y, c)
+            x = settled.x
+            y = settled.y
+            c = settled.c
+          } catch (error) {
+            if (!terminationPoint) throw error
+            x = terminationPoint.x
+            y = terminationPoint.y
+            c = terminationPoint.c
+          }
+        }
+      }
       appendOutputSample(t, x, y, u, c)
+      if (terminationPoint || !observeModelActions(t, x, y, u, c)) break
+      if (k === 0 && typeof model.finishInitialization === 'function') model.finishInitialization()
 
-      if (k === nSteps) break
+      if (t >= tf) break
 
+      const restoreMacro = checkpointRuntime()
       try {
-        const advanced = advanceMacroStep(t, x, y, c, dt, xDotPrev, k)
+        let advanced = { xNext: x, yNext: y, cNext: c, xDotNext: xDotPrev, eventSamples: [] }
+        let segmentStart = t
+        const target = Math.min(tf, t0 + (k + 1) * dt)
+        while (segmentStart < target) {
+          const deadline =
+            typeof model.nextTimeEvent === 'function'
+              ? model.nextTimeEvent(
+                  segmentStart,
+                  advanced.xNext,
+                  advanced.yNext,
+                  f_u(segmentStart) || new Array(nu).fill(0),
+                  pOverride,
+                )
+              : undefined
+          if (deadline !== undefined && (!Number.isFinite(deadline) || deadline <= segmentStart))
+            throw new Error('Model supplied a non-advancing time-event deadline')
+          const limit = acceptedStepLimit()
+          const segmentEnd = Math.min(
+            target,
+            deadline ?? Infinity,
+            limit === undefined ? Infinity : segmentStart + limit,
+          )
+          if (segmentEnd <= segmentStart)
+            throw new Error('Accepted model step does not advance at this time magnitude')
+          const flow = advanceMacroStep(
+            segmentStart,
+            advanced.xNext,
+            advanced.yNext,
+            advanced.cNext,
+            segmentEnd - segmentStart,
+            advanced.xDotNext,
+            k,
+          )
+          const eventSamples = [...advanced.eventSamples, ...(flow.eventSamples || [])]
+          advanced = { ...flow, eventSamples }
+          if (deadline === segmentEnd) {
+            const settled = settleEventAtTime(
+              segmentEnd,
+              advanced.xNext,
+              advanced.yNext,
+              advanced.cNext,
+            )
+            advanced = { ...advanced, xNext: settled.x, yNext: settled.y, cNext: settled.c }
+            eventSamples.push({
+              time: segmentEnd,
+              x: settled.x.slice(),
+              y: settled.y.slice(),
+              c: settled.c.slice(),
+              algebraics: evaluateAlgebraicsAtSample(
+                segmentEnd,
+                settled.x,
+                settled.y,
+                f_u(segmentEnd) || new Array(nu).fill(0),
+              ),
+            })
+          }
+          commitModelPoint(segmentEnd, advanced.xNext, advanced.yNext)
+          segmentStart = segmentEnd
+        }
         if (Array.isArray(advanced.eventSamples) && advanced.eventSamples.length > 0) {
           for (const sample of advanced.eventSamples) {
             const tSample = Number(sample?.time)
-            if (!Number.isFinite(tSample) || tSample <= t + 1e-15 || tSample >= t + dt - 1e-15) {
+            if (!Number.isFinite(tSample) || tSample <= t + 1e-15 || tSample >= target - 1e-15) {
               continue
             }
             const xSample = Array.isArray(sample?.x) ? sample.x : x
             const ySample = Array.isArray(sample?.y) ? sample.y : y
             const cSample = Array.isArray(sample?.c) ? sample.c : c
             const uSample = f_u(tSample) || new Array(nu).fill(0)
-            appendOutputSample(tSample, xSample, ySample, uSample, cSample)
+            appendOutputSample(tSample, xSample, ySample, uSample, cSample, sample.algebraics)
             solverStats.eventSampleCount += 1
           }
         }
-        t += dt
+        t = target
         x = advanced.xNext
         y = advanced.yNext
         c = advanced.cNext
         xDotPrev = advanced.xDotNext
       } catch (e) {
+        if (terminationPoint) {
+          const point = terminationPoint
+          appendOutputSample(
+            point.time,
+            point.x,
+            point.y,
+            f_u(point.time) || new Array(nu).fill(0),
+            point.c,
+          )
+          break
+        }
+        restoreMacro?.()
         stopReason = `${stepperName}Step_failed`
         stopError = (e && e.message) || String(e)
         stopStack = e && e.stack ? String(e.stack) : null
@@ -2156,8 +2697,8 @@ const simulateModel = (params, context, model) => {
       modelShape,
       warnings:
         executionMode === 'static_model'
-          ? ['No dynamic or algebraic equations; emitted constant trajectory.']
-          : [],
+          ? [...observedWarnings, 'No dynamic or algebraic equations; emitted constant trajectory.']
+          : observedWarnings,
       stopReason,
       stopError,
       stopStack,
@@ -2328,6 +2869,11 @@ simulateModel.optionsSchema = {
       type: 'boolean',
       default: false,
       description: 'Include full model state in meta.stopDetails when a timestep fails',
+    },
+    maxStep: {
+      type: 'number',
+      exclusiveMinimum: 0,
+      description: 'Maximum accepted integration step, independent of output spacing',
     },
     newtonTol: { type: 'number', default: 1e-7, description: 'Newton solver tolerance' },
     newtonMaxIter: {
