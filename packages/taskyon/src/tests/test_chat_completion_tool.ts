@@ -1375,6 +1375,68 @@ export const testChatCompletionRecordsProviderSearchWithoutReturnedSources = () 
   return { success: true }
 }
 
+export const testChatCompletionRendersSourceLessProviderSearchAsCompletedContext = async () => {
+  const searchAnnotation = extractProviderWebSearchAnnotation([], { performed: true })
+  assert(searchAnnotation !== undefined, 'Expected an observation-only search annotation')
+  const persistedCall = task({
+    id: 'source-less-search-informed-call',
+    role: 'function',
+    created_at: 1,
+    content: {
+      type: 'functioncall',
+      data: { name: 'executeJavaScript', arguments: { code: 'return 1' } },
+      ann: [searchAnnotation],
+    },
+  })
+  const persistedBeforeRender = JSON.stringify(persistedCall)
+  const messages = await convertTaskNodesToOpenAIChat(
+    [persistedCall],
+    undefined,
+    false,
+    true,
+    {
+      executeJavaScript: {
+        name: 'executeJavaScript',
+        description: 'Execute JavaScript.',
+        parameters: { type: 'object', properties: { code: { type: 'string' } } },
+      },
+    },
+  )
+
+  assert(messages[0]?.role === 'system', 'Expected source-less search context before the tool call')
+  const note = messages[0]?.content
+  assert(typeof note === 'string', 'Expected source-less search context as text')
+  assert(
+    note.includes('Provider-hosted web search completed'),
+    'Expected the completed search activity label',
+  )
+  assert(note.includes('did not expose source URLs'), 'Expected source availability to stay factual')
+  assert(
+    note.includes('may already be reflected in this assistant turn'),
+    'Expected the renderer to explain where search-derived information may appear',
+  )
+  assert(
+    note.includes('message, structured output, or tool calls'),
+    'Expected the renderer to name the assistant-turn surfaces that may carry search-derived information',
+  )
+  assert(
+    JSON.stringify(persistedCall) === persistedBeforeRender,
+    'Rendering search context must not mutate the persisted task node',
+  )
+  assert(
+    JSON.stringify(persistedCall.content.ann) === JSON.stringify([{ type: 'web-search' }]),
+    'The task node must persist only the factual source-less web-search annotation',
+  )
+  assert(
+    !persistedBeforeRender.includes('did not expose source URLs'),
+    'LLM-facing search explanation must not be persisted in the task node',
+  )
+  return { success: true }
+}
+
+testChatCompletionRendersSourceLessProviderSearchAsCompletedContext.description =
+  'Renders a completed source-less provider search for the next model turn without persisting prompt prose in the DAG.'
+
 export const testChatCompletionRendersProviderSearchBeforeToolCall = async () => {
   const searchAnnotation = extractProviderWebSearchAnnotation(providerSearchResponseMessages(), {
     performed: true,

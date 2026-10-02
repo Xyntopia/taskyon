@@ -440,7 +440,9 @@ const renderWebSearchAnnotationLines = (annotations: readonly Annotation[] | und
           `${header} Consulted sources:`,
           ...sources.map((source) => `- ${source.title ? `${source.title}: ` : ''}${source.url}`),
         ]
-      : [`${header} The provider reported no source URLs.`]
+      : [
+          `Provider-hosted web search completed${queries}. The provider did not expose source URLs. Search-derived information may already be reflected in this assistant turn, including its message, structured output, or tool calls.`,
+        ]
   }) ?? []
 
 const renderAnnotationsForLlm = (annotations: readonly Annotation[] | undefined) => {
