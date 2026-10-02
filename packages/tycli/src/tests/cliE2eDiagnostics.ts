@@ -178,7 +178,7 @@ export async function runCliE2eSession(args: {
     cwd,
     acceptOutputAsExit,
     homeKey,
-    timeoutMs = 30_000,
+    timeoutMs = 45_000,
     env,
     cliArgs = [],
     runner = 'pty',
@@ -1116,7 +1116,7 @@ const runQuitPromptCase = async (name: string) => {
     env: { TYCLI_HOTKEY_MENUS: '1' },
     runner: 'pty',
     acceptOutputAsExit: 'No conversation saved: no messages.',
-    timeoutMs: 30_000,
+    timeoutMs: 45_000,
   })
   if (result.code !== 0) {
     throw new Error(

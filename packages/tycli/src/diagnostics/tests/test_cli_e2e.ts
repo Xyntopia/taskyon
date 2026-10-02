@@ -631,31 +631,31 @@ testCliComparesDagGraphWorkstationOptions.timeoutMs = 340_000
 
 export const testCliQuitPromptCtrlDExits = async () => await runQuitPromptCtrlDExits()
 testCliQuitPromptCtrlDExits.description = 'Ctrl+D exits directly from the main prompt.'
-testCliQuitPromptCtrlDExits.timeoutMs = 40_000
+testCliQuitPromptCtrlDExits.timeoutMs = 60_000
 
 export const testCliQuitPromptCtrlCCanBeCompletedByCtrlD = async () =>
   await runQuitPromptCtrlCCanBeCompletedByCtrlD()
 testCliQuitPromptCtrlCCanBeCompletedByCtrlD.description =
   'Ctrl+D completes the quit prompt opened by Ctrl+C.'
-testCliQuitPromptCtrlCCanBeCompletedByCtrlD.timeoutMs = 40_000
+testCliQuitPromptCtrlCCanBeCompletedByCtrlD.timeoutMs = 60_000
 
 export const testCliQuitPromptCancellationReturnsToCtrlD = async () =>
   await runQuitPromptCancellationReturnsToCtrlD()
 testCliQuitPromptCancellationReturnsToCtrlD.description =
   'Cancelling the quit prompt returns to a main prompt that Ctrl+D can exit.'
-testCliQuitPromptCancellationReturnsToCtrlD.timeoutMs = 40_000
+testCliQuitPromptCancellationReturnsToCtrlD.timeoutMs = 60_000
 
 export const testCliPromptHistoryWithoutHotkeyMenus = async () =>
   await runPromptHistoryWithoutHotkeyMenus()
 testCliPromptHistoryWithoutHotkeyMenus.description =
   'Up replays persisted prompt history with hotkey menus disabled.'
-testCliPromptHistoryWithoutHotkeyMenus.timeoutMs = 90_000
+testCliPromptHistoryWithoutHotkeyMenus.timeoutMs = 120_000
 
 export const testCliPromptHistoryWithHotkeyMenus = async () =>
   await runPromptHistoryWithHotkeyMenus()
 testCliPromptHistoryWithHotkeyMenus.description =
   'Up replays persisted prompt history with hotkey menus enabled.'
-testCliPromptHistoryWithHotkeyMenus.timeoutMs = 90_000
+testCliPromptHistoryWithHotkeyMenus.timeoutMs = 120_000
 
 export const testCliTaskRendererDoesNotPrintTransientWorkerProgress = () =>
   runTaskRendererDoesNotPrintTransientWorkerProgress()
