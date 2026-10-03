@@ -55,38 +55,40 @@
       class="task-chat-window__thread col scroll q-pa-sm"
       @scroll="updateAutoScroll"
     >
-      <TaskChatThread
-        v-if="selectedThread.length > 0 || visiblePendingTask"
-        :tasks="selectedThread"
-        :pending-task="visiblePendingTask"
-        :tools="allTools"
-        :expert-mode="expertMode"
-        :presentation="presentation"
-        :client="client"
-        :selected-task-id="selectedTaskId"
-      >
-        <template v-if="$slots.task" #task="slotProps">
-          <slot name="task" v-bind="slotProps" />
-        </template>
-      </TaskChatThread>
-      <div v-if="conversation.error.value" role="status" class="text-caption">
-        {{ conversation.error.value }}
-        <q-btn flat dense no-caps label="Retry" @click="conversation.refresh" />
-      </div>
-      <TaskExecutionProgress v-if="liveProgress" :progress="liveProgress" />
-      <div
-        v-if="selectedThread.length === 0 && !visiblePendingTask && status === 'ready'"
-        class="task-chat-window__empty fit column items-center justify-center text-center q-pa-md"
-      >
-        <div class="text-h6">{{ welcomeMessage }}</div>
-      </div>
-      <div
-        v-else-if="selectedThread.length === 0 && !visiblePendingTask"
-        class="fit column items-center justify-center q-gutter-sm"
-      >
-        <q-spinner v-if="status === 'starting'" color="primary" size="2rem" />
-        <div :class="{ 'text-negative': status === 'error' }">
-          {{ status === 'error' ? errorMessage : resolvedPresentation.startingMessage }}
+      <div ref="threadContent" class="task-chat-window__content column">
+        <TaskChatThread
+          v-if="selectedThread.length > 0 || visiblePendingTask"
+          :tasks="selectedThread"
+          :pending-task="visiblePendingTask"
+          :tools="allTools"
+          :expert-mode="expertMode"
+          :presentation="presentation"
+          :client="client"
+          :selected-task-id="selectedTaskId"
+        >
+          <template v-if="$slots.task" #task="slotProps">
+            <slot name="task" v-bind="slotProps" />
+          </template>
+        </TaskChatThread>
+        <div v-if="conversation.error.value" role="status" class="text-caption">
+          {{ conversation.error.value }}
+          <q-btn flat dense no-caps label="Retry" @click="conversation.refresh" />
+        </div>
+        <TaskExecutionProgress v-if="liveProgress" :progress="liveProgress" />
+        <div
+          v-if="selectedThread.length === 0 && !visiblePendingTask && status === 'ready'"
+          class="task-chat-window__empty fit column items-center justify-center text-center q-pa-md"
+        >
+          <div class="text-h6">{{ welcomeMessage }}</div>
+        </div>
+        <div
+          v-else-if="selectedThread.length === 0 && !visiblePendingTask"
+          class="fit column items-center justify-center q-gutter-sm"
+        >
+          <q-spinner v-if="status === 'starting'" color="primary" size="2rem" />
+          <div :class="{ 'text-negative': status === 'error' }">
+            {{ status === 'error' ? errorMessage : resolvedPresentation.startingMessage }}
+          </div>
         </div>
       </div>
     </div>
@@ -126,7 +128,7 @@ import {
   resolveTaskChatPresentation,
   type TaskChatPresentation,
 } from '@taskyon/ui/modules/taskChatPresentation'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CopyTaskChatButton from './CopyTaskChatButton.vue'
 import TaskConversationBrowser from './TaskConversationBrowser.vue'
 import TaskChatThread from './TaskChatThread.vue'
@@ -184,6 +186,7 @@ const visiblePendingTask = computed(() => {
   return submission.task
 })
 const threadContainer = ref<HTMLElement>()
+const threadContent = ref<HTMLElement>()
 const currentTask = computed(
   () => selectedThread.value.find((task) => task.id === selectedTaskId.value) ?? null,
 )
@@ -191,8 +194,9 @@ const copyableThread = computed(() =>
   selectTasksForChatCopy(selectedThread.value, props.allTools, props.expertMode),
 )
 let unsubscribeTaskCreated: (() => void) | undefined
+let threadResizeObserver: ResizeObserver | undefined
+let threadMutationObserver: MutationObserver | undefined
 const executionProgress = useTaskExecutionProgress()
-
 const resolvedPresentation = computed(() => resolveTaskChatPresentation(props.presentation))
 const conversationHistory = useConversationHistory({
   history: recentTaskIds,
@@ -200,21 +204,27 @@ const conversationHistory = useConversationHistory({
   onError: (error) => console.warn('Could not update conversation history.', error),
 })
 
-const scrollToThreadEnd = async () => {
-  await nextTick()
+const scrollThreadToEnd = () => {
   if (!shouldAutoScroll.value) return
   const container = threadContainer.value
   if (container) container.scrollTop = container.scrollHeight
 }
-
+const scrollToThreadEnd = async () => {
+  await nextTick()
+  scrollThreadToEnd()
+}
 const shouldAutoScroll = ref(true)
 const updateAutoScroll = () => {
   const container = threadContainer.value
   if (!container) return
+  if (liveProgress.value) {
+    shouldAutoScroll.value = true
+    container.scrollTop = container.scrollHeight
+    return
+  }
   shouldAutoScroll.value =
     container.scrollTop + container.clientHeight >= container.scrollHeight - 24
 }
-
 const liveProgress = computed(() =>
   selectTaskExecutionProgress(
     executionProgress.state.value,
@@ -222,7 +232,11 @@ const liveProgress = computed(() =>
     currentTask.value?.id,
   ),
 )
-
+watch(liveProgress, (progress) => {
+  if (!progress) return
+  shouldAutoScroll.value = true
+  void scrollToThreadEnd()
+})
 const connectStreams = () => {
   executionProgress.connect(props.chatCompletionStream, props.workerStream)
 }
@@ -255,13 +269,16 @@ const onTasksCreated = (taskId: string | undefined) => {
 
 const onPendingSubmission = (task: partialTaskDraft | undefined) => {
   pendingSubmission.value = task ? { task, conversationId: selectedTaskId.value } : undefined
+  if (!task) return
+  shouldAutoScroll.value = true
   void scrollToThreadEnd()
 }
 
 const selectConversation = (taskId: string) => {
+  shouldAutoScroll.value = true
   selectedTaskId.value = taskId
+  void scrollToThreadEnd()
 }
-
 const startNewConversation = () => {
   shouldAutoScroll.value = true
   executionProgress.reset()
@@ -273,11 +290,25 @@ watch(selectedThread, () => void scrollToThreadEnd())
 watch([() => props.chatCompletionStream, () => props.workerStream], connectStreams, {
   immediate: true,
 })
-watch(
-  () => executionProgress.state.value,
-  () => void scrollToThreadEnd(),
-)
+onMounted(() => {
+  const content = threadContent.value
+  if (!content) return
+  if (typeof MutationObserver !== 'undefined') {
+    threadMutationObserver = new MutationObserver(scrollThreadToEnd)
+    threadMutationObserver.observe(content, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    threadResizeObserver = new ResizeObserver(scrollThreadToEnd)
+    threadResizeObserver.observe(content)
+  }
+})
 onBeforeUnmount(() => {
+  threadMutationObserver?.disconnect()
+  threadResizeObserver?.disconnect()
   unsubscribeTaskCreated?.()
 })
 </script>
@@ -290,8 +321,11 @@ onBeforeUnmount(() => {
 
 .task-chat-window__thread
   min-height: 0
+.task-chat-window__content
+  width: 100%
+  min-height: 100%
 
-.task-chat-window__thread > :deep(.task-execution-progress)
+.task-chat-window__content > :deep(.task-execution-progress)
   align-self: center
 
 .task-chat-window__header

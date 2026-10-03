@@ -3,17 +3,20 @@
     <div v-if="confirmCreation" role="status">Creation is waiting</div>
     <q-btn label="Confirm creation" :disable="!confirmCreation" @click="confirmCreation?.()" />
     <q-btn label="Open tool example" @click="openExample" />
+    <q-btn label="Stream assistant response" @click="streamAssistantResponse" />
     <TaskChatWindow
       v-model:selected-task-id="selected"
       :client="client"
       :entry-node="undefined"
       status="ready"
       :all-tools="tools"
+      :chat-completion-stream="chatCompletion.stream"
     />
   </q-page>
 </template>
-
 <script setup lang="ts">
+import { createStream } from '@taskyon/common/modules/frpBus'
+import type { ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import {
   createPortServer,
   createProtocolPort,
@@ -30,9 +33,9 @@ import {
 } from '@taskyon/taskyon/api'
 import TaskChatWindow from '@taskyon/ui/components/taskyon/TaskChatWindow.vue'
 import { onBeforeUnmount, ref, shallowRef } from 'vue'
-
 const selected = ref<string>()
 const confirmCreation = shallowRef<() => void>()
+const chatCompletion = createStream<ChatCompletionStreamEvent>()
 const tasks = new Map<string, TaskNode>()
 const ports = createProtocolPort(taskyonProtocol)
 const storagePorts = createProtocolPort(taskyonStorageProtocol)
@@ -112,6 +115,19 @@ const openExample = () => {
     client.taskModel.ingest(task)
   }
   selected.value = 'fixture-call'
+}
+const streamAssistantResponse = async () => {
+  for (let index = 0; index < 24; index++) {
+    chatCompletion.emit({
+      taskId: 'fixture-call',
+      chunk: {
+        type: 'text-delta',
+        id: 'fixture-stream',
+        text: `Stream chunk ${index}: this sentence makes the live assistant response grow while the shared chat stays pinned to the newest words.\n\n`,
+      },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+  }
 }
 onBeforeUnmount(() => {
   confirmCreation.value?.()

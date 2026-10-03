@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 
 for (const width of [390, 1280]) {
@@ -31,8 +32,109 @@ for (const width of [390, 1280]) {
   })
 }
 
+test('submitting a message re-pins the shared chat to the bottom', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/ta[REDACTED:openai-key]')
+  await page.getByRole('button', { name: 'Open tool example' }).click()
+
+  const thread = page.locator('.task-chat-window__thread')
+  await thread.evaluate((element) => {
+    element.style.height = '120px'
+    element.style.flex = '0 0 120px'
+    element.scrollTop = 0
+    element.dispatchEvent(new Event('scroll'))
+  })
+  await expect
+    .poll(() =>
+      thread.evaluate(
+        (element) =>
+          element.scrollHeight > element.clientHeight &&
+          element.scrollTop < element.scrollHeight / 2,
+      ),
+    )
+    .toBe(true)
+
+  const input = page.getByRole('textbox')
+  await input.fill('Keep the reply in view')
+  await input.press('Enter')
+  await expect(page.getByText('Creation is waiting')).toBeVisible()
+  await expect
+    .poll(() =>
+      thread.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight <= 24,
+      ),
+    )
+    .toBe(true)
+})
+test('streamed assistant text keeps the shared chat pinned to the newest words', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'https://127.0.0.1:9000'
+  const routesSource = readFileSync(
+    new URL('../../../src/router/routes_taskyon.ts', import.meta.url),
+    'utf8',
+  )
+  const fixturePath = routesSource.match(
+    /path: '([^']+)'[\s\S]{0,220}TaskChatResponsivenessTest/,
+  )?.[1]
+  if (!fixturePath) throw new Error('Task chat responsiveness fixture route is unavailable.')
+  await page.goto(new URL(fixturePath, baseURL).href)
+  await page.getByRole('button', { name: 'Open tool example' }).click()
+  const thread = page.locator('.task-chat-window__thread')
+  await thread.evaluate((element) => {
+    element.style.height = '140px'
+    element.style.flex = '0 0 140px'
+    element.scrollTop = element.scrollHeight
+    element.dispatchEvent(new Event('scroll'))
+
+    const probe = { maxDistance: 0, samples: 0 }
+    Object.assign(window, { __taskyonChatScrollProbe: probe })
+    const observer = new MutationObserver(() => {
+      requestAnimationFrame(() => {
+        probe.samples += 1
+        probe.maxDistance = Math.max(
+          probe.maxDistance,
+          element.scrollHeight - element.scrollTop - element.clientHeight,
+        )
+      })
+    })
+    observer.observe(element, { childList: true, subtree: true, characterData: true })
+  })
+
+  await page.getByRole('button', { name: 'Stream assistant response' }).click()
+  const liveProgress = page.locator('[data-cy="taskyon-live-progress"]')
+  await expect(liveProgress).toContainText('Stream chunk 5', { timeout: 30_000 })
+  await thread.evaluate((element) => {
+    element.scrollTop = 0
+    element.dispatchEvent(new Event('scroll'))
+  })
+  await expect
+    .poll(() =>
+      thread.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
+    )
+    .toBeLessThanOrEqual(24)
+  await expect(liveProgress).toContainText('Stream chunk 23', {
+    timeout: 30_000,
+  })
+  await expect
+    .poll(() =>
+      thread.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight),
+    )
+    .toBeLessThanOrEqual(24)
+  const probe = await page.evaluate(
+    () =>
+      (
+        window as typeof window & {
+          __taskyonChatScrollProbe?: { maxDistance: number; samples: number }
+        }
+      ).__taskyonChatScrollProbe,
+  )
+  expect(probe?.samples).toBeGreaterThan(5)
+  expect(probe?.maxDistance).toBeLessThanOrEqual(24)
+})
 test('finishing an earlier send does not reopen its conversation', async ({ page }) => {
-  await page.goto('/task-chat-responsiveness-test')
+  await page.goto('/ta[REDACTED:openai-key]')
   const input = page.getByRole('textbox')
   await input.fill('Keep this in the original conversation')
   await input.press('Enter')
