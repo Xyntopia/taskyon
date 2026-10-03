@@ -132,10 +132,14 @@ export const compareDocumentText = (before: string, after: string) => {
     left[left.length - 1 - end] === right[right.length - 1 - end]
   )
     end += 1
+  const removedLines = left.slice(start, left.length - end)
+  const addedLines = right.slice(start, right.length - end)
   return {
     changed: before !== after,
     firstChangedLine: start + 1,
-    removed: left.slice(start, left.length - end).join('\n'),
-    added: right.slice(start, right.length - end).join('\n'),
+    unchangedBefore: right.slice(0, start).join('\n'),
+    removed: removedLines.join('\n'),
+    added: addedLines.join('\n'),
+    unchangedAfter: end ? right.slice(right.length - end).join('\n') : '',
   }
 }

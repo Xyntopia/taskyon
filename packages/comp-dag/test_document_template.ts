@@ -2,7 +2,9 @@ import {
   parseDocumentTemplate,
   renderDocumentView,
   renderDocumentTemplate,
+  previewDocumentTemplate,
   projectDocumentRow,
+  type DocumentRenderProgress,
 } from './documentTemplate'
 import { createStorageDagBackend } from './storageDagBackend'
 import { ingestTextFile, readPinnedTextFile } from './builtIn/textFileSource'
@@ -314,6 +316,77 @@ export const testDocumentTemplateMixedAvailability = async () => {
   )
   if (loop.markdown !== '012') throw new Error('Bounded Jinja loops must render.')
   return { success: true }
+}
+
+export const testDocumentTemplateProgressiveConcurrentViews = async () => {
+  const records = new Map<string, unknown>()
+  const backend = createStorageDagBackend({
+    get: (namespace, id) => Promise.resolve(records.get(`${namespace}/${id}`)),
+    set: (namespace, id, value) => {
+      records.set(`${namespace}/${id}`, value)
+      return Promise.resolve()
+    },
+  })
+  const declarations = ['first', 'second'].map(
+    (id) =>
+      '~~~document-view\n' +
+      JSON.stringify({
+        id,
+        source: {
+          invocation: id,
+          maxRows: 1,
+          columns: { value: { path: 'outputs.value' } },
+        },
+        presentation: { renderer: 'table' },
+      }) +
+      '\n~~~',
+  )
+  const template = `# Progressive report\n\n${declarations.join('\n\n')}\n`
+  const preview = await previewDocumentTemplate(template)
+  if (
+    preview.completedViews !== 0 ||
+    preview.totalViews !== 2 ||
+    !preview.markdown.includes('Rendering **first**')
+  ) {
+    throw new Error('The initial document shell must be available before study views finish.')
+  }
+
+  const started: string[] = []
+  let release: (() => void) | undefined
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const progress: DocumentRenderProgress[] = []
+  const rendering = renderDocumentTemplate(
+    template,
+    async (view) => {
+      started.push(view.id)
+      await gate
+      return { rows: [{ value: view.id }], complete: true }
+    },
+    backend,
+    undefined,
+    (state) => {
+      progress.push(state)
+    },
+  )
+
+  await Promise.resolve()
+  await Promise.resolve()
+  if (started.length !== 2)
+    throw new Error('Independent document views must start resolving concurrently.')
+  release?.()
+  const rendered = await rendering
+  if (
+    !progress.some(({ completedViews }) => completedViews === 0) ||
+    !progress.some(({ completedViews }) => completedViews === 1) ||
+    !progress.some(({ completedViews }) => completedViews === 2)
+  ) {
+    throw new Error('Progressive rendering must publish the initial, partial and complete states.')
+  }
+  if (!rendered.markdown.includes('first') || !rendered.markdown.includes('second'))
+    throw new Error('The final document must replace all loading placeholders.')
+  return { success: true, progressUpdates: progress.length }
 }
 
 export const testDocumentTemplateBoundedViewsAndIndependentCache = async () => {

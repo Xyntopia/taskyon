@@ -313,6 +313,7 @@ export const documentRendererIdentity = (graphicsId?: Hash) =>
     schema: z.toJSONSchema(documentViewSchema),
     parse: parseDocumentTemplate.toString(),
     assemble: renderDocumentTemplate.toString(),
+    markdown: assembleProgressMarkdown.toString(),
     view: renderDocumentView.toString(),
     table: renderTabularView.toString(),
     cell: markdownCell.toString(),
@@ -326,8 +327,9 @@ export const resolveInvocationDocumentView = async (
   storage: InvocationRowStorageClient,
   invocationId: Hash,
   view: DocumentView,
+  resolvedRuns?: Awaited<ReturnType<DesignGraphRepository['listRuns']>>,
 ): Promise<DocumentProjection | { reason: string }> => {
-  const runs = (await repository.listRuns(invocationId)).sort(
+  const runs = [...(resolvedRuns ?? (await repository.listRuns(invocationId)))].sort(
     (a, b) =>
       Number(b.status === 'completed') - Number(a.status === 'completed') ||
       b.completedAtMs - a.completedAtMs,
@@ -354,57 +356,45 @@ export const resolveInvocationDocumentView = async (
   return { reason: unavailable }
 }
 
-/** Resolution is read-only. Missing data never implicitly starts an invocation. */
-export const renderDocumentTemplate = async (
-  template: string,
-  resolve: (view: DocumentView) => Promise<DocumentProjection | { reason: string }>,
-  backend: DagStorageBackend,
-  graphics?: DocumentGraphicsRenderer,
-) => {
-  const plan = parseDocumentTemplate(template)
-  const usesGraphics = plan.views.some(
-    ({ presentation }) =>
-      presentation.renderer === 'vega-lite' || presentation.renderer === 'maplibre',
-  )
-  const rendererId = documentRendererIdentity(usesGraphics ? graphics?.id : undefined)
-  const views: RenderedDocumentView[] = []
-  for (const view of plan.views) {
-    const base = {
+export type DocumentRenderProgressView =
+  | RenderedDocumentView
+  | {
+      id: string
+      invocation: string
+      placement: 'inline' | 'block'
+      status: 'loading'
+      markdown: string
+      reason: string
+    }
+
+export type DocumentRenderProgress = {
+  template: string
+  markdown: string
+  views: DocumentRenderProgressView[]
+  completedViews: number
+  totalViews: number
+}
+
+const loadingDocumentViews = (plan: ReturnType<typeof parseDocumentTemplate>) =>
+  plan.views.map(
+    (view): DocumentRenderProgressView => ({
       id: view.id,
       invocation: view.source.invocation,
       placement: plan.placements[view.id]!,
-    }
-    try {
-      const projection = await resolve(view)
-      if ('reason' in projection) {
-        views.push({
-          ...base,
-          status: 'missing',
-          reason: projection.reason,
-          markdown: `[Missing: ${view.id}](#document-view-${view.id})`,
-        })
-      } else {
-        const rendered = await renderDocumentView(view, projection, backend, graphics)
-        views.push({
-          ...base,
-          ...rendered,
-          markdown: projection.complete
-            ? rendered.markdown
-            : `${rendered.markdown}${base.placement === 'inline' ? ' ' : '\n\n'}[Partial: ${view.id}](#document-view-${view.id})`,
-          status: projection.complete ? 'available' : 'partial',
-          ...(!projection.complete ? { reason: 'The source invocation has partial results.' } : {}),
-        })
-      }
-    } catch (error) {
-      views.push({
-        ...base,
-        status: 'error',
-        reason: error instanceof Error ? error.message : String(error),
-        markdown: `[Unavailable: ${view.id}](#document-view-${view.id})`,
-      })
-    }
-  }
-  const markdown = await createJinjaTemplateRenderer()(
+      status: 'loading',
+      markdown:
+        plan.placements[view.id] === 'inline'
+          ? '…'
+          : `> Rendering **${view.id}** from saved study data…`,
+      reason: 'Rendering this view from the pinned study result.',
+    }),
+  )
+
+const assembleProgressMarkdown = async (
+  plan: ReturnType<typeof parseDocumentTemplate>,
+  views: DocumentRenderProgressView[],
+) =>
+  await createJinjaTemplateRenderer()(
     plan.jinjaTemplate,
     {
       views: Object.fromEntries(views.map((view) => [view.id, view.markdown])),
@@ -413,14 +403,113 @@ export const renderDocumentTemplate = async (
     },
     { profile: 'document' },
   )
+
+/** Fast read-only document shell used while study-backed views are still rendering. */
+export const previewDocumentTemplate = async (
+  template: string,
+): Promise<DocumentRenderProgress> => {
+  const plan = parseDocumentTemplate(template)
+  const views = loadingDocumentViews(plan)
+  return {
+    template,
+    markdown: await assembleProgressMarkdown(plan, views),
+    views,
+    completedViews: 0,
+    totalViews: views.length,
+  }
+}
+
+/** Resolution is read-only. Missing data never implicitly starts an invocation. */
+export const renderDocumentTemplate = async (
+  template: string,
+  resolve: (view: DocumentView) => Promise<DocumentProjection | { reason: string }>,
+  backend: DagStorageBackend,
+  graphics?: DocumentGraphicsRenderer,
+  onProgress?: (progress: DocumentRenderProgress) => void | Promise<void>,
+) => {
+  const plan = parseDocumentTemplate(template)
+  const usesGraphics = plan.views.some(
+    ({ presentation }) =>
+      presentation.renderer === 'vega-lite' || presentation.renderer === 'maplibre',
+  )
+  const rendererId = documentRendererIdentity(usesGraphics ? graphics?.id : undefined)
+  const views = loadingDocumentViews(plan)
+  let completedViews = 0
+  let progressQueue = Promise.resolve()
+
+  const publishProgress = () => {
+    if (!onProgress) return
+    const snapshot = views.map((view) => ({ ...view }))
+    const completed = completedViews
+    progressQueue = progressQueue.then(async () => {
+      await onProgress({
+        template,
+        markdown: await assembleProgressMarkdown(plan, snapshot),
+        views: snapshot,
+        completedViews: completed,
+        totalViews: snapshot.length,
+      })
+    })
+  }
+
+  publishProgress()
+
+  await Promise.all(
+    plan.views.map(async (view, index) => {
+      const base = {
+        id: view.id,
+        invocation: view.source.invocation,
+        placement: plan.placements[view.id]!,
+      }
+      let renderedView: RenderedDocumentView
+      try {
+        const projection = await resolve(view)
+        if ('reason' in projection) {
+          renderedView = {
+            ...base,
+            status: 'missing',
+            reason: projection.reason,
+            markdown: `[Missing: ${view.id}](#document-view-${view.id})`,
+          }
+        } else {
+          const rendered = await renderDocumentView(view, projection, backend, graphics)
+          renderedView = {
+            ...base,
+            ...rendered,
+            markdown: projection.complete
+              ? rendered.markdown
+              : `${rendered.markdown}${base.placement === 'inline' ? ' ' : '\n\n'}[Partial: ${view.id}](#document-view-${view.id})`,
+            status: projection.complete ? 'available' : 'partial',
+            ...(!projection.complete
+              ? { reason: 'The source invocation has partial results.' }
+              : {}),
+          }
+        }
+      } catch (error) {
+        renderedView = {
+          ...base,
+          status: 'error',
+          reason: error instanceof Error ? error.message : String(error),
+          markdown: `[Unavailable: ${view.id}](#document-view-${view.id})`,
+        }
+      }
+      views[index] = renderedView
+      completedViews += 1
+      publishProgress()
+    }),
+  )
+
+  await progressQueue
+  const finalViews = views as RenderedDocumentView[]
+  const markdown = await assembleProgressMarkdown(plan, finalViews)
   // Artifacts contain semantic output, not whether this particular lookup hit the cache.
   const artifactHash = await backend.writeArtifact({
     rendererId,
     template,
     markdown,
-    views: views.map((view) =>
+    views: finalViews.map((view) =>
       Object.fromEntries(Object.entries(view).filter(([key]) => key !== 'cached')),
     ),
   })
-  return { rendererId, template, markdown, views, artifactHash }
+  return { rendererId, template, markdown, views: finalViews, artifactHash }
 }
