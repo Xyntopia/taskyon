@@ -212,10 +212,29 @@ export async function tool_managerCoalescesConcurrentCatalogReads() {
     catalogs.every((catalog) => catalog.catalogTool?.name === 'catalogTool'),
     'Every concurrent caller must receive the complete catalog',
   )
+
+  const cached = await toolManager.listToolDefinitions(true)
+  assert(listCount === 1, 'Sequential catalog reads must reuse the stable in-memory catalog.')
+  assert(cached.catalogTool?.name === 'catalogTool', 'Cached catalog must remain complete.')
+
+  await toolManager.installManifest({
+    publisherId: 'taskyon',
+    name: 'secondCatalogTool',
+    description: 'Second catalog tool',
+    parameters: { type: 'object' },
+    execution: { kind: 'sandboxed-code', runtime: 'javascript', source: '() => null' },
+  })
+  const refreshed = await toolManager.listToolDefinitions(true)
+  assert(listCount === 2, 'Catalog mutation must invalidate exactly one cached storage read.')
+  assert(
+    refreshed.catalogTool?.name === 'catalogTool' &&
+      refreshed.secondCatalogTool?.name === 'secondCatalogTool',
+    'Invalidated catalog must include both active tools.',
+  )
 }
 
 tool_managerCoalescesConcurrentCatalogReads.description =
-  'Concurrent tool-catalog requests share one storage read instead of blocking task creation with duplicate database work.'
+  'Tool-catalog reads are coalesced and cached until a catalog mutation invalidates them.'
 
 export async function tool_managerDoesNotRewriteUnchangedDefaultTools() {
   const records = new Map<string, ToolStorageRecord>()

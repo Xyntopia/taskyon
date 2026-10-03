@@ -119,7 +119,7 @@ export function createToolManager(
   const runtimeTools = new Map<ContentHash, InternalTool>()
   let catalogRevision = 0
   let catalogRead: Promise<Record<string, InternalTool>> | null = null
-
+  let catalogReadRevision = -1
   const getManifest = async (revision: ContentHash): Promise<ToolManifest | null> => {
     const record = await storage.get(definitionKey(revision))
     if (record?.type !== 'manifest') return null
@@ -283,17 +283,24 @@ export function createToolManager(
   }
 
   const listTools = () => {
-    if (catalogRead) return catalogRead
-    catalogRead = loadStableToolCatalog()
-    void catalogRead.then(
+    if (catalogRead && catalogReadRevision === catalogRevision) return catalogRead
+
+    const revisionAtRequest = catalogRevision
+    const read = loadStableToolCatalog()
+    catalogRead = read
+    catalogReadRevision = revisionAtRequest
+    void read.then(
       () => {
-        catalogRead = null
+        if (catalogRead === read) catalogReadRevision = catalogRevision
       },
       () => {
-        catalogRead = null
+        if (catalogRead === read) {
+          catalogRead = null
+          catalogReadRevision = -1
+        }
       },
     )
-    return catalogRead
+    return read
   }
 
   async function listToolDefinitions<T extends boolean>(
