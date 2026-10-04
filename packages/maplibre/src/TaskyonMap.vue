@@ -99,7 +99,7 @@ const syncOverlays = (): void => {
   props.overlays.forEach((overlay) => {
     const source = map?.getSource(overlay.id)
     if (source) {
-      ;(source as GeoJSONSource).setData(overlay.data)
+      void (source as GeoJSONSource).setData(overlay.data)
     } else {
       map?.addSource(overlay.id, { type: 'geojson', data: overlay.data })
       overlaySourceIds.add(overlay.id)
@@ -178,7 +178,6 @@ onMounted(initializeMap)
 onBeforeUnmount(() => {
   map?.remove()
   map = null
-  runtime.dispose()
 })
 </script>
 
