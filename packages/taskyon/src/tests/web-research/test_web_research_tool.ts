@@ -475,6 +475,43 @@ export const testWebResearchPipelineRetriesOnceAndDownloadsDeterministically = a
     'Expected validated evidence to remain in history while continuation state uses raw candidates',
   )
 
+  const emptySelectionRetry = await pipeline.function(
+    {
+      stage: 'verification',
+      ...common,
+      retryCount: 0,
+      candidates: [
+        {
+          title: 'Official rules',
+          sourcePageUrl: 'https://official.example/rules',
+          directArtifactUrl: 'https://official.example/rules.pdf',
+          evidence: 'Official current rules.',
+        },
+      ],
+      verificationResult: {
+        selectedUrl: '',
+        verificationSummary: 'No candidate could be verified.',
+      },
+    },
+    context,
+  )
+  assert(
+    emptySelectionRetry &&
+      typeof emptySelectionRetry === 'object' &&
+      'taskChainList' in emptySelectionRetry,
+    'Expected an empty verification selection to retry instead of parsing an invalid URL',
+  )
+  const emptySelectionTasks = taskResult.parse(emptySelectionRetry)
+  const emptySelectionPipeline = getFunctionCall(
+    emptySelectionTasks.taskChainList[0]?.find(
+      (task) => getFunctionCall(task)?.name === 'webResearchPipeline',
+    ),
+  )
+  assert(
+    emptySelectionPipeline?.arguments.retryCount === 1,
+    'Expected an empty selected URL to trigger the single verification retry',
+  )
+
   const selectedUrl = 'https://official.example/rules.pdf'
   const download = await pipeline.function(
     {

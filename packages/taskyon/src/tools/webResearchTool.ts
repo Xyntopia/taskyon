@@ -1085,7 +1085,14 @@ const webResearchPipeline = createTool({
             throw new Error('Research verification returned no selected URL after one retry.')
           return context.createSubtasksResult([buildResearchVerificationStage(state, 1)])
         }
-        const selectedUrl = normalizeCandidateUrl(result.selectedUrl)
+        let selectedUrl: string
+        try {
+          selectedUrl = normalizeCandidateUrl(result.selectedUrl)
+        } catch {
+          if (retryCount >= 1)
+            throw new Error('Research verification returned no valid selected URL after one retry.')
+          return context.createSubtasksResult([buildResearchVerificationStage(state, 1)])
+        }
         const candidateUrls = new Set(
           state.candidates.flatMap((candidate) =>
             [candidate.sourcePageUrl, candidate.directArtifactUrl].filter(

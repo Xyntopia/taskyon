@@ -10,9 +10,12 @@ export const testCliActiveTaskWaitCoversTransientProviderRecoveryWindow = () => 
 testCliActiveTaskWaitCoversTransientProviderRecoveryWindow.description =
   'Keeps the CLI attached while chatCompletion performs visible retries for up to 24 hours.'
 
-const terminalTask = (type: 'message' | 'error' | 'return'): TaskNode => ({
-  id: type,
-  role: 'system',
+const terminalTask = (
+  type: 'message' | 'error' | 'return',
+  role: TaskNode['role'] = 'system',
+): TaskNode => ({
+  id: `${role}-${type}`,
+  role,
   created_at: 1,
   content:
     type === 'message'
@@ -26,8 +29,14 @@ export const testCliReturnsFinalProviderErrorAfterRecoveryWindow = () => {
   if (!isInteractiveTaskResult(terminalTask('error'))) {
     throw new Error('Expected the final provider error to release the interactive CLI wait.')
   }
-  if (!isInteractiveTaskResult(terminalTask('message'))) {
+  if (!isInteractiveTaskResult(terminalTask('message', 'assistant'))) {
     throw new Error('Expected successful assistant messages to release the interactive CLI wait.')
+  }
+  if (
+    isInteractiveTaskResult(terminalTask('message', 'user')) ||
+    isInteractiveTaskResult(terminalTask('message', 'system'))
+  ) {
+    throw new Error('Expected non-assistant messages to keep the interactive CLI waiting.')
   }
   if (isInteractiveTaskResult(terminalTask('return'))) {
     throw new Error('Expected an internal return node not to replace the visible terminal result.')

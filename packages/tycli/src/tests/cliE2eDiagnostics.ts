@@ -19,10 +19,20 @@ type SessionStep = {
   delayMs?: number
   failOn?: string[]
   input: string
-  waitFor?: string
+  /** Wait for one string or the earliest of several alternatives. */
+  waitFor?: string | readonly string[]
   /** Optional tighter deadline for this output milestone (for example prompt readiness). */
   timeoutMs?: number
   signal?: NodeJS.Signals
+}
+
+export type CliE2eAutoResponder = {
+  /** Output text that triggers the response, for example an interactive approval prompt. */
+  pattern: string
+  /** Bytes written to the CLI stdin when the pattern appears. */
+  response: string
+  /** Answer every occurrence instead of only the first one. */
+  repeat?: boolean
 }
 
 type SessionResult = {
@@ -134,28 +144,38 @@ function delay(ms: number) {
 
 async function waitForText(
   readOutput: () => string,
-  needle: string,
+  needle: string | readonly string[],
   timeoutMs: number,
   failOn: string[] = [],
   isClosed?: () => boolean,
   fromIndex = 0,
 ): Promise<number> {
+  const needles = typeof needle === 'string' ? [needle] : needle
   const startedAt = Date.now()
   while (Date.now() - startedAt < timeoutMs) {
     const output = readOutput()
     const remainingOutput = output.slice(fromIndex)
     const failedMatch = failOn.find((entry) => remainingOutput.includes(entry))
     if (failedMatch) {
-      throw new Error(`Saw failure output "${failedMatch}" while waiting for "${needle}".`)
+      throw new Error(
+        `Saw failure output "${failedMatch}" while waiting for "${needles.join('" or "')}".`,
+      )
     }
-    const matchIndex = remainingOutput.indexOf(needle)
-    if (matchIndex >= 0) return fromIndex + matchIndex + needle.length
+    const earliest = needles
+      .map((candidate) => ({ candidate, matchIndex: remainingOutput.indexOf(candidate) }))
+      .filter(({ matchIndex }) => matchIndex >= 0)
+      .sort((left, right) => left.matchIndex - right.matchIndex)[0]
+    if (earliest) return fromIndex + earliest.matchIndex + earliest.candidate.length
     if (isClosed?.()) {
-      throw new Error(`CLI exited while waiting for output "${needle}".\nOutput:\n${output}`)
+      throw new Error(
+        `CLI exited while waiting for output "${needles.join('" or "')}".\nOutput:\n${output}`,
+      )
     }
     await delay(50)
   }
-  throw new Error(`Timed out waiting for output "${needle}".\nOutput:\n${readOutput()}`)
+  throw new Error(
+    `Timed out waiting for output "${needles.join('" or "')}".\nOutput:\n${readOutput()}`,
+  )
 }
 
 export async function runCliE2eSession(args: {
@@ -170,6 +190,7 @@ export async function runCliE2eSession(args: {
   cliArgs?: string[]
   runner?: 'pty' | 'pipe'
   isolateHome?: boolean
+  autoResponders?: readonly CliE2eAutoResponder[]
 }): Promise<SessionResult> {
   const {
     testName,
@@ -183,6 +204,7 @@ export async function runCliE2eSession(args: {
     cliArgs = [],
     runner = 'pty',
     isolateHome = true,
+    autoResponders,
   } = args
   const launchAttempts =
     runner === 'pty'
@@ -246,6 +268,7 @@ export async function runCliE2eSession(args: {
         steps,
         ...(acceptOutputAsExit ? { acceptOutputAsExit } : {}),
         ...(homeKey ? { homeKey } : {}),
+        ...(autoResponders ? { autoResponders } : {}),
         timeoutMs,
         isolateHome,
         ...(cwd ? { cwd } : {}),
@@ -330,6 +353,7 @@ async function runSpawnedSession(args: {
   isolateHome: boolean
   cwd?: string
   env?: Record<string, string>
+  autoResponders?: readonly CliE2eAutoResponder[]
 }): Promise<SessionResult> {
   const {
     attempt,
@@ -341,6 +365,7 @@ async function runSpawnedSession(args: {
     isolateHome,
     cwd,
     env,
+    autoResponders,
   } = args
   const testHome = join(TEST_HOME, (homeKey ?? testName).replace(/[^a-zA-Z0-9._-]/g, '_'))
   return await new Promise((resolve, reject) => {
@@ -399,12 +424,34 @@ async function runSpawnedSession(args: {
       child.kill('SIGTERM')
     }
 
+    const autoResponderCursors = new Map<number, number>()
+    const completedAutoResponders = new Set<number>()
+    const answerAutoResponders = () => {
+      for (const [index, responder] of (autoResponders ?? []).entries()) {
+        if (completedAutoResponders.has(index)) continue
+        let cursor = autoResponderCursors.get(index) ?? 0
+        for (;;) {
+          const matchIndex = output.indexOf(responder.pattern, cursor)
+          if (matchIndex < 0) break
+          cursor = matchIndex + responder.pattern.length
+          child.stdin.write(responder.response)
+          if (!responder.repeat) {
+            completedAutoResponders.add(index)
+            break
+          }
+        }
+        autoResponderCursors.set(index, cursor)
+      }
+    }
+
     child.stdout.on('data', (chunk) => {
       output += chunk.toString('utf8')
+      answerAutoResponders()
       tryAcceptOutputAsExit()
     })
     child.stderr.on('data', (chunk) => {
       output += chunk.toString('utf8')
+      answerAutoResponders()
       tryAcceptOutputAsExit()
     })
     child.on('error', (error) => {

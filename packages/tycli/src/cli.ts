@@ -3544,7 +3544,7 @@ function createCliSandboxCapabilityPolicy(
   interactiveReadlineRef: { current?: ReturnType<typeof createInterface> },
   approvalUiRef: { current?: CliInteractiveApprovalUi },
 ) {
-  return createCapabilityPolicy({
+  const policy = createCapabilityPolicy({
     storage: {
       get: () => Promise.resolve(null),
       set: () => Promise.resolve(),
@@ -3571,6 +3571,17 @@ function createCliSandboxCapabilityPolicy(
       }
     },
   })
+  let authorizationQueue: Promise<unknown> = Promise.resolve()
+  const authorize: typeof policy.authorize = (request) => {
+    const run = () => policy.authorize(request)
+    const result = authorizationQueue.then(run, run)
+    authorizationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+  return { ...policy, authorize }
 }
 
 async function createCliTaskyonRuntime(
