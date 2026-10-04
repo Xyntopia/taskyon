@@ -22,7 +22,7 @@ export function createNodeSandboxTransport(options: {
   const child = spawn(
     process.execPath,
     [
-      '--experimental-permission',
+      '--permission',
       `--allow-fs-read=${NODE_WORKER_SANDBOX_RUNNER}`,
       `--allow-fs-read=${EXECUTABLE_SANDBOX_RUNTIME}`,
       `--max-old-space-size=${options.maxOldSpaceSizeMb ?? 128}`,

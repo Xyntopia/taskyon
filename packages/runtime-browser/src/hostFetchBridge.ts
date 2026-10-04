@@ -25,37 +25,128 @@ type HostFetchMessage =
       status: number
       statusText: string
       headers: [string, string][]
-      body: ReadableStream<Uint8Array> | null
+      hasBody: boolean
     }
+  | { type: 'pull'; id: string }
+  | { type: 'chunk'; id: string; value: ArrayBuffer }
+  | { type: 'end'; id: string }
   | { type: 'error'; id: string; message: string }
   | { type: 'cancel'; id: string }
   | { type: 'authorize'; id: string; tool: ToolIdentity; capability: FetchCapability }
   | { type: 'authorization'; id: string; allowed: boolean }
 
+type PendingFetch = {
+  kind: 'fetch'
+  resolve: (response: Response) => void
+  reject: (error: Error) => void
+  signal: AbortSignal
+  abortListener?: () => void
+  responseReceived: boolean
+  controller?: ReadableStreamDefaultController<Uint8Array>
+  resolvePull?: () => void
+}
+
+type PendingAuthorization = {
+  kind: 'authorization'
+  resolve: (allowed: boolean) => void
+  reject: (error: Error) => void
+}
+
+type PendingRequest = PendingFetch | PendingAuthorization
+
+const abortError = () => new DOMException('The request was aborted.', 'AbortError')
+
 export function createHostFetchRequester(port: MessagePort) {
-  const pending = new Map<
-    string,
-    { resolve: (value: Response | boolean) => void; reject: (error: Error) => void }
-  >()
+  const pending = new Map<string, PendingRequest>()
+  let stopped = false
+  function cleanup(id: string, entry: PendingFetch) {
+    pending.delete(id)
+    if (entry.abortListener) entry.signal.removeEventListener('abort', entry.abortListener)
+  }
+
+  function onAbort(id: string, entry: PendingFetch) {
+    try {
+      port.postMessage({ type: 'cancel', id } satisfies HostFetchMessage)
+    } catch {
+      // The request still needs to reject locally if the worker has already closed the port.
+    }
+    cleanup(id, entry)
+    const error = abortError()
+    if (entry.responseReceived) entry.controller?.error(error)
+    else entry.reject(error)
+    entry.resolvePull?.()
+  }
+
   const onMessage = (event: MessageEvent<HostFetchMessage>) => {
     const message = event.data
     const entry = pending.get(message.id)
     if (!entry) return
     if (message.type === 'error') {
       pending.delete(message.id)
-      entry.reject(new Error(message.message))
-    } else if (message.type === 'authorization') {
+      if (entry.kind === 'authorization') entry.reject(new Error(message.message))
+      else if (entry.responseReceived) {
+        cleanup(message.id, entry)
+        entry.controller?.error(new Error(message.message))
+        entry.resolvePull?.()
+      } else {
+        cleanup(message.id, entry)
+        entry.reject(new Error(message.message))
+      }
+    } else if (message.type === 'authorization' && entry.kind === 'authorization') {
       pending.delete(message.id)
       entry.resolve(message.allowed)
-    } else if (message.type === 'result') {
-      pending.delete(message.id)
+    } else if (message.type === 'result' && entry.kind === 'fetch') {
+      entry.responseReceived = true
+      const body = message.hasBody
+        ? new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              entry.controller = controller
+            },
+            pull: async (controller) => {
+              if (entry.signal.aborted) {
+                controller.error(abortError())
+                cleanup(message.id, entry)
+                return
+              }
+              entry.controller = controller
+              await new Promise<void>((resolve) => {
+                entry.resolvePull = resolve
+                try {
+                  port.postMessage({ type: 'pull', id: message.id } satisfies HostFetchMessage)
+                } catch (error) {
+                  cleanup(message.id, entry)
+                  controller.error(error)
+                  resolve()
+                }
+              })
+            },
+            cancel: () => {
+              try {
+                port.postMessage({ type: 'cancel', id: message.id } satisfies HostFetchMessage)
+              } finally {
+                cleanup(message.id, entry)
+                entry.resolvePull?.()
+              }
+            },
+          })
+        : null
+      if (!message.hasBody) cleanup(message.id, entry)
       entry.resolve(
-        new Response(message.body, {
+        new Response(body, {
           status: message.status,
           statusText: message.statusText,
           headers: message.headers,
         }),
       )
+    } else if (entry.kind === 'fetch' && message.type === 'chunk') {
+      entry.controller?.enqueue(new Uint8Array(message.value))
+      entry.resolvePull?.()
+      delete entry.resolvePull
+    } else if (entry.kind === 'fetch' && message.type === 'end') {
+      entry.controller?.close()
+      cleanup(message.id, entry)
+      entry.resolvePull?.()
+      delete entry.resolvePull
     }
   }
   port.addEventListener('message', onMessage)
@@ -63,77 +154,60 @@ export function createHostFetchRequester(port: MessagePort) {
 
   return {
     fetch: async (context: HostFetchContext, input: RequestInfo | URL, init?: RequestInit) => {
+      if (stopped) throw new Error('Host fetch bridge stopped.')
       const request = new Request(input, init)
-      if (request.signal.aborted) throw new DOMException('The request was aborted.', 'AbortError')
+      if (request.signal.aborted) throw abortError()
       const id = crypto.randomUUID()
       const body = request.body ? await request.arrayBuffer() : null
+      if (request.signal.aborted) throw abortError()
+      if (stopped) throw new Error('Host fetch bridge stopped.')
       const response = new Promise<Response>((resolve, reject) => {
-        pending.set(id, { resolve: (value) => resolve(value as Response), reject })
+        const entry: PendingFetch = {
+          kind: 'fetch',
+          resolve,
+          reject,
+          signal: request.signal,
+          responseReceived: false,
+        }
+        entry.abortListener = () => onAbort(id, entry)
+        pending.set(id, entry)
+        request.signal.addEventListener('abort', entry.abortListener, { once: true })
+        try {
+          port.postMessage(
+            {
+              type: 'fetch',
+              id,
+              context,
+              url: request.url,
+              method: request.method,
+              headers: [...request.headers],
+              body,
+            } satisfies HostFetchMessage,
+            body ? [body] : [],
+          )
+        } catch (error) {
+          cleanup(id, entry)
+          reject(error instanceof Error ? error : new Error(String(error)))
+        }
       })
-      const onAbort = () => port.postMessage({ type: 'cancel', id } satisfies HostFetchMessage)
-      request.signal.addEventListener('abort', onAbort, { once: true })
-      port.postMessage(
-        {
-          type: 'fetch',
-          id,
-          context,
-          url: request.url,
-          method: request.method,
-          headers: [...request.headers],
-          body,
-        } satisfies HostFetchMessage,
-        body ? [body] : [],
-      )
-      let result: Response
-      try {
-        result = await response
-      } catch (error) {
-        request.signal.removeEventListener('abort', onAbort)
-        throw error
-      }
-      if (!result.body) {
-        request.signal.removeEventListener('abort', onAbort)
-        return result
-      }
-      const reader = result.body.getReader()
-      const bodyStream = new ReadableStream<Uint8Array>({
-        pull: async (controller) => {
-          try {
-            const chunk = await reader.read()
-            if (chunk.done) {
-              request.signal.removeEventListener('abort', onAbort)
-              controller.close()
-            } else {
-              controller.enqueue(chunk.value)
-            }
-          } catch (error) {
-            request.signal.removeEventListener('abort', onAbort)
-            controller.error(error)
-          }
-        },
-        cancel: async (reason) => {
-          onAbort()
-          request.signal.removeEventListener('abort', onAbort)
-          await reader.cancel(reason)
-        },
-      })
-      return new Response(bodyStream, {
-        status: result.status,
-        statusText: result.statusText,
-        headers: result.headers,
-      })
+      return await response
     },
     authorize: (tool: ToolIdentity, capability: FetchCapability) => {
+      if (stopped) return Promise.reject(new Error('Host fetch bridge stopped.'))
       const id = crypto.randomUUID()
       const response = new Promise<boolean>((resolve, reject) => {
-        pending.set(id, { resolve: (value) => resolve(value as boolean), reject })
+        pending.set(id, { kind: 'authorization', resolve, reject })
       })
       port.postMessage({ type: 'authorize', id, tool, capability } satisfies HostFetchMessage)
       return response
     },
     stop: () => {
+      stopped = true
       port.removeEventListener('message', onMessage)
-      for (const entry of pending.values()) entry.reject(new Error('Host fetch bridge stopped.'))
+      for (const [id, entry] of pending) {
+        if (entry.kind === 'authorization') entry.reject(new Error('Host fetch bridge stopped.'))
+        else onAbort(id, entry)
+      }
       pending.clear()
     },
   }
@@ -146,11 +220,54 @@ export function startHostFetchResponder(
     authorize: (tool: ToolIdentity, capability: FetchCapability) => Promise<boolean>
   },
 ) {
-  const controllers = new Map<string, AbortController>()
+  const activeFetches = new Map<
+    string,
+    {
+      controller: AbortController
+      reader?: ReadableStreamDefaultReader<Uint8Array>
+      reading: boolean
+    }
+  >()
   const onMessage = (event: MessageEvent<HostFetchMessage>) => {
     const message = event.data
     if (message.type === 'cancel') {
-      controllers.get(message.id)?.abort()
+      const active = activeFetches.get(message.id)
+      activeFetches.delete(message.id)
+      active?.controller.abort()
+      void active?.reader?.cancel().catch(() => undefined)
+      return
+    }
+    if (message.type === 'pull') {
+      const active = activeFetches.get(message.id)
+      if (!active?.reader || active.reading) return
+      active.reading = true
+      void active.reader
+        .read()
+        .then((chunk) => {
+          if (activeFetches.get(message.id) !== active) return
+          active.reading = false
+          if (chunk.done) {
+            activeFetches.delete(message.id)
+            active.reader?.releaseLock()
+            port.postMessage({ type: 'end', id: message.id } satisfies HostFetchMessage)
+            return
+          }
+          const value = new Uint8Array(chunk.value)
+          port.postMessage(
+            { type: 'chunk', id: message.id, value: value.buffer } satisfies HostFetchMessage,
+            [value.buffer],
+          )
+        })
+        .catch((error: unknown) => {
+          if (activeFetches.get(message.id) !== active) return
+          activeFetches.delete(message.id)
+          active.reader?.releaseLock()
+          port.postMessage({
+            type: 'error',
+            id: message.id,
+            message: String(error),
+          } satisfies HostFetchMessage)
+        })
       return
     }
     if (message.type === 'authorize') {
@@ -172,7 +289,12 @@ export function startHostFetchResponder(
     }
     if (message.type !== 'fetch') return
     const controller = new AbortController()
-    controllers.set(message.id, controller)
+    const active: {
+      controller: AbortController
+      reader?: ReadableStreamDefaultReader<Uint8Array>
+      reading: boolean
+    } = { controller, reading: false }
+    activeFetches.set(message.id, active)
     void (async () => {
       try {
         const request = new Request(message.url, {
@@ -182,49 +304,30 @@ export function startHostFetchResponder(
           signal: controller.signal,
         })
         const response = await handlers.fetch(message.context, request)
+        if (controller.signal.aborted) {
+          await response.body?.cancel()
+          return
+        }
         const reader = response.body?.getReader()
-        const body = reader
-          ? new ReadableStream<Uint8Array>({
-              pull: async (streamController) => {
-                try {
-                  const chunk = await reader.read()
-                  if (chunk.done) {
-                    controllers.delete(message.id)
-                    streamController.close()
-                  } else {
-                    streamController.enqueue(chunk.value)
-                  }
-                } catch (error) {
-                  controllers.delete(message.id)
-                  streamController.error(error)
-                }
-              },
-              cancel: async (reason) => {
-                controller.abort()
-                controllers.delete(message.id)
-                await reader.cancel(reason)
-              },
-            })
-          : null
-        port.postMessage(
-          {
-            type: 'result',
-            id: message.id,
-            status: response.status,
-            statusText: response.statusText,
-            headers: [...response.headers],
-            body,
-          } satisfies HostFetchMessage,
-          body ? [body] : [],
-        )
-        if (!body) controllers.delete(message.id)
-      } catch (error) {
-        controllers.delete(message.id)
+        if (reader) active.reader = reader
+        else activeFetches.delete(message.id)
         port.postMessage({
-          type: 'error',
+          type: 'result',
           id: message.id,
-          message: error instanceof Error ? error.message : String(error),
+          status: response.status,
+          statusText: response.statusText,
+          headers: [...response.headers],
+          hasBody: reader !== undefined,
         } satisfies HostFetchMessage)
+      } catch (error) {
+        activeFetches.delete(message.id)
+        if (!controller.signal.aborted) {
+          port.postMessage({
+            type: 'error',
+            id: message.id,
+            message: error instanceof Error ? error.message : String(error),
+          } satisfies HostFetchMessage)
+        }
       }
     })()
   }
@@ -232,7 +335,10 @@ export function startHostFetchResponder(
   port.start()
   return () => {
     port.removeEventListener('message', onMessage)
-    for (const controller of controllers.values()) controller.abort()
-    controllers.clear()
+    for (const active of activeFetches.values()) {
+      active.controller.abort()
+      void active.reader?.cancel().catch(() => undefined)
+    }
+    activeFetches.clear()
   }
 }

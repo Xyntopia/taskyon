@@ -23,7 +23,29 @@ export type CryptoSessionOptions = {
   bindingKey?: CryptoKey | undefined
 }
 
-export async function createCryptoSession(options?: CryptoSessionOptions) {
+/** Shared session capability: device private keys belong to the selected host owner. */
+export interface CryptoSession {
+  getSessionKey(): CryptoKey
+  getDevicePublicKey(): CryptoKey
+  getUserPublicKey(): CryptoKey
+  deviceId(): Promise<string>
+  exportSessionKey(shareKey?: CryptoKey): Promise<string>
+  getSessionId(): Promise<string>
+  getWrapperId(): Promise<string>
+  derive(options: CryptoSessionOptions): Promise<CryptoSession>
+  newSessionKey(wrappedSK?: string): Promise<CryptoSession>
+  close?(): Promise<void>
+}
+export interface BrowserCryptoSession extends CryptoSession {
+  getDeviceKey(): CryptoKeyPair
+  derive(options: CryptoSessionOptions): Promise<BrowserCryptoSession>
+  newSessionKey(wrappedSK?: string): Promise<BrowserCryptoSession>
+  newDeviceKey(deviceKeyPair?: CryptoKeyPair): Promise<BrowserCryptoSession>
+}
+
+export async function createCryptoSession(
+  options?: CryptoSessionOptions,
+): Promise<BrowserCryptoSession> {
   // Initialize or load device key pair
   const existingDeviceKey = options?.deviceKeyPair ?? undefined
   let DK: CryptoKeyPair
@@ -71,7 +93,7 @@ export async function createCryptoSession(options?: CryptoSessionOptions) {
     getDevicePublicKey: () => DK.publicKey,
     deviceId: () => cryptoKeyToBase64(DK.publicKey),
     getDeviceKey: () => DK,
-    getUserPublicKey: () => UK,
+    getUserPublicKey: () => UK.publicKey,
     exportSessionKey,
     getSessionId: () => keyFingerPrint(SK),
     getWrapperId: () => keyFingerPrint(kek),
@@ -84,5 +106,3 @@ export async function createCryptoSession(options?: CryptoSessionOptions) {
       }),
   }
 }
-
-export type CryptoSession = Awaited<ReturnType<typeof createCryptoSession>>

@@ -354,7 +354,7 @@ const dynamicContext =
             tableName: 'vault',
           }),
         ]),
-        () => cs.getUserPublicKey().publicKey,
+        () => cs.getUserPublicKey(),
         () => {
           //console.log('importing fixed key for secretStore...')
           return cs.getSessionKey()
@@ -675,7 +675,7 @@ const dynamicContext =
             const packed = await encryptCompressObject(
               task,
               archiveName,
-              () => cs.getUserPublicKey()?.publicKey,
+              () => cs.getUserPublicKey(),
               () => cs.getSessionKey(),
             )
             console.log('created encrypted task file...', id)
@@ -847,7 +847,9 @@ export async function tyCore(
 
   const setNewSession = async (newCs: CryptoSession) => {
     console.log('tycore setting new crypto session...')
+    const previous = cs
     await replaceSessionContext(newCs)
+    if (previous !== newCs) await previous.close?.()
   }
 
   const api = {

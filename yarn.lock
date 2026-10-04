@@ -4629,8 +4629,10 @@ __metadata:
     "@taskyon/secure-tunnel": "workspace:*"
     "@taskyon/taskyon": "workspace:*"
     buffer: "npm:^6.0.3"
+    esbuild: "npm:0.28.1"
     esbuild-wasm: "npm:0.28.1"
     isomorphic-git: "npm:^1.38.6"
+    zod: "npm:^4.0.0"
   languageName: unknown
   linkType: soft
 

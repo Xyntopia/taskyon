@@ -1,3 +1,4 @@
+import type { NativeDeviceCommands } from '@taskyon/runtime-browser/crypto-session'
 import { canonicalHash, type Sha256Hash } from '@taskyon/common/modules/canonicalHash'
 import type { StreamSubscription } from '@taskyon/common/modules/frpBus'
 import { createTaskyonBrowserCoreRuntime } from '@taskyon/runtime-browser/core'
@@ -107,6 +108,7 @@ export const createTaskyonIntegrationRuntime = async (options: {
   apiKey?: string
   storageSessionId: string
   cryptoNamespace?: string
+  nativeDevice?: NativeDeviceCommands
   maxConcurrency?: number
   hostFetch?: {
     fetch: (context: HostFetchContext, request: Request) => Promise<Response>
@@ -148,6 +150,7 @@ export const createTaskyonIntegrationRuntime = async (options: {
       : {}),
     cryptoSession: await initCryptoSessionFromBrowser(undefined, true, {
       namespace: options.cryptoNamespace ?? options.storageSessionId,
+      ...(options.nativeDevice ? { nativeDevice: options.nativeDevice } : {}),
     }),
     storage: { kind: 'browser' },
   })

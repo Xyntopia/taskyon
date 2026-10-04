@@ -316,6 +316,7 @@
 </template>
 
 <script setup lang="ts">
+import { desktopCryptoPersistence } from 'src/modules/desktopCrypto'
 import {
   matClose,
   matHistory,
@@ -472,6 +473,7 @@ onMounted(async () => {
       appState.toolchainProfiles,
       'taskyon',
     )
+    const nativeDevice = desktopCryptoPersistence(agentSessionId).nativeDevice
     const runtime = await createTaskyonIntegrationRuntime({
       entry: {
         name: 'rankingAgent',
@@ -484,6 +486,7 @@ onMounted(async () => {
       ...(apiKey ? { apiKey } : {}),
       storageSessionId: agentSessionId,
       cryptoNamespace: agentSessionId,
+      ...(nativeDevice ? { nativeDevice } : {}),
       hostFetch: taskyonStore.hostFetch,
     })
     if (disposed) {

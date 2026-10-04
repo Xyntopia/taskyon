@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tauri-run-bash-command"
+description = "Enables the tauri_run_bash_command command without any pre-configured scope."
+commands.allow = ["tauri_run_bash_command"]
+
+[[permission]]
+identifier = "deny-tauri-run-bash-command"
+description = "Denies the tauri_run_bash_command command without any pre-configured scope."
+commands.deny = ["tauri_run_bash_command"]

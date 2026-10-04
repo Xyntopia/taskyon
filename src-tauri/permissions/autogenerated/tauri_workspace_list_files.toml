@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tauri-workspace-list-files"
+description = "Enables the tauri_workspace_list_files command without any pre-configured scope."
+commands.allow = ["tauri_workspace_list_files"]
+
+[[permission]]
+identifier = "deny-tauri-workspace-list-files"
+description = "Denies the tauri_workspace_list_files command without any pre-configured scope."
+commands.deny = ["tauri_workspace_list_files"]

@@ -41,6 +41,7 @@ export const taskyonDocumentationManifest: DocumentationManifest = {
             '/docs/developer/core-policies.md',
             '/docs/developer/architecture.md',
             '/docs/developer/security-model.md',
+            '/docs/developer/native-device-custody.md',
             '/docs/tool_sandbox_security.md',
           ],
         },

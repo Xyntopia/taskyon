@@ -1,3 +1,5 @@
+import { startNativeDeviceHost } from './nativeCryptoBridge'
+import type { NativeDeviceCommands } from './nativeCryptoSession'
 import {
   createProtocolPort,
   createStorageClient,
@@ -48,6 +50,7 @@ export type TaskyonBrowserRuntimeOptions = {
   createToolContext?: ToolRpcCreateContext
   persistCryptoSession?: boolean
   cryptoNamespace?: string
+  nativeDevice?: NativeDeviceCommands
   readinessTimeoutMs?: number
   storage?: BrowserRuntimeStorageService
   storageNamespacePrefix?: string
@@ -102,6 +105,11 @@ export const createTaskyonBrowserRuntime = async (
   const chatCompletionChannel = new MessageChannel()
   const workerStreamChannel = new MessageChannel()
   const directFallbackChannel = options.approveDirectFallback ? new MessageChannel() : undefined
+  const nativeDeviceChannel = options.nativeDevice ? new MessageChannel() : undefined
+  const stopNativeDevice =
+    nativeDeviceChannel && options.nativeDevice
+      ? startNativeDeviceHost(nativeDeviceChannel.port1, options.nativeDevice)
+      : undefined
   const hostFetchChannel = options.hostFetch ? new MessageChannel() : undefined
   const stopHostFetch =
     hostFetchChannel && options.hostFetch
@@ -147,6 +155,7 @@ export const createTaskyonBrowserRuntime = async (
 
   const initMessage: TaskyonBrowserWorkerInitMessage = {
     type: 'init',
+    ...(nativeDeviceChannel ? { nativeDevicePort: nativeDeviceChannel.port2 } : {}),
     corePort: coreChannel.port2,
     hostPort: hostChannel.port2,
     storagePort: storageChannel.port2,
@@ -165,6 +174,7 @@ export const createTaskyonBrowserRuntime = async (
   }
   worker.postMessage(initMessage, [
     coreChannel.port2,
+    ...(nativeDeviceChannel ? [nativeDeviceChannel.port2] : []),
     storageChannel.port2,
     hostChannel.port2,
     chatCompletionChannel.port2,
@@ -221,6 +231,7 @@ export const createTaskyonBrowserRuntime = async (
     stopHostFetch?.()
     if (typeof storageStop === 'function') storageStop()
     worker.terminate()
+    void stopNativeDevice?.().catch(() => undefined)
     throw new Error(`Taskyon browser worker failed during "${workerStage}".`, { cause: error })
   }
   worker.removeEventListener('message', onWorkerMessage)
@@ -245,6 +256,7 @@ export const createTaskyonBrowserRuntime = async (
       stopHostFetch?.()
       if (typeof storageStop === 'function') storageStop()
       worker.terminate()
+      void stopNativeDevice?.().catch(() => undefined)
       void reason
     },
   }

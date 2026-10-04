@@ -1,3 +1,4 @@
+import { createNativeDeviceRequester } from './nativeCryptoBridge'
 import {
   createProtocolPort,
   taskyonStorageProtocol,
@@ -42,6 +43,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
     storageSessionId,
     persistCryptoSession = false,
     cryptoNamespace,
+    nativeDevicePort,
   } = event.data
 
   void (async () => {
@@ -58,11 +60,16 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
       : undefined
     const storageBridge = createProtocolPort(taskyonStorageProtocol)
     const storageMessageBridge = MessageChannelBridge(storageBridge.y, storagePort)
-    const persistentCrypto = persistCryptoSession
-      ? initCryptoSessionFromBrowser(undefined, true, {
-          namespace: cryptoNamespace ?? storageNamespacePrefix,
-        })
+    const nativeDevice = nativeDevicePort
+      ? createNativeDeviceRequester(nativeDevicePort)
       : undefined
+    const persistentCrypto =
+      persistCryptoSession || nativeDevice
+        ? initCryptoSessionFromBrowser(undefined, persistCryptoSession, {
+            namespace: cryptoNamespace ?? storageNamespacePrefix,
+            ...(nativeDevice ? { nativeDevice: nativeDevice.commands } : {}),
+          })
+        : undefined
     const runtime = createTaskyonBrowserCoreRuntime({
       llmSettings: () => llmSettings,
       entryNode: () => entryNode ?? defaultEntryNode(llmSettings),
@@ -131,6 +138,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
         storageMessageBridge.destroy()
         directFallback?.destroy()
         hostFetch?.stop()
+        nativeDevice?.stop()
         chatCompletionStreamPort?.close()
         workerStreamPort?.close()
       }

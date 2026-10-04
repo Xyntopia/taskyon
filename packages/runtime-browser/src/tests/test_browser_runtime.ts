@@ -14,6 +14,7 @@ import {
 import { createEncryptedOauthSecretStore } from '@taskyon/taskyon/browser'
 import { createStream } from '@taskyon/common/modules/frpBus'
 import { createTaskyonBrowserCoreRuntime } from '../index'
+import { initCryptoSessionFromBrowser } from '../persistentCryptoSession'
 import { forwardStreamToMessagePort } from '../streamBridge'
 
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
@@ -51,6 +52,32 @@ export const testBrowserRuntimeForwardsStreamEvents = async () => {
 
 testBrowserRuntimeForwardsStreamEvents.description =
   'Forwards live runtime stream events through a browser MessagePort and cleans up safely.'
+
+export const testBrowserCryptoSessionPersistsDeviceKey = async () => {
+  if (!globalThis.indexedDB) {
+    return { skipped: true, reason: 'IndexedDB is unavailable in this runtime.' }
+  }
+  const namespace = `diagnostics-${crypto.randomUUID()}`
+  try {
+    const firstSession = await initCryptoSessionFromBrowser(undefined, true, { namespace })
+    const restoredSession = await initCryptoSessionFromBrowser(undefined, false, { namespace })
+    assert(
+      (await restoredSession.deviceId()) === (await firstSession.deviceId()),
+      'Expected the browser crypto session to restore its persisted device key.',
+    )
+    return { success: true }
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(`CryptoSession_${namespace}`)
+      request.onsuccess = () => resolve()
+      request.onerror = () =>
+        reject(request.error ?? new Error('Synthetic crypto database deletion failed'))
+    })
+  }
+}
+
+testBrowserCryptoSessionPersistsDeviceKey.description =
+  'Restores the same browser device key after persisting a crypto session.'
 
 export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () => {
   const cryptoSession = await createCryptoSession()
@@ -289,3 +316,72 @@ export const testBrowserRuntimeDeliversStorageRequestsIssuedBeforeReadiness = as
 
 testBrowserRuntimeDeliversStorageRequestsIssuedBeforeReadiness.description =
   'Delivers storage requests issued while the browser runtime is still connecting.'
+
+export const testBrowserCryptoSessionRejectsUnusableStoredIdentity = async () => {
+  if (!globalThis.indexedDB) return { skipped: true, reason: 'IndexedDB is unavailable.' }
+  const namespace = `diagnostics-invalid-${crypto.randomUUID()}`
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(`CryptoSession_${namespace}`, 1)
+    request.onupgradeneeded = () => request.result.createObjectStore('keys')
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(new Error('Synthetic database open failed'))
+  })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction('keys', 'readwrite')
+      transaction.objectStore('keys').put(null, 'deviceKeyPair')
+      transaction.oncomplete = () => resolve()
+      transaction.onabort = () => reject(new Error('Synthetic null-key write failed'))
+    })
+    database.close()
+    let rejected = false
+    try {
+      await initCryptoSessionFromBrowser(undefined, true, { namespace })
+    } catch (error) {
+      rejected = error instanceof Error && error.message.includes('refusing to replace')
+    }
+    assert(rejected, 'An unusable stored identity must fail instead of silently regenerating.')
+  } finally {
+    database.close()
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(`CryptoSession_${namespace}`)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(new Error('Synthetic database cleanup failed'))
+    })
+  }
+  return { success: true }
+}
+testBrowserCryptoSessionRejectsUnusableStoredIdentity.description =
+  'Fails closed when IndexedDB returns a stored but unusable device identity.'
+
+export const testBrowserRuntimeClosesCryptoOwnerOnInitializationFailure = async () => {
+  const session = await createCryptoSession()
+  let closes = 0
+  const runtime = createTaskyonBrowserCoreRuntime({
+    llmSettings: () => ({ entryFunction: 'entryNode' }),
+    entryNode: () => toolCall({ name: 'entryNode', arguments: {} }),
+    toolchainConfig: {},
+    cryptoSession: {
+      ...session,
+      close: () => {
+        closes += 1
+        return Promise.resolve()
+      },
+    },
+    storage: {
+      kind: 'service',
+      createService: () => Promise.reject(new Error('Synthetic storage startup failure')),
+    },
+  })
+  let failed = false
+  try {
+    await runtime.taskyon
+  } catch {
+    failed = true
+  }
+  assert(failed, 'Expected the synthetic startup failure.')
+  assert(closes === 1, 'Startup failure must release the supplied crypto owner exactly once.')
+  return { success: true }
+}
+testBrowserRuntimeClosesCryptoOwnerOnInitializationFailure.description =
+  'Releases an injected crypto owner when storage startup fails before core initialization.'

@@ -14,6 +14,15 @@
         "https://*:*",
         "http://*:*"
       ]
-    }
+    },
+    "allow-device-open",
+    "allow-device-open-session",
+    "allow-device-import-session",
+    "allow-device-close",
+    "allow-request-tauri-storage-reset",
+    "allow-tauri-workspace-list-files",
+    "allow-tauri-workspace-read-files",
+    "allow-tauri-workspace-write-file",
+    "allow-tauri-run-bash-command"
   ]
 }

@@ -212,7 +212,7 @@ export function createCliConfigStore(paths: CliStoragePaths) {
       })
 
       try {
-        const deviceKeyPairJwk = await exportDeviceKeyPair(cryptoSession.getDeviceKey())
+        const deviceKeyPairJwk = await exportDeviceKeyPair(persistedDevice)
         await saveStoredConfig({
           ...stored,
           deviceKeyPairJwk,
@@ -220,13 +220,14 @@ export function createCliConfigStore(paths: CliStoragePaths) {
         })
         return { cryptoSession, stored }
       } catch {
+        const refreshedDevice = await createPersistableDeviceKeyPair()
         const refreshed = await createCryptoSession({
-          deviceKeyPair: await createPersistableDeviceKeyPair(),
+          deviceKeyPair: refreshedDevice,
           wrappedSK: stored.wrappedSessionKey,
         })
         await saveStoredConfig({
           ...stored,
-          deviceKeyPairJwk: await exportDeviceKeyPair(refreshed.getDeviceKey()),
+          deviceKeyPairJwk: await exportDeviceKeyPair(refreshedDevice),
           wrappedSessionKey: await refreshed.exportSessionKey(),
         })
         return { cryptoSession: refreshed, stored }
@@ -285,7 +286,7 @@ export function createCliConfigStore(paths: CliStoragePaths) {
   const createCliSecretStore = (cryptoSession: CryptoSession) =>
     withSecretStore(
       createConfigSecretCrud(),
-      () => cryptoSession.getUserPublicKey().publicKey,
+      () => cryptoSession.getUserPublicKey(),
       () => cryptoSession.getSessionKey(),
     )
 

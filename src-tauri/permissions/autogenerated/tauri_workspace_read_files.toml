@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tauri-workspace-read-files"
+description = "Enables the tauri_workspace_read_files command without any pre-configured scope."
+commands.allow = ["tauri_workspace_read_files"]
+
+[[permission]]
+identifier = "deny-tauri-workspace-read-files"
+description = "Denies the tauri_workspace_read_files command without any pre-configured scope."
+commands.deny = ["tauri_workspace_read_files"]

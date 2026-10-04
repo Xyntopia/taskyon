@@ -1,0 +1,11 @@
+{
+  "description": "Public synthetic interoperability vector; never use these keys outside tests.",
+  "devicePrivateKey": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+  "runtimePrivateKey": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+  "devicePublicKey": "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk",
+  "transportPublicKey": "zo060cy2M-x7cMF4FKXHbs0CloUFDTRHRboFhw5YfVk",
+  "handle": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+  "wrapperId": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU",
+  "sessionKey": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+  "transportEnvelope": "native:v1:BgYGBgYGBgYGBgYGouhd5FmY6GZ-sZAq5u1z6WurEKtZQNoevDDAhsgLAyU891wwhA1Yptw75SfJRAqQ"
+}

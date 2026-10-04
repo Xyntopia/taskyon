@@ -5,6 +5,7 @@
 - [Core Policies](core-policies.md)
 - [Architecture](architecture.md)
 - [Security and Cryptographic Storage](security-model.md)
+- [Desktop Device-Key Custody](native-device-custody.md)
 
 ## Development
 

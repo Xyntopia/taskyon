@@ -1,3 +1,4 @@
+import { desktopCryptoPersistence } from 'src/modules/desktopCrypto'
 import type {
   Asyncify,
   CryptoSession,
@@ -1295,7 +1296,7 @@ const useSwitchCryptoSession = (
     const ty = await taskyon
     await ty.setNewSession(cs)
     await registerSessionTools()
-    if (persist) await persistBrowserCryptoSession(cs)
+    if (persist) await persistBrowserCryptoSession(cs, desktopCryptoPersistence())
   }
 
   return {
@@ -1351,11 +1352,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           bindingKey,
         },
         true,
+        desktopCryptoPersistence(),
       )
       return initCs
     } else {
       console.log('initializing session without binding key...')
-      const initCs = initCryptoSessionFromBrowser(undefined, true)
+      const initCs = initCryptoSessionFromBrowser(undefined, true, desktopCryptoPersistence())
       return initCs
     }
   })()
@@ -1810,12 +1812,16 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
           bindingKey: bindingKey ?? undefined,
         },
         true,
+        desktopCryptoPersistence(),
       )
       const ty = await taskyon
       const newId = await cs.getSessionId()
       const oldId = await ty.getCryptoSession().getSessionId()
 
-      if (newId === oldId) return
+      if (newId === oldId) {
+        await cs.close?.()
+        return
+      }
       console.log(`switch user session because of binding key change! ${oldId}->${newId}`)
       await uiToolRpcHost
       await ty.setNewSession(cs)

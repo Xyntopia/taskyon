@@ -5,6 +5,8 @@ import type { TaskyonBrowserProviderTransport, TaskyonDirectFallbackRequest } fr
 export type TaskyonBrowserWorkerInitMessage = {
   type: 'init'
   corePort: MessagePort
+  /** Host-owned device custody, already bound to the runtime namespace. */
+  nativeDevicePort?: MessagePort
   hostPort: MessagePort
   storagePort: MessagePort
   /** Additive local-worker capability for forwarding existing core streams. */

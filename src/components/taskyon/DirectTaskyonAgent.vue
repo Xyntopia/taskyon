@@ -15,6 +15,7 @@
 </template>
 
 <script setup lang="ts">
+import { desktopCryptoPersistence } from 'src/modules/desktopCrypto'
 import { deepMerge } from '@taskyon/common/modules/objHelpers'
 import { syncRefsWithLocalStorage } from '@taskyon/common/modules/saveState'
 import type { StreamSubscription } from '@taskyon/common/modules/frpBus'
@@ -131,9 +132,11 @@ watch(
         llmSettings: () => ({ ...appState.llmSettings, entryFunction: entryFunction.value }),
         entryNode: () => entryNode.value,
         toolchainConfig,
-        cryptoSession: initCryptoSessionFromBrowser(key ? { bindingKey: key } : undefined, true, {
-          namespace: scope,
-        }),
+        cryptoSession: initCryptoSessionFromBrowser(
+          key ? { bindingKey: key } : undefined,
+          true,
+          desktopCryptoPersistence(scope),
+        ),
         storageSessionId: scope,
         storage: { kind: 'browser' },
         authorizeSandboxFetch: authorizeBrowserSandboxFetch,

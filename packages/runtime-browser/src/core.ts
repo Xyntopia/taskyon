@@ -167,16 +167,18 @@ export const createTaskyonBrowserCoreRuntime = (
       await core.dispose(reason)
     } finally {
       stopStorageService()
+      await core.getCryptoSession().close?.()
     }
   }
 
   const taskyon = (async () => {
     options.onStage?.('connecting-storage')
-    stopStorage = await storage.start()
-    bufferedStoragePort.connect()
+    let cryptoSession: CryptoSession | undefined
     try {
+      stopStorage = await storage.start()
+      bufferedStoragePort.connect()
       options.onStage?.('creating-crypto-session')
-      const cryptoSession = await (options.cryptoSession ?? createCryptoSession())
+      cryptoSession = await (options.cryptoSession ?? createCryptoSession())
       options.onStage?.('creating-core')
       const core = await tyCore(
         options.llmSettings,
@@ -236,6 +238,8 @@ export const createTaskyonBrowserCoreRuntime = (
       pendingClientMessages.length = 0
       pendingHostMessages.length = 0
       stopStorageService()
+      const failedSession = cryptoSession ?? (await options.cryptoSession)
+      await failedSession?.close?.()
       throw error
     }
   })()

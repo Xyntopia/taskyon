@@ -440,8 +440,8 @@ export async function tool_security_contractsSandboxUsesOnlyMediatedFetch() {
 export const testSandboxToolForwardsProxyPreference = async () => {
   const stopController = new AbortController()
   let preferred = false
-  await executeToolInWorkerSandbox(
-    `async (_params, ctx) => await ctx.fetch('https://example.com/page', {}, { preferProxy: true })`,
+  const result = await executeToolInWorkerSandbox(
+    `async (_params, ctx) => await (await ctx.fetch('https://example.com/page', {}, { preferProxy: true })).text()`,
     {
       params: {},
       context: {
@@ -461,6 +461,7 @@ export const testSandboxToolForwardsProxyPreference = async () => {
     stopController.signal,
   )
   assert(preferred, 'Sandbox tool fetch preference must reach the host context')
+  assert(result === 'ok', 'Sandbox fetch response body must reach the tool result')
   return { success: true }
 }
 

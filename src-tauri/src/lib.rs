@@ -1,3 +1,4 @@
+mod native_crypto;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Write as _;
@@ -346,6 +347,10 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             request_tauri_storage_reset,
+            native_crypto::device_open,
+            native_crypto::device_open_session,
+            native_crypto::device_import_session,
+            native_crypto::device_close,
             commands::tauri_workspace_list_files,
             commands::tauri_workspace_read_files,
             commands::tauri_workspace_write_file,
@@ -354,6 +359,9 @@ pub fn run() {
         .setup(move |app| {
             app.handle().plugin(tauri_plugin_http::init())?;
             apply_pending_storage_reset(app.handle());
+            app.manage(std::sync::Arc::new(native_crypto::DeviceService::os(
+                app.path().app_data_dir()?,
+            )));
 
             if cfg!(debug_assertions) {
                 if !http_trace_enabled {

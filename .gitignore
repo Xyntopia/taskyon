@@ -79,3 +79,6 @@ packages/p2p-core/dist
 packages/relay/dist
 packages/taskyon-vscode/dist
 packages/taskyon-vscode/media/webview.bundle.js
+
+# Redacted host-native diagnostics remain local
+/native-custody-diagnostics-*.json

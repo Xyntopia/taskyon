@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tauri-workspace-write-file"
+description = "Enables the tauri_workspace_write_file command without any pre-configured scope."
+commands.allow = ["tauri_workspace_write_file"]
+
+[[permission]]
+identifier = "deny-tauri-workspace-write-file"
+description = "Denies the tauri_workspace_write_file command without any pre-configured scope."
+commands.deny = ["tauri_workspace_write_file"]

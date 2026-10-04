@@ -5,17 +5,29 @@ undergone a formal security audit.
 
 ## Browser crypto session
 
-The browser crypto session uses an X25519 device key pair. The normal browser path stores the
-`CryptoKeyPair` in IndexedDB. Tauri has a JWK fallback because some WebView environments cannot
-reliably clone stored `CryptoKey` objects.
+The normal browser path owns a non-extractable X25519 device key pair and stores the
+`CryptoKeyPair` in IndexedDB. An unusable stored device identity fails explicitly rather than being
+replaced. Some WebKit versions cannot restore this key pair; the raw-browser diagnostics continue to
+report that compatibility failure.
 
-A key-encryption key is derived from the device private key and either the device public key or a
-host-supplied binding key. The session key is generated and wrapped by that key-encryption key.
-When persistence is enabled, only the wrapped session-key string is stored in local storage.
+[Tauri desktop device custody](native-device-custody.md) keeps the device private key in Rust and
+the OS credential store. Only the public key, scoped handles and authenticated session envelopes
+cross to JavaScript. There is no JWK, plaintext or browser persistence fallback. Desktop starts with
+fresh native identities and clears its legacy crypto bootstrap databases, including retired agent namespaces; browser and
+CLI installations keep their own custody.
 
-The crypto session exposes explicit derivation operations for changing the session key, device key,
-or binding key. A session change rebuilds the dynamic Taskyon context because its encrypted
-database and services are scoped by the session-key fingerprint.
+Both paths bind session-key wrapping to the device identity and an optional host-supplied public
+binding key. IndexedDB stores opaque wrapped session-key strings when persistence is explicitly
+requested. Missing initialized native credentials, corrupted identities and unusable session records
+fail instead of silently replacing keys. Unlocked session keys remain non-extractable WebCrypto
+capabilities; existing sharing temporarily makes only a session key extractable before wrapping it.
+
+The common session capability exposes session and binding derivation and public identities. Device
+key regeneration remains specific to the browser owner; the native owner has no device reset or raw
+private-key export operation. Existing desktop Bash approval is checked in JavaScript; arbitrary host
+shell access prevents claiming full device-key isolation from compromised frontend code. A native
+host-command boundary is pending a product decision. A session change rebuilds the dynamic Taskyon context because its
+encrypted database and services are scoped by the session-key fingerprint.
 
 Backup phrases, passkeys, account-bound recovery secrets, and automatic cross-device session
 exchange are not part of this confirmed browser flow and must not be documented as implemented.
