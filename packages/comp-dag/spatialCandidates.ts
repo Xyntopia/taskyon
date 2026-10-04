@@ -50,13 +50,18 @@ const polygonsOf = (geometry: Geometry) =>
   geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
 
 const boundsOf = (geometry: Geometry): Bounds => {
-  const points = polygonsOf(geometry).flat(2)
-  return {
-    west: Math.min(...points.map((point) => point[0]!)),
-    east: Math.max(...points.map((point) => point[0]!)),
-    south: Math.min(...points.map((point) => point[1]!)),
-    north: Math.max(...points.map((point) => point[1]!)),
+  const bounds = { west: Infinity, east: -Infinity, south: Infinity, north: -Infinity }
+  for (const polygon of polygonsOf(geometry)) {
+    for (const ring of polygon) {
+      for (const point of ring) {
+        bounds.west = Math.min(bounds.west, point[0]!)
+        bounds.east = Math.max(bounds.east, point[0]!)
+        bounds.south = Math.min(bounds.south, point[1]!)
+        bounds.north = Math.max(bounds.north, point[1]!)
+      }
+    }
   }
+  return bounds
 }
 
 const ringContains = (ring: number[][], lon: number, lat: number) => {
@@ -159,13 +164,14 @@ const gridLevel = (index: number, length: number) => {
   return level
 }
 
-export const iterateSpatialCandidates = function* (args: {
+export const iterateSpatialCandidates = async function* (args: {
   domain: SpatialCandidateDomain
   features: Array<{ sourceIndex: number; value: unknown }>
   params: Record<string, unknown>
   readPath: (source: unknown, path: string) => unknown
   order: GridOrder
-}): Iterable<SpatialCandidate> {
+  shouldStop?: () => boolean
+}): AsyncIterable<SpatialCandidate> {
   const { domain } = args
   const features = args.features.map(({ sourceIndex, value }) => ({
     sourceIndex,
@@ -174,6 +180,7 @@ export const iterateSpatialCandidates = function* (args: {
   if (domain.mode === 'perFeature') {
     if (!domain.featureAlias) throw new Error('Per-feature spatial study requires a feature input.')
     for (const { sourceIndex, feature } of features) {
+      if (args.shouldStop?.()) return
       const point = pointForFeature(domain, feature)
       yield {
         ...point,
@@ -190,12 +197,15 @@ export const iterateSpatialCandidates = function* (args: {
   const boundsList = region
     ? [boundsOf(region)]
     : features.map(({ feature }) => boundsOf(feature.geometry))
-  const bounds = {
-    west: Math.min(...boundsList.map((item) => item.west)),
-    east: Math.max(...boundsList.map((item) => item.east)),
-    south: Math.min(...boundsList.map((item) => item.south)),
-    north: Math.max(...boundsList.map((item) => item.north)),
-  }
+  const bounds = boundsList.reduce(
+    (combined, item) => ({
+      west: Math.min(combined.west, item.west),
+      east: Math.max(combined.east, item.east),
+      south: Math.min(combined.south, item.south),
+      north: Math.max(combined.north, item.north),
+    }),
+    { west: Infinity, east: -Infinity, south: Infinity, north: -Infinity },
+  )
   const fineLat = domain.grid.stepLatDeg / 2 ** domain.grid.levels
   const fineLon = domain.grid.stepLonDeg / 2 ** domain.grid.levels
   const latStart = Math.ceil((bounds.south - domain.grid.originLat) / fineLat)
@@ -203,6 +213,7 @@ export const iterateSpatialCandidates = function* (args: {
   const latLength = Math.floor((bounds.north - domain.grid.originLat) / fineLat) - latStart + 1
   const lonLength = Math.floor((bounds.east - domain.grid.originLon) / fineLon) - lonStart + 1
   if (latLength <= 0 || lonLength <= 0) return
+  let scannedPoints = 0
   for (const patch of iterateCandidatePatches(
     [
       {
@@ -222,6 +233,10 @@ export const iterateSpatialCandidates = function* (args: {
     ],
     args.order,
   )) {
+    // Rejected points must also give timers and study budgets a chance to stop traversal.
+    if (scannedPoints % 256 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    scannedPoints += 1
+    if (args.shouldStop?.()) return
     const latIndex = Number(patch.latIndex)
     const lonIndex = Number(patch.lonIndex)
     const point = latticePoint(domain, latStart + latIndex, lonStart + lonIndex)

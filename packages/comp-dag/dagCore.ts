@@ -1877,8 +1877,12 @@ export function createNode<
               params: validatedBase,
               readPath: getObjectPathValue,
               order: opts.gridOrder ?? 'sequential',
+              shouldStop: () => {
+                stoppedReason = shouldStop()
+                return stoppedReason !== null
+              },
             })
-            for (const candidate of candidates) {
+            for await (const candidate of candidates) {
               if (domain.featureAlias && candidate.featureSourceIndex === undefined) {
                 if (candidate.featureIds.length > 1) {
                   throw new Error('Spatial grid point intersects multiple selected features.')
