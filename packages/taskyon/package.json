@@ -55,7 +55,7 @@
     "relay": "node ./src/p2p/relay.js"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.88",
+    "@ai-sdk/openai": "^3.0.124",
     "@ai-sdk/openai-compatible": "^2.0.16",
     "@electric-sql/pglite": "0.4.5",
     "@huggingface/transformers": "^4.0.1",
