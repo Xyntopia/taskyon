@@ -561,8 +561,8 @@ const diagnosticsLibraryByName = (
   diagnosticsModelicaLibraries.find((entry) => entry.name === name)
 
 const diagnosticsStandardMsl = (): DiagnosticsModelicaLibraryManifestEntry | undefined =>
-  diagnosticsModelicaLibraries.find((entry) =>
-    String(entry.name || '').startsWith('ModelicaStandardLibrary-'),
+  diagnosticsModelicaLibraries.find(
+    (entry) => typeof entry.name === 'string' && entry.name.startsWith('ModelicaStandardLibrary-'),
   )
 
 const diagnosticsLibraryUrl = (

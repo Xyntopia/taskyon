@@ -155,19 +155,6 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function sanitizeLibraryPath(path: string): string {
-  const parts = String(path || '')
-    .split('/')
-    .filter(Boolean)
-  if (parts.length > 1 && /(?:Standard)?Library|^MSL/i.test(parts[0] ?? '')) {
-    return parts.slice(1).join('/')
-  }
-  if (parts.length > 0) {
-    parts[0] = parts[0]!.replace(/[\s-][\d.]+$/, '')
-  }
-  return parts.join('/')
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
