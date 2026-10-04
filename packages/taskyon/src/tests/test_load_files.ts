@@ -11,12 +11,15 @@ const gzipTextFile = async (name: string, text: string) => {
   return new File([compressed], name, { type: 'application/gzip' })
 }
 
-const textPdfFile = (text: string) => {
+const textPdfFile = (text: string | string[]) => {
+  const content = Array.isArray(text)
+    ? `BT /F1 12 Tf 20 7900 Td ${text.map((line) => `(${line}) Tj 0 -12 Td`).join(' ')} ET`
+    : `BT /F1 12 Tf 20 100 Td (${text}) Tj ET`
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-    `<< /Length ${text.length + 35} >>\nstream\nBT /F1 12 Tf 20 100 Td (${text}) Tj ET\nendstream`,
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 8000] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
   ]
   const parts = ['%PDF-1.4\n']
@@ -96,3 +99,13 @@ testConvertFileToTextReadsGzippedTextByInnerExtension.description =
   'Decompresses .gz files and routes the inner filename through normal text conversion.'
 testConvertFileToTextReadsPdfInCurrentRuntime.description =
   'Extracts text from a PDF in both browser and Node runtimes.'
+
+export const testConvertFileToTextSeparatesPdfStreamChunks = async () => {
+  const lines = Array.from({ length: 600 }, (_, index) => `line${index}`)
+  const text = await convertFileToText(textPdfFile(lines))
+  assert(
+    text.trim().split(/\s+/).join('|') === lines.join('|'),
+    'PDF stream chunks must preserve word boundaries',
+  )
+  return { success: true }
+}

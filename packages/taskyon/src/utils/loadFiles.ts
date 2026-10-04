@@ -27,15 +27,27 @@ async function read_pdf(file: File) {
 
   const typedArray = await file.arrayBuffer()
   const loadingTask = pdfjsLib.getDocument({ data: typedArray })
-  const pdf = await loadingTask.promise
-
-  let textContent = ''
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const text = await page.getTextContent()
-    textContent += text.items.map((it) => ('str' in it ? it.str : '')).join('\n')
+  try {
+    const pdf = await loadingTask.promise
+    let textContent = ''
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const reader = page.streamTextContent().getReader()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const chunkText = value.items.map((item: { str?: string }) => item.str ?? '').join('\n')
+          if (chunkText) textContent += `${textContent ? '\n' : ''}${chunkText}`
+        }
+      } finally {
+        reader.releaseLock()
+      }
+    }
+    return textContent
+  } finally {
+    await loadingTask.destroy()
   }
-  return textContent
 }
 
 async function read_docx(file: File) {

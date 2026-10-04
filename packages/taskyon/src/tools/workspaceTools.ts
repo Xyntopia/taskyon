@@ -60,6 +60,9 @@ type Edit = { oldText: string; newText: string }
 
 const MAX_READ_LINES = 2_000
 const MAX_RESULTS = 1_000
+const workspaceRelativePathDescription =
+  "Use a workspace-relative path. Absolute paths and '..' segments are rejected."
+const workspaceRootOptionalPathDescription = `${workspaceRelativePathDescription} Omit path to use the workspace root.`
 
 const clamp = (value: number | undefined, fallback: number, maximum: number) =>
   Math.max(1, Math.min(Math.trunc(value ?? fallback), maximum))
@@ -143,7 +146,7 @@ export const createStandardWorkspaceTools = (operations: WorkspaceOperations): I
       additionalProperties: false,
       required: ['path'],
       properties: {
-        path: { type: 'string' },
+        path: { type: 'string', description: workspaceRelativePathDescription },
         offset: { type: 'integer', minimum: 1 },
         limit: { type: 'integer', minimum: 1, maximum: MAX_READ_LINES },
       },
@@ -180,7 +183,10 @@ export const createStandardWorkspaceTools = (operations: WorkspaceOperations): I
       type: 'object',
       additionalProperties: false,
       required: ['path', 'content'],
-      properties: { path: { type: 'string' }, content: { type: 'string' } },
+      properties: {
+        path: { type: 'string', description: workspaceRelativePathDescription },
+        content: { type: 'string' },
+      },
     } as const,
     function: async ({ path, content }: { path: string; content: string }) => ({
       path,
@@ -197,7 +203,7 @@ export const createStandardWorkspaceTools = (operations: WorkspaceOperations): I
       additionalProperties: false,
       required: ['path', 'edits'],
       properties: {
-        path: { type: 'string' },
+        path: { type: 'string', description: workspaceRelativePathDescription },
         edits: {
           type: 'array',
           minItems: 1,
@@ -233,7 +239,7 @@ export const createStandardWorkspaceTools = (operations: WorkspaceOperations): I
       required: ['pattern'],
       properties: {
         pattern: { type: 'string' },
-        path: { type: 'string' },
+        path: { type: 'string', description: workspaceRootOptionalPathDescription },
         glob: { type: 'string' },
         literal: { type: 'boolean', default: false },
         context: { type: 'integer', minimum: 0, maximum: 20, default: 0 },
@@ -265,7 +271,7 @@ export const createStandardWorkspaceTools = (operations: WorkspaceOperations): I
       required: ['pattern'],
       properties: {
         pattern: { type: 'string' },
-        path: { type: 'string' },
+        path: { type: 'string', description: workspaceRootOptionalPathDescription },
         limit: { type: 'integer', minimum: 1, maximum: MAX_RESULTS, default: 500 },
       },
     } as const,
@@ -293,7 +299,7 @@ export const createStandardWorkspaceTools = (operations: WorkspaceOperations): I
       type: 'object',
       additionalProperties: false,
       properties: {
-        path: { type: 'string' },
+        path: { type: 'string', description: workspaceRootOptionalPathDescription },
         limit: { type: 'integer', minimum: 1, maximum: MAX_RESULTS, default: 500 },
       },
     } as const,

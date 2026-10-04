@@ -43,6 +43,28 @@ export const testStandardWorkspaceToolsExposeDirectOperations = async () => {
       JSON.stringify(['read', 'write', 'edit', 'grep', 'find', 'ls']),
     'Expected separate standard workspace tool names',
   )
+  const pathDocumentation = tools.map((tool) => {
+    const path = tool.parameters.properties?.path
+    if (!path || typeof path !== 'object' || typeof path.description !== 'string') {
+      throw new Error(`Expected ${tool.name} to describe its workspace path parameter`)
+    }
+    return { name: tool.name, description: path.description }
+  })
+  assert(
+    pathDocumentation.every(
+      ({ description }) =>
+        description.includes('workspace-relative') &&
+        description.includes('Absolute paths') &&
+        description.includes('..'),
+    ),
+    'Expected workspace path parameters to explain relative paths and rejected traversal',
+  )
+  assert(
+    pathDocumentation
+      .filter(({ name }) => ['grep', 'find', 'ls'].includes(name))
+      .every(({ description }) => description.includes('Omit path to use the workspace root')),
+    'Expected optional workspace paths to explain how to use the workspace root',
+  )
   await findTool(tools, 'edit').function?.(
     {
       path: 'src/example.ts',
@@ -123,14 +145,21 @@ export const testStorageWorkspaceOperationsPersistTextFiles = async () => {
       conflict = error instanceof Error ? error.message : String(error)
     }
     assert(conflict.includes('changed while editing'), 'Expected stale browser edit rejection')
-    await operations.read('../outside.ts').then(
-      () => {
-        throw new Error('Expected virtual workspace traversal rejection')
-      },
-      (error: unknown) => {
-        assert(String(error).includes('escapes its root'), 'Expected traversal-specific error')
-      },
-    )
+    const assertRejectedPath = async (path: string) =>
+      operations.read(path).then(
+        () => {
+          throw new Error(`Expected virtual workspace path rejection: ${path}`)
+        },
+        (error: unknown) => {
+          assert(
+            String(error).includes('escapes its root'),
+            `Expected path-boundary error for: ${path}`,
+          )
+        },
+      )
+    await assertRejectedPath('../outside.ts')
+    await assertRejectedPath('/outside.ts')
+    await assertRejectedPath('C:\\outside.ts')
   } finally {
     storage.destroy()
   }

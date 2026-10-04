@@ -237,6 +237,7 @@ export async function getTaskyonCosts(
   completionId: string | undefined,
   tokenJti: string,
   taskid: string,
+  requestFetch?: typeof fetch,
 ) {
   const baseUrl = new URL(TOKEN_SERVICE_BASE_URL).origin
   console.log('get generation info from ', baseUrl)
@@ -256,7 +257,8 @@ export async function getTaskyonCosts(
   const initialDelayMs = tokenJti ? 6000 : 0
   const maxDelayMs = 30000
   const backoffMultiplier = 1.5
-  const runtimeFetch: typeof fetch = canUseTauriHttpPlugin() ? tauriHttpFetch : fetch
+  const runtimeFetch: typeof fetch =
+    requestFetch ?? (canUseTauriHttpPlugin() ? tauriHttpFetch : fetch)
   let delayMs = initialDelayMs
   const attributionHeaders = {
     ...(providerHeaders?.['HTTP-Referer']

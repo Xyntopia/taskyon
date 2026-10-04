@@ -14,7 +14,6 @@ import { readPublicWebPageAsMarkdown } from '../../tools/helperCollection'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { createStorageClient, taskyonStorageProtocol } from '../../api/storageProtocol'
 import type { TaskyonStorageClient } from '../../api/storageProtocol'
-import { extractStorageTarget } from '../../tools/researchStorageTarget'
 import {
   buildBrowserMcpImportChain,
   buildEnsureBrowserMcpImportRetryChain,
@@ -364,8 +363,8 @@ export const testWebResearchPipelineRetriesOnceAndDownloadsDeterministically = a
     mustDownload: true,
     fileTypeHints: ['pdf'],
     siteHints: [],
-    storageNamespace: 'research/rules',
-    storageObjectId: 'rules.pdf',
+    storageNamespace: 'research/rules..archive',
+    storageObjectId: 'rules..pdf',
     storageExpectedFileType: 'pdf' as const,
   }
   const retry = await pipeline.function(
@@ -546,8 +545,12 @@ export const testWebResearchPipelineRetriesOnceAndDownloadsDeterministically = a
     calls[0]?.name === 'storage' &&
       calls[0].arguments.action === 'download' &&
       calls[0].arguments.url === selectedUrl &&
+      calls[0].arguments.namespace === common.storageNamespace &&
+      calls[0].arguments.id === common.storageObjectId &&
       calls[1]?.name === 'storage' &&
       calls[1].arguments.action === 'read' &&
+      calls[1].arguments.namespace === common.storageNamespace &&
+      calls[1].arguments.id === common.storageObjectId &&
       calls.some((call) => call.name === 'chatCompletion') &&
       calls.at(-1)?.name === 'webResearchPipeline',
     'Expected deterministic storage download/read followed by typed artifact verification',
@@ -585,8 +588,8 @@ export const testWebResearchPipelineRetriesOnceAndDownloadsDeterministically = a
   )
   assert(
     synthesisPrompt?.content.type === 'message' &&
-      synthesisPrompt.content.data.includes('research/rules') &&
-      synthesisPrompt.content.data.includes('rules.pdf'),
+      synthesisPrompt.content.data.includes('research/rules..archive') &&
+      synthesisPrompt.content.data.includes('rules..pdf'),
     'Expected final synthesis to receive the exact storage namespace and object id',
   )
   return { success: true }
@@ -884,33 +887,37 @@ export const testWebResearchPlannerUsesTheActiveEntryNodeName = async () => {
   return { success: true }
 }
 
-export const testWebResearchPlannerInfersExplicitStorageTarget = async () => {
+export const testWebResearchPlannerUsesStructuredStorageTargetArguments = async () => {
   const fileTypeSchema = webResearchPlanner.parameters.properties?.storageExpectedFileType
   assert(
     typeof fileTypeSchema === 'object' &&
       fileTypeSchema.description?.includes('literal value') &&
       webResearchPlanner.longDescription?.includes('prior task result'),
-    'Expected storage targets to be documented as literals unless they come from a prior task.',
+    'Expected storage target arguments to be documented as literal values.',
   )
+  let taskChainReads = 0
   const result = await webResearchPlanner.function?.(
     {
       objective: 'Find the current official Federal Rules of Civil Procedure PDF.',
       searchQueries: ['Federal Rules of Civil Procedure PDF official site'],
-      supportTools: ['storage'],
+      storageNamespace: 'research/archive..draft',
+      storageObjectId: 'federal-rules..2025.pdf',
+      storageExpectedFileType: 'pdf',
     },
     {
-      getExecutionTaskChain: () =>
-        Promise.resolve([
+      getExecutionTaskChain: () => {
+        taskChainReads += 1
+        return Promise.resolve([
           {
             id: 'user',
             role: 'user',
             content: {
               type: 'message',
-              data: `Find the PDF and save it in the storage namespace research with the exact object ID federal-rules-civil-
-procedure.pdf.`,
+              data: 'Save it in namespace another-place with object id another.pdf.',
             },
           },
-        ]),
+        ])
+      },
       createSubtasksResult,
       getSecret: () => Promise.resolve(null),
       setSecret: () => Promise.resolve(),
@@ -927,24 +934,15 @@ procedure.pdf.`,
     .map(getFunctionCall)
     .find((call) => call?.name === 'webResearchPipeline')
   assert(
-    pipelineCall?.arguments.storageNamespace === 'research' &&
-      pipelineCall.arguments.storageObjectId === 'federal-rules-civil-procedure.pdf' &&
-      pipelineCall.arguments.storageExpectedFileType === 'pdf' &&
-      pipelineCall.arguments.mustDownload === true,
-    'Expected the planner to infer and preserve the exact typed storage target from the original user request',
-  )
-  return { success: true }
-}
-
-export const testWebResearchPlannerExtractsExplicitNamespaceFromDiagnosticPrompt = () => {
-  const target = extractStorageTarget(
-    'Store the PDF in the diagnostics storage namespace under the exact object id federal-rules-civil-procedure.pdf. The exact logical storage namespace is diagnostics/document-retrieval/v1.',
+    taskChainReads === 0,
+    'Expected the planner to use its structured arguments without reparsing conversation text',
   )
   assert(
-    target?.namespace === 'diagnostics/document-retrieval/v1' &&
-      target.objectId === 'federal-rules-civil-procedure.pdf' &&
-      target.expectedFileType === 'pdf',
-    'Expected the explicit logical storage namespace to win over the descriptive storage phrase',
+    pipelineCall?.arguments.storageNamespace === 'research/archive..draft' &&
+      pipelineCall.arguments.storageObjectId === 'federal-rules..2025.pdf' &&
+      pipelineCall.arguments.storageExpectedFileType === 'pdf' &&
+      pipelineCall.arguments.mustDownload === true,
+    'Expected the structured storage target to reach the typed research pipeline unchanged',
   )
   return { success: true }
 }
@@ -1332,8 +1330,8 @@ testWebResearchCandidateValidatorUsesMediatedFetch.description =
   'Routes candidate validation through the host-provided mediated fetch capability.'
 testWebResearchPlannerAcceptsProviderResponseLength.description =
   'Accepts and ignores provider-compatible response_length arguments emitted by small models.'
-testWebResearchPlannerInfersExplicitStorageTarget.description =
-  'Infers an explicit browser storage target at the planner boundary and forwards it as typed pipeline arguments.'
+testWebResearchPlannerUsesStructuredStorageTargetArguments.description =
+  'Uses the structured planner storage target unchanged and forwards it through the research pipeline.'
 testWebResearchPlannerProcessTasksKeepsSaveTool.description =
   'Exercises webResearchPlanner through processTasks and verifies its first search stage remains explicit and tool-free.'
 testWebResearchPlannerIgnoresLegacyBrowserRouting.description =

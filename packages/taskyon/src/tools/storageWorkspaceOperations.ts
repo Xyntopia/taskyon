@@ -18,7 +18,11 @@ const normalizePath = (value: string, allowRoot = false) => {
     .replace(/^\.\//, '')
     .replace(/\/{2,}/g, '/')
   const parts = path.split('/').filter(Boolean)
-  if (path.startsWith('/') || parts.some((part) => part === '.' || part === '..')) {
+  if (
+    path.startsWith('/') ||
+    /^[a-z]:\//i.test(path) ||
+    parts.some((part) => part === '.' || part === '..')
+  ) {
     throw new Error(`Workspace path escapes its root: ${value}`)
   }
   if (!parts.length) {

@@ -6,11 +6,7 @@ import {
 } from '@taskyon/common/modules/webFetching/index'
 import { createChatCompletionTask } from '../api'
 import { createTool, toolCall, type toolContext } from '../types/toolApi'
-import type { partialTaskDraft, TaskNode } from '../types/taskNode'
-import {
-  resolveStorageTargetFromTaskChain,
-  storageTargetFromArguments,
-} from './researchStorageTarget'
+import type { partialTaskDraft } from '../types/taskNode'
 import {
   parsePoliteHttpPolicy,
   politeFetch,
@@ -160,15 +156,6 @@ const ensureNonEmptyString = (value: string | undefined, fieldName: string) => {
 
 const trimNonEmptyStrings = (values: readonly string[] | undefined) =>
   (values ?? []).map((value) => value.trim()).filter((value) => value.length > 0)
-
-const resolveRequestedStorageTarget = (
-  args: WebResearchPlannerArgs,
-  taskChain: readonly TaskNode[],
-) => {
-  const explicitTarget = storageTargetFromArguments(args)
-  if (explicitTarget) return explicitTarget
-  return resolveStorageTargetFromTaskChain(taskChain)
-}
 
 const slugifyResearchObjective = (value: string) => {
   const slug = value
@@ -1276,7 +1263,7 @@ Use it when research itself is the current objective and needs durable evidence 
         type: 'boolean',
         default: false,
         description:
-          'Download and inspect the selected artifact through storage. Set this only when the user explicitly requested a file or durable saved artifact.',
+          'Download and inspect the selected artifact through storage. Set this when the user explicitly requested a file or durable saved artifact. Providing storageNamespace or storageObjectId also requests a download.',
       },
       fileTypeHints: {
         type: 'array',
@@ -1302,23 +1289,9 @@ Use it when research itself is the current objective and needs durable evidence 
     },
     required: ['objective'],
   } as const satisfies JSONSchema7,
-  function: async (args, context) => {
-    const scopedArgs = args
-    const requestedStorageTarget = resolveRequestedStorageTarget(
-      scopedArgs,
-      await context.getExecutionTaskChain(),
-    )
-    const effectiveArgs = requestedStorageTarget
-      ? {
-          ...scopedArgs,
-          storageNamespace: requestedStorageTarget.namespace,
-          storageObjectId: requestedStorageTarget.objectId,
-          mustDownload: true,
-          ...(requestedStorageTarget.expectedFileType
-            ? { storageExpectedFileType: requestedStorageTarget.expectedFileType }
-            : {}),
-        }
-      : scopedArgs
+  function: (args, context) => {
+    const hasStorageTarget = Boolean(args.storageNamespace?.trim() || args.storageObjectId?.trim())
+    const effectiveArgs = hasStorageTarget ? { ...args, mustDownload: true } : args
     return context.createSubtasksResult([buildWebResearchStartChain(effectiveArgs)])
   },
 })

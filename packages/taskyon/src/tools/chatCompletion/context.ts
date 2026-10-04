@@ -213,7 +213,18 @@ const selectPlannerSubtaskContext = (
       plannerCallIds.has(task.parentID) &&
       !subtaskHandoffTaskIds.has(task.id),
   )
-  return delegatedObjectiveIndex < 0 ? taskChain : taskChain.slice(delegatedObjectiveIndex)
+  if (delegatedObjectiveIndex < 0) return taskChain
+
+  const delegatedObjective = taskChain[delegatedObjectiveIndex]
+  const previousTaskIndex = taskChain.findIndex((task) => task.id === delegatedObjective?.priorID)
+  const previousHandoff =
+    previousTaskIndex < 0
+      ? []
+      : taskChain
+          .slice(previousTaskIndex + 1, delegatedObjectiveIndex)
+          .filter((task) => subtaskHandoffTaskIds.has(task.id))
+
+  return [...previousHandoff, ...taskChain.slice(delegatedObjectiveIndex)]
 }
 
 export async function convertTaskNodesToOpenAIChat(

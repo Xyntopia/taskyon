@@ -7,7 +7,11 @@ import {
 } from '../tools/chatCompletionTool'
 import { createChatCompletionRecordingFetch } from '../tools/chatCompletionTrace'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
-import { findContinuationLeafTaskIds, selectTaskChainIds } from '../core/taskChainSelection'
+import {
+  findContinuationLeafTaskIds,
+  selectTaskChainIdSelection,
+  selectTaskChainIds,
+} from '../core/taskChainSelection'
 import { createTaskVariablePresentationService } from '../core/taskVariables'
 import {
   buildChatProviderRequest,
@@ -405,6 +409,100 @@ export const testChatCompletionScopesPlannerSubtasksToTheirDelegatedObjective = 
 
 testChatCompletionScopesPlannerSubtasksToTheirDelegatedObjective.description =
   'Starts a delegated planner task from its own objective instead of replaying the parent planning request.'
+
+export const testChatCompletionPassesPreviousSequentialPlannerHandoff = async () => {
+  const tasks = [
+    task({
+      id: 'sequential-parent-request',
+      role: 'user',
+      content: { type: 'message', data: 'Parent request: plan two sequential phases.' },
+    }),
+    task({
+      id: 'sequential-planner-call',
+      role: 'function',
+      priorID: 'sequential-parent-request',
+      content: { type: 'functioncall', data: { name: 'taskPlanner', arguments: { tasks: [] } } },
+    }),
+    task({
+      id: 'sequential-first-objective',
+      role: 'user',
+      parentID: 'sequential-planner-call',
+      content: { type: 'message', data: 'First phase: inspect the README.' },
+    }),
+    task({
+      id: 'sequential-first-entry',
+      role: 'function',
+      parentID: 'sequential-planner-call',
+      priorID: 'sequential-first-objective',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    }),
+    task({
+      id: 'sequential-first-chat',
+      role: 'function',
+      parentID: 'sequential-first-entry',
+      content: { type: 'functioncall', data: { name: 'chatCompletion', arguments: {} } },
+    }),
+    task({
+      id: 'sequential-first-result',
+      role: 'assistant',
+      parentID: 'sequential-first-chat',
+      priorID: 'sequential-first-chat',
+      content: { type: 'message', data: 'Node-first Taskyon CLI is the README evidence.' },
+    }),
+    task({
+      id: 'sequential-second-objective',
+      role: 'user',
+      parentID: 'sequential-planner-call',
+      priorID: 'sequential-first-entry',
+      content: {
+        type: 'message',
+        data: 'Second phase: explain the CLI workflow from the handoff.',
+      },
+    }),
+    task({
+      id: 'sequential-second-entry',
+      role: 'function',
+      parentID: 'sequential-planner-call',
+      priorID: 'sequential-second-objective',
+      content: { type: 'functioncall', data: { name: 'entryNode', arguments: {} } },
+    }),
+  ]
+  const selection = await selectTaskChainIdSelection(
+    'sequential-second-entry',
+    1e9,
+    { method: 'lineage' },
+    createTaskAccess(tasks),
+  )
+  const tasksById = new Map(tasks.map((candidate) => [candidate.id, candidate]))
+  const context = await prepareChatCompletionContext({
+    taskChain: selection.taskIds.flatMap((id) => {
+      const selectedTask = tasksById.get(id)
+      return selectedTask ? [selectedTask] : []
+    }),
+    allowedTools: [],
+    toolDefinitions: { taskPlanner },
+    appendSystemPrompts: [],
+    prependSystemPrompts: [],
+    useVisionModels: false,
+    getTaskById: () => Promise.resolve(null),
+    subtaskHandoffTaskIds: new Set(selection.includedSubtaskTaskIds),
+  })
+  const messages = JSON.stringify(context.messages)
+
+  assert(
+    messages.includes('Node-first Taskyon CLI is the README evidence.'),
+    'Expected a sequential planner task to receive the previous task handoff',
+  )
+  assert(
+    messages.includes('Second phase: explain the CLI workflow from the handoff.') &&
+      !messages.includes('Parent request: plan two sequential phases.'),
+    'Expected the current delegated objective without replaying the parent request',
+  )
+  return { success: true }
+}
+
+testChatCompletionPassesPreviousSequentialPlannerHandoff.description =
+  'Includes the completed prior phase handoff in a sequential planner task context.'
 
 export const testChatCompletionPreservesEvidenceWithinResearchStages = async () => {
   const context = await prepareChatCompletionContext({
@@ -1811,9 +1909,8 @@ export const testChatCompletionOpenRouterWebSearchIsAProviderTool = async () => 
 }
 
 export const testChatCompletionOpenRouterDisablesParallelToolCalls = async () => {
-  const originalFetch = globalThis.fetch
   let requestBody: Record<string, unknown> | undefined
-  globalThis.fetch = (_input, init) => {
+  const testFetch: typeof fetch = (_input, init) => {
     if (typeof init?.body !== 'string') throw new Error('Expected a JSON request body.')
     requestBody = JSON.parse(init.body) as Record<string, unknown>
     return Promise.resolve(
@@ -1824,30 +1921,27 @@ export const testChatCompletionOpenRouterDisablesParallelToolCalls = async () =>
     )
   }
 
-  try {
-    const request = await buildChatProviderRequest({
-      messages: [{ role: 'user', content: 'Use the available tool once.' }],
-      tools: {
-        clock: {
-          description: 'Read the clock.',
-          inputSchema: jsonSchema({ type: 'object', properties: {} }),
-        },
+  const request = await buildChatProviderRequest({
+    messages: [{ role: 'user', content: 'Use the available tool once.' }],
+    tools: {
+      clock: {
+        description: 'Read the clock.',
+        inputSchema: jsonSchema({ type: 'object', properties: {} }),
       },
-      selectedModel: 'openai/gpt-5-nano',
-      api: {
-        provider: 'taskyon',
-        name: 'taskyon',
-        model: 'openai/gpt-5-nano',
-        baseURL: 'https://provider.example',
-        streamSupport: true,
-        routes: { chatCompletion: '/v1/', models: '/v1/models' },
-      },
-      apiKey: 'diagnostic-key',
-    })
-    await streamText(request).text
-  } finally {
-    globalThis.fetch = originalFetch
-  }
+    },
+    selectedModel: 'openai/gpt-5-nano',
+    api: {
+      provider: 'taskyon',
+      name: 'taskyon',
+      model: 'openai/gpt-5-nano',
+      baseURL: 'https://provider.example',
+      streamSupport: true,
+      routes: { chatCompletion: '/v1/', models: '/v1/models' },
+    },
+    apiKey: 'diagnostic-key',
+    fetch: testFetch,
+  })
+  await streamText(request).text
 
   assert(
     requestBody?.parallel_tool_calls === false,
@@ -2139,9 +2233,8 @@ export const testChatCompletionCacheKeyFitsOpenAiProviderLimit = async () => {
 }
 
 export const testTaskyonCostLookupOnlyForwardsAttributionHeaders = async () => {
-  const originalFetch = globalThis.fetch
   let requestHeaders: Headers | undefined
-  globalThis.fetch = (_input, init) => {
+  const testFetch: typeof fetch = (_input, init) => {
     requestHeaders = new Headers(init?.headers)
     return Promise.resolve(
       new Response(JSON.stringify([{ used_credits: 0.25 }]), {
@@ -2151,23 +2244,20 @@ export const testTaskyonCostLookupOnlyForwardsAttributionHeaders = async () => {
     )
   }
 
-  try {
-    const cost = await getTaskyonCosts(
-      {
-        'HTTP-Referer': 'https://taskyon.space',
-        'X-Title': 'Taskyon',
-        'X-Unrelated': 'must-not-leak',
-      },
-      'anonymous-key',
-      'user-token',
-      undefined,
-      '',
-      'task-id',
-    )
-    assert(cost === 0.25, 'Expected the mocked Taskyon cost result')
-  } finally {
-    globalThis.fetch = originalFetch
-  }
+  const cost = await getTaskyonCosts(
+    {
+      'HTTP-Referer': 'https://taskyon.space',
+      'X-Title': 'Taskyon',
+      'X-Unrelated': 'must-not-leak',
+    },
+    'anonymous-key',
+    'user-token',
+    undefined,
+    '',
+    'task-id',
+    testFetch,
+  )
+  assert(cost === 0.25, 'Expected the mocked Taskyon cost result')
 
   assert(requestHeaders?.get('HTTP-Referer') === 'https://taskyon.space', 'Expected referer')
   assert(requestHeaders?.get('X-Title') === 'Taskyon', 'Expected application title')
@@ -2180,9 +2270,8 @@ testTaskyonCostLookupOnlyForwardsAttributionHeaders.description =
   'Forwards only allowlisted provider attribution headers to the Taskyon cost endpoint.'
 
 export const testProviderRequestsApplyProfileHeaders = async () => {
-  const originalFetch = globalThis.fetch
   const requests: Headers[] = []
-  globalThis.fetch = (_input, init) => {
+  const testFetch: typeof fetch = (_input, init) => {
     requests.push(new Headers(init?.headers))
     return Promise.resolve(
       new Response(
@@ -2192,52 +2281,50 @@ export const testProviderRequestsApplyProfileHeaders = async () => {
     )
   }
 
-  try {
-    for (const provider of ['openrouter.ai', 'taskyon', 'local'] as const) {
-      const request = await buildChatProviderRequest({
-        messages: [{ role: 'user', content: 'Hello.' }],
-        tools: {},
-        selectedModel: 'test-model',
-        api: {
-          provider,
-          name: provider,
-          model: 'test-model',
-          baseURL: 'https://provider.example',
-          streamSupport: true,
-          networkTransport: 'auto',
-          defaultHeaders: { 'X-Profile-Header': provider },
-          routes: {
-            chatCompletion: '/v1/',
-            models: '/v1/models',
-          },
-        },
-        apiKey: 'diagnostic-key',
-      })
-      await streamText(request).text
-    }
-
-    const requestWithoutHeaders = await buildChatProviderRequest({
+  for (const provider of ['openrouter.ai', 'taskyon', 'local'] as const) {
+    const request = await buildChatProviderRequest({
       messages: [{ role: 'user', content: 'Hello.' }],
       tools: {},
       selectedModel: 'test-model',
       api: {
-        provider: 'local',
-        name: 'local',
+        provider,
+        name: provider,
         model: 'test-model',
         baseURL: 'https://provider.example',
         streamSupport: true,
         networkTransport: 'auto',
+        defaultHeaders: { 'X-Profile-Header': provider },
         routes: {
           chatCompletion: '/v1/',
           models: '/v1/models',
         },
       },
       apiKey: 'diagnostic-key',
+      fetch: testFetch,
     })
-    await streamText(requestWithoutHeaders).text
-  } finally {
-    globalThis.fetch = originalFetch
+    await streamText(request).text
   }
+
+  const requestWithoutHeaders = await buildChatProviderRequest({
+    messages: [{ role: 'user', content: 'Hello.' }],
+    tools: {},
+    selectedModel: 'test-model',
+    api: {
+      provider: 'local',
+      name: 'local',
+      model: 'test-model',
+      baseURL: 'https://provider.example',
+      streamSupport: true,
+      networkTransport: 'auto',
+      routes: {
+        chatCompletion: '/v1/',
+        models: '/v1/models',
+      },
+    },
+    apiKey: 'diagnostic-key',
+    fetch: testFetch,
+  })
+  await streamText(requestWithoutHeaders).text
 
   assert(
     requests[0]?.get('X-Profile-Header') === 'openrouter.ai',
