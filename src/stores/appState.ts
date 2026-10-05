@@ -356,7 +356,11 @@ export function buildTaskyonProfileSectionResetPatch(
   return createTaskyonProfileSettingsSnapshot(defaults, sections)
 }
 
-function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<initialState>) {
+function loadConfigurationFile(
+  initialState: initialState,
+  stateRefs: Reactive<initialState>,
+  restoredFromStoredProfile: boolean,
+) {
   return axios
     .get<
       | {
@@ -379,18 +383,32 @@ function loadConfigurationFile(initialState: initialState, stateRefs: Reactive<i
           // we only want to load the initial configuration the first time we are loading the page...
           console.log('merge dynamic app config', jsonconfig.data)
 
-          // if this is *not* an initial load, we only add "new" values that can be found in the configuration.
-          const mergeStrategy: MergeOptions = stateRefs.initialLoad
+          // A restored profile must keep user choices such as provider/model selection while still
+          // accepting newly shipped fields. Overwrite arrays so runtime-only initialLoad can remain
+          // true on every boot without reintroducing the old repeated-array-concatenation bug.
+          const mergeStrategy: MergeOptions = restoredFromStoredProfile
             ? {
                 arrays: 'overwrite',
-                objects: 'overwrite',
+                objects: 'merge',
+                typeMismatch: 'target',
                 primitives: 'preserve',
               }
-            : { arrays: 'concat', objects: 'merge', typeMismatch: 'target', primitives: 'preserve' }
+            : stateRefs.initialLoad
+              ? {
+                  arrays: 'overwrite',
+                  objects: 'overwrite',
+                  primitives: 'preserve',
+                }
+              : {
+                  arrays: 'concat',
+                  objects: 'merge',
+                  typeMismatch: 'target',
+                  primitives: 'preserve',
+                }
           deepMergeReactive(stateRefs.appConfiguration, config.appConfiguration, mergeStrategy)
           deepMergeReactive(stateRefs.llmSettings, config.llmSettings, mergeStrategy)
           deepMergeReactive(stateRefs.toolchainProfiles, config.toolchainProfiles, mergeStrategy)
-          if ('selectedToolchainProfile' in config) {
+          if ('selectedToolchainProfile' in config && !restoredFromStoredProfile) {
             resolveToolchainConfig(stateRefs.toolchainProfiles, config.selectedToolchainProfile)
             stateRefs.selectedToolchainProfile = config.selectedToolchainProfile
           }
@@ -509,14 +527,15 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     version: initialStoredStateObjTyped?.version,
   })
 
+  const restoredStoredProfile =
+    initialStoredStateObjTyped?.version === initialState.version
+      ? initialStoredStateObjTyped
+      : undefined
+  const restoredFromStoredProfile = restoredStoredProfile !== undefined
   let stateRefs: Reactive<initialState>
-  if (
-    initialStoredStateObjTyped &&
-    initialStoredStateObjTyped.version &&
-    initialStoredStateObjTyped.version === initialState.version
-  ) {
+  if (restoredStoredProfile) {
     console.log(`[PERSIST] load saved ui state from profile "${initialProfileName}"`)
-    const storedInitialState = reconcileStoredTaskyonState(initialStoredStateObjTyped, initialState)
+    const storedInitialState = reconcileStoredTaskyonState(restoredStoredProfile, initialState)
     stateRefs = reactive(storedInitialState)
   } else {
     // TODO: pop up a dialog or a separate migration page where we
@@ -636,7 +655,7 @@ const saveAndLoadState = (initialState: initialState, pname: Thunk<string | null
     finishSettingsChange(persist)
   }
 
-  return { overRideSettings, replaceProfileSettings, stateRefs }
+  return { overRideSettings, replaceProfileSettings, restoredFromStoredProfile, stateRefs }
 }
 
 // this is where we save all of our app settings.
@@ -695,10 +714,8 @@ export const useAppStateStore = defineStore('ui-state', () => {
   if (!hasExplicitUrlProfile && !getCurrentActiveProfileName()) {
     switchCurrentActiveProfilePointer(activeProfileNameRef.value)
   }
-  const { overRideSettings, replaceProfileSettings, stateRefs } = saveAndLoadState(
-    initialState,
-    () => activeProfileNameRef.value,
-  )
+  const { overRideSettings, replaceProfileSettings, restoredFromStoredProfile, stateRefs } =
+    saveAndLoadState(initialState, () => activeProfileNameRef.value)
   const applyStoredProfile = (profileName: string) => {
     const storedProfile = getTaskyonUiProfile(profileName) as Partial<initialState> | undefined
     if (!storedProfile) return
@@ -728,7 +745,11 @@ export const useAppStateStore = defineStore('ui-state', () => {
   // that way we can configure our webapp even if its already compiled...
   // this is done asynchrounously, because we want to be able to dynamically
   // change our config without having to recompile taskyon.
-  const configurationReady = loadConfigurationFile(initialState, stateRefs)
+  const configurationReady = loadConfigurationFile(
+    initialState,
+    stateRefs,
+    restoredFromStoredProfile,
+  )
 
   // TODO: check if we can do this maybe a bit more elegant using pinia functions?  like using "clear" or something like that?
   function $reset() {

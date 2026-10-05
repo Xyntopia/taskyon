@@ -60,8 +60,21 @@
               v-model:custom-proxy-template="state.appConfiguration.customProxyTemplate"
             />
             <div class="row items-center q-gutter-sm">
-              <q-btn outline label="Check CORS proxy" @click="checkCorsProxy" />
-              <span v-if="corsProxyStatus" class="text-caption">{{ corsProxyStatus }}</span>
+              <q-btn
+                data-cy="check-cors-proxy"
+                outline
+                label="Check CORS proxy"
+                @click="checkCorsProxy"
+              />
+              <q-btn
+                data-cy="reset-fetch-transport"
+                flat
+                label="Reset transport choice"
+                @click="tystate.resetFetchTransportSelection()"
+              />
+              <span v-if="corsProxyStatus" data-cy="cors-proxy-status" class="text-caption">
+                {{ corsProxyStatus }}
+              </span>
             </div>
           </div>
         </q-tab-panel>
@@ -269,7 +282,7 @@ const tabPanelClass = 'column items-center'
 const checkCorsProxy = async () => {
   corsProxyStatus.value = 'Checking…'
   const available = await tystate.checkCorsProxyAvailability()
-  corsProxyStatus.value = available ? 'Available' : 'Unavailable'
+  corsProxyStatus.value = available ? 'CORS proxy is available' : 'CORS proxy is unavailable'
 }
 
 const toolchainProfileNames = computed(() => Object.keys(state.toolchainProfiles.profiles).sort())

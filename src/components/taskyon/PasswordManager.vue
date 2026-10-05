@@ -93,7 +93,6 @@ import { mdiTools } from '@quasar/extras/mdi-v6'
 import { Dialog } from 'quasar'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { generateSecretId, type ToolBase } from '@taskyon/taskyon'
-import { createTaskyonClient } from '@taskyon/tyclient'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useTaskyonStore } from 'src/stores/taskyonState'
 import { onMounted, ref, watch } from 'vue'
@@ -108,7 +107,7 @@ const { onlyThisKey = undefined, title = undefined } = defineProps<{
 }>()
 
 const tystate = useTaskyonStore()
-const taskyonClient = createTaskyonClient(tystate.api)
+const taskyonClient = tystate.taskyonClient
 const secretList = ref<Record<string, Record<string, string>>>({})
 const loadingSecrets = ref<boolean>(false)
 

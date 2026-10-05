@@ -25,6 +25,9 @@ test.describe('sharing functionality', () => {
     await expect(lastAssistantMessage(page)).toBeVisible({ timeout: 100_000 })
 
     await page.getByLabel('share content').click()
-    await expect(page.getByText(/share/i)).toBeVisible()
+    await expect(page.getByText('Choose sharing method', { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Share through Gdrive', exact: true }),
+    ).toBeVisible()
   })
 })
