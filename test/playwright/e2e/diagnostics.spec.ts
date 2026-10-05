@@ -37,6 +37,40 @@ test('runs quick browser diagnostics without a provider', async ({ page }) => {
   await expect(report).toContainText('failed tests: 0/')
 })
 
+test('runs storage targeting and spatial regression diagnostics in the browser', async ({ page }) => {
+  await page.goto('/diagnostics')
+  await dataCy(page, 'diagnostics-run-level').click()
+  await page.getByRole('option', { name: 'L3 · Release checks', exact: true }).click()
+  const cases = [
+    [
+      'testWebResearchPlannerUsesStructuredStorageTargetArguments',
+      'Test Web Research Planner Uses Structured Storage Target Arguments',
+    ],
+    ['testSpatialCandidatesLargePolygon', 'Test Spatial Candidates Large Polygon'],
+    [
+      'testSpatialStudyStopsDuringRejectedGridScan',
+      'Test Spatial Study Stops During Rejected Grid Scan',
+    ],
+    [
+      'testSpatialCandidatesStopDuringFeatureRejections',
+      'Test Spatial Candidates Stop During Feature Rejections',
+    ],
+  ]
+  for (const [index, [filter, label]] of cases.entries()) {
+    await page.getByLabel('Filter tests').fill(filter!)
+    const button = page.getByRole('button', { name: label!, exact: true }).first()
+    if (index === 0) {
+      await page.getByText('tests', { exact: true }).first().click()
+      await page.getByText('Tests', { exact: true }).first().click()
+    }
+    await expect(button).toBeVisible()
+    await button.click()
+    await expect(dataCy(page, 'test-finished')).toContainText('Test Finished')
+    await expect(dataCy(page, 'diagnostics-result')).toContainText('status: OK')
+    await expect(dataCy(page, 'diagnostics-result')).toContainText('failed tests: 0/1')
+  }
+})
+
 test.describe('diagnostics page', () => {
   test.skip(!onlineEnv, 'requires playwright.env.json with Taskyon, OpenAI, and OpenRouter keys')
   test.setTimeout(diagnosticsTimeoutMs + 30_000)
@@ -75,9 +109,11 @@ test.describe('diagnostics page', () => {
       .map((line) => line.trim())
     expect(diagnosticsLines.at(-1)).toBe('finished all tests!')
 
-    const okCount = diagnosticsText.match(/ok/gi)?.length ?? 0
-    expect(okCount).toBeGreaterThan(10)
-    expect(diagnosticsText).toMatch(/failed tests: 0\/\d+/i)
+    const summaryMatch = diagnosticsText.match(/failed tests:\s*0\/(\d+)/i)
+    expect(summaryMatch).not.toBeNull()
+    const totalTests = Number(summaryMatch?.[1] ?? 0)
+    expect(totalTests).toBeGreaterThan(0)
+    expect(diagnosticsText.match(/:\s+OK\b/g)?.length ?? 0).toBe(totalTests)
     expect(diagnosticsText).not.toContain('status: ERROR')
   })
 
@@ -110,12 +146,18 @@ test.describe('diagnostics page', () => {
     await expectTaskyonReady(page)
     await addAiServices(page, onlineEnv)
 
-    await page.goto('/browser-access')
+    await page.goto('/settings/sandbox-network')
     const fetchTransport = dataCy(page, 'sandbox-fetch-transport')
     await fetchTransport.click()
-    await page.getByRole('option', { name: 'Local or configured CORS proxy', exact: true }).click()
-    await dataCy(page, 'check-cors-proxy').click()
-    await expect(dataCy(page, 'cors-proxy-status')).toContainText('CORS proxy is available')
+    if (process.env.PLAYWRIGHT_LOCAL_PRODUCTION === '1') {
+      await page
+        .getByRole('option', { name: 'Secure WSS tunnel (recommended)', exact: true })
+        .click()
+    } else {
+      await page.getByRole('option', { name: 'CORS proxy', exact: true }).click()
+      await dataCy(page, 'check-cors-proxy').click()
+      await expect(dataCy(page, 'cors-proxy-status')).toContainText('CORS proxy is available')
+    }
     await page.addLocatorHandler(
       page.locator('.taskyon-capability-dialog--network-access'),
       async (dialog) => {
@@ -135,6 +177,8 @@ test.describe('diagnostics page', () => {
     await page.getByRole('link', { name: 'Open Diagnostics', exact: true }).click()
     await expect(page).toHaveURL(/\/diagnostics$/)
 
+    await dataCy(page, 'diagnostics-run-level').click()
+    await page.getByRole('option', { name: 'L3 · Release checks', exact: true }).click()
     await page.getByLabel('Filter tests').fill('testDocumentRetrievalStoresOfficialFederalRulesPdf')
     await page.getByText('modelBasedTests', { exact: true }).click()
     await page.getByText('Tests', { exact: true }).first().click()
@@ -149,8 +193,10 @@ test.describe('diagnostics page', () => {
       timeout: diagnosticsTimeoutMs,
     })
     const diagnosticsText = (await dataCy(page, 'diagnostics-result').textContent()) ?? ''
-    expect(diagnosticsText, browserFailures.join('\n')).toContain('status: MODEL PASS')
+    expect(diagnosticsText, browserFailures.join('\n')).not.toContain('status: ERROR')
     expect(diagnosticsText).toMatch(/failed tests: 0\/1/i)
+
+    expect(diagnosticsText, browserFailures.join('\n')).toContain('status: MODEL PASS')
     expect(diagnosticsText).toMatch(/model capability score: 1\/1/i)
     expect(diagnosticsText).toContain('websearch auto is supplied by the chain builder')
     expect(diagnosticsText).toMatch(/sha256:\s+sha256:[A-Za-z0-9_-]{43}/i)
@@ -246,6 +292,8 @@ test.describe('diagnostics page', () => {
     await selectLlmModel(page, 'openai', 'gpt-5.1')
     await page.goto('/diagnostics')
 
+    await dataCy(page, 'diagnostics-run-level').click()
+    await page.getByRole('option', { name: 'L3 · Release checks', exact: true }).click()
     await page.getByLabel('Filter tests').fill('testTaskyonUiListsAndUsesAvailableTools')
     await page.getByText('guiTests', { exact: true }).click()
     await page.getByText('Tests', { exact: true }).click()

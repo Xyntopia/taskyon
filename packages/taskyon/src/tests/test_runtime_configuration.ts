@@ -1,6 +1,7 @@
 import { createStream } from '@taskyon/common/modules/frpBus'
 import { createPortClient, createTaskyonClient, taskyonHostProtocol, taskyonProtocol } from '../api'
 import { tyCore, type TyCoreToolSetup } from '../core/init'
+import { createPgLiteTaskManagerStorage } from '../core/taskManager'
 import type {
   ChatCompletionMetadataEvent,
   ChatCompletionStreamEvent,
@@ -8,7 +9,7 @@ import type {
 import { createTool, toolCall } from '../types/toolApi'
 import type { TyToolchainConfig } from '../types/profiles'
 import { createCryptoSession } from '../utils/cryptoSession'
-import { getInMemoryDatabase } from '../utils/pglite.api'
+import { createInMemoryDatabasePool } from '../testSupport/inMemoryDatabasePool'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -43,6 +44,7 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     }).success,
     'Expected runtime configuration to remain outside the public peer protocol',
   )
+  const databases = createInMemoryDatabasePool()
   const streamEmitters = new Map<string, (event: ChatCompletionStreamEvent) => void>()
   const createConfiguredSessionTools = (toolchainConfig: TyToolchainConfig) => {
     const value = configuredValue(toolchainConfig)
@@ -77,7 +79,7 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     undefined,
     {
       indexTaskVectors: false,
-      databaseFactory: getInMemoryDatabase,
+      databaseFactory: databases.databaseFactory,
       toolSetup,
     },
   )
@@ -223,7 +225,15 @@ export const testRuntimeConfigurationRecreatesConfiguredTools = async () => {
     )
   } finally {
     unsubscribeChatCompletion()
-    await ty.dispose('runtime configuration diagnostic complete')
+    try {
+      try {
+        await ty.dispose('runtime configuration diagnostic complete')
+      } finally {
+        await ty.closeMetadataPersistence()
+      }
+    } finally {
+      await databases.closeDatabases()
+    }
   }
 
   return { success: true }
@@ -233,6 +243,7 @@ testRuntimeConfigurationRecreatesConfiguredTools.description =
   'Applies runtime configuration across sessions while keeping external tool registrations session-scoped.'
 
 export const testRuntimePersistsChatCompletionMetadataEvents = async () => {
+  const databases = createInMemoryDatabasePool()
   const emitters = new Map<string, (event: ChatCompletionMetadataEvent) => void>()
   const createSessionTools = (config: TyToolchainConfig) => {
     const stream = createStream<ChatCompletionMetadataEvent>()
@@ -249,7 +260,7 @@ export const testRuntimePersistsChatCompletionMetadataEvents = async () => {
     undefined,
     {
       indexTaskVectors: false,
-      databaseFactory: getInMemoryDatabase,
+      databaseFactory: databases.databaseFactory,
       toolSetup: {
         baseTools: [],
         chatCompletionToolName: 'configuredTool',
@@ -296,8 +307,21 @@ export const testRuntimePersistsChatCompletionMetadataEvents = async () => {
       afterDisposal.data?.taskCosts === 2,
       'A late metadata event must persist after session disposal',
     )
+    const firstClose = ty.closeMetadataPersistence()
+    assert(
+      firstClose === ty.closeMetadataPersistence(),
+      'Final metadata closure must be idempotent',
+    )
+    await firstClose
+    emit('initial', { taskId: 'closed-completion', metadata: { taskCosts: 3 } })
+    assert((await ty.getMeta('closed-completion')) == null, 'Final closure must detach producers')
   } finally {
-    await ty.dispose('metadata stream diagnostic complete')
+    try {
+      await ty.dispose('metadata stream diagnostic complete')
+      await ty.closeMetadataPersistence()
+    } finally {
+      await databases.closeDatabases()
+    }
   }
 
   return { success: true }
@@ -307,6 +331,7 @@ testRuntimePersistsChatCompletionMetadataEvents.description =
   'The runtime persists chat-completion metadata events, including late events after reconfiguration or disposal.'
 
 export const testHostProviderCredentialsRemainPrivateAndPersistInTheSecretStore = async () => {
+  const databases = createInMemoryDatabasePool()
   assert(
     !taskyonProtocol.message.safeParse({
       type: 'providerCredentials.setRequest',
@@ -324,7 +349,7 @@ export const testHostProviderCredentialsRemainPrivateAndPersistInTheSecretStore 
     undefined,
     {
       indexTaskVectors: false,
-      databaseFactory: getInMemoryDatabase,
+      databaseFactory: databases.databaseFactory,
       toolSetup: {
         baseTools: [],
         chatCompletionToolName: 'chatCompletion',
@@ -371,9 +396,98 @@ export const testHostProviderCredentialsRemainPrivateAndPersistInTheSecretStore 
       'Expected the provider credential to be removed from Taskyon secret storage',
     )
   } finally {
-    await ty.dispose('host provider credential diagnostic complete')
+    try {
+      try {
+        await ty.dispose('host provider credential diagnostic complete')
+      } finally {
+        await ty.closeMetadataPersistence()
+      }
+    } finally {
+      await databases.closeDatabases()
+    }
   }
 }
 
 testHostProviderCredentialsRemainPrivateAndPersistInTheSecretStore.description =
   'Stores provider credentials through the private host protocol without widening the public peer API.'
+
+export const testRuntimeMetadataClosureDrainsWritesAndReportsFailures = async () => {
+  for (const failWrite of [false, true]) {
+    const databases = createInMemoryDatabasePool()
+    const stream = createStream<ChatCompletionMetadataEvent>()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let writeFinished = false
+    const ty = await tyCore(
+      () => ({ entryFunction: 'entryNode' }),
+      () => toolCall({ name: 'entryNode', arguments: {} }),
+      {},
+      undefined,
+      {
+        indexTaskVectors: false,
+        databaseFactory: databases.databaseFactory,
+        taskManagerStorageFactory: async ({ db }) => {
+          const storage = await createPgLiteTaskManagerStorage(db)
+          return {
+            ...storage,
+            meta: {
+              ...storage.meta,
+              set: async (id, value) => {
+                await gate
+                if (failWrite) throw new Error('Synthetic metadata write failure')
+                await storage.meta.set(id, value)
+                writeFinished = true
+              },
+            },
+          }
+        },
+        toolSetup: {
+          baseTools: [],
+          chatCompletionToolName: 'chatCompletion',
+          createSessionTools: () => ({ tools: [], chatCompletionMetadataStream: stream.stream }),
+        },
+      },
+    )
+    try {
+      const notification = ty.metaLiveRead('synthetic').wait({ timeoutMs: 1000 })
+      stream.emit({ taskId: 'synthetic', metadata: { taskCosts: 1 } })
+      await notification
+      let closed = false
+      const closing = ty.closeMetadataPersistence()
+      const outcome = closing.then(
+        () => {
+          closed = true
+          return undefined
+        },
+        (error: unknown) => error,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      assert(!closed, 'Closure must wait for durable writes after the live notification')
+      release()
+      const error = await outcome
+      assert(
+        failWrite ? error instanceof AggregateError : writeFinished,
+        'Closure must finish writes and expose failures',
+      )
+      assert(
+        closing === ty.closeMetadataPersistence(),
+        'Repeated closure must preserve its outcome',
+      )
+    } finally {
+      release()
+      try {
+        await ty.dispose('metadata closure diagnostic complete')
+      } finally {
+        try {
+          await ty.closeMetadataPersistence()
+        } catch {
+          // The synthetic failure was asserted above; resources must still close.
+        }
+        await databases.closeDatabases()
+      }
+    }
+  }
+  return { success: true }
+}

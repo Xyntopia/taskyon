@@ -2,12 +2,12 @@ import { isTauri } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 
 type LogMethod = 'log' | 'info' | 'warn' | 'error' | 'debug'
+type TauriStdoutMessage = { level: LogMethod; message: string }
 
 declare global {
   interface Window {
     __taskyonTauriStdoutBridge?: {
       installed: boolean
-      originals: Record<LogMethod, (...args: unknown[]) => void>
     }
   }
 }
@@ -22,6 +22,15 @@ function formatArg(arg: unknown): string {
   }
 }
 
+export function createTauriStdoutForwarder(
+  level: LogMethod,
+  send: (message: TauriStdoutMessage) => void,
+) {
+  return (...args: unknown[]) => {
+    send({ level, message: args.map(formatArg).join(' ') })
+  }
+}
+
 export function enableTauriStdoutBridge(): boolean {
   if (!isTauri()) return false
 
@@ -33,31 +42,12 @@ export function enableTauriStdoutBridge(): boolean {
   const existing = window.__taskyonTauriStdoutBridge
   if (existing?.installed) return true
 
-  const originals =
-    existing?.originals ??
-    methods.reduce(
-      (acc, method) => {
-        acc[method] = console[method].bind(console)
-        return acc
-      },
-      {} as Record<LogMethod, (...args: unknown[]) => void>,
-    )
-
-  window.__taskyonTauriStdoutBridge = {
-    installed: true,
-    originals,
-  }
+  window.__taskyonTauriStdoutBridge = { installed: true }
 
   for (const level of methods) {
-    const original = originals[level]
-    console[level] = (...args: unknown[]) => {
-      // Forward to Rust/stdout via Tauri events; keep original console behavior.
-      void emit('headless-console', {
-        level,
-        message: args.map(formatArg).join(' '),
-      })
-      original(...args)
-    }
+    console[level] = createTauriStdoutForwarder(level, (message) => {
+      void emit('headless-console', message)
+    })
   }
 
   return true

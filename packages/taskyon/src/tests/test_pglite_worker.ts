@@ -1,9 +1,35 @@
-import { LeaderChangedError } from '@electric-sql/pglite/worker'
-import { getInMemoryDatabase, initializePGliteWorker } from '../utils/pglite.api'
+import { LeaderChangedError, PGliteWorker } from '@electric-sql/pglite/worker'
+import {
+  closeInMemoryDatabase,
+  createInMemoryDatabase,
+  getInMemoryDatabase,
+  initializePGliteWorker,
+} from '../utils/pglite.api'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
+
+export async function pgliteWorkerCreatesDisposableInMemoryDatabase() {
+  if (typeof indexedDB === 'undefined') {
+    return { skipped: true, reason: 'Disposable browser workers require IndexedDB.' }
+  }
+
+  const database = await createInMemoryDatabase(`worker-memory-${Date.now()}`)
+  try {
+    assert(
+      database instanceof PGliteWorker,
+      'Browser in-memory databases must isolate PGlite in a disposable worker',
+    )
+    const result = await database.query<{ value: number }>('SELECT 1 AS value')
+    assert(result.rows[0]?.value === 1, 'Expected the in-memory worker to execute queries')
+  } finally {
+    await database.close()
+  }
+}
+
+pgliteWorkerCreatesDisposableInMemoryDatabase.description =
+  'Browser diagnostics create memory databases in workers that close with their test.'
 
 export async function pglite_workerRetriesInterruptedInitialization() {
   let attempts = 0
@@ -57,12 +83,16 @@ pglite_workerDoesNotRetryUnrelatedFailures.description =
 
 export async function pglite_workerSharesConcurrentDatabaseInitialization() {
   const databaseName = `concurrent-memory-${Date.now()}`
-  const [first, second] = await Promise.all([
-    getInMemoryDatabase(databaseName),
-    getInMemoryDatabase(databaseName),
-  ])
+  try {
+    const [first, second] = await Promise.all([
+      getInMemoryDatabase(databaseName),
+      getInMemoryDatabase(databaseName),
+    ])
 
-  assert(first === second, 'Concurrent callers must receive the same PGlite instance')
+    assert(first === second, 'Concurrent callers must receive the same PGlite instance')
+  } finally {
+    await closeInMemoryDatabase(databaseName)
+  }
 }
 
 pglite_workerSharesConcurrentDatabaseInitialization.description =

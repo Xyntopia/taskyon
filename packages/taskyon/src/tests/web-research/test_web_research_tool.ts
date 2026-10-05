@@ -9,6 +9,7 @@ import { DEFAULT_POLITE_HTTP_MIN_DELAY_MS } from '../../utils/politeHttp'
 import { processTasksDetailed } from '../../api'
 import { tyCore } from '../../core/init'
 import { createDefaultTaskyonToolSetup } from '../../tools'
+import { createInMemoryDatabasePool } from '../../testSupport/inMemoryDatabasePool'
 import { createStorageTool } from '../../tools/fileTools'
 import { readPublicWebPageAsMarkdown } from '../../tools/helperCollection'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
@@ -948,6 +949,7 @@ export const testWebResearchPlannerUsesStructuredStorageTargetArguments = async 
 }
 
 export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
+  const databases = createInMemoryDatabasePool()
   const continuationTool = createTool({
     name: 'entryNode',
     description: 'Test continuation tool.',
@@ -979,6 +981,7 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
     },
     undefined,
     {
+      databaseFactory: databases.databaseFactory,
       indexTaskVectors: false,
       toolSetup: {
         ...defaultToolSetup,
@@ -1067,7 +1070,15 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
     assert(delegatedBootstrap.length > 0, 'Expected a visible research objective before searching')
   } finally {
     toolRpcExecutor.destroy()
-    await ty.dispose('web research planner diagnostic complete')
+    try {
+      try {
+        await ty.dispose('web research planner diagnostic complete')
+      } finally {
+        await ty.closeMetadataPersistence()
+      }
+    } finally {
+      await databases.closeDatabases()
+    }
   }
 
   return { success: true }

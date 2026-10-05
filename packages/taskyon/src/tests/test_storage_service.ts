@@ -12,7 +12,7 @@ import {
   createPgLiteTaskManagerStorageService,
   useTyTaskManager,
 } from '../core/taskManager'
-import { getDatabase } from '../utils/pglite.api'
+import { createInMemoryDatabasePool } from '../testSupport/inMemoryDatabasePool'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -21,11 +21,12 @@ function assert(condition: unknown, message: string): asserts condition {
 export const testTaskManagerCanUseProtocolBackedStorage = async () => {
   const sessionId = `storage-service-diagnostic-${Date.now()}`
   const namespacePrefix = 'taskyon-test'
+  const databases = createInMemoryDatabasePool()
   const { x: storageClientPort, y: storageServicePort } = createProtocolPort(taskyonStorageProtocol)
   const unsubscribeStorageService = createPgLiteTaskManagerStorageService(
     storageServicePort,
     namespacePrefix,
-    getDatabase,
+    databases.databaseFactory,
   )
   const storage = createStorageClient(storageClientPort, {
     namespacePrefix,
@@ -33,18 +34,21 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
   })
 
   try {
-    const writer = await useTyTaskManager(await getDatabase(`${sessionId}-writer`), {
+    const writer = await useTyTaskManager(await databases.databaseFactory(`${sessionId}-writer`), {
       indexTaskVectors: false,
       storage: connectTaskManagerStorageFromProtocol(storage, sessionId),
     })
-    const reader = await useTyTaskManager(await getDatabase(`${sessionId}-reader`), {
+    const reader = await useTyTaskManager(await databases.databaseFactory(`${sessionId}-reader`), {
       indexTaskVectors: false,
       storage: connectTaskManagerStorageFromProtocol(storage, sessionId),
     })
-    const otherSession = await useTyTaskManager(await getDatabase(`${sessionId}-other`), {
-      indexTaskVectors: false,
-      storage: connectTaskManagerStorageFromProtocol(storage, `${sessionId}-other`),
-    })
+    const otherSession = await useTyTaskManager(
+      await databases.databaseFactory(`${sessionId}-other`),
+      {
+        indexTaskVectors: false,
+        storage: connectTaskManagerStorageFromProtocol(storage, `${sessionId}-other`),
+      },
+    )
     const missingTask = await reader.getTask('missing-task')
 
     assert(missingTask === null, 'Expected missing protocol-backed tasks to resolve as null')
@@ -108,6 +112,7 @@ export const testTaskManagerCanUseProtocolBackedStorage = async () => {
     assert(taskFromOtherSession === null, 'Expected task records to remain isolated by session')
   } finally {
     unsubscribeStorageService()
+    await databases.closeDatabases()
   }
 }
 

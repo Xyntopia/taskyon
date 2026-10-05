@@ -8,7 +8,9 @@ import type { TaskNode } from '../types/taskNode'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { toolDefinitionTask } from '../tools/lambdaTool'
 import { createCryptoSession } from '../utils/cryptoSession'
+import { createInMemoryDatabase } from '../utils/pglite.api'
 import { createPortableTestStorage } from '../testSupport/portableTestStorage'
+import { createInMemoryDatabasePool } from '../testSupport/inMemoryDatabasePool'
 import type { JSONSchema7 } from 'json-schema'
 
 const assert = (condition: unknown, message: string) => {
@@ -25,6 +27,7 @@ const createContinuationTool = () =>
 
 export const testTaskScopedCodeToolExecutesWithoutRegistryInstallation = async () => {
   const storage = createPortableTestStorage()
+  const database = await createInMemoryDatabase('task-scoped-code-tool-diagnostic')
   const registeredEcho = createTool({
     name: 'scopedEcho',
     description: 'Registered fallback echo.',
@@ -37,23 +40,28 @@ export const testTaskScopedCodeToolExecutesWithoutRegistryInstallation = async (
     code: `({ message }) => ({ source: 'registered', message })`,
   })
   const continuationTool = createContinuationTool()
-  const ty = await tyCore(
-    () => ({ entryFunction: 'entryNode' }),
-    () => toolCall({ name: 'entryNode', arguments: {} }),
-    {},
-    undefined,
-    {
-      indexTaskVectors: false,
-      taskManagerStorageFactory: storage.taskManagerStorageFactory,
-      toolSetup: {
-        baseTools: [registeredEcho, continuationTool],
-        chatCompletionToolName: 'chatCompletion',
-        createSessionTools: () => ({ tools: [] }),
-      },
-    },
-  )
-
+  let disposeCore: (() => Promise<void>) | undefined
+  let disposeClient = () => {}
   try {
+    const ty = await tyCore(
+      () => ({ entryFunction: 'entryNode' }),
+      () => toolCall({ name: 'entryNode', arguments: {} }),
+      {},
+      undefined,
+      {
+        databaseFactory: () => Promise.resolve(database),
+        indexTaskVectors: false,
+        taskManagerStorageFactory: storage.taskManagerStorageFactory,
+        toolSetup: {
+          baseTools: [registeredEcho, continuationTool],
+          chatCompletionToolName: 'chatCompletion',
+          createSessionTools: () => ({ tools: [] }),
+        },
+      },
+    )
+    disposeCore = () => ty.dispose('task-scoped code tool diagnostic complete')
+    const client = createTaskyonClient(ty.port)
+    disposeClient = () => client.dispose()
     const result = await processTasksDetailed(ty.port)(
       [
         [
@@ -81,7 +89,7 @@ export const testTaskScopedCodeToolExecutesWithoutRegistryInstallation = async (
       result.status === 'matched' && result.result.content.type === 'toolresult'
         ? result.result.content.data
         : undefined
-    const registeredTools = await createTaskyonClient(ty.port).tools.list({ includeHidden: true })
+    const registeredTools = await client.tools.list({ includeHidden: true })
 
     assert(
       typeof response === 'object' &&
@@ -97,8 +105,13 @@ export const testTaskScopedCodeToolExecutesWithoutRegistryInstallation = async (
       'Expected the scoped definition not to replace the registered tool with the same name',
     )
   } finally {
-    await ty.dispose('task-scoped code tool diagnostic complete')
-    storage.destroy()
+    try {
+      await disposeCore?.()
+    } finally {
+      disposeClient()
+      storage.destroy()
+      await database.close()
+    }
   }
 }
 
@@ -192,31 +205,38 @@ testRemoteFunctionBridgePreservesStructuredErrorCause.description =
 
 export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
   const storage = createPortableTestStorage()
-  const ty = await tyCore(
-    () => ({
-      entryFunction: 'entryNode',
-    }),
-    () =>
-      toolCall({
-        name: 'entryNode',
-        arguments: {},
-      }),
-    {},
-    undefined,
-    {
-      indexTaskVectors: false,
-      taskManagerStorageFactory: storage.taskManagerStorageFactory,
-    },
-  )
-
-  const waitForMessage = (message: string) =>
-    ty.taskStream
-      .filter(({ data }) => data?.content.type === 'message' && data.content.data === message)
-      .wait({ timeoutMs: 1000 })
+  const databases = createInMemoryDatabasePool()
+  let disposeCore: (() => Promise<void>) | undefined
+  let disposeClient = () => {}
 
   try {
+    const ty = await tyCore(
+      () => ({
+        entryFunction: 'entryNode',
+      }),
+      () =>
+        toolCall({
+          name: 'entryNode',
+          arguments: {},
+        }),
+      {},
+      undefined,
+      {
+        databaseFactory: databases.databaseFactory,
+        indexTaskVectors: false,
+        taskManagerStorageFactory: storage.taskManagerStorageFactory,
+      },
+    )
+    disposeCore = () => ty.dispose('stable task stream diagnostic complete')
+    const client = createTaskyonClient(ty.port)
+    disposeClient = () => client.dispose()
+    const waitForMessage = (message: string) =>
+      ty.taskStream
+        .filter(({ data }) => data?.content.type === 'message' && data.content.data === message)
+        .wait({ timeoutMs: 1000 })
+
     const beforeSwitch = waitForMessage('before session switch')
-    await createTaskyonClient(ty.port).task.create({
+    await client.task.create({
       execute: false,
       show: false,
       task: {
@@ -229,7 +249,7 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
     await ty.setNewSession(await createCryptoSession())
 
     const afterSwitch = waitForMessage('after session switch')
-    await createTaskyonClient(ty.port).task.create({
+    await client.task.create({
       execute: false,
       show: false,
       task: {
@@ -239,8 +259,13 @@ export const testTyCoreStableTaskStreamSurvivesSessionSwitch = async () => {
     })
     await afterSwitch
   } finally {
-    await ty.dispose('stable task stream diagnostic complete')
-    storage.destroy()
+    try {
+      await disposeCore?.()
+    } finally {
+      disposeClient()
+      storage.destroy()
+      await databases.closeDatabases()
+    }
   }
 }
 
@@ -249,50 +274,55 @@ testTyCoreStableTaskStreamSurvivesSessionSwitch.description =
 
 export const testRemoteFunctionRegistrationFollowsSessionSwitch = async () => {
   const storage = createPortableTestStorage()
+  const databases = createInMemoryDatabasePool()
   const continuationTool = createContinuationTool()
-  const ty = await tyCore(
-    () => ({ entryFunction: 'entryNode' }),
-    () => toolCall({ name: 'entryNode', arguments: {} }),
-    {},
-    undefined,
-    {
-      indexTaskVectors: false,
-      taskManagerStorageFactory: storage.taskManagerStorageFactory,
-      toolSetup: {
-        baseTools: [continuationTool],
-        chatCompletionToolName: 'chatCompletion',
-        createSessionTools: () => ({ tools: [] }),
-      },
-    },
-  )
-  const sessionEcho = createTool({
-    name: 'sessionEcho',
-    description: 'Echo a value across Taskyon session changes.',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['message'],
-      properties: { message: { type: 'string' } },
-    } as const,
-    function: ({ message }) => message,
-  })
-  const registration = await registerToolRpcTools({ port: ty.port, tools: [sessionEcho] })
-  const runEcho = async (message: string) => {
-    const result = await processTasksDetailed(ty.port)(
-      [[toolCall({ name: 'sessionEcho', arguments: { message } })]],
-      'toolresult',
+  let disposeCore: (() => Promise<void>) | undefined
+  let registration: Awaited<ReturnType<typeof registerToolRpcTools>> | undefined
+  try {
+    const ty = await tyCore(
+      () => ({ entryFunction: 'entryNode' }),
+      () => toolCall({ name: 'entryNode', arguments: {} }),
+      {},
+      undefined,
       {
-        timeoutMs: 10_000,
-        interruptOnSettle: (reason) => ty.cancelCurrentRun(reason),
+        databaseFactory: databases.databaseFactory,
+        indexTaskVectors: false,
+        taskManagerStorageFactory: storage.taskManagerStorageFactory,
+        toolSetup: {
+          baseTools: [continuationTool],
+          chatCompletionToolName: 'chatCompletion',
+          createSessionTools: () => ({ tools: [] }),
+        },
       },
     )
-    if (result.status !== 'matched' || result.result.content.type !== 'toolresult') {
-      throw new Error(`expected sessionEcho tool result, got ${result.status}`)
+    disposeCore = () => ty.dispose('session tool registration diagnostic complete')
+    const sessionEcho = createTool({
+      name: 'sessionEcho',
+      description: 'Echo a value across Taskyon session changes.',
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['message'],
+        properties: { message: { type: 'string' } },
+      } as const,
+      function: ({ message }) => message,
+    })
+    registration = await registerToolRpcTools({ port: ty.port, tools: [sessionEcho] })
+    const runEcho = async (message: string) => {
+      const result = await processTasksDetailed(ty.port)(
+        [[toolCall({ name: 'sessionEcho', arguments: { message } })]],
+        'toolresult',
+        {
+          timeoutMs: 10_000,
+          interruptOnSettle: (reason) => ty.cancelCurrentRun(reason),
+        },
+      )
+      if (result.status !== 'matched' || result.result.content.type !== 'toolresult') {
+        throw new Error(`expected sessionEcho tool result, got ${result.status}`)
+      }
+      return result.result.content.data
     }
-    return result.result.content.data
-  }
 
-  try {
     const before = await runEcho('before')
     assert(before === 'before', 'expected registered tool result before session switch')
 
@@ -302,9 +332,13 @@ export const testRemoteFunctionRegistrationFollowsSessionSwitch = async () => {
     const after = await runEcho('after')
     assert(after === 'after', 'expected registered tool result after session switch')
   } finally {
-    registration.destroy()
-    await ty.dispose('session tool registration diagnostic complete')
-    storage.destroy()
+    registration?.destroy()
+    try {
+      await disposeCore?.()
+    } finally {
+      storage.destroy()
+      await databases.closeDatabases()
+    }
   }
 
   return { success: true }
@@ -633,28 +667,8 @@ testRemoteFunctionBridgeAllowsExplicitExternalSecretContext.description =
 
 export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => {
   const storage = createPortableTestStorage()
+  const databases = createInMemoryDatabasePool()
   const continuationTool = createContinuationTool()
-  const ty = await tyCore(
-    () => ({
-      entryFunction: 'entryNode',
-    }),
-    () =>
-      toolCall({
-        name: 'entryNode',
-        arguments: {},
-      }),
-    {},
-    undefined,
-    {
-      indexTaskVectors: false,
-      taskManagerStorageFactory: storage.taskManagerStorageFactory,
-      toolSetup: {
-        baseTools: [continuationTool],
-        chatCompletionToolName: 'chatCompletion',
-        createSessionTools: () => ({ tools: [] }),
-      },
-    },
-  )
   const codeTool = createTool({
     name: 'remoteCodeSecretEcho',
     description: 'Echo a message and persist a secret through a remote code-backed tool.',
@@ -677,44 +691,69 @@ export const testRemoteFunctionBridgeRegistersAndExecutesCodeTool = async () => 
     }`,
   })
 
-  const registration = await registerToolRpcTools({ port: ty.port, tools: [codeTool] })
-  const result = await processTasksDetailed(ty.port)(
-    [
+  let disposeCore: (() => Promise<void>) | undefined
+  let registration: Awaited<ReturnType<typeof registerToolRpcTools>> | undefined
+  try {
+    const ty = await tyCore(
+      () => ({ entryFunction: 'entryNode' }),
+      () => toolCall({ name: 'entryNode', arguments: {} }),
+      {},
+      undefined,
+      {
+        databaseFactory: databases.databaseFactory,
+        indexTaskVectors: false,
+        taskManagerStorageFactory: storage.taskManagerStorageFactory,
+        toolSetup: {
+          baseTools: [continuationTool],
+          chatCompletionToolName: 'chatCompletion',
+          createSessionTools: () => ({ tools: [] }),
+        },
+      },
+    )
+    disposeCore = () => ty.dispose('remote code tool diagnostic complete')
+    registration = await registerToolRpcTools({ port: ty.port, tools: [codeTool] })
+    const result = await processTasksDetailed(ty.port)(
       [
-        toolCall({
-          name: 'remoteCodeSecretEcho',
-          arguments: {
-            message: 'hello',
-            secret: 'stored-by-core-code',
-          },
-        }),
+        [
+          toolCall({
+            name: 'remoteCodeSecretEcho',
+            arguments: {
+              message: 'hello',
+              secret: 'stored-by-core-code',
+            },
+          }),
+        ],
       ],
-    ],
-    'toolresult',
-    {
-      timeoutMs: 10_000,
-      interruptOnSettle: (reason) => ty.cancelCurrentRun(reason),
-    },
-  )
-
-  registration.destroy()
-  await ty.dispose('remote code tool diagnostic complete')
-  storage.destroy()
-  const response =
-    result.status === 'matched' && result.result.content.type === 'toolresult'
-      ? result.result.content.data
-      : undefined
-  assert(
-    typeof response === 'object' &&
-      response !== null &&
-      'echoed' in response &&
-      response.echoed === 'hello' &&
-      'secret' in response &&
-      response.secret === 'stored-by-core-code' &&
-      'source' in response &&
-      response.source === 'core-code',
-    'expected core-executed code-backed response payload with secret access',
-  )
+      'toolresult',
+      {
+        timeoutMs: 10_000,
+        interruptOnSettle: (reason) => ty.cancelCurrentRun(reason),
+      },
+    )
+    const response =
+      result.status === 'matched' && result.result.content.type === 'toolresult'
+        ? result.result.content.data
+        : undefined
+    assert(
+      typeof response === 'object' &&
+        response !== null &&
+        'echoed' in response &&
+        response.echoed === 'hello' &&
+        'secret' in response &&
+        response.secret === 'stored-by-core-code' &&
+        'source' in response &&
+        response.source === 'core-code',
+      'expected core-executed code-backed response payload with secret access',
+    )
+  } finally {
+    registration?.destroy()
+    try {
+      await disposeCore?.()
+    } finally {
+      storage.destroy()
+      await databases.closeDatabases()
+    }
+  }
 }
 
 testRemoteFunctionBridgeRegistersAndExecutesCodeTool.description =

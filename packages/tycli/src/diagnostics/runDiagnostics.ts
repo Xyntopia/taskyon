@@ -24,6 +24,7 @@ import { resolveCliInvocationDirectory, resolveTaskyonCliStoragePaths } from '..
 import { resolveCliDebugConfiguration } from '../cli/debugOptions'
 import { createCliChatCompletionTraceWriter } from '../cli/chatCompletionTraceWriter'
 import { createDiagnosticsOutput, formatFailedDiagnostics } from './diagnosticsOutput'
+import type { bootstrapCliTaskyon } from '../cli/runtime'
 
 const diagnosticsCategories = [
   'standard',
@@ -423,7 +424,11 @@ function wrapTests(tests: TestRecord, opts: CliOptions): TestRecord {
   )
 }
 
-function listTests(tests: TestRecord, experimentalTests: TestRecord) {
+function listTests(
+  tests: TestRecord,
+  experimentalTests: TestRecord,
+  status: (line: string) => void,
+) {
   const render = (name: string, kind: 'default' | 'experimental') => {
     const id = diagnosticsTestIdentifier(name)
     const metadata = diagnosticsTestMetadata[id]
@@ -437,14 +442,14 @@ function listTests(tests: TestRecord, experimentalTests: TestRecord) {
       metadata?.modelBased ? 'model-based' : '',
     ].filter(Boolean)
     const tagText = tags.length ? ` [${tags.join(', ')}]` : ''
-    console.log(`${name}${tagText}`)
+    status(`${name}${tagText}`)
   }
 
-  console.log('Default tests:')
+  status('Default tests:')
   for (const name of Object.keys(tests).sort((a, b) => a.localeCompare(b))) render(name, 'default')
 
-  console.log('')
-  console.log('Experimental tests:')
+  status('')
+  status('Experimental tests:')
   for (const name of Object.keys(experimentalTests).sort((a, b) => a.localeCompare(b))) {
     render(name, 'experimental')
   }
@@ -532,6 +537,10 @@ async function main(): Promise<number> {
   const opts = parseArgs(process.argv.slice(2))
 
   if (opts.listOnly) {
+    const output = createDiagnosticsOutput({
+      logDir: resolveTaskyonCliStoragePaths().logDir,
+      verbose: opts.verbose,
+    })
     const { modules, discoveredFiles } = await loadTestModules(opts.filter)
     const registry = buildDiagnosticsRegistry({ modules })
     const defaultTests = filterTests(
@@ -560,10 +569,10 @@ async function main(): Promise<number> {
       opts.throughLevel === undefined
         ? experimentalTests
         : filterDiagnosticsThroughLevel(experimentalTests, opts.throughLevel)
-    console.log(`Discovered files: ${discoveredFiles.length}`)
-    for (const file of discoveredFiles) console.log(`- ${file}`)
-    console.log('')
-    listTests(levelDefaultTests, levelExperimentalTests)
+    output.status(`Discovered files: ${discoveredFiles.length}`)
+    for (const file of discoveredFiles) output.status(`- ${file}`)
+    output.status('')
+    listTests(levelDefaultTests, levelExperimentalTests, output.status)
     return 0
   }
 
@@ -589,6 +598,7 @@ async function main(): Promise<number> {
     verbose: opts.verbose,
   })
   const restoreOutput = output.capture()
+  let diagnosticRuntime: Awaited<ReturnType<typeof bootstrapCliTaskyon>> | undefined
   let fatalExitStarted = false
   const exitAfterFatalError = (kind: string, error: unknown) => {
     if (fatalExitStarted) return
@@ -634,8 +644,8 @@ async function main(): Promise<number> {
     const wrapped = wrapTests(filtered, opts)
     const selectedNames = Object.keys(wrapped)
 
-    console.log(`[tycli-diagnostics] discovered ${discoveredFiles.length} test files`)
-    console.log(
+    output.status(`[tycli-diagnostics] discovered ${discoveredFiles.length} test files`)
+    output.status(
       `[tycli-diagnostics] selected ${selectedNames.length} tests` +
         (opts.filter ? ` (filter="${opts.filter}")` : '') +
         (opts.category ? ` (category="${opts.category}")` : '') +
@@ -649,12 +659,12 @@ async function main(): Promise<number> {
     }
 
     const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
-    const runtime = await bootstrapCliTaskyon({
+    const runtime = (diagnosticRuntime = await bootstrapCliTaskyon({
       nodePgLiteDataDir: diagnosticsDataDir,
       blobStorageRoot: resolveCliInvocationDirectory(),
       ...(opts.provider ? { selectedApi: opts.provider } : {}),
       ...(opts.model ? { model: opts.model } : {}),
-    })
+    }))
     const [
       { createCliWorkflowHost, loadProjectInstructions },
       { createTaskyonInteractiveCliHost },
@@ -699,7 +709,7 @@ async function main(): Promise<number> {
       details: true,
       context,
       onProgress: (progress) => {
-        if (progress.phase === 'start') console.log(`[RUN ] ${progress.test}`)
+        if (progress.phase === 'start') output.status(`[RUN ] ${progress.test}`)
       },
       onResult: (result) => {
         output.status(formatResultLine(result, opts.verbose), result.ok ? 'stdout' : 'stderr')
@@ -750,10 +760,20 @@ async function main(): Promise<number> {
     output.status(`[tycli-diagnostics] log file: ${output.logFile}`, 'stderr')
     return 1
   } finally {
-    setChatCompletionTraceWriter(undefined)
-    process.removeListener('uncaughtException', handleUncaughtException)
-    process.removeListener('unhandledRejection', handleUnhandledRejection)
-    restoreOutput()
+    try {
+      if (diagnosticRuntime) {
+        try {
+          await diagnosticRuntime.taskyon.dispose('tycli diagnostics complete')
+        } finally {
+          await diagnosticRuntime.taskyon.closeMetadataPersistence()
+        }
+      }
+    } finally {
+      setChatCompletionTraceWriter(undefined)
+      process.removeListener('uncaughtException', handleUncaughtException)
+      process.removeListener('unhandledRejection', handleUnhandledRejection)
+      restoreOutput()
+    }
   }
 }
 

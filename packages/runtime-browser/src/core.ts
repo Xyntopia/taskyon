@@ -164,7 +164,11 @@ export const createTaskyonBrowserCoreRuntime = (
     pendingClientMessages.length = 0
     pendingHostMessages.length = 0
     try {
-      await core.dispose(reason)
+      try {
+        await core.dispose(reason)
+      } finally {
+        await core.closeMetadataPersistence()
+      }
     } finally {
       stopStorageService()
       await core.getCryptoSession().close?.()

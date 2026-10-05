@@ -282,6 +282,10 @@ const dynamicContext =
       indexTaskVectors: boolean
       taskSearchVectorizer: 'static-multilingual' | 'transformer-minilm'
       databaseFactory: TaskyonDatabaseFactory
+      subscribeMetadata: (
+        stream: Stream<ChatCompletionMetadataEvent> | undefined,
+        persist: (event: ChatCompletionMetadataEvent) => Promise<unknown>,
+      ) => () => void
       secretStore?: SecretStore
       sendEncryptedTasks?: Thunk<boolean>
       streamObservers: SessionStreamObservers
@@ -374,16 +378,13 @@ const dynamicContext =
     await timeStep('core.install-default-tools', () => toolManager.addDefaultTools(sessionToolList))
     let unsubscribeChatCompletion =
       sessionTools.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
-    const persistChatCompletionMetadata = ({ taskId, metadata }: ChatCompletionMetadataEvent) => {
-      void taskManagerInstance
-        .metaUpsert(taskId, metadata, 'shallow_merge')
-        .catch((error: unknown) =>
-          console.error('Could not persist chat completion metadata.', error),
-        )
-    }
-    // Each metadata stream is private to its tool. Keep its host listener for the tool's
-    // lifetime: direct calls and detached cost lookups may finish after session disposal.
-    sessionTools.chatCompletionMetadataStream?.(persistChatCompletionMetadata)
+    const persistChatCompletionMetadata = ({ taskId, metadata }: ChatCompletionMetadataEvent) =>
+      taskManagerInstance.metaUpsert(taskId, metadata, 'shallow_merge')
+    // Late costs can arrive after disposal; the owning core closes these listeners separately.
+    options.subscribeMetadata(
+      sessionTools.chatCompletionMetadataStream,
+      persistChatCompletionMetadata,
+    )
     const getChatCompletionCredentialOwnerId = async () => {
       const { tool, identity } = await toolManager.resolveTool(toolSetup.chatCompletionToolName)
       if (!tool) {
@@ -409,8 +410,10 @@ const dynamicContext =
           const refreshed = sessionTools.recreateConfiguredTools?.(nextConfiguration)
           const unsubscribeReplacementStream =
             refreshed?.chatCompletionStream?.(options.streamObservers.chatCompletion) ?? (() => {})
-          const unsubscribeReplacementMetadata =
-            refreshed?.chatCompletionMetadataStream?.(persistChatCompletionMetadata) ?? (() => {})
+          const unsubscribeReplacementMetadata = options.subscribeMetadata(
+            refreshed?.chatCompletionMetadataStream,
+            persistChatCompletionMetadata,
+          )
           try {
             await toolManager.addDefaultTools(refreshed?.tools ?? [])
           } catch (error) {
@@ -785,6 +788,45 @@ export async function tyCore(
     chatCompletionToolName: 'chatCompletion',
     createSessionTools: () => ({ tools: [] }),
   }
+  const metadataWrites = new Set<Promise<void>>()
+  const metadataSubscriptions = new Set<() => void>()
+  const metadataErrors: unknown[] = []
+  let metadataClosure: Promise<void> | undefined
+  const subscribeMetadata = (
+    stream: Stream<ChatCompletionMetadataEvent> | undefined,
+    persist: (event: ChatCompletionMetadataEvent) => Promise<unknown>,
+  ) => {
+    if (!stream || metadataClosure) return () => {}
+    const unsubscribe = stream((event) => {
+      if (metadataClosure) return
+      const write = Promise.resolve()
+        .then(() => persist(event))
+        .then(
+          () => undefined,
+          (error: unknown) => {
+            metadataErrors.push(error)
+          },
+        )
+      metadataWrites.add(write)
+      void write.then(() => metadataWrites.delete(write))
+    })
+    metadataSubscriptions.add(unsubscribe)
+    return () => {
+      metadataSubscriptions.delete(unsubscribe)
+      unsubscribe()
+    }
+  }
+  const closeMetadataPersistence = () => {
+    metadataClosure ??= Promise.resolve().then(async () => {
+      for (const unsubscribe of metadataSubscriptions) unsubscribe()
+      metadataSubscriptions.clear()
+      await Promise.all(metadataWrites)
+      if (metadataErrors.length) {
+        throw new AggregateError(metadataErrors, 'Could not persist chat completion metadata.')
+      }
+    })
+    return metadataClosure
+  }
   const parsedInitialToolchainConfig = TyToolchainConfig.parse(initialToolchainConfig)
 
   // TODO: encapsulate this into a "createCtx" function
@@ -806,6 +848,7 @@ export async function tyCore(
       indexTaskVectors: options?.indexTaskVectors !== false,
       taskSearchVectorizer: options?.taskSearchVectorizer ?? 'static-multilingual',
       databaseFactory: options?.databaseFactory ?? getDatabase,
+      subscribeMetadata,
       ...(options?.onInitializationProgress
         ? { onInitializationProgress: options.onInitializationProgress }
         : {}),
@@ -862,6 +905,7 @@ export async function tyCore(
     taskStream: taskStream.stream,
     cancelCurrentRun: (message: string) => ctx.cancelCurrentRun(message),
     dispose: (message: string) => ctx.dispose(message),
+    closeMetadataPersistence,
     getArtifact: async (attachment: Parameters<ArtifactStore['get']>[0]) =>
       await ctx.artifactStore?.get(attachment),
     installTool: async (tool: InternalTool) => {

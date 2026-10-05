@@ -2063,7 +2063,7 @@ async function promptForMainInput(
   return await new Promise<string | null>((resolve) => {
     let settled = false
     let menuOpen = false
-    let restoreReadlineKeypress: (() => void) | undefined
+    let readlineKeypressDetached = false
     let activePaste:
       | {
           initialLine: string
@@ -2073,6 +2073,21 @@ async function promptForMainInput(
         }
       | undefined
 
+    const detachReadlineKeypress = () => {
+      if (readlineKeypressDetached) return
+      readlineKeypressListeners.forEach((listener) => {
+        stdin.removeListener('keypress', listener as (...args: unknown[]) => void)
+      })
+      readlineKeypressDetached = true
+    }
+    const restoreReadlineKeypress = () => {
+      if (!readlineKeypressDetached) return
+      ;[...readlineKeypressListeners].reverse().forEach((listener) => {
+        stdin.prependListener('keypress', listener as (...args: unknown[]) => void)
+      })
+      readlineKeypressDetached = false
+    }
+
     const finish = (value: string | null) => {
       if (settled) return
       settled = true
@@ -2080,6 +2095,7 @@ async function promptForMainInput(
       rl.off('line', onLine)
       rl.off('close', onClose)
       signal?.removeEventListener('abort', onAbort)
+      restoreReadlineKeypress()
       process.stdout.write(DISABLE_BRACKETED_PASTE)
       restoreTerminalInput()
       resolve(value)
@@ -2087,7 +2103,8 @@ async function promptForMainInput(
 
     const onLine = (line: string) => {
       if (menuOpen || activePaste) return
-      finish(line)
+      // Readline reverses line order when it emits history-normalized multiline input.
+      finish(line.includes('\r') ? line.split('\r').reverse().join('\n') : line)
     }
     const onClose = () => finish(null)
     const onAbort = () => finish(null)
@@ -2096,6 +2113,7 @@ async function promptForMainInput(
       key: { ctrl?: boolean; name?: string; sequence?: string },
     ) => {
       if (key.name === 'paste-start') {
+        detachReadlineKeypress()
         const input = rl as ReadlineWithMutableInput
         const history = getReadlineHistory(rl)
         activePaste = {
@@ -2118,6 +2136,8 @@ async function promptForMainInput(
             rl.emit('history', history)
           }
           activePaste = undefined
+          restoreReadlineKeypress()
+          rl.prompt(true)
         } else if (str) {
           activePaste.text += str
         }
@@ -2159,21 +2179,13 @@ async function promptForMainInput(
       ;(async () => {
         menuOpen = true
         rl.write('', { ctrl: true, name: 'u' })
-        readlineKeypressListeners.forEach((listener) => {
-          stdin.removeListener('keypress', listener as (...args: unknown[]) => void)
-        })
-        restoreReadlineKeypress = () => {
-          ;[...readlineKeypressListeners].reverse().forEach((listener) => {
-            stdin.prependListener('keypress', listener as (...args: unknown[]) => void)
-          })
-        }
+        detachReadlineKeypress()
         rl.pause()
         let selected: string | null
         try {
           selected = typedSlash ? await onSlashRequested() : await onFileRequested()
         } finally {
-          restoreReadlineKeypress?.()
-          restoreReadlineKeypress = undefined
+          restoreReadlineKeypress()
           rl.resume()
           menuOpen = false
         }
@@ -3249,6 +3261,14 @@ async function runPromptReadyPhase(
   writeNotice(
     'info',
     `${host.commandName} prompt ready. provider=${llmState.selectedToolchainProfile} model=${getSelectedProviderSettings(llmState).model}`,
+  )
+  writeLine(
+    formatPromptPrefixLine({
+      provider: llmState.selectedToolchainProfile,
+      model: getSelectedProviderSettings(llmState).model,
+      taskState: 'idle',
+      activeTasks: 0,
+    }),
   )
   writeLine(
     'Slash commands: /provider, /model, /keys, /help, /exit, /quit. Other commands and messages start the task engine on first use.',

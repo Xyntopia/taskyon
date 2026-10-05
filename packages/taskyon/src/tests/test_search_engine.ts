@@ -1,6 +1,6 @@
 import { rankSearchDocuments, searchIndexSignature } from '../utils/searchEngine'
 import { createPgLiteSearchIndexBackend } from '../api/searchProtocol'
-import { getInMemoryDatabase } from '../utils/pglite.api'
+import { createInMemoryDatabase } from '../utils/pglite.api'
 import { poolStaticTokenEmbeddings } from '../utils/staticEmbedding'
 
 const assert = (condition: unknown, message: string) => {
@@ -64,19 +64,21 @@ testStaticEmbeddingPoolsBigIntTokenIds.description =
   'Static embeddings accept the BigInt token IDs returned by Transformers.js.'
 
 export const testPgLiteSearchIndexRestoresPrecomputedVectors = async () => {
-  const backend = createPgLiteSearchIndexBackend(
-    await getInMemoryDatabase(`search-diagnostic-${Date.now()}`),
-    'searchDiagnostic',
-  )
-  await backend.upsertMany([
-    {
-      id: 'taskyon',
-      text: 'Taskyon agent task search',
-      vector: Array.from({ length: 256 }, (_, index) => (index === 0 ? 1 : 0)),
-    },
-  ])
-  const snapshot = await backend.snapshot()
-  assert(snapshot[0]?.vector?.length === 256, 'Expected persisted vector sidecar data')
+  const database = await createInMemoryDatabase('search-diagnostic')
+  try {
+    const backend = createPgLiteSearchIndexBackend(database, 'searchDiagnostic')
+    await backend.upsertMany([
+      {
+        id: 'taskyon',
+        text: 'Taskyon agent task search',
+        vector: Array.from({ length: 256 }, (_, index) => (index === 0 ? 1 : 0)),
+      },
+    ])
+    const snapshot = await backend.snapshot()
+    assert(snapshot[0]?.vector?.length === 256, 'Expected persisted vector sidecar data')
+  } finally {
+    await database.close()
+  }
 }
 
 testPgLiteSearchIndexRestoresPrecomputedVectors.description =

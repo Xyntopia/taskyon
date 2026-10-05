@@ -32,7 +32,7 @@ import {
   taskyonProtocol,
 } from '@taskyon/taskyon/api'
 import { authenticateWithPopup } from '@taskyon/taskyon/browser'
-import { getDatabase } from '@taskyon/taskyon/db'
+import { createInMemoryDatabase } from '@taskyon/taskyon/db'
 import { buildPmtilesUrlCandidates } from '@taskyon/maplibre'
 import { getIconAtPath } from '@taskyon/ui/components/varViews/useVariableGraph'
 import { parseTaskyonMapWidgetState } from '@taskyon/ui/gis/taskyonMapWidget'
@@ -55,6 +55,7 @@ import {
 import { resolveDiagnosticsProviderCredential, useTaskyonStore } from 'src/stores/taskyonState'
 import z from 'zod'
 import { useGdrive } from '../gdrive'
+import { createTauriStdoutForwarder } from '../tauriStdoutBridge'
 import { getCurrentActiveProfileName, getStoredStateString } from '../ui/initialState'
 import { initCryptoSessionFromBrowser } from '@taskyon/runtime-browser'
 import { extractBrowserAccessActivity } from './browserAccess'
@@ -78,6 +79,24 @@ function assert(condition: boolean, msg?: string): asserts condition {
     throw new Error(msg ?? 'Assertion failed')
   }
 }
+
+export const testTauriStdoutForwarderSerializesConsoleArguments = () => {
+  let emitted: { level: string; message: string } | undefined
+  const forward = createTauriStdoutForwarder('info', (message) => {
+    emitted = message
+  })
+
+  forward('diagnostic result', { passed: true })
+
+  assert(emitted?.level === 'info', 'Expected the original console level to be forwarded')
+  assert(
+    emitted.message === 'diagnostic result {"passed":true}',
+    'Expected console arguments to serialize into one stdout message',
+  )
+}
+
+testTauriStdoutForwarderSerializesConsoleArguments.description =
+  'Tauri stdout forwarding serializes console arguments into the native output message.'
 
 export const testPortableDiagnosticsToolsOnlyCopyExecutableCode = async () => {
   const installed: string[] = []
@@ -525,7 +544,7 @@ export const testSessionSwitching = async () => {
 }
 
 export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
-  const DB = 'test_crypto_key_roundtrip'
+  const DB = `test_crypto_key_roundtrip_${crypto.randomUUID()}`
   const STORE = 'keys'
   const KEY_NAME = 'deviceKeyPair'
 
@@ -566,91 +585,6 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
     report.errors.push(message)
   }
 
-  async function collectIndexedDbDiagnostics() {
-    const details: Record<string, unknown> = {
-      origin: typeof location !== 'undefined' ? location.origin : 'unknown',
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-      indexedDbAvailable: typeof indexedDB !== 'undefined',
-      storageApiAvailable:
-        typeof navigator !== 'undefined' && !!('storage' in navigator && navigator.storage),
-      storageEstimateAvailable: typeof navigator !== 'undefined' && !!navigator.storage?.estimate,
-      storagePersistedAvailable: typeof navigator !== 'undefined' && !!navigator.storage?.persisted,
-      storagePersistAvailable: typeof navigator !== 'undefined' && !!navigator.storage?.persist,
-    }
-
-    try {
-      if (navigator.storage?.persisted) {
-        details.storagePersisted = await navigator.storage.persisted()
-      }
-    } catch (e) {
-      details.storagePersistedError = e instanceof Error ? e.message : String(e)
-    }
-
-    try {
-      if (navigator.storage?.estimate) {
-        const estimate = await navigator.storage.estimate()
-        const usageDetails = (estimate as StorageEstimate & { usageDetails?: unknown }).usageDetails
-        details.storageEstimate = {
-          usage: estimate.usage ?? null,
-          quota: estimate.quota ?? null,
-          usageDetails: usageDetails ?? null,
-        }
-      }
-    } catch (e) {
-      details.storageEstimateError = e instanceof Error ? e.message : String(e)
-    }
-
-    try {
-      const maybeDbApi = indexedDB as IDBFactory & {
-        databases?: () => Promise<Array<{ name?: string; version?: number }>>
-      }
-      if (typeof maybeDbApi.databases === 'function') {
-        const dbs = await maybeDbApi.databases()
-        details.indexedDbDatabases = dbs
-          .map((d) => ({ name: d.name ?? 'unknown', version: d.version ?? null }))
-          .sort((a, b) => a.name.localeCompare(b.name))
-      } else {
-        details.indexedDbDatabases = 'indexedDB.databases() unsupported'
-      }
-    } catch (e) {
-      details.indexedDbDatabasesError = e instanceof Error ? e.message : String(e)
-    }
-
-    try {
-      const lsKeys: string[] = []
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (typeof key === 'string') lsKeys.push(key)
-      }
-      details.localStorageInterestingKeys = lsKeys
-        .filter((k) => k.includes('profile'))
-        .sort()
-        .slice(0, 200)
-    } catch (e) {
-      details.localStorageScanError = e instanceof Error ? e.message : String(e)
-    }
-
-    return details
-  }
-
-  async function getStorageEstimateSummary() {
-    if (!('storage' in navigator) || !navigator.storage?.estimate) {
-      return 'storage estimate unavailable'
-    }
-    try {
-      const estimate = await navigator.storage.estimate()
-      const usage = typeof estimate.usage === 'number' ? estimate.usage : 0
-      const quota = typeof estimate.quota === 'number' ? estimate.quota : 0
-      const usageDetails = (estimate as StorageEstimate & { usageDetails?: unknown }).usageDetails
-      const usageMb = Math.round((usage / 1024 / 1024) * 100) / 100
-      const quotaMb = Math.round((quota / 1024 / 1024) * 100) / 100
-      return `usage=${usageMb}MB quota=${quotaMb}MB usageDetails=${JSON.stringify(usageDetails ?? {})}`
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return `storage estimate failed: ${msg}`
-    }
-  }
-
   // helpers
   function openDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
@@ -660,17 +594,7 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
       }
       req.onsuccess = () => resolve(req.result)
-      req.onerror = () => {
-        void (async () => {
-          const storageSummary = await getStorageEstimateSummary()
-          const diagnostics = await collectIndexedDbDiagnostics()
-          reject(
-            new Error(
-              `${req.error?.message || 'DB open failed'} | ${storageSummary} | diagnostics=${JSON.stringify(diagnostics)}`,
-            ),
-          )
-        })()
-      }
+      req.onerror = () => reject(new Error(req.error?.message || 'DB open failed'))
     })
   }
 
@@ -681,12 +605,9 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
         const tx = db.transaction(STORE, 'readwrite')
         const store = tx.objectStore(STORE)
         const r = store.put(val, keyName)
-        r.onsuccess = () => resolve(true)
         r.onerror = () => reject(new Error(r.error?.message || 'put failed'))
+        tx.oncomplete = () => resolve(true)
         tx.onabort = () => reject(new Error(tx.error?.message || 'tx aborted'))
-        tx.oncomplete = () => {
-          /* ok */
-        }
       })
     } finally {
       db.close()
@@ -709,217 +630,232 @@ export const testIndexedDBKeyStorage = async (): Promise<TestReport> => {
     }
   }
 
-  const preflightDiagnostics = await collectIndexedDbDiagnostics()
-  log(`indexeddb preflight: ${JSON.stringify(preflightDiagnostics)}`)
-
-  // Generate crypto key pair (with non-extractable private key for security test)
-  let kp: CryptoKeyPair
-
+  let testFailure: unknown
+  let testFailed = false
+  let cleanupFailure: unknown
+  let cleanupFailed = false
   try {
-    // try X25519 (modern) - private key should be non-extractable
-    kp = (await crypto.subtle.generateKey({ name: 'X25519' }, false, [
-      'deriveKey',
-      'deriveBits',
-    ])) as CryptoKeyPair
-    report.keyGeneration.algorithm = 'X25519'
-    log('generated X25519 pair')
-  } catch {
-    kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, [
-      'deriveKey',
-      'deriveBits',
-    ])
-    report.keyGeneration.algorithm = 'ECDH P-256'
-    log('fallback to ECDH P-256 pair')
-  }
+    if (typeof indexedDB === 'undefined') throw new Error('IndexedDB is unavailable')
+    log('IndexedDB is available')
 
-  // Record original extractable properties
-  report.keyGeneration.originalPrivateExtractable = kp.privateKey.extractable
-  report.keyGeneration.originalPublicExtractable = kp.publicKey.extractable
+    // Generate crypto key pair (with non-extractable private key for security test)
+    let kp: CryptoKeyPair
 
-  log(`original private.extractable: ${kp.privateKey.extractable}`)
-  log(`original public.extractable: ${kp.publicKey.extractable}`)
-
-  // Security check: Verify the private key is non-extractable
-  if (kp.privateKey.extractable) {
-    const errorMsg = 'SECURITY VIOLATION: Private key should be non-extractable for this test!'
-    error(errorMsg)
-    throw new Error(errorMsg)
-  }
-
-  // Security check: Verify the public key IS extractable (public keys should always be extractable)
-  if (!kp.publicKey.extractable) {
-    const errorMsg = 'SECURITY VIOLATION: Public key should be extractable!'
-    error(errorMsg)
-    throw new Error(errorMsg)
-  }
-
-  // store pair
-  const storeSuccess = await putValue(kp)
-  report.storage.storeSuccess = storeSuccess
-  log('Successfully stored key pair in IndexedDB')
-
-  // retrieve
-  const loaded = await getValue()
-  report.storage.retrieveSuccess = true
-  log('Successfully retrieved key pair from IndexedDB')
-
-  function describeLoadedValue(value: unknown) {
-    const base: Record<string, unknown> = {
-      jsType: typeof value,
-      isNull: value === null,
-      isCryptoKeyPairLike: false,
-    }
-    if (value && typeof value === 'object') {
-      const obj = value as Record<string, unknown>
-      base.constructorName =
-        (value as { constructor?: { name?: unknown } }).constructor?.name ?? 'unknown'
-      base.keys = Object.keys(obj)
-      base.hasPrivateKey = 'privateKey' in obj
-      base.hasPublicKey = 'publicKey' in obj
-      base.hasPrivate = 'private' in obj
-      base.hasPublic = 'public' in obj
-      base.privateKeyType = typeof obj.privateKey
-      base.publicKeyType = typeof obj.publicKey
-      base.privateType = typeof obj.private
-      base.publicType = typeof obj.public
-      base.privateKeyIsCryptoKey = obj.privateKey instanceof CryptoKey
-      base.publicKeyIsCryptoKey = obj.publicKey instanceof CryptoKey
-      base.privateIsCryptoKey = obj.private instanceof CryptoKey
-      base.publicIsCryptoKey = obj.public instanceof CryptoKey
-      base.isCryptoKeyPairLike = !!(
-        (obj.privateKey instanceof CryptoKey && obj.publicKey instanceof CryptoKey) ||
-        (obj.private instanceof CryptoKey && obj.public instanceof CryptoKey)
-      )
-    }
-    return base
-  }
-  log(`loaded payload diagnostics: ${JSON.stringify(describeLoadedValue(loaded))}`)
-
-  // Type guard to check if object has alternative key properties
-  function hasAlternativeKeys(obj: unknown): obj is { private?: CryptoKey; public?: CryptoKey } {
-    return typeof obj === 'object' && obj !== null && ('private' in obj || 'public' in obj)
-  }
-
-  // the loaded object may be a CryptoKeyPair or an object with keys; attempt to detect
-  const privateLoaded =
-    loaded?.privateKey ?? (hasAlternativeKeys(loaded) ? loaded.private : undefined)
-  const publicLoaded = loaded?.publicKey ?? (hasAlternativeKeys(loaded) ? loaded.public : undefined)
-
-  // Check if keys were found
-  report.postStorage.privateKeyFound = !!privateLoaded
-  report.postStorage.publicKeyFound = !!publicLoaded
-
-  if (!privateLoaded || !publicLoaded) {
-    const diagnostics = await collectIndexedDbDiagnostics()
-    const errorMsg = `CRITICAL: IndexedDB did not preserve a CryptoKeyPair | loaded=${JSON.stringify(
-      describeLoadedValue(loaded),
-    )} | preflight=${JSON.stringify(preflightDiagnostics)} | diagnostics=${JSON.stringify(
-      diagnostics,
-    )}`
-    error(errorMsg)
-    throw new Error(errorMsg)
-  }
-
-  // Check extractable properties post-storage
-  report.postStorage.privateExtractable = privateLoaded.extractable
-  report.postStorage.publicExtractable = publicLoaded.extractable
-
-  log(`loaded.privateKey?.extractable = ${privateLoaded.extractable}`)
-  log(`loaded.publicKey?.extractable  = ${publicLoaded.extractable}`)
-
-  // CRITICAL SECURITY CHECK: Private key must remain non-extractable
-  if (privateLoaded.extractable) {
-    const errorMsg = 'SECURITY VIOLATION: Private key became extractable after storage/retrieval!'
-    error(errorMsg)
-    throw new Error(errorMsg)
-  }
-
-  // CRITICAL SECURITY CHECK: Public key should remain extractable
-  if (!publicLoaded.extractable) {
-    const errorMsg =
-      'SECURITY VIOLATION: Public key became non-extractable after storage/retrieval!'
-    error(errorMsg)
-    throw new Error(errorMsg)
-  }
-
-  // try to export both keys (export should fail for non-extractable private)
-  async function tryExport(key: CryptoKey | undefined, label: string): Promise<boolean> {
-    if (!key) {
-      log(`${label} key missing`)
-      return false
-    }
     try {
-      const jwk = await crypto.subtle.exportKey('jwk', key)
-      log(`${label} export OK — jwk keys: ${Object.keys(jwk).join(', ')}`)
+      // try X25519 (modern) - private key should be non-extractable
+      kp = (await crypto.subtle.generateKey({ name: 'X25519' }, false, [
+        'deriveKey',
+        'deriveBits',
+      ])) as CryptoKeyPair
+      report.keyGeneration.algorithm = 'X25519'
+      log('generated X25519 pair')
+    } catch {
+      kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, [
+        'deriveKey',
+        'deriveBits',
+      ])
+      report.keyGeneration.algorithm = 'ECDH P-256'
+      log('fallback to ECDH P-256 pair')
+    }
 
-      // SECURITY CHECK: If this was originally a non-extractable private key, this is a problem!
-      if (label === 'private' && !kp.privateKey.extractable) {
-        const errorMsg =
-          'SECURITY VIOLATION: Successfully extracted a non-extractable private key from IndexedDB!'
-        error(errorMsg)
-        throw new Error(errorMsg)
+    // Record original extractable properties
+    report.keyGeneration.originalPrivateExtractable = kp.privateKey.extractable
+    report.keyGeneration.originalPublicExtractable = kp.publicKey.extractable
+
+    log(`original private.extractable: ${kp.privateKey.extractable}`)
+    log(`original public.extractable: ${kp.publicKey.extractable}`)
+
+    // Security check: Verify the private key is non-extractable
+    if (kp.privateKey.extractable) {
+      const errorMsg = 'SECURITY VIOLATION: Private key should be non-extractable for this test!'
+      error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
+    // Security check: Verify the public key IS extractable (public keys should always be extractable)
+    if (!kp.publicKey.extractable) {
+      const errorMsg = 'SECURITY VIOLATION: Public key should be extractable!'
+      error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
+    // store pair
+    const storeSuccess = await putValue(kp)
+    report.storage.storeSuccess = storeSuccess
+    log('Successfully stored key pair in IndexedDB')
+
+    // retrieve
+    const loaded = await getValue()
+    report.storage.retrieveSuccess = true
+    log('Successfully retrieved key pair from IndexedDB')
+
+    function describeLoadedValue(value: unknown) {
+      const base: Record<string, unknown> = {
+        jsType: typeof value,
+        isNull: value === null,
+        isCryptoKeyPairLike: false,
       }
-
-      return true
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e)
-      log(`${label} export FAILED (expected for non-extractable): ${errorMessage}`)
-
-      // This is the expected behavior for non-extractable keys
-      if (label === 'private' && !kp.privateKey.extractable) {
-        log('✅ Security test PASSED: Non-extractable private key remained non-extractable')
+      if (value && typeof value === 'object') {
+        const obj = value as Record<string, unknown>
+        base.constructorName =
+          (value as { constructor?: { name?: unknown } }).constructor?.name ?? 'unknown'
+        base.keys = Object.keys(obj)
+        base.hasPrivateKey = 'privateKey' in obj
+        base.hasPublicKey = 'publicKey' in obj
+        base.hasPrivate = 'private' in obj
+        base.hasPublic = 'public' in obj
+        base.privateKeyType = typeof obj.privateKey
+        base.publicKeyType = typeof obj.publicKey
+        base.privateType = typeof obj.private
+        base.publicType = typeof obj.public
+        base.privateKeyIsCryptoKey = obj.privateKey instanceof CryptoKey
+        base.publicKeyIsCryptoKey = obj.publicKey instanceof CryptoKey
+        base.privateIsCryptoKey = obj.private instanceof CryptoKey
+        base.publicIsCryptoKey = obj.public instanceof CryptoKey
+        base.isCryptoKeyPairLike = !!(
+          (obj.privateKey instanceof CryptoKey && obj.publicKey instanceof CryptoKey) ||
+          (obj.private instanceof CryptoKey && obj.public instanceof CryptoKey)
+        )
       }
+      return base
+    }
+    log(`loaded payload diagnostics: ${JSON.stringify(describeLoadedValue(loaded))}`)
 
-      // Store error details
-      if (label === 'private') {
-        report.exportTests.privateExportError = errorMessage
-      } else {
-        report.exportTests.publicExportError = errorMessage
+    // Type guard to check if object has alternative key properties
+    function hasAlternativeKeys(obj: unknown): obj is { private?: CryptoKey; public?: CryptoKey } {
+      return typeof obj === 'object' && obj !== null && ('private' in obj || 'public' in obj)
+    }
+
+    // the loaded object may be a CryptoKeyPair or an object with keys; attempt to detect
+    const privateLoaded =
+      loaded?.privateKey ?? (hasAlternativeKeys(loaded) ? loaded.private : undefined)
+    const publicLoaded =
+      loaded?.publicKey ?? (hasAlternativeKeys(loaded) ? loaded.public : undefined)
+
+    // Check if keys were found
+    report.postStorage.privateKeyFound = !!privateLoaded
+    report.postStorage.publicKeyFound = !!publicLoaded
+
+    if (!privateLoaded || !publicLoaded) {
+      const errorMsg = `CRITICAL: IndexedDB did not preserve a CryptoKeyPair | loaded=${JSON.stringify(
+        describeLoadedValue(loaded),
+      )}`
+      error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
+    // Check extractable properties post-storage
+    report.postStorage.privateExtractable = privateLoaded.extractable
+    report.postStorage.publicExtractable = publicLoaded.extractable
+
+    log(`loaded.privateKey?.extractable = ${privateLoaded.extractable}`)
+    log(`loaded.publicKey?.extractable  = ${publicLoaded.extractable}`)
+
+    // CRITICAL SECURITY CHECK: Private key must remain non-extractable
+    if (privateLoaded.extractable) {
+      const errorMsg = 'SECURITY VIOLATION: Private key became extractable after storage/retrieval!'
+      error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
+    // CRITICAL SECURITY CHECK: Public key should remain extractable
+    if (!publicLoaded.extractable) {
+      const errorMsg =
+        'SECURITY VIOLATION: Public key became non-extractable after storage/retrieval!'
+      error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
+    // try to export both keys (export should fail for non-extractable private)
+    async function tryExport(key: CryptoKey | undefined, label: string): Promise<boolean> {
+      if (!key) {
+        log(`${label} key missing`)
+        return false
       }
+      try {
+        const jwk = await crypto.subtle.exportKey('jwk', key)
+        log(`${label} export OK — jwk keys: ${Object.keys(jwk).join(', ')}`)
 
-      return false
+        // SECURITY CHECK: If this was originally a non-extractable private key, this is a problem!
+        if (label === 'private' && !kp.privateKey.extractable) {
+          const errorMsg =
+            'SECURITY VIOLATION: Successfully extracted a non-extractable private key from IndexedDB!'
+          error(errorMsg)
+          throw new Error(errorMsg)
+        }
+
+        return true
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e)
+        log(`${label} export FAILED (expected for non-extractable): ${errorMessage}`)
+
+        // This is the expected behavior for non-extractable keys
+        if (label === 'private' && !kp.privateKey.extractable) {
+          log('✅ Security test PASSED: Non-extractable private key remained non-extractable')
+        }
+
+        // Store error details
+        if (label === 'private') {
+          report.exportTests.privateExportError = errorMessage
+        } else {
+          report.exportTests.publicExportError = errorMessage
+        }
+
+        return false
+      }
+    }
+
+    report.exportTests.privateExportSuccess = await tryExport(privateLoaded, 'private')
+    report.exportTests.publicExportSuccess = await tryExport(publicLoaded, 'public')
+
+    // Final security validation
+    report.securityValidation.privateKeySecurityMaintained =
+      !report.exportTests.privateExportSuccess
+    report.securityValidation.publicKeyAccessible = report.exportTests.publicExportSuccess
+
+    // If private key export succeeded, that's a security violation
+    if (report.exportTests.privateExportSuccess) {
+      const errorMsg = 'SECURITY VIOLATION: Private key export should have failed!'
+      error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
+    // If public key export failed, that's also a problem
+    if (!report.exportTests.publicExportSuccess) {
+      const errorMsg = 'SECURITY VIOLATION: Public key export should have succeeded!'
+      error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
+    log('✅ All security tests PASSED')
+    report.success = true
+  } catch (cause) {
+    testFailed = true
+    testFailure = cause
+  } finally {
+    if (typeof indexedDB !== 'undefined') {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const request = indexedDB.deleteDatabase(DB)
+          request.onsuccess = () => resolve()
+          request.onerror = () => reject(new Error(request.error?.message || 'delete failed'))
+          request.onblocked = () => reject(new Error('delete blocked'))
+        })
+        log('Database cleanup completed')
+      } catch (cause) {
+        const message = `Database cleanup failed: ${cause instanceof Error ? cause.message : String(cause)}`
+        error(message)
+        cleanupFailed = true
+        cleanupFailure = cause
+      }
     }
   }
 
-  report.exportTests.privateExportSuccess = await tryExport(privateLoaded, 'private')
-  report.exportTests.publicExportSuccess = await tryExport(publicLoaded, 'public')
-
-  // Final security validation
-  report.securityValidation.privateKeySecurityMaintained = !report.exportTests.privateExportSuccess
-  report.securityValidation.publicKeyAccessible = report.exportTests.publicExportSuccess
-
-  // If private key export succeeded, that's a security violation
-  if (report.exportTests.privateExportSuccess) {
-    const errorMsg = 'SECURITY VIOLATION: Private key export should have failed!'
-    error(errorMsg)
-    throw new Error(errorMsg)
+  if (testFailed) throw testFailure
+  if (cleanupFailed) {
+    report.success = false
+    throw cleanupFailure
   }
-
-  // If public key export failed, that's also a problem
-  if (!report.exportTests.publicExportSuccess) {
-    const errorMsg = 'SECURITY VIOLATION: Public key export should have succeeded!'
-    error(errorMsg)
-    throw new Error(errorMsg)
-  }
-
-  log('✅ All security tests PASSED')
-  report.success = true
-
-  // cleanup
-  try {
-    await new Promise<void>((res, rej) => {
-      const req = indexedDB.deleteDatabase(DB)
-      req.onsuccess = () => res()
-      req.onerror = () => rej(new Error(req.error?.message || 'delete failed'))
-      req.onblocked = () => rej(new Error('delete blocked'))
-    })
-    log('Database cleanup completed')
-  } catch (e) {
-    const errorMsg = `Database cleanup failed: ${e instanceof Error ? e.message : String(e)}`
-    error(errorMsg)
-    // Don't throw cleanup errors - just log them
-  }
-
   return report
 }
 // TODO: encrypt a file with device1 SK and decrypt with device2 SK
@@ -979,7 +915,7 @@ export async function testCryptoSession() {
 
   // Test user key management
   const userPubKey = (await device1.derive({ mnemonic: generateSeedPhrase() })).getUserPublicKey()
-  report.push(`User public key: ${await cryptoKeyToBase64(userPubKey.publicKey)}`)
+  report.push(`User public key: ${await cryptoKeyToBase64(userPubKey)}`)
 
   // ===================================================================
   // Phase 2: Key Sharing Between Devices
@@ -2056,34 +1992,37 @@ export const testMetaDb = async () => {
 testMetaDb.description = 'test meta database'
 
 export const testPGLite = async () => {
-  const db = await getDatabase('chatStore')
-  return {
-    db,
-    pgvector: await db.exec('CREATE EXTENSION IF NOT EXISTS vector;'),
-    createTable: await db.exec(`
-      CREATE TABLE IF NOT EXISTS test (
-        id SERIAL PRIMARY KEY,
-        task TEXT,
-        vec vector(3),
-        done BOOLEAN DEFAULT false
-      );
-      INSERT INTO test (task, done) VALUES ('Install PGlite from NPM', true);
-      INSERT INTO test (task, done) VALUES ('Load PGlite', true);
-      INSERT INTO test (task, done) VALUES ('Create a table', true);
-      INSERT INTO test (task, done) VALUES ('Insert some data', true);
-      INSERT INTO test (task) VALUES ('Update a task');
-      INSERT INTO test (task, vec) VALUES ('test1', '[1,2,3]');
-      INSERT INTO test (task, vec) VALUES ('test2', '[4,5,6]');
-      INSERT INTO test (task, vec) VALUES ('test3', '[7,8,9]');
-    `),
-    query: await db.sql`SELECT * from test WHERE id = 1;`,
-    'vector query': await db.exec(`
-      SELECT
-        task,
-        vec,
-        vec <-> '[3,1,2]' AS distance
-      FROM test;
-    `),
+  const db = await createInMemoryDatabase('pglite-diagnostic')
+  try {
+    return {
+      pgvector: await db.exec('CREATE EXTENSION IF NOT EXISTS vector;'),
+      createTable: await db.exec(`
+        CREATE TABLE IF NOT EXISTS test (
+          id SERIAL PRIMARY KEY,
+          task TEXT,
+          vec vector(3),
+          done BOOLEAN DEFAULT false
+        );
+        INSERT INTO test (task, done) VALUES ('Install PGlite from NPM', true);
+        INSERT INTO test (task, done) VALUES ('Load PGlite', true);
+        INSERT INTO test (task, done) VALUES ('Create a table', true);
+        INSERT INTO test (task, done) VALUES ('Insert some data', true);
+        INSERT INTO test (task) VALUES ('Update a task');
+        INSERT INTO test (task, vec) VALUES ('test1', '[1,2,3]');
+        INSERT INTO test (task, vec) VALUES ('test2', '[4,5,6]');
+        INSERT INTO test (task, vec) VALUES ('test3', '[7,8,9]');
+      `),
+      query: await db.sql`SELECT * from test WHERE id = 1;`,
+      'vector query': await db.exec(`
+        SELECT
+          task,
+          vec,
+          vec <-> '[3,1,2]' AS distance
+        FROM test;
+      `),
+    }
+  } finally {
+    await db.close()
   }
 }
 

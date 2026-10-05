@@ -22,6 +22,7 @@ import {
   buildDiagnosticsRegistry,
   getDiagnosticsSkipReason,
   runDiagnosticsTests,
+  selectDiagnosticsTestBatch,
   type DiagnosticsRunOptions,
   type DiagnosticsTestContext,
   type TaskyonTestFn,
@@ -50,21 +51,18 @@ const chatTopic = computed(() => {
   return 'taskyon-simple-chat'
 })
 
-const emitHeadlessEvents = computed(() => route.query.emit === '1')
+const shouldReportHeadlessResult = computed(() => route.query.emit === '1')
 const HEADLESS_KEEP_TAG = '[HEADLESS][KEEP]'
 
-async function emitHeadlessEvent(name: string, payload: Record<string, unknown>) {
-  if (!emitHeadlessEvents.value) return
-  try {
-    const { emit } = await import('@tauri-apps/api/event')
-    await emit(name, payload)
-  } catch (error) {
-    console.error(`${HEADLESS_KEEP_TAG}[EMIT][ERROR] failed to emit event`, {
-      name,
-      payload,
-      error,
-    })
-  }
+function emitHeadlessResult(payload: {
+  passed: boolean
+  total: number
+  failed: number
+  modelPassed?: number
+  modelTotal?: number
+}) {
+  if (!shouldReportHeadlessResult.value) return
+  console.info(`${HEADLESS_KEEP_TAG}[RESULT] ${JSON.stringify(payload)}`)
 }
 
 function getDiagnosticsTests(throughLevel?: DiagnosticsRunLevel) {
@@ -136,6 +134,12 @@ function normalizeTestFilter(value: string): string {
   return value.toLowerCase().replace(/\s+/g, '')
 }
 
+function parseDiagnosticsBatchNumber(value: unknown, minimum: number): number | undefined {
+  if (typeof value !== 'string') return undefined
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed >= minimum ? parsed : undefined
+}
+
 function applyTestFilter(tests: TestRecord, filter: string): TestRecord {
   const normalizedFilter = normalizeTestFilter(filter)
   return Object.fromEntries(
@@ -193,35 +197,31 @@ function diagnosticsYamlReport(results: Awaited<ReturnType<typeof runDiagnostics
   return out
 }
 
-function summarizeError(error: unknown): string {
-  if (!error) return 'unknown error'
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  if (typeof error === 'object' && error !== null) {
-    const maybeMessage = (error as { message?: unknown }).message
-    if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage
-  }
-  try {
-    return JSON.stringify(error)
-  } catch {
-    return Object.prototype.toString.call(error)
-  }
-}
-
-async function closeWindow() {
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    await getCurrentWindow().close()
-  } catch (error) {
-    console.error(`${HEADLESS_KEEP_TAG}[WINDOW][ERROR] failed to close window`, error)
-  }
-}
-
 async function runDiagnosticsMode() {
   status.value = 'running diagnostics'
   console.log(`${HEADLESS_KEEP_TAG}[DIAG][START] diagnostics mode started`)
 
   const start = Date.now()
+  const progressLines: string[] = []
+  let progressFlushTimer: ReturnType<typeof setTimeout> | undefined
+  const flushProgress = () => {
+    if (progressFlushTimer !== undefined) clearTimeout(progressFlushTimer)
+    progressFlushTimer = undefined
+    if (progressLines.length === 0) return
+    console.log(`${HEADLESS_KEEP_TAG}[TEST] ${progressLines.splice(0).join(' | ')}`)
+  }
+  const recordProgress: NonNullable<DiagnosticsRunOptions['onProgress']> = (progress) => {
+    const status =
+      progress.ok === undefined ? '' : progress.ok ? ' (OK)' : ` (ERROR) ${String(progress.error)}`
+    progressLines.push(`${progress.phase.toUpperCase()} ${progress.test}${status}`)
+    if (progressLines.length >= 40) {
+      flushProgress()
+      return
+    }
+    if (progressFlushTimer === undefined) {
+      progressFlushTimer = setTimeout(flushProgress, 2_000)
+    }
+  }
   const filterArg = typeof route.query.testFilter === 'string' ? route.query.testFilter.trim() : ''
   const throughLevel =
     route.query.throughLevel === undefined
@@ -229,18 +229,28 @@ async function runDiagnosticsMode() {
       : parseDiagnosticsRunLevel(route.query.throughLevel)
   const allTests = getDiagnosticsTests(throughLevel)
   const matchingNames = filterArg ? applyTestFilter(allTests, filterArg) : allTests
-  const tests =
+  const levelFilteredTests =
     throughLevel === undefined
       ? matchingNames
       : filterDiagnosticsThroughLevel(matchingNames, throughLevel)
+  const testOffset = parseDiagnosticsBatchNumber(route.query.testOffset, 0) ?? 0
+  const testLimit = parseDiagnosticsBatchNumber(route.query.testLimit, 1)
+  const tests = selectDiagnosticsTestBatch(levelFilteredTests, testOffset, testLimit)
   if (filterArg) {
     console.log(
-      `${HEADLESS_KEEP_TAG}[DIAG][FILTER] diagnostics filter "${filterArg}" matched ${Object.keys(tests).length}/${Object.keys(allTests).length} tests`,
+      `${HEADLESS_KEEP_TAG}[DIAG][FILTER] diagnostics filter "${filterArg}" matched ${Object.keys(levelFilteredTests).length}/${Object.keys(allTests).length} tests`,
+    )
+  }
+  if (testOffset > 0 || testLimit !== undefined) {
+    console.log(
+      `${HEADLESS_KEEP_TAG}[DIAG][BATCH] selected ${Object.keys(tests).length}/${Object.keys(levelFilteredTests).length} tests at offset ${testOffset}`,
     )
   }
   if (!Object.keys(tests).length) {
     throw new Error(
-      `No diagnostics tests matched filter: "${filterArg}" at level ${throughLevel ?? 'all'}`,
+      Object.keys(levelFilteredTests).length === 0
+        ? `No diagnostics tests matched filter: "${filterArg}" at level ${throughLevel ?? 'all'}`
+        : `No diagnostics tests selected at offset ${testOffset}`,
     )
   }
   const modelArg = route.query.diagnosticsModel
@@ -306,14 +316,7 @@ async function runDiagnosticsMode() {
           : {}),
       }
     },
-    onProgress: (progress) => {
-      void emitHeadlessEvent('headless-diagnostics-progress', {
-        phase: progress.phase,
-        test: progress.test,
-        ok: progress.ok,
-        errorMessage: progress.ok === false ? summarizeError(progress.error) : undefined,
-      })
-    },
+    onProgress: recordProgress,
     onResult: (result) => {
       if (!result.ok && (!result.modelBased || result.preparationFailed)) {
         console.error(`${HEADLESS_KEEP_TAG}[TEST][FAIL] ${result.name}`, result.error)
@@ -326,6 +329,7 @@ async function runDiagnosticsMode() {
       )
     : tests
   const results = await runDiagnosticsTests(namedTests, createRunOptions(diagnosticModel))
+  flushProgress()
 
   const total = results.length
   const executableResults = results.filter(
@@ -352,7 +356,7 @@ async function runDiagnosticsMode() {
     elapsedSeconds: elapsed,
   })
 
-  await emitHeadlessEvent('headless-diagnostics-result', {
+  emitHeadlessResult({
     passed,
     total,
     failed,
@@ -361,9 +365,6 @@ async function runDiagnosticsMode() {
   })
 
   status.value = passed ? 'diagnostics passed' : 'diagnostics failed'
-  if (route.query.close === '1') {
-    await closeWindow()
-  }
 }
 
 onMounted(async () => {
@@ -396,14 +397,11 @@ onMounted(async () => {
   } catch (error) {
     status.value = 'error'
     console.error(`${HEADLESS_KEEP_TAG}[BOOT][ERROR] failed to boot headless mode`, error)
-    await emitHeadlessEvent('headless-diagnostics-result', {
+    emitHeadlessResult({
       passed: false,
       total: 0,
       failed: 1,
     })
-    if (route.query.close === '1') {
-      await closeWindow()
-    }
   }
 })
 </script>

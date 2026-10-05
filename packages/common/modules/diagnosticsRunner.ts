@@ -100,8 +100,8 @@ export type DiagnosticsRunOptions = {
     test: string
     ok?: boolean
     error?: unknown
-  }) => void
-  onResult?: (result: DiagnosticsRunResult) => void
+  }) => void | Promise<void>
+  onResult?: (result: DiagnosticsRunResult) => void | Promise<void>
   shouldAbort?: () => boolean
   onAbort?: (nextTest: string) => void
 }
@@ -122,6 +122,11 @@ export function getDiagnosticsSkipReason(details: unknown): string | undefined {
 
 const DEFAULT_DIAGNOSTICS_TEST_TIMEOUT_MS = 20_000
 const MAX_DIAGNOSTICS_TEST_TIMEOUT_MS = 600_000
+
+const normalizeDiagnosticError = (error: unknown) =>
+  error instanceof Error
+    ? { message: error.message, stack: error.stack, cause: error.cause, name: error.name }
+    : error
 
 function camelToNormal(input: string): string {
   if (!input) return ''
@@ -204,6 +209,21 @@ export function buildDiagnosticsRegistry(args: {
   }
 }
 
+export function selectDiagnosticsTestBatch(
+  tests: TestRecord,
+  offset: number,
+  limit?: number,
+): TestRecord {
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    throw new Error(`Invalid diagnostics test offset: ${offset}`)
+  }
+  if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) {
+    throw new Error(`Invalid diagnostics test limit: ${limit}`)
+  }
+  const entries = Object.entries(tests)
+  return Object.fromEntries(entries.slice(offset, limit === undefined ? undefined : offset + limit))
+}
+
 export async function runDiagnosticsTests(
   tests: TestRecord,
   opts?: DiagnosticsRunOptions,
@@ -238,9 +258,10 @@ export async function runDiagnosticsTests(
       opts.onAbort?.(name)
       break
     }
-    opts?.onProgress?.({ phase: 'start', test: name })
+    await opts?.onProgress?.({ phase: 'start', test: name })
     const controller = new AbortController()
     let preparing = false
+    let result: DiagnosticsRunResult
     try {
       const fallbackContext =
         opts?.tyauth !== undefined || opts?.isCypress !== undefined
@@ -272,35 +293,48 @@ export async function runDiagnosticsTests(
         if (typeof testFn.setup === 'function') await testFn.setup(testOpts)
         return await testFn(testOpts)
       }
-      const result = await withTimeout(name, timeoutMs, run, controller)
+      const testResult = await withTimeout(name, timeoutMs, run, controller)
       const skipped =
-        typeof result === 'object' &&
-        result !== null &&
-        'skipped' in result &&
-        result.skipped === true
-      out.push({
+        typeof testResult === 'object' &&
+        testResult !== null &&
+        'skipped' in testResult &&
+        testResult.skipped === true
+      result = {
         name,
         ok: true,
         modelBased: testFn.modelBased === true,
-        details: details || skipped ? result : undefined,
-      })
-      opts?.onResult?.(out[out.length - 1]!)
-      opts?.onProgress?.({ phase: 'finish', test: name, ok: true })
+        details: details || skipped ? testResult : undefined,
+      }
     } catch (error) {
-      const normalizedError =
-        error instanceof Error
-          ? { message: error.message, stack: error.stack, cause: error.cause, name: error.name }
-          : error
-      out.push({
+      result = {
         name,
         ok: false,
         modelBased: testFn.modelBased === true,
         ...(preparing ? { preparationFailed: true } : {}),
-        error: normalizedError,
-      })
-      opts?.onResult?.(out[out.length - 1]!)
-      opts?.onProgress?.({ phase: 'finish', test: name, ok: false, error: normalizedError })
+        error: normalizeDiagnosticError(error),
+      }
     }
+    out.push(result)
+    try {
+      await opts?.onResult?.(result)
+    } catch (error) {
+      result = {
+        name,
+        ok: false,
+        modelBased: testFn.modelBased === true,
+        ...(result.preparationFailed ? { preparationFailed: true } : {}),
+        error: result.ok
+          ? normalizeDiagnosticError(error)
+          : { testError: result.error, onResultError: normalizeDiagnosticError(error) },
+      }
+      out[out.length - 1] = result
+    }
+    await opts?.onProgress?.({
+      phase: 'finish',
+      test: name,
+      ok: result.ok,
+      ...(!result.ok ? { error: result.error } : {}),
+    })
   }
 
   return out

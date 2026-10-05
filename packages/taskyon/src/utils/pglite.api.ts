@@ -24,15 +24,36 @@ export function configureNodePgLiteDataDir(resolver?: (name: string) => string) 
   nodeDataDirResolver = resolver ?? null
 }
 
-export async function closeDatabases(): Promise<void> {
-  const pendingDatabases = [...pendingPgInstances.values(), ...pendingMemoryPgInstances.values()]
+const closeDatabaseCaches = async (
+  caches: Array<{
+    instances: Map<string, TyPGDB>
+    pendingInstances: Map<string, Promise<TyPGDB>>
+  }>,
+): Promise<void> => {
+  const pendingDatabases = caches.flatMap(({ pendingInstances }) => [...pendingInstances.values()])
   await Promise.allSettled(pendingDatabases)
-  const databases = [...pgInstances.values(), ...memoryPgInstances.values()]
-  pgInstances.clear()
-  memoryPgInstances.clear()
-  pendingPgInstances.clear()
-  pendingMemoryPgInstances.clear()
-  await Promise.all(databases.map(async (database) => await database.close()))
+  const databases = caches.flatMap(({ instances }) => [...instances.values()])
+  for (const { instances, pendingInstances } of caches) {
+    instances.clear()
+    pendingInstances.clear()
+  }
+  await Promise.all(databases.map((database) => database.close()))
+}
+
+export async function closeDatabases(): Promise<void> {
+  await closeDatabaseCaches([
+    { instances: pgInstances, pendingInstances: pendingPgInstances },
+    { instances: memoryPgInstances, pendingInstances: pendingMemoryPgInstances },
+  ])
+}
+
+export async function closeInMemoryDatabase(name: string): Promise<void> {
+  const pendingDatabase = pendingMemoryPgInstances.get(name)
+  if (pendingDatabase) await Promise.allSettled([pendingDatabase])
+  const database = memoryPgInstances.get(name)
+  if (!database) return
+  memoryPgInstances.delete(name)
+  await database.close()
 }
 
 export async function initializePGliteWorker<T>(
@@ -52,18 +73,19 @@ export async function initializePGliteWorker<T>(
   }
 }
 
-const createBrowserPGlite = async (name: string): Promise<TyPGDB> =>
+const createBrowserPGlite = async (options: {
+  dataDir: string
+  id?: string
+  extensions: { live: typeof live }
+}): Promise<TyPGDB> =>
   await initializePGliteWorker(() => {
     const worker = new Worker(new URL('./pglite.worker.ts', import.meta.url), {
       type: 'module',
     })
     return {
       ready: PGliteWorker.create(worker, {
-        dataDir: `idb://${name}314`,
+        ...options,
         database: TASKYON_DATABASE,
-        extensions: {
-          live,
-        },
       }),
       cleanup: () => worker.terminate(),
     }
@@ -89,7 +111,10 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
             vector,
           },
         })) as TyPGDB)
-      : await createBrowserPGlite(name)
+      : await createBrowserPGlite({
+          dataDir: `idb://${name}314`,
+          extensions: { live },
+        })
     pgInstances.set(name, newInstance)
     newInstance.name = name
     return newInstance
@@ -103,12 +128,16 @@ export const getDatabase: (name: string) => Promise<TyPGDB> = async (name) => {
 }
 
 export const createInMemoryDatabase = async (name: string): Promise<TyPGDB> => {
-  const database: TyPGDB = await PGlite.create({
-    dataDir: 'memory://',
-    extensions: {
-      vector,
-    },
-  })
+  const database: TyPGDB = useNodePgLite()
+    ? ((await PGlite.create({
+        dataDir: 'memory://',
+        extensions: { vector },
+      })) as TyPGDB)
+    : await createBrowserPGlite({
+        dataDir: 'memory://',
+        id: `taskyon-memory-${crypto.randomUUID()}`,
+        extensions: { live },
+      })
   database.name = name
   return database
 }

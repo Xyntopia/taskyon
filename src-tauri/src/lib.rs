@@ -3,9 +3,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Write as _;
 use std::path::PathBuf;
+use tauri::Manager;
 use tauri::{webview::NewWindowResponse, webview::Url, Listener, WebviewUrl};
 use tracing_subscriber::EnvFilter;
-use tauri::Manager;
 
 mod commands;
 
@@ -22,6 +22,8 @@ struct RunConfig {
     diagnostics_detailed: bool,
     diagnostics_no_gui: bool,
     diagnostics_filter: Option<String>,
+    diagnostics_test_offset: Option<usize>,
+    diagnostics_test_limit: Option<usize>,
     diagnostics_through_level: Option<String>,
     diagnostics_model: Option<String>,
     diagnostics_allow_long_run: bool,
@@ -34,15 +36,6 @@ struct DiagnosticsResultPayload {
     passed: bool,
     total: usize,
     failed: usize,
-}
-
-#[derive(Debug, Deserialize)]
-struct DiagnosticsProgressPayload {
-    phase: String,
-    test: String,
-    ok: Option<bool>,
-    #[serde(rename = "errorMessage")]
-    error_message: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,6 +73,8 @@ fn classify_headless_log_policy(config: &RunConfig) -> HeadlessLogPolicy {
 }
 
 const HEADLESS_KEEP_TAG: &str = "[HEADLESS][KEEP]";
+const HEADLESS_TEST_TAG: &str = "[HEADLESS][KEEP][TEST] ";
+const HEADLESS_RESULT_TAG: &str = "[HEADLESS][KEEP][RESULT] ";
 
 fn has_headless_keep_tag(message: &str) -> bool {
     message.contains(HEADLESS_KEEP_TAG)
@@ -98,8 +93,23 @@ fn policy_allows_headless_console(policy: HeadlessLogPolicy, level: &str, messag
     }
 }
 
+fn format_headless_line(level: &str, message: &str) -> String {
+    if let Some(progress) = message.strip_prefix(HEADLESS_TEST_TAG) {
+        return format!("[HEADLESS][TEST] {progress}");
+    }
+    format!("[HEADLESS][{}] {}", normalize_level(level), message)
+}
+
+fn parse_headless_diagnostics_result(
+    message: &str,
+) -> Option<Result<DiagnosticsResultPayload, serde_json::Error>> {
+    message
+        .strip_prefix(HEADLESS_RESULT_TAG)
+        .map(serde_json::from_str)
+}
+
 fn print_headless_line(level: &str, message: &str) {
-    println!("[HEADLESS][{}] {}", normalize_level(level), message);
+    println!("{}", format_headless_line(level, message));
 }
 
 fn detect_run_config() -> RunConfig {
@@ -128,6 +138,10 @@ fn detect_run_config() -> RunConfig {
         diagnostics_detailed: args.iter().any(|arg| arg == "--diagnostics-detailed"),
         diagnostics_no_gui: !args.iter().any(|arg| arg == "--diagnostics-gui"),
         diagnostics_filter,
+        diagnostics_test_offset: arg_value(&args, "--diagnostics-test-offset")
+            .and_then(|value| value.parse().ok()),
+        diagnostics_test_limit: arg_value(&args, "--diagnostics-test-limit")
+            .and_then(|value| value.parse().ok()),
         diagnostics_through_level: arg_value(&args, "--diagnostics-through-level"),
         diagnostics_model: arg_value(&args, "--diagnostics-model"),
         diagnostics_allow_long_run: has_arg(&args, "--diagnostics-allow-long-run"),
@@ -147,11 +161,16 @@ fn headless_url(config: &RunConfig) -> String {
             "0"
         };
         let no_gui = if config.diagnostics_no_gui { "1" } else { "0" };
-        let mut url =
-            format!("/headless?runDiagnostics=1&details={details}&nogui={no_gui}&close=1&emit=1");
+        let mut url = format!("/headless?runDiagnostics=1&details={details}&nogui={no_gui}&emit=1");
         if let Some(filter) = config.diagnostics_filter.as_deref() {
             url.push_str("&testFilter=");
             url.push_str(&url_encode_query_value(filter));
+        }
+        if let Some(offset) = config.diagnostics_test_offset {
+            url.push_str(&format!("&testOffset={offset}"));
+        }
+        if let Some(limit) = config.diagnostics_test_limit {
+            url.push_str(&format!("&testLimit={limit}"));
         }
         if let Some(level) = config.diagnostics_through_level.as_deref() {
             url.push_str("&throughLevel=");
@@ -282,16 +301,12 @@ fn apply_pending_storage_reset(app: &tauri::AppHandle) {
         };
         match result {
             Ok(()) => report.removed.push(path.display().to_string()),
-            Err(err) => report
-                .failed
-                .push(format!("{}: {}", path.display(), err)),
+            Err(err) => report.failed.push(format!("{}: {}", path.display(), err)),
         }
     }
 
     if let Err(err) = std::fs::remove_file(&marker) {
-        report
-            .failed
-            .push(format!("{}: {}", marker.display(), err));
+        report.failed.push(format!("{}: {}", marker.display(), err));
     }
 
     if report.failed.is_empty() {
@@ -313,8 +328,12 @@ fn request_tauri_storage_reset(app: tauri::AppHandle) -> Result<String, String> 
         .path()
         .app_data_dir()
         .map_err(|e| format!("Could not resolve app_data_dir: {e}"))?;
-    std::fs::create_dir_all(&app_data_dir)
-        .map_err(|e| format!("Could not create app_data_dir {}: {e}", app_data_dir.display()))?;
+    std::fs::create_dir_all(&app_data_dir).map_err(|e| {
+        format!(
+            "Could not create app_data_dir {}: {e}",
+            app_data_dir.display()
+        )
+    })?;
     let marker = storage_reset_marker_path(&app_data_dir);
     std::fs::write(&marker, b"reset")
         .map_err(|e| format!("Could not create reset marker {}: {e}", marker.display()))?;
@@ -375,6 +394,8 @@ pub fn run() {
 
             if run_mode == RunMode::Headless {
                 let policy = classify_headless_log_policy(&config);
+                let run_diagnostics = config.run_diagnostics;
+                let app_handle = app.handle().clone();
                 app.listen("headless-console", move |event| {
                     let payload_str = event.payload();
                     let (level, message) =
@@ -384,83 +405,37 @@ pub fn run() {
                             ("INFO".to_string(), payload_str.to_string())
                         };
 
-                    if policy_allows_headless_console(policy, &level, &message) {
-                        print_headless_line(&level, &message);
-                    }
-                });
-            }
-
-            if run_mode == RunMode::Headless && config.run_diagnostics {
-                app.listen("headless-diagnostics-progress", move |event| {
-                    let payload_str = event.payload();
-                    if let Ok(payload) =
-                        serde_json::from_str::<DiagnosticsProgressPayload>(payload_str)
-                    {
-                        match payload.ok {
-                            Some(ok) => {
-                                if ok {
+                    if run_diagnostics {
+                        if let Some(result) = parse_headless_diagnostics_result(&message) {
+                            match result {
+                                Ok(payload) => {
                                     println!(
-                                        "[HEADLESS][TEST] {} {} ({})",
-                                        payload.phase.to_uppercase(),
-                                        payload.test,
-                                        "OK"
+                                        "HEADLESS_DIAGNOSTICS_RESULT {}",
+                                        serde_json::json!({
+                                          "passed": payload.passed,
+                                          "total": payload.total,
+                                          "failed": payload.failed
+                                        })
                                     );
-                                } else if let Some(message) = payload.error_message {
-                                    println!(
-                                        "[HEADLESS][TEST] {} {} ({}) {}",
-                                        payload.phase.to_uppercase(),
-                                        payload.test,
-                                        "ERROR",
-                                        message
+                                    app_handle.exit(if payload.passed { 0 } else { 1 });
+                                }
+                                Err(err) => {
+                                    eprintln!(
+                                        "HEADLESS_DIAGNOSTICS_RESULT_PARSE_ERROR {}",
+                                        serde_json::json!({
+                                          "error": err.to_string(),
+                                          "message": message
+                                        })
                                     );
-                                } else {
-                                    println!(
-                                        "[HEADLESS][TEST] {} {} ({})",
-                                        payload.phase.to_uppercase(),
-                                        payload.test,
-                                        "ERROR"
-                                    );
+                                    app_handle.exit(2);
                                 }
                             }
-                            None => println!(
-                                "[HEADLESS][TEST] {} {}",
-                                payload.phase.to_uppercase(),
-                                payload.test
-                            ),
+                            return;
                         }
-                    } else {
-                        eprintln!(
-                            "[HEADLESS][WARN] failed to parse diagnostics progress payload: {}",
-                            payload_str
-                        );
                     }
-                });
 
-                let app_handle = app.handle().clone();
-                app.listen("headless-diagnostics-result", move |event| {
-                    let payload_str = event.payload();
-                    match serde_json::from_str::<DiagnosticsResultPayload>(payload_str) {
-                        Ok(payload) => {
-                            println!(
-                                "HEADLESS_DIAGNOSTICS_RESULT {}",
-                                serde_json::json!({
-                                  "passed": payload.passed,
-                                  "total": payload.total,
-                                  "failed": payload.failed
-                                })
-                            );
-                            app_handle.exit(if payload.passed { 0 } else { 1 });
-                        }
-                        Err(err) => {
-                            eprintln!(
-                                "HEADLESS_DIAGNOSTICS_RESULT_PARSE_ERROR {}",
-                                serde_json::json!({
-                                  "error": err.to_string(),
-                                  "raw_payload": payload_str
-                                })
-                            );
-                            app_handle.exit(2);
-                        }
+                    if policy_allows_headless_console(policy, &level, &message) {
+                        print_headless_line(&level, &message);
                     }
                 });
             }
@@ -525,6 +500,8 @@ mod tests {
             diagnostics_detailed: false,
             diagnostics_no_gui: true,
             diagnostics_filter: None,
+            diagnostics_test_offset: None,
+            diagnostics_test_limit: None,
             diagnostics_through_level: None,
             diagnostics_model: None,
             diagnostics_allow_long_run: false,
@@ -550,6 +527,31 @@ mod tests {
             "info",
             "create tool chatCompletion"
         ));
+    }
+
+    #[test]
+    fn headless_test_console_messages_keep_the_diagnostic_line_format() {
+        assert_eq!(
+            format_headless_line(
+                "info",
+                "[HEADLESS][KEEP][TEST] FINISH Example Diagnostic (OK)"
+            ),
+            "[HEADLESS][TEST] FINISH Example Diagnostic (OK)"
+        );
+    }
+
+    #[test]
+    fn headless_diagnostics_result_messages_parse_from_console_output() {
+        let result = parse_headless_diagnostics_result(
+            "[HEADLESS][KEEP][RESULT] {\"passed\":true,\"total\":3,\"failed\":0}",
+        )
+        .expect("result message")
+        .expect("valid result payload");
+
+        assert!(result.passed);
+        assert_eq!(result.total, 3);
+        assert_eq!(result.failed, 0);
+        assert!(parse_headless_diagnostics_result("ordinary log message").is_none());
     }
 
     #[test]
@@ -582,6 +584,18 @@ mod tests {
         cfg.run_diagnostics = true;
         cfg.diagnostics_through_level = Some("3".to_string());
         assert!(headless_url(&cfg).contains("throughLevel=3"));
+    }
+
+    #[test]
+    fn headless_diagnostics_can_select_a_test_batch() {
+        let mut cfg = test_run_config();
+        cfg.run_diagnostics = true;
+        cfg.diagnostics_test_offset = Some(20);
+        cfg.diagnostics_test_limit = Some(10);
+
+        let url = headless_url(&cfg);
+        assert!(url.contains("testOffset=20"));
+        assert!(url.contains("testLimit=10"));
     }
 
     #[test]

@@ -7,6 +7,7 @@ import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { createStorageTool } from '../tools/fileTools'
 import { sleep } from '../utils/asyncUtils'
 import { createPortableTestStorage } from '../testSupport/portableTestStorage'
+import { createInMemoryDatabasePool } from '../testSupport/inMemoryDatabasePool'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -14,20 +15,35 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const createTaskWorkerTestRuntime = async () => {
   const storage = createPortableTestStorage()
-  const ty = await tyCore(
-    () => ({
-      entryFunction: 'entryNode',
-      taskWorker: { maxConcurrency: 4 },
-    }),
-    () => toolCall({ name: 'entryNode', arguments: {} }),
-    {},
-    undefined,
-    {
-      indexTaskVectors: false,
-      taskManagerStorageFactory: storage.taskManagerStorageFactory,
-    },
-  )
-  return { ty, storage }
+  const databases = createInMemoryDatabasePool()
+  try {
+    const ty = await tyCore(
+      () => ({
+        entryFunction: 'entryNode',
+        taskWorker: { maxConcurrency: 4 },
+      }),
+      () => toolCall({ name: 'entryNode', arguments: {} }),
+      {},
+      undefined,
+      {
+        databaseFactory: databases.databaseFactory,
+        indexTaskVectors: false,
+        taskManagerStorageFactory: storage.taskManagerStorageFactory,
+      },
+    )
+    return {
+      ty,
+      storage,
+      cleanup: async () => {
+        storage.destroy()
+        await databases.closeDatabases()
+      },
+    }
+  } catch (error) {
+    storage.destroy()
+    await databases.closeDatabases()
+    throw error
+  }
 }
 
 const waitForWorkerSettlement = async (events: TyTaskStreamData[], timeoutMs: number) => {
@@ -86,7 +102,7 @@ const assertEventOrder = (
 }
 
 export const testStorageResultContinuesThroughConfiguredEntryNode = async () => {
-  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const { ty, cleanup } = await createTaskWorkerTestRuntime()
   const storageClient = {
     setBlob: ({ data }: { data: Uint8Array }) =>
       Promise.resolve({
@@ -159,7 +175,7 @@ export const testStorageResultContinuesThroughConfiguredEntryNode = async () => 
   } finally {
     registration.destroy()
     await ty.dispose('storage entry continuation diagnostic complete')
-    storage.destroy()
+    await cleanup()
   }
 }
 
@@ -167,7 +183,7 @@ testStorageResultContinuesThroughConfiguredEntryNode.description =
   "Routes ordinary storage results through Taskyon's configured default entry node instead of directly invoking chatCompletion."
 
 export const testTaskWorkerEmitsProcessedBeforeFinishedForMessageSubtask = async () => {
-  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const { ty, cleanup } = await createTaskWorkerTestRuntime()
   const events: TyTaskStreamData[] = []
   const unsubscribeWorkerStream = ty.workerStream((event) => {
     events.push(event)
@@ -215,7 +231,7 @@ export const testTaskWorkerEmitsProcessedBeforeFinishedForMessageSubtask = async
     unsubscribeWorkerStream()
     registration.destroy()
     await ty.dispose('task worker message subtask diagnostic complete')
-    storage.destroy()
+    await cleanup()
   }
 }
 
@@ -223,7 +239,7 @@ testTaskWorkerEmitsProcessedBeforeFinishedForMessageSubtask.description =
   'Ensures worker streams distinguish processed function calls from semantic task completion.'
 
 export const testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks = async () => {
-  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const { ty, cleanup } = await createTaskWorkerTestRuntime()
   const events: TyTaskStreamData[] = []
   const unsubscribeWorkerStream = ty.workerStream((event) => {
     events.push(event)
@@ -310,7 +326,7 @@ export const testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks = async () =
     unsubscribeWorkerStream()
     registration.destroy()
     await ty.dispose('task worker settlement diagnostic complete')
-    storage.destroy()
+    await cleanup()
   }
 }
 
@@ -318,7 +334,7 @@ testTaskWorkerSettlesAfterPriorFunctionCreatesSubtasks.description =
   'Ensures dependency waiters settle after a prior function creates subtasks late in execution.'
 
 export const testTaskWorkerReleasesFunctionAfterDependentMessage = async () => {
-  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const { ty, cleanup } = await createTaskWorkerTestRuntime()
   const priorTool = createTool({
     name: 'priorWithMessageDependency',
     description: 'Create a terminal result before a dependent message.',
@@ -366,7 +382,7 @@ export const testTaskWorkerReleasesFunctionAfterDependentMessage = async () => {
   } finally {
     registration.destroy()
     await ty.dispose('message dependency settlement diagnostic complete')
-    storage.destroy()
+    await cleanup()
   }
 }
 
@@ -374,7 +390,7 @@ testTaskWorkerReleasesFunctionAfterDependentMessage.description =
   'Runs a sequential function after an intervening message whose prior function completed with an empty explicit task result.'
 
 export const testTaskWorkerDoesNotAddDefaultAfterExplicitSuccessor = async () => {
-  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const { ty, cleanup } = await createTaskWorkerTestRuntime()
   const events: TyTaskStreamData[] = []
   const unsubscribeWorkerStream = ty.workerStream((event) => {
     events.push(event)
@@ -449,7 +465,7 @@ export const testTaskWorkerDoesNotAddDefaultAfterExplicitSuccessor = async () =>
     unsubscribeWorkerStream()
     registration.destroy()
     await ty.dispose('explicit successor continuation diagnostic complete')
-    storage.destroy()
+    await cleanup()
   }
 }
 
@@ -457,7 +473,7 @@ testTaskWorkerDoesNotAddDefaultAfterExplicitSuccessor.description =
   'Avoids adding the generic entry-node continuation when a function task already has a precompiled successor.'
 
 export const testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer = async () => {
-  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const { ty, cleanup } = await createTaskWorkerTestRuntime()
   const events: TyTaskStreamData[] = []
   const unsubscribeWorkerStream = ty.workerStream((event) => {
     events.push(event)
@@ -548,7 +564,7 @@ export const testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer = asyn
     unsubscribeWorkerStream()
     registration.destroy()
     await ty.dispose('parallel subtree reducer diagnostic complete')
-    storage.destroy()
+    await cleanup()
   }
 }
 
@@ -556,7 +572,7 @@ testTaskWorkerWaitsForParallelSubtreeBeforeSequentialReducer.description =
   'Ensures a sequential reducer waits for every branch in the prior parallel subtree.'
 
 export const testTaskWorkerCompletesDeterministicErrorRecovery = async () => {
-  const { ty, storage } = await createTaskWorkerTestRuntime()
+  const { ty, cleanup } = await createTaskWorkerTestRuntime()
   let recoveryCalls = 0
   const failingTool = createTool({
     name: 'deterministicFailure',
@@ -612,7 +628,7 @@ export const testTaskWorkerCompletesDeterministicErrorRecovery = async () => {
   } finally {
     registration.destroy()
     await ty.dispose('deterministic worker recovery diagnostic complete')
-    storage.destroy()
+    await cleanup()
   }
 }
 

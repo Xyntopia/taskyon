@@ -22,6 +22,7 @@ import {
   resolveDiagnosticsRuntimeConfig,
 } from '../../testSupport/onlineProviderSupport'
 import { createPortableTestStorage } from '../../testSupport/portableTestStorage'
+import { createInMemoryDatabasePool } from '../../testSupport/inMemoryDatabasePool'
 import type { TaskNode, partialTaskDraft } from '../../types/taskNode'
 
 const documentNamespace = 'research'
@@ -153,6 +154,7 @@ const createRetrievalRuntime = async (
   entryFunction: string,
   storageDownload?: typeof fetch,
 ) => {
+  const databases = createInMemoryDatabasePool()
   const taskyonRef: { current?: Awaited<ReturnType<typeof tyCore>> } = {}
   const entryNodeTool = createStandardEntryNodeTool({
     name: entryFunction,
@@ -182,34 +184,41 @@ const createRetrievalRuntime = async (
       }
     },
   })
-  const ty = await tyCore(
-    () => runtimeConfig.settings,
-    () => buildEntryNodeDraft(entryFunction),
-    {
-      chatCompletion: runtimeConfig.providerSettings,
-      ...(runtimeConfig.entryNodeSettings
-        ? { [entryFunction]: runtimeConfig.entryNodeSettings }
-        : {}),
-    },
-    undefined,
-    {
-      toolSetup: createDefaultTaskyonToolSetup({
-        pythonTool: null,
-        storageClient,
-        ...(storageDownload ? { storageDownload } : {}),
-      }),
-      authorizeSandboxFetch: ({ tool, capability }) =>
-        Promise.resolve(
-          tool.name === 'webResearchCandidateValidator' &&
-            capability.access === 'read' &&
-            ['https://r.jina.ai', 'https://www.uscourts.gov', 'https://uscourts.gov'].includes(
-              capability.origin,
-            ),
-        ),
-      indexTaskVectors: false,
-      taskManagerStorageFactory: storage.taskManagerStorageFactory,
-    },
-  )
+  let ty: Awaited<ReturnType<typeof tyCore>>
+  try {
+    ty = await tyCore(
+      () => runtimeConfig.settings,
+      () => buildEntryNodeDraft(entryFunction),
+      {
+        chatCompletion: runtimeConfig.providerSettings,
+        ...(runtimeConfig.entryNodeSettings
+          ? { [entryFunction]: runtimeConfig.entryNodeSettings }
+          : {}),
+      },
+      undefined,
+      {
+        databaseFactory: databases.databaseFactory,
+        toolSetup: createDefaultTaskyonToolSetup({
+          pythonTool: null,
+          storageClient,
+          ...(storageDownload ? { storageDownload } : {}),
+        }),
+        authorizeSandboxFetch: ({ tool, capability }) =>
+          Promise.resolve(
+            tool.name === 'webResearchCandidateValidator' &&
+              capability.access === 'read' &&
+              ['https://r.jina.ai', 'https://www.uscourts.gov', 'https://uscourts.gov'].includes(
+                capability.origin,
+              ),
+          ),
+        indexTaskVectors: false,
+        taskManagerStorageFactory: storage.taskManagerStorageFactory,
+      },
+    )
+  } catch (error) {
+    await databases.closeDatabases()
+    throw error
+  }
   taskyonRef.current = ty
   try {
     const toolRpcExecutor = await registerToolRpcTools({
@@ -229,9 +238,17 @@ const createRetrievalRuntime = async (
           },
         }),
     })
-    return { ty, toolRpcExecutor }
+    return { ty, toolRpcExecutor, databases }
   } catch (error) {
-    await ty.dispose('document retrieval runtime setup failed')
+    try {
+      try {
+        await ty.dispose('document retrieval runtime setup failed')
+      } finally {
+        await ty.closeMetadataPersistence()
+      }
+    } finally {
+      await databases.closeDatabases()
+    }
     throw error
   }
 }
@@ -395,7 +412,15 @@ export const testDocumentRetrievalStoresOfficialFederalRulesPdf = async (
       }
     } finally {
       runtime.toolRpcExecutor.destroy()
-      await runtime.ty.dispose('document retrieval Federal Rules test complete')
+      try {
+        try {
+          await runtime.ty.dispose('document retrieval Federal Rules test complete')
+        } finally {
+          await runtime.ty.closeMetadataPersistence()
+        }
+      } finally {
+        await runtime.databases.closeDatabases()
+      }
     }
   } finally {
     storage.destroy()

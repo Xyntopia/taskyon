@@ -10,7 +10,7 @@ import { useTyTaskManager } from '../core/taskManager'
 import type { TaskyonMessage } from '../api/taskyonProtocol'
 import type { TaskNode } from '../types/taskNode'
 import type { ToolBase } from '../types/tools'
-import { getDatabase } from '../utils/pglite.api'
+import { createInMemoryDatabase } from '../utils/pglite.api'
 
 type TestMessage = TaskyonMessage | { type: 'funnyMessage'; data: string }
 type TaskyonProtocolMessage = ProtocolMessage<typeof taskyonProtocol>
@@ -401,12 +401,8 @@ testTaskyonClientGetsTaskChainThroughProtocol.description =
   'Reads selected task chains through the Taskyon protocol client.'
 
 export const testTaskGetChainMissingTaskReturnsProtocolValidErrorTask = async () => {
-  const taskManager = await useTyTaskManager(
-    await getDatabase(`taskyon-missing-chain-${Date.now()}`),
-    {
-      indexTaskVectors: false,
-    },
-  )
+  const database = await createInMemoryDatabase(`taskyon-missing-chain-${Date.now()}`)
+  const taskManager = await useTyTaskManager(database, { indexTaskVectors: false })
   const { x: clientPort, y: taskyonPort } = createDuplexChannel<
     TaskyonProtocolMessage,
     TaskyonProtocolMessage
@@ -417,11 +413,10 @@ export const testTaskGetChainMissingTaskReturnsProtocolValidErrorTask = async ()
         await taskManager.getTaskChain(id, maxFollow, selection),
     },
   })
+  const client = createTaskyonClient(clientPort, { deferUntilReady: false })
 
   try {
-    const tasks = await createTaskyonClient(clientPort, {
-      deferUntilReady: false,
-    }).task.getChain({
+    const tasks = await client.task.getChain({
       id: 'missing-task',
       timeoutMs: 1000,
     })
@@ -429,7 +424,9 @@ export const testTaskGetChainMissingTaskReturnsProtocolValidErrorTask = async ()
     assert(fallbackTask?.id === 'missing-task', 'Expected missing task fallback to preserve id')
     assert(fallbackTask.content.type === 'error', 'Expected missing task fallback to be an error')
   } finally {
+    client.dispose()
     unsubscribe()
+    await database.close()
   }
 }
 

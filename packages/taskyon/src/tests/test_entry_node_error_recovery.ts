@@ -12,6 +12,7 @@ import {
 import { createDefaultTaskyonToolSetup } from '../tools'
 import { CLARIFICATION_TOOL_NAME } from '../tools/clarificationTool'
 import { createPortableTestStorage } from '../testSupport/portableTestStorage'
+import { createInMemoryDatabasePool } from '../testSupport/inMemoryDatabasePool'
 import {
   authenticateDiagnosticsRuntime,
   resolveDiagnosticsRuntimeConfig,
@@ -1989,6 +1990,7 @@ const runEntryNodePythonRecovery = async (
   }
 
   const storage = createPortableTestStorage()
+  const databases = createInMemoryDatabasePool()
   const entryNodeTool = createStandardEntryNodeTool({
     name: 'entryNode',
     renderOptions: { hideChat: true, hideLlm: true },
@@ -2033,6 +2035,7 @@ const runEntryNodePythonRecovery = async (
     },
     undefined,
     {
+      databaseFactory: databases.databaseFactory,
       toolSetup,
       taskManagerStorageFactory: storage.taskManagerStorageFactory,
     },
@@ -2195,8 +2198,16 @@ const runEntryNodePythonRecovery = async (
     }
   } finally {
     toolRpcExecutor.destroy()
-    await ty.dispose('entry-node Python recovery diagnostic complete')
-    storage.destroy()
+    try {
+      try {
+        await ty.dispose('entry-node Python recovery diagnostic complete')
+      } finally {
+        await ty.closeMetadataPersistence()
+      }
+    } finally {
+      storage.destroy()
+      await databases.closeDatabases()
+    }
   }
 }
 

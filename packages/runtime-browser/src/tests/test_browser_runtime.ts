@@ -2,7 +2,6 @@ import {
   createCryptoSession,
   createPgLiteTaskManagerStorageService,
   createTaskNode,
-  getDatabase,
   toolCall,
 } from '@taskyon/taskyon'
 import {
@@ -11,6 +10,7 @@ import {
   createTool,
   setTaskyonProviderCredential,
 } from '@taskyon/taskyon/api'
+import { createInMemoryDatabasePool } from '@taskyon/taskyon/test-support'
 import { createEncryptedOauthSecretStore } from '@taskyon/taskyon/browser'
 import { createStream } from '@taskyon/common/modules/frpBus'
 import { createTaskyonBrowserCoreRuntime } from '../index'
@@ -84,6 +84,7 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
   const sessionId = await cryptoSession.getSessionId()
   const createdRuntimes: ReturnType<typeof createTaskyonBrowserCoreRuntime>[] = []
   const storageNamespacePrefix = 'taskyon'
+  const testDatabases = createInMemoryDatabasePool()
   const createRuntime = () => {
     const runtime = createTaskyonBrowserCoreRuntime({
       llmSettings: () => ({
@@ -93,6 +94,7 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
       entryNode: () => toolCall({ name: 'entryNode', arguments: {} }),
       toolchainConfig: {},
       cryptoSession,
+      databaseFactory: testDatabases.databaseFactory,
       indexTaskVectors: false,
       toolSetup: {
         baseTools: [],
@@ -103,7 +105,11 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
       storage: {
         kind: 'service',
         createService: (port) =>
-          createPgLiteTaskManagerStorageService(port, storageNamespacePrefix, getDatabase),
+          createPgLiteTaskManagerStorageService(
+            port,
+            storageNamespacePrefix,
+            testDatabases.databaseFactory,
+          ),
       },
     })
     createdRuntimes.push(runtime)
@@ -112,6 +118,7 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
 
   try {
     const firstRuntime = createRuntime()
+    await firstRuntime.taskyon
     const createdTask = await createTaskNode({
       role: 'user',
       content: {
@@ -157,9 +164,13 @@ export const testBrowserRuntimePreservesTaskyonStorageAcrossRestart = async () =
       'Expected the restored task content to match the original task',
     )
   } finally {
-    await Promise.all(
-      createdRuntimes.map((runtime) => runtime.stop('shared browser runtime diagnostic cleanup')),
-    )
+    try {
+      await Promise.all(
+        createdRuntimes.map((runtime) => runtime.stop('shared browser runtime diagnostic cleanup')),
+      )
+    } finally {
+      await testDatabases.closeDatabases()
+    }
   }
 }
 
@@ -168,12 +179,14 @@ testBrowserRuntimePreservesTaskyonStorageAcrossRestart.description =
 
 export const testBrowserRuntimeProviderAuthKeepsOauthInHostStorage = async () => {
   const cryptoSession = await createCryptoSession()
+  const databases = createInMemoryDatabasePool()
   const hostStorage = createMemoryStorageRecordBackend()
   const runtime = createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({ entryFunction: 'entryNode' }),
     entryNode: () => toolCall({ name: 'entryNode', arguments: {} }),
     toolchainConfig: {},
     cryptoSession,
+    databaseFactory: databases.databaseFactory,
     indexTaskVectors: false,
     toolSetup: {
       baseTools: [
@@ -190,20 +203,24 @@ export const testBrowserRuntimeProviderAuthKeepsOauthInHostStorage = async () =>
     storage: {
       kind: 'service',
       createService: (port) =>
-        createPgLiteTaskManagerStorageService(port, 'taskyon', getDatabase, () => hostStorage),
+        createPgLiteTaskManagerStorageService(
+          port,
+          'taskyon',
+          databases.databaseFactory,
+          () => hostStorage,
+        ),
     },
   })
   const runtimeClient = createTaskyonHostClient(runtime.hostPort)
-  await runtime.taskyon
-  const credentials = JSON.stringify({
-    type: 'oauth-credentials',
-    access_token: 'codex-access-token',
-    service: 'https://auth.openai.com/oauth/token',
-    created_at: Date.now(),
-  })
-  const oauthSecrets = createEncryptedOauthSecretStore(runtime.storageClient, cryptoSession)
-
   try {
+    await runtime.taskyon
+    const credentials = JSON.stringify({
+      type: 'oauth-credentials',
+      access_token: 'codex-access-token',
+      service: 'https://auth.openai.com/oauth/token',
+      created_at: Date.now(),
+    })
+    const oauthSecrets = createEncryptedOauthSecretStore(runtime.storageClient, cryptoSession)
     await oauthSecrets.setSecret('llm:chatgpt-codex', credentials)
     const stored = await oauthSecrets.getSecret('llm:chatgpt-codex')
     assert(
@@ -233,19 +250,26 @@ export const testBrowserRuntimeProviderAuthKeepsOauthInHostStorage = async () =>
     const deleted = await oauthSecrets.getSecret('llm:chatgpt-codex')
     assert(deleted === null, 'Expected deleting host OAuth credentials to remove the secret')
   } finally {
-    await runtime.stop('provider authentication diagnostic cleanup')
+    try {
+      await runtime.stop('provider authentication diagnostic cleanup')
+    } finally {
+      await databases.closeDatabases()
+    }
   }
 }
 
 testBrowserRuntimeProviderAuthKeepsOauthInHostStorage.description =
   'Keeps encrypted OAuth credentials in host storage and sends only the access token to Taskyon.'
 
-const createEarlyRequestRuntime = () =>
+const createEarlyRequestRuntime = (
+  databaseFactory: ReturnType<typeof createInMemoryDatabasePool>['databaseFactory'],
+) =>
   createTaskyonBrowserCoreRuntime({
     llmSettings: () => ({ entryFunction: 'entryNode' }),
     entryNode: () => toolCall({ name: 'entryNode', arguments: {} }),
     toolchainConfig: {},
     cryptoSession: createCryptoSession(),
+    databaseFactory,
     indexTaskVectors: false,
     toolSetup: {
       baseTools: [],
@@ -257,7 +281,7 @@ const createEarlyRequestRuntime = () =>
       kind: 'service',
       createService: async (port) => {
         await new Promise((resolve) => setTimeout(resolve, 0))
-        return createPgLiteTaskManagerStorageService(port, 'taskyon', getDatabase, () =>
+        return createPgLiteTaskManagerStorageService(port, 'taskyon', databaseFactory, () =>
           createMemoryStorageRecordBackend(),
         )
       },
@@ -265,7 +289,8 @@ const createEarlyRequestRuntime = () =>
   })
 
 export const testBrowserRuntimeDeliversHostRequestsIssuedBeforeReadiness = async () => {
-  const runtime = createEarlyRequestRuntime()
+  const databases = createInMemoryDatabasePool()
+  const runtime = createEarlyRequestRuntime(databases.databaseFactory)
   try {
     const configuration = runtime.host.runtime.configure({ toolchainConfig: {} }).then(
       (result) => ({ ok: true as const, result }),
@@ -276,7 +301,11 @@ export const testBrowserRuntimeDeliversHostRequestsIssuedBeforeReadiness = async
     if (!outcome.ok) throw outcome.error
     assert(outcome.result.ok, 'Expected the early host configuration to be accepted')
   } finally {
-    await runtime.stop('early host request diagnostic cleanup')
+    try {
+      await runtime.stop('early host request diagnostic cleanup')
+    } finally {
+      await databases.closeDatabases()
+    }
   }
   return { success: true }
 }
@@ -285,7 +314,8 @@ testBrowserRuntimeDeliversHostRequestsIssuedBeforeReadiness.description =
   'Delivers host requests issued while the browser runtime is still connecting.'
 
 export const testBrowserRuntimeDeliversStorageRequestsIssuedBeforeReadiness = async () => {
-  const runtime = createEarlyRequestRuntime()
+  const databases = createInMemoryDatabasePool()
+  const runtime = createEarlyRequestRuntime(databases.databaseFactory)
   try {
     const write = runtime.storageClient
       .set({
@@ -309,7 +339,11 @@ export const testBrowserRuntimeDeliversStorageRequestsIssuedBeforeReadiness = as
       'Expected the early storage write to persist after readiness',
     )
   } finally {
-    await runtime.stop('early storage request diagnostic cleanup')
+    try {
+      await runtime.stop('early storage request diagnostic cleanup')
+    } finally {
+      await databases.closeDatabases()
+    }
   }
   return { success: true }
 }

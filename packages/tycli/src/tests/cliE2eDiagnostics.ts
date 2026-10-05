@@ -1207,7 +1207,7 @@ export async function testEscapeCancelsModelMenuAndKeepsPromptUsable() {
     steps: [
       { waitFor: 'Slash commands:', input: '/model\n' },
       { waitFor: 'Model menu', input: '\u001b' },
-      { waitFor: '\u001b[?2004h\u001b[1G\u001b[0J> ', input: '/tools\n' },
+      { waitFor: '\u001b[?2004h> ', input: '/tools\n' },
       { waitFor: 'Active tool definitions:', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },
@@ -1346,7 +1346,8 @@ export async function testBracketedPastePreservesMultilinePrompt() {
     testName: 'testBracketedPastePreservesMultilinePrompt',
     steps: [
       {
-        waitFor: 'Slash commands:',
+        waitFor: '\u001b[?2004h',
+        delayMs: 100,
         input: `\u001b[200~${firstLine}\r\r${secondLine}\r\r${thirdLine}\r\u001b[201~`,
       },
       { delayMs: 300, input: textTypedAfterPaste },
@@ -1355,7 +1356,7 @@ export async function testBracketedPastePreservesMultilinePrompt() {
       { waitFor: 'Task interrupted.', input: '/exit\n' },
       { waitFor: 'Conversation saved:', input: '', signal: 'SIGTERM' },
     ],
-    env: { TYCLI_HOTKEY_MENUS: '0' },
+    env: { TYCLI_HOTKEY_MENUS: '0', TERM: 'xterm-256color' },
     timeoutMs: 45_000,
     runner: 'pty',
   })

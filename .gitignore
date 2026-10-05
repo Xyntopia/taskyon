@@ -80,5 +80,8 @@ packages/relay/dist
 packages/taskyon-vscode/dist
 packages/taskyon-vscode/media/webview.bundle.js
 
+# Private interactive diagnostic transcripts
+/packages/tycli/tycli-e2e-*.log
+
 # Redacted host-native diagnostics remain local
 /native-custody-diagnostics-*.json

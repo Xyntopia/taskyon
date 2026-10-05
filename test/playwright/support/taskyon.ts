@@ -108,7 +108,12 @@ const selectLlmProvider = async (page: Page, modelSelection: Locator, provider: 
   }).toPass({ timeout: 30_000 })
 
   await option.click()
-  await expect(providerSelect).toContainText(provider)
+  // Provider changes can close the picker while the runtime reconnects.
+  await expect(dataCy(page, 'model-id').locator('..')).toContainText(provider)
+  await expect(async () => {
+    if (!(await modelSelection.isVisible())) await dataCy(page, 'model-id').click()
+    await expect(modelSelection).toBeVisible({ timeout: 1_000 })
+  }).toPass({ timeout: 30_000 })
 }
 
 export const selectLlmModel = async (page: Page, provider?: string, modelId = '') => {
@@ -198,6 +203,18 @@ export const addAiServices = async (page: Page, env: OnlineEnv) => {
     openai: env.openai_api_key,
     'openrouter.ai': env.openrouter_api_key,
   }
+  const providerNames = Object.keys(providerKeys)
+    .map((provider) => provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')
+
+  await page.addLocatorHandler(
+    page.getByRole('dialog').filter({
+      hasText: new RegExp(`Connect to (${providerNames})\\?`),
+    }),
+    async (dialog) => {
+      await dialog.getByRole('button', { name: 'Connect', exact: true }).click()
+    },
+  )
 
   await page.goto('/settings/aiserviceprovider')
   const providerPanel = page.locator('.llm-providers')
