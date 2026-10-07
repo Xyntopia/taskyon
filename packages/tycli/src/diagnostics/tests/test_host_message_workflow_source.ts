@@ -1,5 +1,22 @@
 import { readFile } from 'node:fs/promises'
 
+export const testBrowserDiagnosticsDiscoverOnlyPortableRuntimeChecks = async () => {
+  for (const file of [
+    '../../../../../src/pages/DiagnosticsPage.vue',
+    '../../../../../src/pages/taskyon/HeadlessPage.vue',
+  ]) {
+    const source = await readFile(new URL(file, import.meta.url), 'utf8')
+    const runtimePattern = source.match(/runtime-browser\/src\/tests\/([^']+)'/)?.[1]
+    assert(
+      runtimePattern === '**/test_*.ts',
+      `${file} must discover portable test_ diagnostics without importing Node .test.ts harnesses or fixtures`,
+    )
+  }
+}
+
+testBrowserDiagnosticsDiscoverOnlyPortableRuntimeChecks.description =
+  'Keeps Node native-crypto harnesses and helpers out of both browser diagnostic entry points.'
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }

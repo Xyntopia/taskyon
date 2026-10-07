@@ -19,6 +19,10 @@ The browser page can filter tests, abort a run, and copy or download its YAML re
 tests in locations already discovered by the diagnostics runner, such as
 `packages/taskyon/src/tests/test*.ts` or common modules exporting named `test*` functions.
 
+In `packages/runtime-browser/src/tests`, browser and headless discovery selects `test_*.ts`
+modules exporting diagnostics. Node-run `.test.ts` harnesses and their fixture helpers stay outside
+that selection because they may import Node APIs, Playwright, or native processes.
+
 Diagnostics that use an LLM must reuse the active browser/CLI profile or explicit harness override.
 Do not construct a hidden second provider configuration in the test.
 

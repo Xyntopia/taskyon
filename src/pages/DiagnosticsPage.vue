@@ -203,7 +203,7 @@ import { copyToClipboard, getEnvironmentInfo } from '@taskyon/common/modules/uti
 
 const testModules = import.meta.glob(
   [
-    '../../packages/runtime-browser/src/tests/**/*.ts',
+    '../../packages/runtime-browser/src/tests/**/test_*.ts',
     '../../packages/taskyon/src/tests/**/*.ts',
     '!../../packages/taskyon/src/tests/test_taskyon_documentation_conversation.ts',
     '../../packages/common/modules/test_*.ts',

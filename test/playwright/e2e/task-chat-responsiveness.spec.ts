@@ -34,7 +34,7 @@ for (const width of [390, 1280]) {
 
 test('submitting a message re-pins the shared chat to the bottom', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/ta[REDACTED:openai-key]')
+  await page.goto('/task-chat-responsiveness-test')
   await page.getByRole('button', { name: 'Open tool example' }).click()
 
   const thread = page.locator('.task-chat-window__thread')
@@ -134,7 +134,7 @@ test('streamed assistant text keeps the shared chat pinned to the newest words',
   expect(probe?.maxDistance).toBeLessThanOrEqual(24)
 })
 test('finishing an earlier send does not reopen its conversation', async ({ page }) => {
-  await page.goto('/ta[REDACTED:openai-key]')
+  await page.goto('/task-chat-responsiveness-test')
   const input = page.getByRole('textbox')
   await input.fill('Keep this in the original conversation')
   await input.press('Enter')

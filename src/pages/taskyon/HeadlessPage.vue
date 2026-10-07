@@ -68,7 +68,7 @@ function emitHeadlessResult(payload: {
 function getDiagnosticsTests(throughLevel?: DiagnosticsRunLevel) {
   const testModules = import.meta.glob(
     [
-      '../../../packages/runtime-browser/src/tests/**/*.ts',
+      '../../../packages/runtime-browser/src/tests/**/test_*.ts',
       '../../../packages/taskyon/src/tests/**/*.ts',
       '!../../../packages/taskyon/src/tests/test_ai_workstation_graph.ts',
       '!../../../packages/taskyon/src/tests/test_public_design_repositories.ts',
