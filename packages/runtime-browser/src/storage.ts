@@ -56,12 +56,6 @@ export type BrowserRuntimeStorageService =
       ) => void | (() => void) | Promise<void | (() => void)>
     }
 
-type NavigatorWithLocks = Navigator & {
-  locks?: {
-    request: <T>(name: string, callback: () => Promise<T>) => Promise<T>
-  }
-}
-
 const assertBrowserOpfs = () => {
   if (typeof navigator === 'undefined' || typeof navigator.storage?.getDirectory !== 'function') {
     throw new Error('Taskyon OPFS storage requires browser OPFS support.')
@@ -266,7 +260,7 @@ export const createOpfsBlobStorageBackend = async (
   }
   const store: BlobChunkStore = {
     transaction: (operation) =>
-      withBrowserLock(`${lockPrefix}:blobs:${namespace}`, () => operation(store)),
+      withBrowserLock(`${lockPrefix}:blobs:${namespace}`, 'exclusive', () => operation(store)),
     get: async (id) => {
       const value = await readJson(manifest(id))
       if (z.object({ deleted: z.literal(true) }).safeParse(value).success) return null
@@ -361,10 +355,13 @@ export const createOpfsBlobStorageBackend = async (
   return createChunkedBlobBackend(store)
 }
 
-const withBrowserLock = async <T>(lockName: string, operation: () => Promise<T>): Promise<T> => {
-  const locks = (navigator as NavigatorWithLocks).locks
-  if (!locks) return await operation()
-  return await locks.request(lockName, operation)
+const withBrowserLock = async <T>(
+  lockName: string,
+  mode: 'shared' | 'exclusive',
+  operation: () => Promise<T>,
+): Promise<T> => {
+  if (!navigator.locks) return await operation()
+  return await navigator.locks.request(lockName, { mode }, operation)
 }
 
 export const createOpfsStorageRecordFileAdapter = async (
@@ -378,8 +375,8 @@ export const createOpfsStorageRecordFileAdapter = async (
     remove: async (path) => await removeFile(root, path),
     list: async (directory) => await listRecordFiles(root, directory),
     clearDirectory: async (directory) => await clearDirectory(root, directory),
-    withNamespaceLock: async (namespaceDirectory, operation) =>
-      await withBrowserLock(`${lockPrefix}:${namespaceDirectory}`, operation),
+    withNamespaceLock: async (namespaceDirectory, operation, mode) =>
+      await withBrowserLock(`${lockPrefix}:${namespaceDirectory}`, mode, operation),
   }
 }
 

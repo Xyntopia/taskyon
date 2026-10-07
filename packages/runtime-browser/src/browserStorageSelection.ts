@@ -124,8 +124,7 @@ export const selectBrowserStorageProvider = async (options?: {
   const databaseName = options?.databaseName ?? 'taskyon-storage'
   const preferences = options?.preferences ?? createBrowserStoragePreferenceStore()
   const selectionOptions = { databaseName, ...(options?.opfs ? { opfs: options.opfs } : {}) }
-  const isDesktop =
-    typeof window !== 'undefined' && '__TAURI_INTERNALS__' in (window as Record<string, unknown>)
+  const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
   const defaultCandidates: readonly BrowserStorageBackendKind[] = isDesktop
     ? ['native', 'opfs', 'indexeddb']
     : ['opfs', 'indexeddb']

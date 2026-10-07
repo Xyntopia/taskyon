@@ -240,6 +240,7 @@ export default defineConfig((ctx) => {
           '**/dist/**',
           '**/dist-*/**',
           '**/coverage/**',
+          '**/target/**',
           '**/.tmp/**',
         ]
 

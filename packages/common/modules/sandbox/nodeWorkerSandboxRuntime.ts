@@ -19,10 +19,19 @@ const SANDBOX_ENV: NodeJS.ProcessEnv = {
 export function createNodeSandboxTransport(options: {
   maxOldSpaceSizeMb?: number | undefined
 }): SandboxTransport {
+  const permissionFlag = ['--permission', '--experimental-permission'].find((flag) =>
+    process.allowedNodeEnvironmentFlags.has(flag),
+  )
+  if (!permissionFlag) {
+    throw new Error(
+      `The Node.js permission model is required for sandbox execution (Node ${process.version}).`,
+    )
+  }
+
   const child = spawn(
     process.execPath,
     [
-      '--permission',
+      permissionFlag,
       `--allow-fs-read=${NODE_WORKER_SANDBOX_RUNNER}`,
       `--allow-fs-read=${EXECUTABLE_SANDBOX_RUNTIME}`,
       `--max-old-space-size=${options.maxOldSpaceSizeMb ?? 128}`,

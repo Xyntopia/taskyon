@@ -45,7 +45,9 @@ void test('Provider fetch mints a destination-scoped tunnel token per request', 
         }
         mintedRequests.push({
           ...body.requests?.[0],
-          authorization: request.headers.authorization,
+          ...(request.headers.authorization
+            ? { authorization: request.headers.authorization }
+            : {}),
         })
         response.setHeader('content-type', 'application/json')
         response.end(JSON.stringify({ tokens: ['fixture-token'] }))

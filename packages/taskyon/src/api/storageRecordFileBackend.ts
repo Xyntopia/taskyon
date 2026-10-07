@@ -21,7 +21,11 @@ export type StorageRecordFileAdapter = {
   remove: (path: string) => Promise<void>
   list: (directory: string) => Promise<string[]>
   clearDirectory: (directory: string) => Promise<void>
-  withNamespaceLock?: <T>(namespaceDirectory: string, operation: () => Promise<T>) => Promise<T>
+  withNamespaceLock?: <T>(
+    namespaceDirectory: string,
+    operation: () => Promise<T>,
+    mode: 'shared' | 'exclusive',
+  ) => Promise<T>
 }
 
 export const parseStorageRecordFile = (value: unknown): StorageRecordFile =>
@@ -49,8 +53,8 @@ export const createStorageRecordFileBackend = (
   namespace: string,
 ): StorageRecordBackend => {
   const directory = storageRecordNamespacePath(namespace)
-  const withLock = <T>(operation: () => Promise<T>) =>
-    adapter.withNamespaceLock ? adapter.withNamespaceLock(directory, operation) : operation()
+  const withLock = <T>(mode: 'shared' | 'exclusive', operation: () => Promise<T>) =>
+    adapter.withNamespaceLock ? adapter.withNamespaceLock(directory, operation, mode) : operation()
 
   const readRecordFile = adapter.read
   const readRecord = async (id: string | number) => {
@@ -67,20 +71,20 @@ export const createStorageRecordFileBackend = (
   }
 
   return {
-    get: async (id) => await withLock(async () => (await readRecord(id))?.data ?? null),
+    get: async (id) => await withLock('shared', async () => (await readRecord(id))?.data ?? null),
     getMany: async (ids) =>
-      await withLock(async () => {
+      await withLock('shared', async () => {
         const records = await Promise.all(ids.map(readRecord))
         return records
           .filter((record): record is StorageRecordFile => record !== null)
           .map((record) => ({ id: record.id, data: record.data }))
       }),
     set: async (id, value) =>
-      await withLock(async () => {
+      await withLock('exclusive', async () => {
         await adapter.write(storageRecordFilePath(namespace, id), { id, data: value })
       }),
     setIfUnchanged: async (id, expectedStoredContentHash, value) =>
-      await withLock(async () => {
+      await withLock('exclusive', async () => {
         const current = (await readRecord(id))?.data ?? null
         const currentStoredContentHash = current === null ? null : storageValueContentHash(current)
         if (currentStoredContentHash !== expectedStoredContentHash) {
@@ -90,7 +94,7 @@ export const createStorageRecordFileBackend = (
         return { written: true, currentStoredContentHash: storageValueContentHash(value) }
       }),
     setMany: async (rows) =>
-      await withLock(async () => {
+      await withLock('exclusive', async () => {
         await Promise.all(
           rows.map(async ({ id, data }) =>
             adapter.write(storageRecordFilePath(namespace, id), { id, data }),
@@ -98,7 +102,7 @@ export const createStorageRecordFileBackend = (
         )
       }),
     upsert: async (id, value, strategy) =>
-      await withLock(async () => {
+      await withLock('exclusive', async () => {
         const path = storageRecordFilePath(namespace, id)
         const current = await readRecord(id)
         const next = mergeStorageRecord(current?.data, value, strategy)
@@ -106,17 +110,17 @@ export const createStorageRecordFileBackend = (
         return next
       }),
     delete: async (id) =>
-      await withLock(async () => {
+      await withLock('exclusive', async () => {
         await adapter.remove(storageRecordFilePath(namespace, id))
       }),
     list: async () =>
-      await withLock(async () =>
+      await withLock('shared', async () =>
         (await listRecords()).map((record) => ({ id: record.id, data: record.data })),
       ),
     listIds: async () =>
-      await withLock(async () => (await listRecords()).map((record) => record.id)),
+      await withLock('shared', async () => (await listRecords()).map((record) => record.id)),
     find: async (query) =>
-      await withLock(async () =>
+      await withLock('shared', async () =>
         Object.fromEntries(
           (await listRecords())
             .filter((record) => storageQueryMatches(record.data, query))
@@ -124,7 +128,7 @@ export const createStorageRecordFileBackend = (
         ),
       ),
     clear: async () =>
-      await withLock(async () => {
+      await withLock('exclusive', async () => {
         await adapter.clearDirectory(directory)
       }),
   }

@@ -9,8 +9,7 @@ import {
 } from '../browserStorageSelection'
 import { createTauriStorageFileSystem } from '../nativeStorage'
 
-const isTauri = () =>
-  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in (window as Record<string, unknown>)
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 const unavailable = { skipped: true, reason: 'Native Tauri filesystem is unavailable.' }
 

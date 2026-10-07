@@ -181,6 +181,7 @@ export const runStorageBackendContract = async (provider: StorageBackendProvider
 }
 
 export const runStorageStreamingContract = async (provider: StorageBackendProvider) => {
+  if (!provider.blobs) throw new Error('Blob backend capability unavailable')
   const namespace = `streaming-contract-${crypto.randomUUID()}`
   const backend = await provider.blobs(namespace)
   if (!backend) throw new Error('Blob backend unavailable')
@@ -208,9 +209,9 @@ export const runStorageStreamingContract = async (provider: StorageBackendProvid
 }
 
 export const runStorageLegacyBlobContract = async (backend: StorageBlobBackend) => {
-  assert((await backend.readRange('legacy',1,2)).data.join(',') === '2,3','Legacy range read')
-  await backend.append('legacy',new Uint8Array([4]),3)
-  assert((await backend.get('legacy'))?.data.join(',') === '1,2,3,4','Legacy append migration')
+  assert((await backend.readRange('legacy', 1, 2)).data.join(',') === '2,3', 'Legacy range read')
+  await backend.append('legacy', new Uint8Array([4]), 3)
+  assert((await backend.get('legacy'))?.data.join(',') === '1,2,3,4', 'Legacy append migration')
   await backend.delete('legacy')
-  assert(await backend.get('legacy') === null,'Deleted legacy data stays invisible')
+  assert((await backend.get('legacy')) === null, 'Deleted legacy data stays invisible')
 }

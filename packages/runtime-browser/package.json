@@ -26,6 +26,7 @@
     "@taskyon/comp-dag": "workspace:*",
     "@taskyon/secure-tunnel": "workspace:*",
     "@taskyon/taskyon": "workspace:*",
+    "@tauri-apps/plugin-fs": "2.4.5",
     "buffer": "^6.0.3",
     "esbuild-wasm": "0.28.1",
     "isomorphic-git": "^1.38.6",

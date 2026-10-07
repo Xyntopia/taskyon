@@ -395,6 +395,11 @@ export const testBrowserRuntimeClosesCryptoOwnerOnInitializationFailure = async 
     llmSettings: () => ({ entryFunction: 'entryNode' }),
     entryNode: () => toolCall({ name: 'entryNode', arguments: {} }),
     toolchainConfig: {},
+    toolSetup: {
+      baseTools: [],
+      chatCompletionToolName: 'chatCompletion',
+      createSessionTools: () => ({ tools: [] }),
+    },
     cryptoSession: {
       ...session,
       close: () => {

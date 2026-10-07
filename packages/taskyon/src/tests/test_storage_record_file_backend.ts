@@ -1,5 +1,6 @@
 import {
   createStorageRecordFileBackend,
+  storageRecordFilePath,
   type StorageRecordFileAdapter,
 } from '../api/storageRecordFileBackend'
 
@@ -58,3 +59,73 @@ export const testFileStorageReadWaitsForActiveWrite = async () => {
 
 testFileStorageReadWaitsForActiveWrite.description =
   'Serializes public file-backed record reads with active namespace writes.'
+
+export const testFileStorageReadersShareLockWhileWritesWait = async () => {
+  if (typeof navigator === 'undefined' || !navigator.locks)
+    return { skipped: true, reason: 'Web Locks are unavailable.' }
+  const namespace = `diagnostics-file-lock-${crypto.randomUUID()}`
+  const records = new Map<string, Parameters<StorageRecordFileAdapter['write']>[1]>([
+    [storageRecordFilePath(namespace, 'a'), { id: 'a', data: 'original' }],
+    [storageRecordFilePath(namespace, 'b'), { id: 'b', data: 'second' }],
+  ])
+  let releaseReads: () => void = () => undefined
+  const readGate = new Promise<void>((resolve) => {
+    releaseReads = resolve
+  })
+  let markReadStarted: () => void = () => undefined
+  const readStarted = new Promise<void>((resolve) => {
+    markReadStarted = resolve
+  })
+  let wrote = false
+  const adapter: StorageRecordFileAdapter = {
+    read: async (path) => {
+      markReadStarted()
+      await readGate
+      return records.get(path) ?? null
+    },
+    write: async (path, record) => {
+      wrote = true
+      records.set(path, record)
+    },
+    remove: async () => undefined,
+    list: async () => [...records.keys()],
+    clearDirectory: async () => records.clear(),
+    withNamespaceLock: (_directory, operation, mode: 'shared' | 'exclusive' = 'exclusive') =>
+      navigator.locks.request(namespace, { mode }, operation),
+  }
+  const storage = createStorageRecordFileBackend(adapter, namespace)
+  const first = storage.get('a')
+  const second = storage.get('b')
+  let writing: Promise<void> | undefined
+  try {
+    await readStarted
+    const readers = await navigator.locks.query()
+    assert(
+      readers.held?.filter(({ name, mode }) => name === namespace && mode === 'shared').length ===
+        2,
+      'Concurrent record reads must hold shared locks rather than serialize behind an exclusive lock.',
+    )
+    writing = storage.set('a', 'updated')
+    const queued = await navigator.locks.query()
+    assert(
+      !wrote &&
+        queued.pending?.some(({ name, mode }) => name === namespace && mode === 'exclusive'),
+      'A namespace write must remain blocked until all shared readers finish.',
+    )
+    releaseReads()
+    assert(
+      (await first) === 'original' && (await second) === 'second',
+      'Readers must see the pre-write snapshot.',
+    )
+    await writing
+    assert(
+      (await storage.get('a')) === 'updated',
+      'The write must become visible after reader locks release.',
+    )
+  } finally {
+    releaseReads()
+    await Promise.allSettled([first, second, writing])
+  }
+}
+testFileStorageReadersShareLockWhileWritesWait.description =
+  'Allows concurrent record reads while preserving exclusive namespace writes and complete snapshots.'
