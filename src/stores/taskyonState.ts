@@ -2208,13 +2208,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     },
   }))
 
-  const tyready = ref(false)
-  void taskyon.then(() => {
-    tyready.value = true
+  void taskyon.catch((error: unknown) => {
+    console.error('Taskyon runtime initialization failed:', error)
   })
 
   return {
-    tyready: computed(() => tyready),
     switchTaskyonSessionForBindingKey,
     addFile: async (file: File) => await uiTaskyonClient.files.add({ file }),
     setNewSession,

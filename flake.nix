@@ -221,6 +221,8 @@
           graphviz # we are using this with "madge" in order to display dependency graphs...
           perf # needed for cargo flamegraph (perf-based sampling)
           xorgserver # provides Xvfb / xvfb-run for headless tauri diagnostics on servers
+          dbus # session bus for scripts/run-with-headless-keyring.sh
+          gnome-keyring # unlocked Secret Service for headless tauri diagnostics on servers
 
           # supabase
           docker-compose

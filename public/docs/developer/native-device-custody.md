@@ -105,6 +105,11 @@ node scripts/diagnose-native-custody.mjs \
   --synthetic-roundtrip
 ```
 
+Linux server diagnostics need an unlocked Secret Service.
+`scripts/run-with-headless-keyring.sh` starts a private session bus and an isolated persistent
+GNOME keyring for headless desktop runs without touching the desktop login keyring; see
+[diagnostics](diagnostics.md).
+
 The default checks are read-only. The explicit round-trip mode writes, reads and deletes one randomly
 named disposable synthetic OS credential and its temporary marker directory. It does not reset your
 application state. Reports are timestamped, redacted JSON with restrictive permissions and are ignored

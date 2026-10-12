@@ -10,7 +10,6 @@
 
 <script setup lang="ts">
 import { chatCompletionProviderSettings } from '@taskyon/taskyon'
-import { until } from '@vueuse/core'
 import { dump } from 'js-yaml'
 import * as ModelicaDiagnostics from '@taskyon/modelica/modelicaDiagnostics'
 import { runMarkdownDetectionTests } from 'src/modules/taskyon/runMarkdownDetectionTests'
@@ -34,6 +33,7 @@ import {
   type DiagnosticsRunLevel,
 } from '@taskyon/common/modules/diagnosticsLevels'
 import { getEnvironmentInfo } from '@taskyon/common/modules/utils'
+import { awaitRuntimeReadiness } from '@taskyon/common/modules/runtimeReadiness'
 
 const route = useRoute()
 const status = ref('booting')
@@ -279,7 +279,7 @@ async function runDiagnosticsMode() {
       if (context.abortSignal?.aborted) throw new Error('Diagnostic preparation was canceled')
       appState.appConfiguration.enableGdriveSync = false
       const state = useTaskyonStore()
-      await until(() => state.tyready.value).toBe(true, { timeout: 30_000 })
+      await awaitRuntimeReadiness(state.taskyon)
       if (context.abortSignal?.aborted) throw new Error('Diagnostic preparation was canceled')
       let tyauth = state.getTaskyonKeyString()
       if (!tyauth) {
@@ -383,7 +383,7 @@ onMounted(async () => {
       import('@taskyon/taskyon'),
     ])
     const state = useTaskyonStore()
-    await until(() => state.tyready.value).toBe(true, { timeout: 30_000 })
+    await awaitRuntimeReadiness(state.taskyon)
     const p2p = getActiveP2pNode()
     status.value = 'starting p2p'
     await p2p.start({ chatTopic: chatTopic.value })

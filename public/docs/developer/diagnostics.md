@@ -74,9 +74,35 @@ be copied into the isolated runtime automatically; test them through their own h
 Headless diagnostics do not wait for the main Taskyon runtime before listing or running tests.
 Tests that need a browser profile, key, or Taskyon runtime prepare those dependencies when that
 test starts, within its own timeout. A preparation failure is reported as `ERROR` for that test,
-not as a model capability miss, and the runner can continue with other tests. A focused browser
-run may also select `--diagnostics-model=openai/gpt-6-luna` or
+not as a model capability miss, and the runner can continue with other tests. A failed Taskyon
+runtime initialization is reported immediately with its native error, and a runtime that is still
+not ready after 30 seconds fails preparation with a clear timeout instead of continuing without
+one. A focused browser run may also select `--diagnostics-model=openai/gpt-6-luna` or
 `--diagnostics-model=z-ai/glm-5.3-flash` without changing the saved profile.
+
+On Linux, Tauri desktop runs keep device private keys in the OS vault, which needs an unlocked
+Secret Service. A server or container session usually has none, and any runtime-backed diagnostic
+fails with `Unavailable`. Run the Tauri command through the headless keyring helper, composed with
+the Xvfb helper when no display is available:
+
+```bash
+bash scripts/run-with-headless-keyring.sh \
+  bash scripts/run-with-xvfb.sh \
+  yarn tauri dev -c \
+  src-tauri/tauri.diagnostics.devserver.conf.json \
+  --no-watch --no-dev-server-wait -- -- \
+  --headless --run-diagnostics \
+  --test-filter=Greeting \
+  --diagnostics-detailed
+```
+
+The helper starts a private session bus and an isolated GNOME keyring under
+`${XDG_DATA_HOME:-$HOME/.local/share}/taskyon-headless-keyring`
+(`TASKYON_HEADLESS_KEYRING_HOME` overrides it). The keyring directory and its generated password
+file stay together, so the headless device identity survives across runs. Set
+`TASKYON_HEADLESS_KEYRING_PASSWORD` instead when the password comes from a CI secret manager. The
+helper never reads or modifies the desktop login keyring. Its `dbus` and `gnome-keyring`
+dependencies come from the project development shell.
 
 Playwright writes reports to `playwright-report/` and run artifacts to `test-results/`. The normal
 `yarn test:e2e` command starts the local development server. `yarn test:e2e:production` builds the
