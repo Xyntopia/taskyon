@@ -29,14 +29,13 @@ void test('HTTP proxy fetch selects proxy and direct transports explicitly', asy
     const response = await proxyFetch(
       'https://example.com/resource',
       { method: 'POST', body: 'payload' },
-      { policy: 'proxy', proxy: { cacheBust: true, stripHeaders: true } },
+      { policy: 'proxy', proxy: { cacheBust: true } },
     )
     assert.equal(await response.text(), 'proxied')
     const request = requests.at(0)
     assert(request)
     const receivedUrl = new URL(request.url, proxyUrl)
     assert.equal(receivedUrl.searchParams.get('url'), 'https://example.com/resource')
-    assert.equal(receivedUrl.searchParams.get('sH'), '1')
     assert(receivedUrl.searchParams.has('cb'))
     assert.equal(request.authorization, 'Bearer test-token')
     assert.equal(request.body, 'payload')

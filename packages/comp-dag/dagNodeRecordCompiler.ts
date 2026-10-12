@@ -87,7 +87,6 @@ const dagNodeUseProtocol = defineFrpServiceProtocol({
             proxy: z
               .object({
                 cacheBust: z.boolean().optional(),
-                stripHeaders: z.boolean().optional(),
               })
               .optional(),
           })

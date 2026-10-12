@@ -21,7 +21,6 @@ export function createHttpProxyFetch(options: {
     const proxyUrl = new URL(options.proxyUrl)
     proxyUrl.searchParams.set('url', target.href)
     if (fetchOptions.proxy?.cacheBust) proxyUrl.searchParams.set('cb', crypto.randomUUID())
-    if (fetchOptions.proxy?.stripHeaders) proxyUrl.searchParams.set('sH', '1')
 
     const send = async (refreshInstanceKey = false) => {
       const headers = new Headers(init.headers)

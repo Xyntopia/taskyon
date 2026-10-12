@@ -451,21 +451,13 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
   }
 }
 
-type ProxyFetchOptions = {
-  cacheBust?: boolean
-  stripHeaders?: boolean
-}
-
 const createProxyFetchClient = (tunnelUrl: string) => {
-  return async (url: string, tunnelToken: string, opts?: ProxyFetchOptions) => {
+  return async (url: string, tunnelToken: string, cacheBust = false) => {
     const urlObj = new URL(tunnelUrl)
     urlObj.searchParams.set('url', url)
 
-    if (opts?.cacheBust) {
+    if (cacheBust) {
       urlObj.searchParams.set('cb', Date.now().toString())
-    }
-    if (opts?.stripHeaders) {
-      urlObj.searchParams.set('sH', '1')
     }
 
     return await axios.get<unknown>(urlObj.toString(), {
@@ -487,9 +479,6 @@ const responseDataToText = (data: unknown): string => {
   }
 }
 
-const isPvgisRejectedHtml = (body: unknown): boolean =>
-  /request rejected|support id|requested url was rejected/i.test(responseDataToText(body))
-
 export const testTyProxy = async (ctx: { tyauth: string }) => {
   const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
 
@@ -507,7 +496,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
 
   // --- Test 1: no browser cache interference ---
   // Use a cache-busting parameter so that the first request definitely goes to the server.
-  const response1 = await proxyFetch(testApiUrl2, token, { cacheBust: true })
+  const response1 = await proxyFetch(testApiUrl2, token, true)
 
   console.log(response1.status)
   console.log(response1.data)
@@ -528,7 +517,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
   // as a double-spend. The cache-buster ensures this request cannot be fulfilled purely
   // from the browser cache.
   const errDoubleSpend = await expectThrows(
-    async () => await proxyFetch(testApiUrl2, token, { cacheBust: true }),
+    async () => await proxyFetch(testApiUrl2, token, true),
     'No double spending error received from server in no-cache scenario!',
   )
   const expectedDoubleSpendError =
@@ -545,7 +534,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
         ctx.tyauth,
         await getSettlementConfirmation('https://share.taskyon.space'),
       ),
-      { cacheBust: true },
+      true,
     )
   ).data
   const data2Text = responseDataToText(data2)
@@ -561,7 +550,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
     await getSettlementConfirmation('https://share.taskyon.space'),
   )
 
-  const cacheTestResponse1 = await proxyFetch(testApiUrl2, tokenForCacheTest, { cacheBust: false })
+  const cacheTestResponse1 = await proxyFetch(testApiUrl2, tokenForCacheTest, false)
 
   let cachingHidDoubleSpend = false
   let cacheTestErrorDescription: string | null = null
@@ -571,9 +560,7 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
     // server, it should trigger a double-spend error. If it is served from cache,
     // it will likely succeed with HTTP 200 and *no* error.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const cacheTestResponse2 = await proxyFetch(testApiUrl2, tokenForCacheTest, {
-      cacheBust: false,
-    })
+    const cacheTestResponse2 = await proxyFetch(testApiUrl2, tokenForCacheTest, false)
 
     // If we got here, no error was thrown. That means either:
     //  - the server did not enforce double-spend, or
@@ -605,71 +592,6 @@ export const testTyProxy = async (ctx: { tyauth: string }) => {
     },
   }
 }
-
-export const testTyProxyPvgisHeaderStripping = async (ctx: { tyauth: string }) => {
-  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
-  const tunnelUrl = 'https://share.taskyon.space/proxy'
-  const proxyFetch = createProxyFetchClient(tunnelUrl)
-
-  const pvgisUrl =
-    'https://re.jrc.ec.europa.eu/api/tmy?lat=52.52&lon=13.405&outputformat=json&usehorizon=1'
-
-  const tokenDefault = await mintToken(
-    baseUrl,
-    ctx.tyauth,
-    await getSettlementConfirmation('https://share.taskyon.space'),
-  )
-  const defaultResp = await proxyFetch(pvgisUrl, tokenDefault, {
-    cacheBust: true,
-    stripHeaders: false,
-  })
-  const defaultBodyText = responseDataToText(defaultResp.data)
-  const defaultRejected = isPvgisRejectedHtml(defaultBodyText)
-
-  const tokenStripped = await mintToken(
-    baseUrl,
-    ctx.tyauth,
-    await getSettlementConfirmation('https://share.taskyon.space'),
-  )
-  const strippedResp = await proxyFetch(pvgisUrl, tokenStripped, {
-    cacheBust: true,
-    stripHeaders: true,
-  })
-  const strippedBodyText = responseDataToText(strippedResp.data)
-  const strippedRejected = isPvgisRejectedHtml(strippedBodyText)
-  const strippedLooksJson =
-    strippedBodyText.trim().startsWith('{') ||
-    (typeof strippedResp.data === 'object' && strippedResp.data !== null)
-
-  if (strippedRejected || !strippedLooksJson) {
-    throw new Error(
-      `strip mode failed for PVGIS. status=${strippedResp.status}, rejected=${strippedRejected}, bodyPreview=${strippedBodyText.slice(
-        0,
-        180,
-      )}`,
-    )
-  }
-
-  return {
-    pvgisUrl,
-    withoutStrip: {
-      status: defaultResp.status,
-      rejected: defaultRejected,
-      bodyPreview: defaultBodyText.slice(0, 180),
-    },
-    withStrip: {
-      status: strippedResp.status,
-      rejected: strippedRejected,
-      bodyPreview: strippedBodyText.slice(0, 180),
-      looksJson: strippedLooksJson,
-    },
-    note: defaultRejected
-      ? 'PVGIS rejected browser-like proxy request without strip mode; strip mode avoided rejection.'
-      : 'PVGIS did not reject the non-stripped request in this run. Upstream behavior may vary.',
-  }
-}
-
-testTyProxyPvgisHeaderStripping.experimental = true
 
 export const testTauriHttpPluginHttpsFetch = async () => {
   if (!canUseTauriHttpPlugin()) {

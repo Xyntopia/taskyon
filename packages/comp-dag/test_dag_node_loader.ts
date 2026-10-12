@@ -261,9 +261,9 @@ export const testCompiledDagNodePassesFetchPolicyToHost = async () => {
     outputSchema: { type: 'string' },
     inputs: {},
     runSource:
-      "async ({ services }) => (await services.fetch('https://example.test/value', {}, { policy: 'proxy', proxy: { stripHeaders: true, cacheBust: true } })).text()",
+      "async ({ services }) => (await services.fetch('https://example.test/value', {}, { policy: 'proxy', proxy: { cacheBust: true } })).text()",
     runCode:
-      "async ({ services }) => (await services.fetch('https://example.test/value', {}, { policy: 'proxy', proxy: { stripHeaders: true, cacheBust: true } })).text()",
+      "async ({ services }) => (await services.fetch('https://example.test/value', {}, { policy: 'proxy', proxy: { cacheBust: true } })).text()",
   })
   const compiled = compileDagNodeRecordGraph({
     graph: { [record.id]: record },
@@ -280,7 +280,6 @@ export const testCompiledDagNodePassesFetchPolicyToHost = async () => {
   })
   assert(result.value === 'policy-result', 'Expected the policy-aware host fetch to provide data')
   assert(receivedOptions?.policy === 'proxy', 'Expected the sandbox to select proxy fetch mode')
-  assert(receivedOptions.proxy?.stripHeaders === true, 'Expected proxy header stripping option')
   assert(receivedOptions.proxy?.cacheBust === true, 'Expected proxy cache-busting option')
 }
 

@@ -32,7 +32,6 @@ export function resolveSandboxFetchTransport(
 
 export type SandboxProxyFetchOptions = {
   cacheBust?: boolean | undefined
-  stripHeaders?: boolean | undefined
 }
 
 export type SandboxFetchOptions = {
