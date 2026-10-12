@@ -171,3 +171,37 @@ Join the Matrix channel: [Taskyon Matrix](https://matrix.to/#/!UNCbKcBpdEjFduzzM
 ## License
 
 MIT. See [LICENSE](LICENSE) for details.
+
+## Preparing a release
+
+Use the same local release-preparation workflow as Syncpeer. The root `package.json`
+version owns the application release. The command updates it together with
+`src-tauri/tauri.conf.json`, the application package in `src-tauri/Cargo.toml`, and
+its entry in `src-tauri/Cargo.lock`. Separately versioned workspace packages,
+dependency versions, and embedded repositories retain their own release versions.
+
+Check consistency without making changes:
+
+```sh
+yarn release --check
+```
+
+Preview an explicit version without changing files or Git:
+
+```sh
+yarn release 0.6.0-rc.1 --dry-run
+```
+
+Prepare a release interactively:
+
+```sh
+yarn release
+```
+
+The command shows the current application version and latest local version tag,
+asks for a new semantic version, and requires a clean tracked worktree and explicit
+confirmation. It updates only release metadata, creates a local commit named
+`chore: prepare release v<version>`, and creates the annotated tag `v<version>`.
+It prints the push command for the current branch; pushing, building, and
+publishing remain separate steps. `--dry-run` and `--check` are read-only and
+can be used while other work is in progress.
