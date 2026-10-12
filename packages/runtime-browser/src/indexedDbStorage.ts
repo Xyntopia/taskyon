@@ -1,5 +1,7 @@
-import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
 import {
+  createChunkedBlobBackend,
+  STORAGE_CHUNK_BYTES,
+  type BlobChunkStore,
   mergeStorageRecord,
   storageQueryMatches,
   storageValueContentHash,
@@ -8,27 +10,28 @@ import {
   type StorageRecordBackend,
 } from '@taskyon/taskyon/api'
 
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 const RECORDS = 'records'
 const BLOBS = 'blobs'
 const WRITES = 'blobWrites'
-const blobOptions = (contentType?: string): BlobPropertyBag | undefined =>
-  contentType ? { type: contentType } : undefined
-
+const CHUNKS = 'blobChunks'
 type RecordRow = { key: string; namespace: string; id: string | number; data: unknown }
 type BlobRow = {
   key: string
   namespace: string
   id: string
-  data: Blob
+  data?: Blob
   metadata: StorageBlobMetadata
+  generation?: string
 }
 type BlobWriteRow = {
   key: string
   namespace: string
   id: string
   writeId: string
-  data: Blob
+  data?: Blob
+  generation?: string
+  size?: number
   contentType?: string
 }
 
@@ -56,6 +59,8 @@ export const openTaskyonIndexedDb = (databaseName = 'taskyon-storage') =>
     const request = indexedDB.open(databaseName, DATABASE_VERSION)
     request.onupgradeneeded = () => {
       const database = request.result
+      if (!database.objectStoreNames.contains(CHUNKS))
+        database.createObjectStore(CHUNKS, { keyPath: 'key' })
       if (!database.objectStoreNames.contains(RECORDS)) {
         database.createObjectStore(RECORDS, { keyPath: 'key' })
       }
@@ -189,159 +194,169 @@ export const createIndexedDbRecordBackend = async (
   }
 }
 
-const hashBlob = async (blob: Blob) => {
-  const hasher = createSha256Hasher()
-  const reader = blob.stream().getReader()
-  try {
-    while (true) {
-      const chunk = await reader.read()
-      if (chunk.done) return hasher.digest()
-      hasher.update(chunk.value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-}
-
 export const createIndexedDbBlobBackend = async (
   namespace: string,
   databaseName?: string,
 ): Promise<StorageBlobBackend> => {
   const database = await openTaskyonIndexedDb(databaseName)
-  const key = (id: string) => logicalKey(namespace, id)
-  const getRow = async (id: string) => {
-    const transaction = database.transaction(BLOBS, 'readonly')
-    const row = await requestResult(
-      transaction.objectStore(BLOBS).get(key(id)) as IDBRequest<BlobRow | undefined>,
-    )
-    await transactionDone(transaction)
-    return row
-  }
-  const putBlob = async (id: string, data: Blob, contentType?: string, sha256?: string) => {
-    const metadata: StorageBlobMetadata = {
-      id,
-      size: data.size,
-      modifiedAt: new Date().toISOString(),
-      ...(contentType ? { contentType } : {}),
-      ...(sha256 ? { sha256 } : {}),
+  const prefix = `${encodeURIComponent(namespace)}\u0000`
+  const range = IDBKeyRange.bound(prefix, prefix + '\uffff')
+  const createStore = (
+    transaction?: IDBTransaction,
+    submit?: <T>(operation: () => IDBRequest<T>) => Promise<T>,
+  ): BlobChunkStore => {
+    const execute = <T>(operation: () => IDBRequest<T>): Promise<T> => {
+      if (!submit) throw new Error('Blob operation requires an active transaction')
+      return submit(operation)
     }
-    const transaction = database.transaction(BLOBS, 'readwrite')
-    await requestResult(
-      transaction.objectStore(BLOBS).put({ key: key(id), namespace, id, data, metadata }),
-    )
-    await transactionDone(transaction)
-    return metadata
-  }
-
-  return {
-    get: async (id) => {
-      const row = await getRow(id)
-      return row
-        ? { data: new Uint8Array(await row.data.arrayBuffer()), metadata: row.metadata }
-        : null
-    },
-    set: async (id, data, contentType) => {
-      const blob = new Blob([data], blobOptions(contentType))
-      return await putBlob(id, blob, contentType, await hashBlob(blob))
-    },
-    stat: async (id) => (await getRow(id))?.metadata ?? null,
-    list: async () =>
-      (await rowsForNamespace<BlobRow>(database, BLOBS, namespace)).map(({ metadata }) => metadata),
-    readRange: async (id, offset, length) => {
-      const row = await getRow(id)
-      if (!row) throw new Error(`Blob not found: ${id}`)
-      const data = new Uint8Array(await row.data.slice(offset, offset + length).arrayBuffer())
-      const nextOffset = offset + data.byteLength
-      return { data, nextOffset, eof: nextOffset >= row.data.size }
-    },
-    append: async (id, data, expectedSize, contentType) => {
-      const row = await getRow(id)
-      const current = row?.data ?? new Blob()
-      if (current.size !== expectedSize) {
-        throw new Error(
-          `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${current.size}.`,
+    const objectStore = (name: string) => {
+      if (!transaction) throw new Error('Blob operation requires a transaction')
+      return transaction.objectStore(name)
+    }
+    const read = <T>(name: string, key: string) =>
+      execute(() => objectStore(name).get(key) as IDBRequest<T | undefined>)
+    const store: BlobChunkStore = {
+      transaction: async (operation) => {
+        const tx = database.transaction([BLOBS, WRITES, CHUNKS], 'readwrite')
+        const completed = transactionDone(tx)
+        // Legacy Blob.slice().arrayBuffer() is asynchronous outside IndexedDB. Keep the
+        // transaction alive until migration and publication complete, without loading it all.
+        let active = true
+        const jobs: (() => void)[] = []
+        const submit = <T>(operation: () => IDBRequest<T>) =>
+          new Promise<T>((resolve, reject) => {
+            jobs.push(() => {
+              try {
+                void requestResult(operation()).then(resolve, reject)
+              } catch (error) {
+                reject(error instanceof Error ? error : new Error(String(error)))
+              }
+            })
+          })
+        const keepAlive = () => {
+          if (!active) return
+          const request = tx.objectStore(WRITES).get(prefix)
+          request.onsuccess = () => {
+            for (const job of jobs.splice(0)) job()
+            keepAlive()
+          }
+        }
+        keepAlive()
+        try {
+          const result = await Promise.race([
+            operation(createStore(tx, submit)),
+            completed.then(() => {
+              throw new Error('Blob transaction completed before its operation')
+            }),
+          ])
+          active = false
+          await completed
+          return result
+        } catch (error) {
+          active = false
+          try {
+            tx.abort()
+          } catch {
+            /* It may already have aborted. */
+          }
+          await completed.catch(() => undefined)
+          throw error
+        }
+      },
+      get: async (id) => {
+        const row = await read<BlobRow>(BLOBS, logicalKey(namespace, id))
+        return row
+          ? { metadata: row.metadata, ...(row.generation ? { generation: row.generation } : {}) }
+          : null
+      },
+      list: async () =>
+        (await execute(() => objectStore(BLOBS).getAll(range) as IDBRequest<BlobRow[]>)).map(
+          (row) => ({
+            metadata: row.metadata,
+            ...(row.generation ? { generation: row.generation } : {}),
+          }),
+        ),
+      publish: async (id, value) => {
+        await execute(() =>
+          objectStore(BLOBS).put({ key: logicalKey(namespace, id), namespace, id, ...value }),
         )
-      }
-      return await putBlob(
-        id,
-        new Blob([current, data], blobOptions(contentType ?? row?.metadata.contentType)),
-        contentType ?? row?.metadata.contentType,
-      )
-    },
-    beginWrite: async (id, contentType) => {
-      const writeId = crypto.randomUUID()
-      const transaction = database.transaction(WRITES, 'readwrite')
-      await requestResult(
-        transaction.objectStore(WRITES).put({
-          key: writeKey(namespace, writeId),
-          namespace,
-          id,
-          writeId,
-          data: new Blob(),
-          ...(contentType ? { contentType } : {}),
-        }),
-      )
-      await transactionDone(transaction)
-      return { writeId }
-    },
-    writeChunk: async (id, writeId, offset, data) => {
-      const transaction = database.transaction(WRITES, 'readwrite')
-      const store = transaction.objectStore(WRITES)
-      const row = await requestResult(
-        store.get(writeKey(namespace, writeId)) as IDBRequest<BlobWriteRow | undefined>,
-      )
-      if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-      if (offset > row.data.size)
-        throw new Error(`Blob write offset ${offset} exceeds size ${row.data.size}.`)
-      const next = new Blob([
-        row.data.slice(0, offset),
-        data,
-        row.data.slice(offset + data.byteLength),
-      ])
-      await requestResult(store.put({ ...row, data: next }))
-      await transactionDone(transaction)
-      return { nextOffset: Math.max(row.data.size, offset + data.byteLength) }
-    },
-    writeStatus: async (id, writeId) => {
-      const transaction = database.transaction(WRITES, 'readonly')
-      const row = await requestResult(
-        transaction.objectStore(WRITES).get(writeKey(namespace, writeId)) as IDBRequest<
-          BlobWriteRow | undefined
-        >,
-      )
-      await transactionDone(transaction)
-      if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-      return { size: row.data.size }
-    },
-    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) => {
-      const transaction = database.transaction(WRITES, 'readonly')
-      const row = await requestResult(
-        transaction.objectStore(WRITES).get(writeKey(namespace, writeId)) as IDBRequest<
-          BlobWriteRow | undefined
-        >,
-      )
-      await transactionDone(transaction)
-      if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-      if (row.data.size !== expectedSize) throw new Error(`Blob size mismatch for "${id}".`)
-      const sha256 = await hashBlob(row.data)
-      if (expectedSha256 && sha256 !== expectedSha256)
-        throw new Error(`Blob checksum mismatch for "${id}".`)
-      const metadata = await putBlob(targetId ?? id, row.data, row.contentType, sha256)
-      const cleanup = database.transaction(WRITES, 'readwrite')
-      await requestResult(cleanup.objectStore(WRITES).delete(writeKey(namespace, writeId)))
-      await transactionDone(cleanup)
-      return metadata
-    },
-    abortWrite: async (_id, writeId) => {
-      const transaction = database.transaction(WRITES, 'readwrite')
-      await requestResult(transaction.objectStore(WRITES).delete(writeKey(namespace, writeId)))
-      await transactionDone(transaction)
-    },
-    delete: async (id) => {
-      const transaction = database.transaction(BLOBS, 'readwrite')
-      await requestResult(transaction.objectStore(BLOBS).delete(key(id)))
-      await transactionDone(transaction)
-    },
-    clear: async () => await clearNamespace(database, [BLOBS, WRITES], namespace),
+      },
+      remove: async (id) => {
+        await execute(() => objectStore(BLOBS).delete(logicalKey(namespace, id)))
+      },
+      getWrite: async (writeId) => {
+        const row = await read<BlobWriteRow>(WRITES, writeKey(namespace, writeId))
+        if (!row) return null
+        if (row.generation && row.size !== undefined)
+          return {
+            id: row.id,
+            generation: row.generation,
+            size: row.size,
+            ...(row.contentType ? { contentType: row.contentType } : {}),
+          }
+        if (!row.data) throw new Error('Legacy blob write has no data')
+        const value = {
+          id: row.id,
+          generation: crypto.randomUUID(),
+          size: row.data.size,
+          ...(row.contentType ? { contentType: row.contentType } : {}),
+        }
+        for (let offset = 0; offset < row.data.size; offset += STORAGE_CHUNK_BYTES)
+          await store.putChunk(
+            value.generation,
+            offset / STORAGE_CHUNK_BYTES,
+            new Uint8Array(
+              await row.data.slice(offset, offset + STORAGE_CHUNK_BYTES).arrayBuffer(),
+            ),
+          )
+        await store.putWrite(writeId, value)
+        return value
+      },
+      putWrite: async (writeId, value) => {
+        await execute(() =>
+          objectStore(WRITES).put({
+            key: writeKey(namespace, writeId),
+            namespace,
+            writeId,
+            ...value,
+          }),
+        )
+      },
+      removeWrite: async (writeId) => {
+        await execute(() => objectStore(WRITES).delete(writeKey(namespace, writeId)))
+      },
+      readChunk: async (generation, index) =>
+        (
+          await read<{ data: Uint8Array<ArrayBuffer> }>(
+            CHUNKS,
+            `${prefix}${generation}\u0000${index}`,
+          )
+        )?.data ?? new Uint8Array(),
+      putChunk: async (generation, index, data) => {
+        await execute(() =>
+          objectStore(CHUNKS).put({ key: `${prefix}${generation}\u0000${index}`, namespace, data }),
+        )
+      },
+      removeGeneration: async (generation) => {
+        const start = `${prefix}${generation}\u0000`
+        const keys = await execute(() =>
+          objectStore(CHUNKS).getAllKeys(IDBKeyRange.bound(start, start + '\uffff')),
+        )
+        for (const key of keys) await execute(() => objectStore(CHUNKS).delete(key))
+      },
+      readLegacy: async (id, offset, length) => {
+        const row = await read<BlobRow>(BLOBS, logicalKey(namespace, id))
+        if (!row?.data) throw new Error('Legacy blob not found')
+        return new Uint8Array(await row.data.slice(offset, offset + length).arrayBuffer())
+      },
+      clear: async () => {
+        for (const name of [BLOBS, WRITES, CHUNKS]) {
+          const keys = await execute(() => objectStore(name).getAllKeys(range))
+          for (const key of keys) await execute(() => objectStore(name).delete(key))
+        }
+      },
+    }
+    return store
   }
+  return createChunkedBlobBackend(createStore())
 }

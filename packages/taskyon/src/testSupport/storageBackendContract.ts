@@ -5,6 +5,7 @@ import {
   createStorageProtocolServer,
   taskyonStorageProtocol,
   type StorageBackendProvider,
+  type StorageBlobBackend,
 } from '../api/storageProtocol'
 
 export { createInMemoryDatabasePool } from './inMemoryDatabasePool'
@@ -108,9 +109,108 @@ export const runStorageBackendContract = async (provider: StorageBackendProvider
       expectedSha256: hasher.digest(),
     })
     assert((await storage.listBlobs({ namespace })).blobs.length === 2, 'List committed blobs')
+    const pending = await storage.beginBlobWrite({ namespace, id: 'value.txt' })
+    const replacement = encoder.encode('new-value')
+    await storage.writeBlobChunk({
+      namespace,
+      id: 'value.txt',
+      writeId: pending.writeId,
+      offset: 0,
+      data: replacement,
+    })
+    let rejected = false
+    try {
+      await storage.writeBlobChunk({
+        namespace,
+        id: 'different',
+        writeId: pending.writeId,
+        offset: 0,
+        data: replacement,
+      })
+    } catch {
+      rejected = true
+    }
+    assert(rejected, 'Bind write ID to object ID')
+    await storage.abortBlobWrite({ namespace, id: 'different', writeId: pending.writeId })
+    assert(
+      (await storage.getBlobWriteStatus({ namespace, id: 'value.txt', writeId: pending.writeId }))
+        .size === replacement.length,
+      'Wrong object must not abort a write',
+    )
+    rejected = false
+    try {
+      await storage.commitBlobWrite({
+        namespace,
+        id: 'value.txt',
+        writeId: pending.writeId,
+        expectedSize: replacement.length,
+        expectedSha256: 'invalid',
+      })
+    } catch {
+      rejected = true
+    }
+    assert(rejected, 'Reject checksum failure')
+    assert(
+      decoder.decode((await storage.getBlob({ namespace, id: 'value.txt' }))!.data) ===
+        'first-second',
+      'Failed commit preserves previous object',
+    )
+    await storage.writeBlobChunk({
+      namespace,
+      id: 'value.txt',
+      writeId: pending.writeId,
+      offset: 1,
+      data: encoder.encode('X'),
+    })
+    await storage.commitBlobWrite({
+      namespace,
+      id: 'value.txt',
+      writeId: pending.writeId,
+      expectedSize: replacement.length,
+      targetId: 'renamed',
+    })
+    assert(
+      decoder.decode((await storage.getBlob({ namespace, id: 'renamed' }))!.data) === 'nXw-value',
+      'Overwrite and publish target ID',
+    )
   } finally {
     await storage.clear({ namespace }).catch(() => undefined)
     await storage.clearBlobs({ namespace }).catch(() => undefined)
     stop()
   }
+}
+
+export const runStorageStreamingContract = async (provider: StorageBackendProvider) => {
+  const namespace = `streaming-contract-${crypto.randomUUID()}`
+  const backend = await provider.blobs(namespace)
+  if (!backend) throw new Error('Blob backend unavailable')
+  const data = new Uint8Array(1024 * 1024).fill(37)
+  const { writeId } = await backend.beginWrite('large')
+  try {
+    for (let index = 0; index < 17; index++)
+      await backend.writeChunk('large', writeId, index * data.length, data)
+    await backend.writeChunk('large', writeId, data.length - 1, new Uint8Array([7, 8]))
+    await backend.commitWrite('large', writeId, 17 * data.length)
+    const reopened = await provider.blobs(namespace)
+    if (!reopened) throw new Error('Reopened blob backend unavailable')
+    const result = await reopened.readRange('large', data.length - 1, 2)
+    assert(result.data.join(',') === '7,8', 'Range spanning stored chunks survives reopening')
+    assert(
+      (await reopened.stat('large'))?.size === 17 * data.length,
+      'Large object size survives reopening',
+    )
+    await reopened.delete('large')
+    assert((await reopened.stat('large')) === null, 'Deleted generation stays invisible')
+  } finally {
+    await backend.abortWrite('large', writeId)
+    await backend.clear()
+  }
+}
+
+export const runStorageLegacyBlobContract = async (backend: StorageBlobBackend) => {
+  assert((await backend.readRange('legacy',1,2)).data.join(',') === '2,3','Legacy range read')
+  await backend.append('legacy',new Uint8Array([4]),3)
+  assert((await backend.get('legacy'))?.data.join(',') === '1,2,3,4','Legacy append migration')
+  await backend.delete('legacy')
+  assert(await backend.get('legacy') === null,'Deleted legacy data stays invisible')
 }

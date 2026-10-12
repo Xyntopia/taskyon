@@ -163,7 +163,7 @@ const blobBytes = z.instanceof(Uint8Array<ArrayBuffer>) as z.ZodType<Uint8Array<
 const blobChunk = blobBytes.refine((data) => data.byteLength <= 1024 * 1024, {
   message: 'Blob chunks must not exceed 1 MiB.',
 })
-const blobMetadata = z.object({
+export const blobMetadata = z.object({
   id: blobId,
   size: z.number().int().nonnegative(),
   contentType: z.string().optional(),

@@ -377,6 +377,12 @@ pub fn run() {
         ])
         .setup(move |app| {
             app.handle().plugin(tauri_plugin_http::init())?;
+            app.handle().plugin(tauri_plugin_fs::init())?;
+            {
+                use tauri_plugin_fs::FsExt;
+                let storage_root = app.path().app_data_dir()?.join("taskyon-storage");
+                app.fs_scope().allow_directory(&storage_root, true)?;
+            }
             apply_pending_storage_reset(app.handle());
             app.manage(std::sync::Arc::new(native_crypto::DeviceService::os(
                 app.path().app_data_dir()?,

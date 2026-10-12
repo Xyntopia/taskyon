@@ -133,6 +133,7 @@
     "@taskyon/tyclient": "workspace:*",
     "@taskyon/ui": "workspace:*",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-fs": "2.4.5",
     "@tauri-apps/plugin-http": "^2.5.7",
     "@vueuse/core": "^10.10.0",
     "ai": "^6.0.42",

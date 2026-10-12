@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { canonicalHash, sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
-import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
+import { runStorageBackendContract, runStorageLegacyBlobContract } from '@taskyon/taskyon/test-support'
 import {
   createProtocolStorageBlobBackend,
   createStorageClient,
@@ -16,6 +16,7 @@ import type { TaskNodeRecord } from '../../../../taskyon/src/types/taskNode'
 import {
   createCliFileBlobStorageBackend,
   createCliFileStorageBackend,
+  resolveCliBlobStoragePath,
   createCliFileStorageService,
 } from '../../cli/fileStorage'
 
@@ -390,3 +391,11 @@ export const testArtifactStoreStreamsLargeFilesThroughBlobStorage = async () => 
 
 testArtifactStoreStreamsLargeFilesThroughBlobStorage.description =
   'Stages large artifacts in bounded chunks and verifies them while reading by content hash.'
+
+export const testCliFileRetainsLegacyBlobData = async () => {
+  const root = await mkdtemp(join(tmpdir(),'tycli-legacy-synthetic-'))
+  const path = resolveCliBlobStoragePath(root,'synthetic','legacy')
+  await mkdir(join(root,'blobs','synthetic'),{ recursive: true })
+  await writeFile(path,new Uint8Array([1,2,3]))
+  await runStorageLegacyBlobContract(createCliFileBlobStorageBackend(root,'synthetic'))
+}

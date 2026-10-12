@@ -10,8 +10,9 @@ import {
   createOpfsStorageBackendResolver,
   type OpfsStorageOptions,
 } from './storage'
+import { createTauriStorageProvider } from './nativeStorage'
 
-export type BrowserStorageBackendKind = 'opfs' | 'indexeddb' | 'pglite'
+export type BrowserStorageBackendKind = 'native' | 'opfs' | 'indexeddb' | 'pglite'
 export type BrowserStorageCapability = 'records' | 'blobs'
 export type BrowserStoragePreferenceStore = {
   get: (capability: BrowserStorageCapability) => BrowserStorageBackendKind | undefined
@@ -20,14 +21,16 @@ export type BrowserStoragePreferenceStore = {
 }
 
 const preferenceKey = (capability: BrowserStorageCapability) =>
-  `taskyon.storage.backend.${capability}`
+  `taskyon.storage.backend.v2.${capability}`
 
 export const createBrowserStoragePreferenceStore = (
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = localStorage,
 ): BrowserStoragePreferenceStore => ({
   get: (capability) => {
     const value = storage.getItem(preferenceKey(capability))
-    return value === 'opfs' || value === 'indexeddb' || value === 'pglite' ? value : undefined
+    return value === 'native' || value === 'opfs' || value === 'indexeddb' || value === 'pglite'
+      ? value
+      : undefined
   },
   set: (capability, backend) => storage.setItem(preferenceKey(capability), backend),
   clear: (capability) => storage.removeItem(preferenceKey(capability)),
@@ -38,6 +41,13 @@ const createProvider = (
   options: { databaseName: string; opfs?: OpfsStorageOptions },
 ): StorageBackendProvider => {
   switch (backend) {
+    case 'native': {
+      const provider = createTauriStorageProvider()
+      return {
+        records: async (namespace) => (await provider).records(namespace),
+        blobs: async (namespace) => (await provider).blobs(namespace),
+      }
+    }
     case 'opfs':
       return {
         records: createOpfsStorageBackendResolver(options.opfs),
@@ -114,19 +124,19 @@ export const selectBrowserStorageProvider = async (options?: {
   const databaseName = options?.databaseName ?? 'taskyon-storage'
   const preferences = options?.preferences ?? createBrowserStoragePreferenceStore()
   const selectionOptions = { databaseName, ...(options?.opfs ? { opfs: options.opfs } : {}) }
+  const isDesktop =
+    typeof window !== 'undefined' && '__TAURI_INTERNALS__' in (window as Record<string, unknown>)
+  const defaultCandidates: readonly BrowserStorageBackendKind[] = isDesktop
+    ? ['native', 'opfs', 'indexeddb']
+    : ['opfs', 'indexeddb']
   const [records, blobs] = await Promise.all([
     selectCapability(
       'records',
       preferences,
-      options?.records ?? ['opfs', 'indexeddb'],
+      options?.records ?? defaultCandidates,
       selectionOptions,
     ),
-    selectCapability(
-      'blobs',
-      preferences,
-      options?.blobs ?? ['opfs', 'indexeddb'],
-      selectionOptions,
-    ),
+    selectCapability('blobs', preferences, options?.blobs ?? defaultCandidates, selectionOptions),
   ])
   return {
     provider: {

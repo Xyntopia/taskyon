@@ -1,5 +1,11 @@
+import { z } from 'zod'
 import {
   createStorageProtocolServer,
+  createChunkedBlobBackend,
+  blobGenerationSchema,
+  blobWriteGenerationSchema,
+  type BlobChunkStore,
+  type BlobGeneration,
   createStorageRecordFileBackend,
   parseStorageRecordFile,
   type Port,
@@ -8,7 +14,6 @@ import {
   type StorageBlobMetadata,
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
-import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
 import type {
   BrowserStorageBackendKind,
   BrowserStoragePreferenceStore,
@@ -225,30 +230,6 @@ const readBlobDetails = async (root: FileSystemDirectoryHandle, path: string) =>
     return JSON.parse(await file.text()) as { contentType?: string; sha256?: string }
   })
 
-const writeBlobDetails = async (
-  root: FileSystemDirectoryHandle,
-  path: string,
-  details: { contentType?: string; sha256?: string },
-) => {
-  const writable = await (await getFile(root, path, true)).createWritable()
-  await writable.write(JSON.stringify(details))
-  await writable.close()
-}
-
-const hashFile = async (file: File) => {
-  const hash = createSha256Hasher()
-  const reader = file.stream().getReader()
-  try {
-    while (true) {
-      const chunk = await reader.read()
-      if (chunk.done) return hash.digest()
-      hash.update(chunk.value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-}
-
 const missingBlobAsNull = async <T>(operation: () => Promise<T>) => {
   try {
     return await operation()
@@ -263,159 +244,121 @@ export const createOpfsBlobStorageBackend = async (
   options: OpfsStorageOptions = {},
 ): Promise<StorageBlobBackend> => {
   const root = await getRootDirectory(options)
+  const directory = blobDirectory(namespace)
   const lockPrefix = options.lockNamePrefix ?? 'taskyon-opfs-storage'
-  const locked = <T>(operation: () => Promise<T>) =>
-    withBrowserLock(`${lockPrefix}:blobs:${namespace}`, operation)
-  const target = (id: string) => blobPath(namespace, id)
-  const staged = (writeId: string) => stagedBlobPath(namespace, writeId)
-  const details = (id: string) => blobMetadataPath(namespace, id)
-  const stagedDetails = (writeId: string) => stagedBlobMetadataPath(namespace, writeId)
-
-  return {
-    get: async (id) =>
-      await missingBlobAsNull(async () => {
-        const handle = await getFile(root, target(id))
-        const file = await handle.getFile()
-        return {
-          data: new Uint8Array(await file.arrayBuffer()),
-          metadata: await blobMetadata(
-            handle,
-            id,
-            (await readBlobDetails(root, details(id))) ?? {},
-          ),
+  const manifest = (id: string) => blobMetadataPath(namespace, id)
+  const staging = (id: string) => stagedBlobMetadataPath(namespace, id)
+  const generationDirectory = (generation: string) =>
+    `${directory}/.generations/${encodeURIComponent(generation)}`
+  const readJson = async (path: string): Promise<unknown> =>
+    missingBlobAsNull(async () =>
+      JSON.parse(await (await (await getFile(root, path)).getFile()).text()),
+    )
+  const writeJson = async (path: string, value: unknown) => {
+    const writable = await (await getFile(root, path, true)).createWritable()
+    try {
+      await writable.write(JSON.stringify(value))
+      await writable.close()
+    } catch (error) {
+      await writable.abort().catch(() => undefined)
+      throw error
+    }
+  }
+  const store: BlobChunkStore = {
+    transaction: (operation) =>
+      withBrowserLock(`${lockPrefix}:blobs:${namespace}`, () => operation(store)),
+    get: async (id) => {
+      const value = await readJson(manifest(id))
+      if (z.object({ deleted: z.literal(true) }).safeParse(value).success) return null
+      const current = blobGenerationSchema.safeParse(value)
+      if (current.success && current.data.generation) return current.data
+      return missingBlobAsNull(async () => ({
+        metadata: await blobMetadata(
+          await getFile(root, blobPath(namespace, id)),
+          id,
+          (await readBlobDetails(root, manifest(id))) ?? {},
+        ),
+      }))
+    },
+    list: async () => {
+      const ids = new Set<string>()
+      for (const path of [directory, `${directory}/.metadata`]) {
+        const dir = await missingBlobAsNull(() =>
+          getDirectory(root, normalizeRelativePath(path), false),
+        )
+        if (!dir) continue
+        for await (const [name, handle] of dir.entries()) {
+          if (isFileHandle(handle))
+            ids.add(
+              decodeURIComponent(path.endsWith('/.metadata') ? name.replace(/\.json$/, '') : name),
+            )
         }
-      }),
-    set: async (id, data, contentType) =>
-      await locked(async () => {
-        const handle = await getFile(root, target(id), true)
-        const writable = await handle.createWritable()
+      }
+      const rows = await Promise.all([...ids].map((id) => store.get(id)))
+      return rows.filter((row): row is BlobGeneration => row !== null)
+    },
+    publish: async (id, value) => {
+      // Closing one manifest publishes data and metadata together. Chunk files stay immutable
+      // once published; a failed close leaves the old manifest and old generation visible.
+      await writeJson(manifest(id), value)
+      await removeFile(root, blobPath(namespace, id)).catch(() => undefined)
+    },
+    remove: async (id) => {
+      await writeJson(manifest(id), { deleted: true })
+      await removeFile(root, blobPath(namespace, id)).catch(() => undefined)
+    },
+    getWrite: async (writeId) => {
+      const value = await readJson(staging(writeId))
+      const current = blobWriteGenerationSchema.safeParse(value)
+      if (current.success) return current.data
+      // Old OPFS staging files did not persist object IDs. They cannot safely be claimed
+      // by a new caller; committed legacy files remain readable and migrate on append.
+      if (await missingBlobAsNull(() => getFile(root, stagedBlobPath(namespace, writeId))))
+        throw new Error('Legacy OPFS staging write has no object identity; restart the write')
+      return null
+    },
+    putWrite: (writeId, value) => writeJson(staging(writeId), value),
+    removeWrite: async (writeId) => {
+      await removeFile(root, staging(writeId)).catch(() => undefined)
+    },
+    readChunk: async (generation, index) =>
+      (await missingBlobAsNull(
+        async () =>
+          new Uint8Array(
+            await (
+              await (await getFile(root, `${generationDirectory(generation)}/${index}`)).getFile()
+            ).arrayBuffer(),
+          ),
+      )) ?? new Uint8Array(),
+    putChunk: async (generation, index, data) => {
+      const writable = await (
+        await getFile(root, `${generationDirectory(generation)}/${index}`, true)
+      ).createWritable()
+      try {
         await writable.write(data)
         await writable.close()
-        const metadataDetails = {
-          ...(contentType ? { contentType } : {}),
-          sha256: await hashFile(await handle.getFile()),
-        }
-        await writeBlobDetails(root, details(id), metadataDetails)
-        return await blobMetadata(handle, id, metadataDetails)
-      }),
-    stat: async (id) =>
-      await missingBlobAsNull(
-        async () =>
-          await blobMetadata(
-            await getFile(root, target(id)),
-            id,
-            (await readBlobDetails(root, details(id))) ?? {},
-          ),
-      ),
-    list: async () => {
-      try {
-        const directory = await getDirectory(
-          root,
-          normalizeRelativePath(blobDirectory(namespace)),
-          false,
-        )
-        const values: StorageBlobMetadata[] = []
-        for await (const [name, handle] of directory.entries()) {
-          if (!isFileHandle(handle)) continue
-          const id = decodeURIComponent(name)
-          values.push(
-            await blobMetadata(handle, id, (await readBlobDetails(root, details(id))) ?? {}),
-          )
-        }
-        return values
       } catch (error) {
-        if (error instanceof Error && error.name === 'NotFoundError') return []
+        await writable.abort().catch(() => undefined)
         throw error
       }
     },
-    readRange: async (id, offset, length) => {
-      const file = await (await getFile(root, target(id))).getFile()
-      const data = new Uint8Array(await file.slice(offset, offset + length).arrayBuffer())
-      const nextOffset = offset + data.byteLength
-      return { data, nextOffset, eof: nextOffset >= file.size }
+    removeGeneration: async (generation) => {
+      // A stale staging manifest after a cleanup failure must never delete live data.
+      if ((await store.list()).some((row) => row.generation === generation)) return
+      const dir = await getDirectory(root, normalizeRelativePath(`${directory}/.generations`), true)
+      await dir
+        .removeEntry(encodeURIComponent(generation), { recursive: true })
+        .catch(() => undefined)
     },
-    append: async (id, data, expectedSize, contentType) =>
-      await locked(async () => {
-        const handle = await getFile(root, target(id), true)
-        const current = await handle.getFile()
-        if (current.size !== expectedSize) {
-          throw new Error(
-            `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${current.size}.`,
-          )
-        }
-        const writable = await handle.createWritable({ keepExistingData: true })
-        await writable.seek(current.size)
-        await writable.write(data)
-        await writable.close()
-        const existing = (await readBlobDetails(root, details(id))) ?? {}
-        const metadataDetails = {
-          ...((contentType ?? existing.contentType)
-            ? { contentType: contentType ?? existing.contentType }
-            : {}),
-        }
-        await writeBlobDetails(root, details(id), metadataDetails)
-        return await blobMetadata(handle, id, metadataDetails)
-      }),
-    beginWrite: async (_id, contentType) => {
-      const writeId = crypto.randomUUID()
-      const writable = await (await getFile(root, staged(writeId), true)).createWritable()
-      await writable.close()
-      await writeBlobDetails(root, stagedDetails(writeId), contentType ? { contentType } : {})
-      return { writeId }
-    },
-    writeChunk: async (_id, writeId, offset, data) =>
-      await locked(async () => {
-        const handle = await getFile(root, staged(writeId))
-        const current = await handle.getFile()
-        if (offset > current.size)
-          throw new Error(`Blob write offset ${offset} exceeds size ${current.size}.`)
-        const writable = await handle.createWritable({ keepExistingData: true })
-        await writable.seek(offset)
-        await writable.write(data)
-        await writable.close()
-        return { nextOffset: Math.max(current.size, offset + data.byteLength) }
-      }),
-    writeStatus: async (_id, writeId) => ({
-      size: (await (await getFile(root, staged(writeId))).getFile()).size,
-    }),
-    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) =>
-      await locked(async () => {
-        const stagedHandle = await getFile(root, staged(writeId))
-        const file = await stagedHandle.getFile()
-        if (file.size !== expectedSize) {
-          throw new Error(
-            `Blob size mismatch for "${id}": expected ${expectedSize}, found ${file.size}.`,
-          )
-        }
-        const sha256 = await hashFile(file)
-        if (expectedSha256 && sha256 !== expectedSha256) {
-          throw new Error(`Blob checksum mismatch for "${id}".`)
-        }
-        const publishedId = targetId ?? id
-        const targetHandle = await getFile(root, target(publishedId), true)
-        const writable = await targetHandle.createWritable()
-        await writable.write(file)
-        await writable.close()
-        const metadataDetails = {
-          ...((await readBlobDetails(root, stagedDetails(writeId))) ?? {}),
-          sha256,
-        }
-        await writeBlobDetails(root, details(publishedId), metadataDetails)
-        await removeFile(root, staged(writeId))
-        await removeFile(root, stagedDetails(writeId))
-        return await blobMetadata(targetHandle, publishedId, metadataDetails)
-      }),
-    abortWrite: async (_id, writeId) => {
-      await Promise.all([
-        removeFile(root, staged(writeId)),
-        removeFile(root, stagedDetails(writeId)),
-      ])
-    },
-    delete: async (id) => {
-      await Promise.all([removeFile(root, target(id)), removeFile(root, details(id))])
-    },
-    clear: async () => await clearDirectory(root, blobDirectory(namespace)),
+    readLegacy: async (id, offset, length) =>
+      new Uint8Array(
+        await (await (await getFile(root, blobPath(namespace, id))).getFile())
+          .slice(offset, offset + length)
+          .arrayBuffer(),
+      ),
+    clear: () => clearDirectory(root, directory),
   }
+  return createChunkedBlobBackend(store)
 }
 
 const withBrowserLock = async <T>(lockName: string, operation: () => Promise<T>): Promise<T> => {

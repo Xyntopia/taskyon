@@ -4,11 +4,14 @@ import { randomUUID } from 'node:crypto'
 import {
   access,
   appendFile,
+  copyFile,
   mkdir,
   open,
   readdir,
   readFile,
   rename,
+  readlink,
+  symlink,
   rm,
   stat,
   writeFile,
@@ -183,61 +186,119 @@ export const createCliFileBlobStorageBackend = (
     (await missingAsNull(
       async () =>
         JSON.parse(await readFile(path, 'utf8')) as {
+          id?: string
           contentType?: string
           sha256?: string
         },
     )) ?? {}
-  const writeDetails = async (path: string, details: { contentType?: string; sha256?: string }) =>
-    await writeJsonFile(path, details)
+  const writeDetails = async (
+    path: string,
+    details: { id?: string; generation?: string; contentType?: string; sha256?: string },
+  ) => await writeJsonFile(path, details)
   const locked = <T>(operation: () => Promise<T>) => withDirectoryLock(lockDirectory, operation)
+
+  const generationPath = (generation: string) =>
+    join(directory, '.generations', safePathPart(generation))
+  const visiblePath = async (id: string) => {
+    const link = await missingAsNull(async () => {
+      try {
+        return await readlink(targetPath(id))
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'EINVAL') return null
+        throw error
+      }
+    })
+    return link ? join(dirname(targetPath(id)), link) : targetPath(id)
+  }
+  const visibleDetails = async (id: string, path: string) =>
+    readDetails(path === targetPath(id) ? detailsPath(id) : `${path}.json`)
+  const requireWrite = async (id: string, writeId: string) => {
+    const details = await readDetails(stagingDetailsPath(writeId))
+    if (details.id !== id)
+      throw new Error('Unknown blob write or legacy staging write without object identity')
+    return details
+  }
+  const publish = async (
+    id: string,
+    path: string,
+    details: { contentType?: string; sha256?: string },
+  ) => {
+    const generation = randomUUID()
+    const destination = generationPath(generation)
+    await mkdir(dirname(destination), { recursive: true })
+    const previous = await visiblePath(id)
+    await rename(path, destination)
+    const link = `${targetPath(id)}.tmp-${generation}`
+    try {
+      await writeDetails(`${destination}.json`, details)
+      await symlink(`.generations/${safePathPart(generation)}`, link)
+      await rename(link, targetPath(id))
+    } catch (error) {
+      await Promise.all([
+        rm(destination, { force: true }),
+        rm(`${destination}.json`, { force: true }),
+        rm(link, { force: true }),
+      ]).catch(() => undefined)
+      throw error
+    }
+    if (previous !== targetPath(id)) {
+      await Promise.all([
+        rm(previous, { force: true }),
+        rm(`${previous}.json`, { force: true }),
+      ]).catch(() => undefined)
+    }
+    await rm(detailsPath(id), { force: true }).catch(() => undefined)
+    return fileMetadata(destination, id, details)
+  }
 
   return {
     get: async (id) =>
-      await missingAsNull(async () => {
-        const path = targetPath(id)
-        const data = new Uint8Array(await readFile(path))
-        return { data, metadata: await fileMetadata(path, id, await readDetails(detailsPath(id))) }
-      }),
+      await locked(() =>
+        missingAsNull(async () => {
+          const path = await visiblePath(id)
+          const data = new Uint8Array(await readFile(path))
+          return { data, metadata: await fileMetadata(path, id, await visibleDetails(id, path)) }
+        }),
+      ),
     set: async (id, data, contentType) =>
-      await locked(async () => {
-        const path = targetPath(id)
-        await mkdir(dirname(path), { recursive: true })
-        const temporary = `${path}.tmp-${randomUUID()}`
-        await writeFile(temporary, data)
-        await rename(temporary, path)
-        const details = {
-          ...(contentType ? { contentType } : {}),
-          sha256: sha256HashBytes(data),
+      locked(async () => {
+        const temporary = stagingPath(randomUUID())
+        await mkdir(dirname(temporary), { recursive: true })
+        try {
+          await writeFile(temporary, data)
+          return await publish(id, temporary, {
+            ...(contentType ? { contentType } : {}),
+            sha256: sha256HashBytes(data),
+          })
+        } finally {
+          await rm(temporary, { force: true }).catch(() => undefined)
         }
-        await writeDetails(detailsPath(id), details)
-        return await fileMetadata(path, id, details)
       }),
     stat: async (id) =>
-      await missingAsNull(
-        async () => await fileMetadata(targetPath(id), id, await readDetails(detailsPath(id))),
+      locked(() =>
+        missingAsNull(async () => {
+          const path = await visiblePath(id)
+          return fileMetadata(path, id, await visibleDetails(id, path))
+        }),
       ),
-    list: async () => {
-      try {
-        const entries = await readdir(directory, { withFileTypes: true })
-        return await Promise.all(
-          entries
-            .filter((entry) => entry.isFile())
-            .map(async (entry) => {
-              const id = decodeURIComponent(entry.name)
-              return await fileMetadata(
-                join(directory, entry.name),
-                id,
-                await readDetails(detailsPath(id)),
-              )
-            }),
+    list: () =>
+      locked(async () => {
+        const entries = await missingAsNull(() => readdir(directory, { withFileTypes: true }))
+        const rows = await Promise.all(
+          (entries ?? [])
+            .filter((entry) => entry.isFile() || entry.isSymbolicLink())
+            .map((entry) =>
+              missingAsNull(async () => {
+                const id = decodeURIComponent(entry.name)
+                const path = await visiblePath(id)
+                return fileMetadata(path, id, await visibleDetails(id, path))
+              }),
+            ),
         )
-      } catch (error) {
-        if (isMissingError(error)) return []
-        throw error
-      }
-    },
+        return rows.filter((row): row is StorageBlobMetadata => row !== null)
+      }),
     readRange: async (id, offset, length) => {
-      const handle = await open(targetPath(id), 'r')
+      const handle = await open(await visiblePath(id), 'r')
       try {
         const info = await handle.stat()
         const size = Math.max(0, Math.min(length, info.size - offset))
@@ -250,35 +311,39 @@ export const createCliFileBlobStorageBackend = (
       }
     },
     append: async (id, data, expectedSize, contentType) =>
-      await locked(async () => {
-        const path = targetPath(id)
-        await mkdir(dirname(path), { recursive: true })
-        const currentSize = (await missingAsNull(async () => (await stat(path)).size)) ?? 0
-        if (currentSize !== expectedSize) {
-          throw new Error(
-            `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${currentSize}.`,
-          )
+      locked(async () => {
+        const path = await visiblePath(id)
+        const size = (await missingAsNull(() => stat(path)))?.size ?? 0
+        if (size !== expectedSize) throw new Error('Blob append offset mismatch')
+        const temporary = stagingPath(randomUUID())
+        await mkdir(dirname(temporary), { recursive: true })
+        try {
+          if (size) await copyFile(path, temporary)
+          else await writeFile(temporary, new Uint8Array())
+          await appendFile(temporary, data)
+          const previous = await visibleDetails(id, path)
+          return await publish(id, temporary, {
+            contentType: contentType ?? previous.contentType,
+            sha256: await fileSha256(temporary),
+          })
+        } finally {
+          await rm(temporary, { force: true }).catch(() => undefined)
         }
-        await appendFile(path, data)
-        const existing = await readDetails(detailsPath(id))
-        const details = {
-          ...((contentType ?? existing.contentType)
-            ? { contentType: contentType ?? existing.contentType }
-            : {}),
-        }
-        await writeDetails(detailsPath(id), details)
-        return await fileMetadata(path, id, details)
       }),
-    beginWrite: async (_id, contentType) => {
+    beginWrite: async (id, contentType) => {
       const writeId = randomUUID()
       const path = stagingPath(writeId)
       await mkdir(dirname(path), { recursive: true })
       await writeFile(path, new Uint8Array())
-      await writeDetails(stagingDetailsPath(writeId), contentType ? { contentType } : {})
+      await writeDetails(stagingDetailsPath(writeId), {
+        id,
+        ...(contentType ? { contentType } : {}),
+      })
       return { writeId }
     },
-    writeChunk: async (_id, writeId, offset, data) =>
+    writeChunk: async (id, writeId, offset, data) =>
       await locked(async () => {
+        await requireWrite(id, writeId)
         const path = stagingPath(writeId)
         const handle = await open(path, 'r+')
         try {
@@ -291,9 +356,14 @@ export const createCliFileBlobStorageBackend = (
           await handle.close()
         }
       }),
-    writeStatus: async (_id, writeId) => ({ size: (await stat(stagingPath(writeId))).size }),
+    writeStatus: async (id, writeId) =>
+      locked(async () => {
+        await requireWrite(id, writeId)
+        return { size: (await stat(stagingPath(writeId))).size }
+      }),
     commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) =>
       await locked(async () => {
+        const stagedDetails = await requireWrite(id, writeId)
         const staged = stagingPath(writeId)
         const info = await stat(staged)
         if (info.size !== expectedSize) {
@@ -306,23 +376,30 @@ export const createCliFileBlobStorageBackend = (
           throw new Error(`Blob checksum mismatch for "${id}".`)
         }
         const publishedId = targetId ?? id
-        const target = targetPath(publishedId)
-        const details = { ...(await readDetails(stagingDetailsPath(writeId))), sha256 }
-        await mkdir(dirname(target), { recursive: true })
-        await rename(staged, target)
-        await writeDetails(detailsPath(publishedId), details)
-        await rm(stagingDetailsPath(writeId), { force: true })
-        return await fileMetadata(target, publishedId, details)
+        const details = {
+          ...(stagedDetails.contentType ? { contentType: stagedDetails.contentType } : {}),
+          sha256,
+        }
+        const metadata = await publish(publishedId, staged, details)
+        await rm(stagingDetailsPath(writeId), { force: true }).catch(() => undefined)
+        return metadata
       }),
-    abortWrite: async (_id, writeId) => {
-      await Promise.all([
-        rm(stagingPath(writeId), { force: true }),
-        rm(stagingDetailsPath(writeId), { force: true }),
-      ])
-    },
-    delete: async (id) => {
-      await Promise.all([rm(targetPath(id), { force: true }), rm(detailsPath(id), { force: true })])
-    },
+    abortWrite: async (id, writeId) =>
+      locked(async () => {
+        if ((await readDetails(stagingDetailsPath(writeId))).id !== id) return
+        await Promise.all([
+          rm(stagingPath(writeId), { force: true }),
+          rm(stagingDetailsPath(writeId), { force: true }),
+        ])
+      }),
+    delete: async (id) =>
+      locked(async () => {
+        const path = await visiblePath(id)
+        await rm(targetPath(id), { force: true })
+        await rm(detailsPath(id), { force: true })
+        if (path !== targetPath(id))
+          await Promise.all([rm(path, { force: true }), rm(`${path}.json`, { force: true })])
+      }),
     clear: async () => await rm(directory, { recursive: true, force: true }),
   }
 }

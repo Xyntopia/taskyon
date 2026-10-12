@@ -100,10 +100,14 @@ separate revision-token record.
 Canonical SHA-256 strings use the `sha256:` prefix followed by unpadded base64url.
 
 Hosts compose record and blob providers independently. Browser providers are OPFS, IndexedDB, and
-PGlite; Node/CLI providers are files, SQLite, and PGlite. Each provider implements the complete
-record and blob contracts, so mixed configurations remain transparent to consumers. Browser
-selection is remembered separately for records and blobs and never silently changes after data
-has been written.
+PGlite; Node/CLI providers are files, SQLite, and PGlite; the desktop provider stores records and
+blobs as native files under `$APPDATA/taskyon-storage` through the Tauri filesystem plugin. Each
+provider implements the complete record and blob contracts, so mixed configurations remain
+transparent to consumers. A shared path-based filesystem port backs the file providers: the desktop
+adapter calls the Tauri filesystem plugin, while the CLI adapter calls Node filesystem APIs. Native
+desktop storage is outside the WebKitGTK per-domain storage quota; PGlite task data remains in
+IndexedDB. Browser selection is remembered separately for records and blobs under a versioned
+preference key and never silently changes after data has been written.
 
 Every storage service explicitly runs as trusted-local or delegates each normalized access request
 to an authorizer before resolving a backend. Distribution is bound when the client is constructed,

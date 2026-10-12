@@ -147,6 +147,13 @@ export {
   type StorageRecordFileAdapter,
 } from './storageRecordFileBackend'
 export {
+  createFileSystemBlobStorageBackend,
+  createFileSystemStorageProvider,
+  createFileSystemStorageRecordFileAdapter,
+  type StorageDirectoryEntry,
+  type StorageFileSystem,
+} from './storageFileSystem'
+export {
   createLoggingClient,
   createLoggingProtocolServer,
   taskyonLoggingProtocol,
@@ -892,3 +899,12 @@ const createRunTasks = (send: SendTasksFunction): RunTasksFunction => {
  */
 export const runTasks = <T extends { type: string }>(tyPort: Port<T | TaskyonMessageType>) =>
   createRunTasks(createRunTasksSender(tyPort))
+export {
+  createChunkedBlobBackend,
+  blobGenerationSchema,
+  blobWriteGenerationSchema,
+  STORAGE_CHUNK_BYTES,
+  type BlobGeneration,
+  type BlobWriteGeneration,
+  type BlobChunkStore,
+} from './chunkedBlobBackend'

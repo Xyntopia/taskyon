@@ -4850,6 +4850,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tauri-apps/api@npm:^2.8.0":
+  version: 2.12.2
+  resolution: "@tauri-apps/api@npm:2.12.2"
+  checksum: 10c0/1224b861d15312e11bce75f7813fd22f5afb2f0390030c67d4a99eeb119585a17af8951f4940a38d1053cff0462ff8b3848711016d837ae4d0387b3a543ee865
+  languageName: node
+  linkType: hard
+
 "@tauri-apps/cli-darwin-arm64@npm:2.10.1":
   version: 2.10.1
   resolution: "@tauri-apps/cli-darwin-arm64@npm:2.10.1"
@@ -4968,6 +4975,15 @@ __metadata:
   bin:
     tauri: tauri.js
   checksum: 10c0/a68f340a752092fc4f417fb7a8d4dc044031fe47c9c458ec3a1d25280d26f54dd7f33c97f797ce006936113b2d5ee54d25cef56bb84d803f1f11f7d3b5f81fd5
+  languageName: node
+  linkType: hard
+
+"@tauri-apps/plugin-fs@npm:2.4.5":
+  version: 2.4.5
+  resolution: "@tauri-apps/plugin-fs@npm:2.4.5"
+  dependencies:
+    "@tauri-apps/api": "npm:^2.8.0"
+  checksum: 10c0/238d1864bfa505f6e1eb3dfcba0867678fb386b590f33d4754d7f7edd9bf17a9bc2b28a9e1a2b5a4490a379d79f176448919ce317803d502d2589b7aa0a75c47
   languageName: node
   linkType: hard
 
@@ -17244,6 +17260,7 @@ __metadata:
     "@taskyon/ui": "workspace:*"
     "@tauri-apps/api": "npm:^2.10.1"
     "@tauri-apps/cli": "npm:^2.10.1"
+    "@tauri-apps/plugin-fs": "npm:2.4.5"
     "@tauri-apps/plugin-http": "npm:^2.5.7"
     "@types/express": "npm:^4.17.23"
     "@types/html-to-text": "npm:^9.0.4"

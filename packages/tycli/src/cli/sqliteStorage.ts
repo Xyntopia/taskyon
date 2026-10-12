@@ -1,18 +1,21 @@
-import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import type { Port } from '@taskyon/common/modules/frpBus'
 import {
   createStorageProtocolServer,
+  createChunkedBlobBackend,
+  blobGenerationSchema,
+  blobWriteGenerationSchema,
+  STORAGE_CHUNK_BYTES,
+  type BlobChunkStore,
+  type BlobGeneration,
   mergeStorageRecord,
   storageQueryMatches,
   storageValueContentHash,
   type StorageBackendProvider,
   type StorageBlobBackend,
-  type StorageBlobMetadata,
   type StorageRecordBackend,
   type TaskyonStorageMessage,
 } from '@taskyon/taskyon/api'
@@ -22,23 +25,9 @@ const recordRowSchema = z.object({
   id_text: z.string(),
   data: z.string(),
 })
-const blobRowSchema = z.object({
-  id: z.string(),
-  data: z.instanceof(Uint8Array),
-  size: z.number(),
-  content_type: z.string().nullable(),
-  modified_at: z.string(),
-  sha256: z.string().nullable(),
-})
-const writeRowSchema = z.object({
-  id: z.string(),
-  data: z.instanceof(Uint8Array),
-  content_type: z.string().nullable(),
-})
 const storedRecordSchema = z.object({ data: z.string() })
 
 type RecordRow = z.infer<typeof recordRowSchema>
-type BlobRow = z.infer<typeof blobRowSchema>
 
 const initialize = (database: DatabaseSync) => {
   database.exec(`
@@ -52,6 +41,16 @@ const initialize = (database: DatabaseSync) => {
       namespace TEXT NOT NULL, id TEXT NOT NULL, data BLOB NOT NULL, size INTEGER NOT NULL,
       content_type TEXT, modified_at TEXT NOT NULL, sha256 TEXT,
       PRIMARY KEY (namespace, id)
+    );
+    CREATE TABLE IF NOT EXISTS taskyon_blob_generations (
+      namespace TEXT NOT NULL,id TEXT NOT NULL, value TEXT NOT NULL,PRIMARY KEY(namespace,id)
+    );
+    CREATE TABLE IF NOT EXISTS taskyon_blob_write_generations (
+      namespace TEXT NOT NULL,write_id TEXT NOT NULL,value TEXT NOT NULL,PRIMARY KEY(namespace,write_id)
+    );
+    CREATE TABLE IF NOT EXISTS taskyon_blob_chunks (
+      namespace TEXT NOT NULL,generation TEXT NOT NULL,chunk_index INTEGER NOT NULL,data BLOB NOT NULL,
+      PRIMARY KEY(namespace,generation,chunk_index)
     );
     CREATE TABLE IF NOT EXISTS taskyon_storage_blob_writes (
       write_id TEXT PRIMARY KEY, namespace TEXT NOT NULL, id TEXT NOT NULL,
@@ -72,29 +71,14 @@ const transaction = <T>(database: DatabaseSync, operation: () => T) => {
   }
 }
 
-const runAsync = <T>(operation: () => T): Promise<T> => Promise.resolve().then(operation)
+const runAsync = async <T>(operation: () => T | Promise<T>): Promise<T> => await operation()
 
 const idParts = (id: string | number) => ({ idType: typeof id, idText: String(id) })
 const rowId = (row: RecordRow) => (row.id_type === 'number' ? Number(row.id_text) : row.id_text)
-const bytes = (value: Uint8Array) => new Uint8Array(value)
-const concatenate = (left: Uint8Array, right: Uint8Array, offset = left.byteLength) => {
-  const result = new Uint8Array(Math.max(left.byteLength, offset + right.byteLength))
-  result.set(left)
-  result.set(right, offset)
-  return result
-}
-
-const metadata = (row: BlobRow): StorageBlobMetadata => ({
-  id: row.id,
-  size: row.size,
-  modifiedAt: row.modified_at,
-  ...(row.content_type ? { contentType: row.content_type } : {}),
-  ...(row.sha256 ? { sha256: row.sha256 } : {}),
-})
-
 export const createSqliteStorageRecordBackend = (
   database: DatabaseSync,
   namespace: string,
+  run: typeof runAsync = runAsync,
 ): StorageRecordBackend => {
   const read = database.prepare(
     'SELECT data FROM taskyon_storage_records WHERE namespace = ? AND id_type = ? AND id_text = ?',
@@ -122,17 +106,17 @@ export const createSqliteStorageRecordBackend = (
   }
 
   return {
-    get: (id) => runAsync(() => get(id)),
+    get: (id) => run(() => get(id)),
     getMany: (ids) =>
-      runAsync(() =>
+      run(() =>
         ids.flatMap((id) => {
           const data = get(id)
           return data === null ? [] : [{ id, data }]
         }),
       ),
-    set: (id, data) => runAsync(() => set(id, data)),
+    set: (id, data) => run(() => set(id, data)),
     setIfUnchanged: (id, expectedStoredContentHash, data) =>
-      runAsync(() =>
+      run(() =>
         transaction(database, () => {
           const current = get(id)
           const currentStoredContentHash =
@@ -145,9 +129,9 @@ export const createSqliteStorageRecordBackend = (
         }),
       ),
     setMany: (rows) =>
-      runAsync(() => transaction(database, () => rows.forEach(({ id, data }) => set(id, data)))),
+      run(() => transaction(database, () => rows.forEach(({ id, data }) => set(id, data)))),
     upsert: (id, data, strategy) =>
-      runAsync(() =>
+      run(() =>
         transaction(database, () => {
           const next = mergeStorageRecord(get(id), data, strategy)
           set(id, next)
@@ -155,7 +139,7 @@ export const createSqliteStorageRecordBackend = (
         }),
       ),
     delete: (id) =>
-      runAsync(() => {
+      run(() => {
         const { idType, idText } = idParts(id)
         database
           .prepare(
@@ -164,12 +148,10 @@ export const createSqliteStorageRecordBackend = (
           .run(namespace, idType, idText)
       }),
     list: () =>
-      runAsync(() =>
-        list().map((row) => ({ id: rowId(row), data: JSON.parse(row.data) as unknown })),
-      ),
-    listIds: () => runAsync(() => list().map(rowId)),
+      run(() => list().map((row) => ({ id: rowId(row), data: JSON.parse(row.data) as unknown }))),
+    listIds: () => run(() => list().map(rowId)),
     find: (query) =>
-      runAsync(() =>
+      run(() =>
         Object.fromEntries(
           list()
             .map((row) => ({ id: rowId(row), data: JSON.parse(row.data) as unknown }))
@@ -178,7 +160,7 @@ export const createSqliteStorageRecordBackend = (
         ),
       ),
     clear: () =>
-      runAsync(() => {
+      run(() => {
         database.prepare('DELETE FROM taskyon_storage_records WHERE namespace = ?').run(namespace)
       }),
   }
@@ -187,166 +169,208 @@ export const createSqliteStorageRecordBackend = (
 export const createSqliteStorageBlobBackend = (
   database: DatabaseSync,
   namespace: string,
+  serialize: <T>(operation: () => T | Promise<T>) => Promise<T> = runAsync,
 ): StorageBlobBackend => {
-  const readRow = database.prepare(`
-    SELECT id, data, size, content_type, modified_at, sha256
-    FROM taskyon_storage_blobs WHERE namespace = ? AND id = ?
-  `)
-  const getRow = (id: string) => blobRowSchema.optional().parse(readRow.get(namespace, id))
-  const put = (id: string, data: Uint8Array, contentType?: string, sha256?: string) => {
-    const modifiedAt = new Date().toISOString()
-    database
-      .prepare(
-        `
-      INSERT INTO taskyon_storage_blobs
-      (namespace, id, data, size, content_type, modified_at, sha256) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (namespace, id) DO UPDATE SET data = excluded.data, size = excluded.size,
-      content_type = excluded.content_type, modified_at = excluded.modified_at, sha256 = excluded.sha256
-    `,
-      )
-      .run(namespace, id, data, data.byteLength, contentType ?? null, modifiedAt, sha256 ?? null)
-    return {
-      id,
-      size: data.byteLength,
-      modifiedAt,
-      ...(contentType ? { contentType } : {}),
-      ...(sha256 ? { sha256 } : {}),
-    }
+  const json = <T>(schema: z.ZodType<T>, sql: string, ...args: string[]): T | null => {
+    const row = storedRecordSchema.optional().parse(database.prepare(sql).get(...args))
+    return row ? schema.parse(JSON.parse(row.data)) : null
   }
-  const getWrite = (writeId: string) =>
-    writeRowSchema
-      .optional()
-      .parse(
-        database
-          .prepare(
-            'SELECT id, data, content_type FROM taskyon_storage_blob_writes WHERE write_id = ? AND namespace = ?',
-          )
-          .get(writeId, namespace),
-      )
-
-  return {
+  const readLegacy = (id: string, offset: number, length: number) =>
+    Promise.resolve().then(() => {
+      const row = z
+        .object({ data: z.instanceof(Uint8Array) })
+        .parse(
+          database
+            .prepare(
+              'SELECT substr(data,?,?) AS data FROM taskyon_storage_blobs WHERE namespace=? AND id=?',
+            )
+            .get(offset + 1, length, namespace, id),
+        )
+      return new Uint8Array(row.data)
+    })
+  const store: BlobChunkStore = {
+    transaction: (operation) =>
+      serialize(async () => {
+        database.exec('BEGIN IMMEDIATE')
+        try {
+          const result = await operation(store)
+          database.exec('COMMIT')
+          return result
+        } catch (error) {
+          database.exec('ROLLBACK')
+          throw error
+        }
+      }),
     get: (id) =>
-      runAsync(() => {
-        const row = getRow(id)
-        return row ? { data: bytes(row.data), metadata: metadata(row) } : null
-      }),
-    set: (id, data, contentType) =>
-      runAsync(() => put(id, data, contentType, sha256HashBytes(data))),
-    stat: (id) =>
-      runAsync(() => {
-        const row = getRow(id)
-        return row ? metadata(row) : null
-      }),
-    list: () =>
-      runAsync(() =>
-        z
-          .array(blobRowSchema)
+      Promise.resolve().then(() => {
+        const current = json(
+          blobGenerationSchema,
+          'SELECT value AS data FROM taskyon_blob_generations WHERE namespace=? AND id=?',
+          namespace,
+          id,
+        )
+        if (current) return current
+        const legacy = z
+          .object({
+            id: z.string(),
+            size: z.number(),
+            content_type: z.string().nullable(),
+            modified_at: z.string(),
+            sha256: z.string().nullable(),
+          })
+          .optional()
           .parse(
             database
               .prepare(
-                `
-        SELECT id, data, size, content_type, modified_at, sha256
-        FROM taskyon_storage_blobs WHERE namespace = ?
-      `,
+                'SELECT id,size,content_type,modified_at,sha256 FROM taskyon_storage_blobs WHERE namespace=? AND id=?',
               )
-              .all(namespace),
+              .get(namespace, id),
           )
-          .map(metadata),
-      ),
-    readRange: (id, offset, length) =>
-      runAsync(() => {
-        const row = getRow(id)
-        if (!row) throw new Error(`Blob not found: ${id}`)
-        const data = bytes(row.data).slice(offset, offset + length)
-        const nextOffset = offset + data.byteLength
-        return { data, nextOffset, eof: nextOffset >= row.size }
+        return legacy
+          ? {
+              metadata: {
+                id,
+                size: legacy.size,
+                modifiedAt: legacy.modified_at,
+                ...(legacy.content_type ? { contentType: legacy.content_type } : {}),
+                ...(legacy.sha256 ? { sha256: legacy.sha256 } : {}),
+              },
+            }
+          : null
       }),
-    append: (id, data, expectedSize, contentType) =>
-      runAsync(() =>
-        transaction(database, () => {
-          const row = getRow(id)
-          const current = row ? bytes(row.data) : new Uint8Array()
-          if (current.byteLength !== expectedSize) {
-            throw new Error(
-              `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${current.byteLength}.`,
+    list: async () => {
+      const ids = z
+        .array(z.object({ id: z.string() }))
+        .parse(
+          database
+            .prepare(
+              'SELECT id FROM taskyon_blob_generations WHERE namespace=? UNION SELECT id FROM taskyon_storage_blobs WHERE namespace=?',
             )
-          }
-          return put(id, concatenate(current, data), contentType ?? row?.content_type ?? undefined)
-        }),
-      ),
-    beginWrite: (id, contentType) =>
-      runAsync(() => {
-        const writeId = randomUUID()
+            .all(namespace, namespace),
+        )
+      const rows = await Promise.all(ids.map((row) => store.get(row.id)))
+      return rows.filter((row): row is BlobGeneration => row !== null)
+    },
+    publish: (id, value) =>
+      Promise.resolve().then(() => {
         database
           .prepare(
-            `
-        INSERT INTO taskyon_storage_blob_writes (write_id, namespace, id, data, content_type)
-        VALUES (?, ?, ?, ?, ?)
-      `,
+            'INSERT INTO taskyon_blob_generations(namespace,id,value) VALUES(?,?,?) ON CONFLICT(namespace,id) DO UPDATE SET value=excluded.value',
           )
-          .run(writeId, namespace, id, new Uint8Array(), contentType ?? null)
-        return { writeId }
-      }),
-    writeChunk: (id, writeId, offset, data) =>
-      runAsync(() =>
-        transaction(database, () => {
-          const row = getWrite(writeId)
-          if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-          const current = bytes(row.data)
-          if (offset > current.byteLength)
-            throw new Error(`Blob write offset ${offset} exceeds size ${current.byteLength}.`)
-          const next = concatenate(current, data, offset)
-          database
-            .prepare('UPDATE taskyon_storage_blob_writes SET data = ? WHERE write_id = ?')
-            .run(next, writeId)
-          return { nextOffset: next.byteLength }
-        }),
-      ),
-    writeStatus: (id, writeId) =>
-      runAsync(() => {
-        const row = getWrite(writeId)
-        if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-        return { size: row.data.byteLength }
-      }),
-    commitWrite: (id, writeId, expectedSize, expectedSha256, targetId) =>
-      runAsync(() =>
-        transaction(database, () => {
-          const row = getWrite(writeId)
-          if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-          const data = bytes(row.data)
-          if (data.byteLength !== expectedSize) throw new Error(`Blob size mismatch for "${id}".`)
-          const sha256 = sha256HashBytes(data)
-          if (expectedSha256 && sha256 !== expectedSha256)
-            throw new Error(`Blob checksum mismatch for "${id}".`)
-          const result = put(targetId ?? id, data, row.content_type ?? undefined, sha256)
-          database
-            .prepare('DELETE FROM taskyon_storage_blob_writes WHERE write_id = ?')
-            .run(writeId)
-          return result
-        }),
-      ),
-    abortWrite: (_id, writeId) =>
-      runAsync(() => {
+          .run(namespace, id, JSON.stringify(value))
         database
-          .prepare('DELETE FROM taskyon_storage_blob_writes WHERE write_id = ? AND namespace = ?')
-          .run(writeId, namespace)
-      }),
-    delete: (id) =>
-      runAsync(() => {
-        database
-          .prepare('DELETE FROM taskyon_storage_blobs WHERE namespace = ? AND id = ?')
+          .prepare('DELETE FROM taskyon_storage_blobs WHERE namespace=? AND id=?')
           .run(namespace, id)
       }),
-    clear: () =>
-      runAsync(() =>
-        transaction(database, () => {
-          database.prepare('DELETE FROM taskyon_storage_blobs WHERE namespace = ?').run(namespace)
+    remove: (id) =>
+      Promise.resolve().then(() => {
+        for (const table of ['taskyon_blob_generations', 'taskyon_storage_blobs'])
+          database.prepare(`DELETE FROM ${table} WHERE namespace=? AND id=?`).run(namespace, id)
+      }),
+    getWrite: async (writeId) => {
+      const current = json(
+        blobWriteGenerationSchema,
+        'SELECT value AS data FROM taskyon_blob_write_generations WHERE namespace=? AND write_id=?',
+        namespace,
+        writeId,
+      )
+      if (current) return current
+      const row = z
+        .object({ id: z.string(), size: z.number(), content_type: z.string().nullable() })
+        .optional()
+        .parse(
           database
-            .prepare('DELETE FROM taskyon_storage_blob_writes WHERE namespace = ?')
-            .run(namespace)
-        }),
-      ),
+            .prepare(
+              'SELECT id,length(data) AS size,content_type FROM taskyon_storage_blob_writes WHERE namespace=? AND write_id=?',
+            )
+            .get(namespace, writeId),
+        )
+      if (!row) return null
+      const value = {
+        id: row.id,
+        generation: crypto.randomUUID(),
+        size: row.size,
+        ...(row.content_type ? { contentType: row.content_type } : {}),
+      }
+      for (let offset = 0; offset < row.size; offset += STORAGE_CHUNK_BYTES) {
+        const chunk = z
+          .object({ data: z.instanceof(Uint8Array) })
+          .parse(
+            database
+              .prepare(
+                'SELECT substr(data,?,?) AS data FROM taskyon_storage_blob_writes WHERE namespace=? AND write_id=?',
+              )
+              .get(offset + 1, STORAGE_CHUNK_BYTES, namespace, writeId),
+          )
+        await store.putChunk(
+          value.generation,
+          offset / STORAGE_CHUNK_BYTES,
+          new Uint8Array(chunk.data),
+        )
+      }
+      await store.putWrite(writeId, value)
+      return value
+    },
+    putWrite: (writeId, value) =>
+      Promise.resolve().then(() => {
+        database
+          .prepare(
+            'INSERT INTO taskyon_blob_write_generations(namespace,write_id,value) VALUES(?,?,?) ON CONFLICT(namespace,write_id) DO UPDATE SET value=excluded.value',
+          )
+          .run(namespace, writeId, JSON.stringify(value))
+        database
+          .prepare('DELETE FROM taskyon_storage_blob_writes WHERE namespace=? AND write_id=?')
+          .run(namespace, writeId)
+      }),
+    removeWrite: (writeId) =>
+      Promise.resolve().then(() => {
+        for (const table of ['taskyon_blob_write_generations', 'taskyon_storage_blob_writes'])
+          database
+            .prepare(`DELETE FROM ${table} WHERE namespace=? AND write_id=?`)
+            .run(namespace, writeId)
+      }),
+    readChunk: (generation, index) =>
+      Promise.resolve().then(() => {
+        const row = z
+          .object({ data: z.instanceof(Uint8Array) })
+          .optional()
+          .parse(
+            database
+              .prepare(
+                'SELECT data FROM taskyon_blob_chunks WHERE namespace=? AND generation=? AND chunk_index=?',
+              )
+              .get(namespace, generation, index),
+          )
+        return row ? new Uint8Array(row.data) : new Uint8Array()
+      }),
+    putChunk: (generation, index, data) =>
+      Promise.resolve().then(() => {
+        database
+          .prepare(
+            'INSERT INTO taskyon_blob_chunks(namespace,generation,chunk_index,data) VALUES(?,?,?,?) ON CONFLICT(namespace,generation,chunk_index) DO UPDATE SET data=excluded.data',
+          )
+          .run(namespace, generation, index, data)
+      }),
+    removeGeneration: (generation) =>
+      Promise.resolve().then(() => {
+        database
+          .prepare('DELETE FROM taskyon_blob_chunks WHERE namespace=? AND generation=?')
+          .run(namespace, generation)
+      }),
+    readLegacy,
+    clear: () =>
+      Promise.resolve().then(() => {
+        for (const table of [
+          'taskyon_storage_blobs',
+          'taskyon_storage_blob_writes',
+          'taskyon_blob_generations',
+          'taskyon_blob_write_generations',
+          'taskyon_blob_chunks',
+        ])
+          database.prepare(`DELETE FROM ${table} WHERE namespace=?`).run(namespace)
+      }),
   }
+  return createChunkedBlobBackend(store)
 }
 
 export const createCliSqliteStorageProvider = async (
@@ -355,10 +379,19 @@ export const createCliSqliteStorageProvider = async (
   await mkdir(dirname(databasePath), { recursive: true })
   const database = new DatabaseSync(databasePath)
   initialize(database)
+  let queue = Promise.resolve()
+  const serialize = <T>(operation: () => T | Promise<T>) => {
+    const result = queue.then(operation, operation)
+    queue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
   return {
     provider: {
-      records: (namespace) => createSqliteStorageRecordBackend(database, namespace),
-      blobs: (namespace) => createSqliteStorageBlobBackend(database, namespace),
+      records: (namespace) => createSqliteStorageRecordBackend(database, namespace, serialize),
+      blobs: (namespace) => createSqliteStorageBlobBackend(database, namespace, serialize),
     },
     close: () => database.close(),
   }

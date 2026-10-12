@@ -23,6 +23,14 @@
     "allow-tauri-workspace-list-files",
     "allow-tauri-workspace-read-files",
     "allow-tauri-workspace-write-file",
-    "allow-tauri-run-bash-command"
+    "allow-tauri-run-bash-command",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:allow-read-dir",
+    "fs:allow-stat",
+    "fs:allow-rename",
+    "fs:allow-exists"
   ]
 }

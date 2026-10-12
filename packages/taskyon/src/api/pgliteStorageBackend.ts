@@ -14,13 +14,13 @@ import {
 type RecordRow = { id_type: 'string' | 'number'; id_text: string; data: unknown }
 type BlobRow = {
   id: string
-  data: Uint8Array<ArrayBuffer>
+  object_oid: number | null
   size: number
   content_type: string | null
   modified_at: string
   sha256: string | null
 }
-type WriteRow = { id: string; data: Uint8Array<ArrayBuffer>; content_type: string | null }
+type WriteRow = { id: string; object_oid: number | null; size: number; content_type: string | null }
 type PgLiteTransaction = Parameters<Parameters<TyPGDB['transaction']>[0]>[0]
 type Queryable = TyPGDB | PgLiteTransaction
 
@@ -56,6 +56,11 @@ const initialize = (database: TyPGDB) => {
       data BYTEA NOT NULL,
       content_type TEXT
     );
+    ALTER TABLE taskyon_storage_blobs ADD COLUMN IF NOT EXISTS object_oid OID;
+    ALTER TABLE taskyon_storage_blobs ALTER COLUMN data DROP NOT NULL;
+    ALTER TABLE taskyon_storage_blob_writes ADD COLUMN IF NOT EXISTS object_oid OID;
+    ALTER TABLE taskyon_storage_blob_writes ADD COLUMN IF NOT EXISTS size BIGINT;
+    ALTER TABLE taskyon_storage_blob_writes ALTER COLUMN data DROP NOT NULL;
   `,
     )
     .then(() => undefined)
@@ -79,18 +84,6 @@ const sha256 = (data: Uint8Array<ArrayBuffer>) => {
   const hasher = createSha256Hasher()
   hasher.update(data)
   return hasher.digest()
-}
-
-const concatenate = (
-  left: Uint8Array<ArrayBuffer>,
-  right: Uint8Array<ArrayBuffer>,
-  offset = left.byteLength,
-) => {
-  const size = Math.max(left.byteLength, offset + right.byteLength)
-  const result = new Uint8Array(size)
-  result.set(left)
-  result.set(right, offset)
-  return result
 }
 
 export const createPgLiteStorageRecordBackend = async (
@@ -223,53 +216,106 @@ export const createPgLiteStorageBlobBackend = async (
   namespace: string,
 ): Promise<StorageBlobBackend> => {
   await initialize(database)
-  const getRow = async (id: string, queryable: Queryable = database) =>
+  const getRow = async (id: string, db: Queryable = database) =>
     (
-      await queryable.query<BlobRow>(
-        `SELECT id, data, size, content_type, modified_at, sha256
-       FROM taskyon_storage_blobs WHERE namespace = $1 AND id = $2;`,
+      await db.query<BlobRow>(
+        `SELECT id, object_oid, size, content_type, modified_at, sha256
+       FROM taskyon_storage_blobs WHERE namespace=$1 AND id=$2`,
         [namespace, id],
       )
     ).rows[0]
-  const put = async (
+  const unlink = async (db: Queryable, oid: number | null | undefined) => {
+    if (oid) await db.query('SELECT lo_unlink($1::oid)', [oid])
+  }
+  const allocate = async (db: Queryable) =>
+    (await db.query<{ oid: number }>('SELECT lo_create(0) AS oid')).rows[0]!.oid
+  const read = async (db: Queryable, oid: number, offset: number, length: number) =>
+    (
+      await db.query<{ data: Uint8Array<ArrayBuffer> }>(
+        'SELECT lo_get($1::oid,$2::bigint,$3::integer) AS data',
+        [oid, offset, length],
+      )
+    ).rows[0]!.data
+  const digest = async (db: Queryable, oid: number, size: number) => {
+    const hasher = createSha256Hasher()
+    for (let offset = 0; offset < size; offset += 1024 * 1024)
+      hasher.update(await read(db, oid, offset, Math.min(1024 * 1024, size - offset)))
+    return hasher.digest()
+  }
+  const publish = async (
+    db: Queryable,
     id: string,
-    data: Uint8Array<ArrayBuffer>,
+    oid: number,
+    size: number,
     contentType?: string,
     hash?: string,
-    queryable: Queryable = database,
   ) => {
+    const previous = await getRow(id, db)
     const modifiedAt = new Date().toISOString()
-    await queryable.query(
+    await db.query(
       `INSERT INTO taskyon_storage_blobs
-       (namespace, id, data, size, content_type, modified_at, sha256)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (namespace, id) DO UPDATE SET
-       data = EXCLUDED.data, size = EXCLUDED.size, content_type = EXCLUDED.content_type,
-       modified_at = EXCLUDED.modified_at, sha256 = EXCLUDED.sha256;`,
-      [namespace, id, data, data.byteLength, contentType ?? null, modifiedAt, hash ?? null],
+       (namespace,id,data,object_oid,size,content_type,modified_at,sha256)
+       VALUES ($1,$2,NULL,$3,$4,$5,$6,$7)
+       ON CONFLICT(namespace,id) DO UPDATE SET data=NULL,object_oid=EXCLUDED.object_oid,
+       size=EXCLUDED.size,content_type=EXCLUDED.content_type,
+       modified_at=EXCLUDED.modified_at,sha256=EXCLUDED.sha256`,
+      [namespace, id, oid, size, contentType ?? null, modifiedAt, hash ?? null],
     )
+    if (previous?.object_oid !== oid) await unlink(db, previous?.object_oid)
     return {
       id,
-      size: data.byteLength,
+      size,
       modifiedAt,
       ...(contentType ? { contentType } : {}),
       ...(hash ? { sha256: hash } : {}),
     }
   }
-  const getWrite = async (writeId: string, queryable: Queryable = database) =>
-    (
-      await queryable.query<WriteRow>(
-        'SELECT id, data, content_type FROM taskyon_storage_blob_writes WHERE write_id = $1 AND namespace = $2;',
-        [writeId, namespace],
+  const getWrite = async (db: Queryable, id: string, writeId: string) => {
+    const row = (
+      await db.query<WriteRow>(
+        `SELECT id,object_oid,COALESCE(size,octet_length(data)) AS size,content_type
+       FROM taskyon_storage_blob_writes WHERE namespace=$1 AND write_id=$2 AND id=$3`,
+        [namespace, writeId, id],
       )
     ).rows[0]
-
+    if (!row) throw new Error(`Unknown blob write: ${writeId}`)
+    return row
+  }
+  const migrateWrite = async (db: Queryable, id: string, writeId: string) => {
+    await getWrite(db, id, writeId)
+    return (
+      await db.query<WriteRow>(
+        `UPDATE taskyon_storage_blob_writes SET
+       object_oid=COALESCE(object_oid,lo_from_bytea(0,data)),
+       size=COALESCE(size,octet_length(data)),data=NULL
+       WHERE namespace=$1 AND write_id=$2 AND id=$3
+       RETURNING id,object_oid,size,content_type`,
+        [namespace, writeId, id],
+      )
+    ).rows[0]!
+  }
   return {
     get: async (id) => {
       const row = await getRow(id)
-      return row ? { data: row.data, metadata: toMetadata(row) } : null
+      if (!row) return null
+      const result = await database.query<{ data: Uint8Array<ArrayBuffer> }>(
+        `SELECT CASE WHEN object_oid IS NULL THEN data ELSE lo_get(object_oid) END AS data
+         FROM taskyon_storage_blobs WHERE namespace=$1 AND id=$2`,
+        [namespace, id],
+      )
+      return { data: result.rows[0]!.data, metadata: toMetadata(row) }
     },
-    set: async (id, data, contentType) => await put(id, data, contentType, sha256(data)),
+    set: async (id, data, contentType) =>
+      database.transaction(async (db) => {
+        const oid = await allocate(db)
+        for (let offset = 0; offset < data.length; offset += 1024 * 1024)
+          await db.query('SELECT lo_put($1::oid,$2::bigint,$3::bytea)', [
+            oid,
+            offset,
+            data.subarray(offset, offset + 1024 * 1024),
+          ])
+        return publish(db, id, oid, data.length, contentType, sha256(data))
+      }),
     stat: async (id) => {
       const row = await getRow(id)
       return row ? toMetadata(row) : null
@@ -277,103 +323,132 @@ export const createPgLiteStorageBlobBackend = async (
     list: async () =>
       (
         await database.query<BlobRow>(
-          `SELECT id, data, size, content_type, modified_at, sha256
-         FROM taskyon_storage_blobs WHERE namespace = $1;`,
+          `SELECT id,object_oid,size,content_type,modified_at,sha256
+       FROM taskyon_storage_blobs WHERE namespace=$1`,
           [namespace],
         )
       ).rows.map(toMetadata),
-    readRange: async (id, offset, length) => {
-      const row = await getRow(id)
-      if (!row) throw new Error(`Blob not found: ${id}`)
-      const data = row.data.slice(offset, offset + length)
-      const nextOffset = offset + data.byteLength
-      return { data, nextOffset, eof: nextOffset >= Number(row.size) }
-    },
-    append: async (id, data, expectedSize, contentType) =>
-      await database.transaction(async (transaction) => {
-        const row = await getRow(id, transaction)
-        const current = row?.data ?? new Uint8Array()
-        if (current.byteLength !== expectedSize) {
-          throw new Error(
-            `Blob append offset mismatch for "${id}": expected ${expectedSize}, found ${current.byteLength}.`,
-          )
+    readRange: async (id, offset, length) =>
+      database.transaction(async (db) => {
+        const row = await getRow(id, db)
+        if (!row) throw new Error(`Blob not found: ${id}`)
+        const data = row.object_oid
+          ? await read(db, row.object_oid, offset, length)
+          : (
+              await db.query<{ data: Uint8Array<ArrayBuffer> }>(
+                'SELECT substring(data FROM $3::integer + 1 FOR $4::integer) AS data FROM taskyon_storage_blobs WHERE namespace=$1 AND id=$2',
+                [namespace, id, offset, length],
+              )
+            ).rows[0]!.data
+        return {
+          data,
+          nextOffset: offset + data.length,
+          eof: offset + data.length >= Number(row.size),
         }
-        return await put(
+      }),
+    append: async (id, data, expectedSize, contentType) =>
+      database.transaction(async (db) => {
+        const row = await getRow(id, db)
+        const size = Number(row?.size ?? 0)
+        if (size !== expectedSize) throw new Error(`Blob append offset mismatch for "${id}".`)
+        const oid =
+          row?.object_oid ??
+          (row
+            ? (
+                await db.query<{ oid: number }>(
+                  'SELECT lo_from_bytea(0,data) AS oid FROM taskyon_storage_blobs WHERE namespace=$1 AND id=$2',
+                  [namespace, id],
+                )
+              ).rows[0]!.oid
+            : await allocate(db))
+        await db.query('SELECT lo_put($1::oid,$2::bigint,$3::bytea)', [oid, size, data])
+        return publish(
+          db,
           id,
-          concatenate(current, data),
+          oid,
+          size + data.length,
           contentType ?? row?.content_type ?? undefined,
-          undefined,
-          transaction,
         )
       }),
-    beginWrite: async (id, contentType) => {
-      const writeId = crypto.randomUUID()
-      await database.query(
-        `INSERT INTO taskyon_storage_blob_writes (write_id, namespace, id, data, content_type)
-         VALUES ($1, $2, $3, $4, $5);`,
-        [writeId, namespace, id, new Uint8Array(), contentType ?? null],
-      )
-      return { writeId }
-    },
+    beginWrite: async (id, contentType) =>
+      database.transaction(async (db) => {
+        const writeId = crypto.randomUUID()
+        const oid = await allocate(db)
+        await db.query(
+          `INSERT INTO taskyon_storage_blob_writes
+        (write_id,namespace,id,object_oid,size,content_type) VALUES ($1,$2,$3,$4,0,$5)`,
+          [writeId, namespace, id, oid, contentType ?? null],
+        )
+        return { writeId }
+      }),
     writeChunk: async (id, writeId, offset, data) =>
-      await database.transaction(async (transaction) => {
-        const row = await getWrite(writeId, transaction)
-        if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-        if (offset > row.data.byteLength)
-          throw new Error(`Blob write offset ${offset} exceeds size ${row.data.byteLength}.`)
-        const next = concatenate(row.data, data, offset)
-        await transaction.query(
-          'UPDATE taskyon_storage_blob_writes SET data = $1 WHERE write_id = $2;',
-          [next, writeId],
-        )
-        return { nextOffset: next.byteLength }
-      }),
-    writeStatus: async (id, writeId) => {
-      const row = await getWrite(writeId)
-      if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-      return { size: row.data.byteLength }
-    },
-    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) =>
-      await database.transaction(async (transaction) => {
-        const row = await getWrite(writeId, transaction)
-        if (!row || row.id !== id) throw new Error(`Unknown blob write: ${writeId}`)
-        if (row.data.byteLength !== expectedSize) throw new Error(`Blob size mismatch for "${id}".`)
-        const hash = sha256(row.data)
-        if (expectedSha256 && hash !== expectedSha256)
-          throw new Error(`Blob checksum mismatch for "${id}".`)
-        const metadata = await put(
-          targetId ?? id,
-          row.data,
-          row.content_type ?? undefined,
-          hash,
-          transaction,
-        )
-        await transaction.query('DELETE FROM taskyon_storage_blob_writes WHERE write_id = $1;', [
+      database.transaction(async (db) => {
+        const row = await migrateWrite(db, id, writeId)
+        const size = Number(row.size)
+        if (offset > size) throw new Error(`Blob write offset ${offset} exceeds size ${size}.`)
+        await db.query('SELECT lo_put($1::oid,$2::bigint,$3::bytea)', [
+          row.object_oid,
+          offset,
+          data,
+        ])
+        const nextOffset = Math.max(size, offset + data.length)
+        await db.query('UPDATE taskyon_storage_blob_writes SET size=$1 WHERE write_id=$2', [
+          nextOffset,
           writeId,
         ])
+        return { nextOffset }
+      }),
+    writeStatus: async (id, writeId) => ({
+      size: Number((await getWrite(database, id, writeId)).size),
+    }),
+    commitWrite: async (id, writeId, expectedSize, expectedSha256, targetId) =>
+      database.transaction(async (db) => {
+        const row = await migrateWrite(db, id, writeId)
+        const size = Number(row.size)
+        if (size !== expectedSize) throw new Error(`Blob size mismatch for "${id}".`)
+        if (!row.object_oid) throw new Error('Blob write has no large object')
+        const hash = await digest(db, row.object_oid, size)
+        if (expectedSha256 && hash !== expectedSha256)
+          throw new Error(`Blob checksum mismatch for "${id}".`)
+        const metadata = await publish(
+          db,
+          targetId ?? id,
+          row.object_oid,
+          size,
+          row.content_type ?? undefined,
+          hash,
+        )
+        await db.query(
+          'DELETE FROM taskyon_storage_blob_writes WHERE write_id=$1 AND namespace=$2',
+          [writeId, namespace],
+        )
         return metadata
       }),
-    abortWrite: async (_id, writeId) => {
-      await database.query(
-        'DELETE FROM taskyon_storage_blob_writes WHERE write_id = $1 AND namespace = $2;',
-        [writeId, namespace],
-      )
-    },
-    delete: async (id) => {
-      await database.query('DELETE FROM taskyon_storage_blobs WHERE namespace = $1 AND id = $2;', [
-        namespace,
-        id,
-      ])
-    },
-    clear: async () => {
-      await database.transaction(async (transaction) => {
-        await transaction.query('DELETE FROM taskyon_storage_blobs WHERE namespace = $1;', [
-          namespace,
-        ])
-        await transaction.query('DELETE FROM taskyon_storage_blob_writes WHERE namespace = $1;', [
-          namespace,
-        ])
-      })
-    },
+    abortWrite: async (id, writeId) =>
+      database.transaction(async (db) => {
+        const rows = await db.query<{ object_oid: number | null }>(
+          'DELETE FROM taskyon_storage_blob_writes WHERE namespace=$1 AND id=$2 AND write_id=$3 RETURNING object_oid',
+          [namespace, id, writeId],
+        )
+        for (const row of rows.rows) await unlink(db, row.object_oid)
+      }),
+    delete: async (id) =>
+      database.transaction(async (db) => {
+        const rows = await db.query<{ object_oid: number | null }>(
+          'DELETE FROM taskyon_storage_blobs WHERE namespace=$1 AND id=$2 RETURNING object_oid',
+          [namespace, id],
+        )
+        for (const row of rows.rows) await unlink(db, row.object_oid)
+      }),
+    clear: async () =>
+      database.transaction(async (db) => {
+        for (const table of ['taskyon_storage_blobs', 'taskyon_storage_blob_writes']) {
+          const rows = await db.query<{ object_oid: number | null }>(
+            `DELETE FROM ${table} WHERE namespace=$1 RETURNING object_oid`,
+            [namespace],
+          )
+          for (const row of rows.rows) await unlink(db, row.object_oid)
+        }
+      }),
   }
 }

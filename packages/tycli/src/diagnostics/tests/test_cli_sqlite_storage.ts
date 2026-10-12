@@ -1,7 +1,11 @@
+import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
-import { access, mkdtemp } from 'node:fs/promises'
+import { access, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { runStorageBackendContract } from '@taskyon/taskyon/test-support'
+import {
+  runStorageBackendContract,
+  runStorageStreamingContract,
+} from '@taskyon/taskyon/test-support'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { createStorageClient, taskyonStorageProtocol } from '@taskyon/taskyon/api'
 import { createCliFileBlobStorageBackend, createCliFileStorageBackend } from '../../cli/fileStorage'
@@ -145,3 +149,51 @@ export const testCliScopesSelectedStorageForHost = async () => {
 
 testCliScopesSelectedStorageForHost.description =
   'Scopes every selected record and blob backend beneath the host namespace.'
+
+export const testCliBlobBackendsStreamLargeObjects = async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tycli-streaming-synthetic-'))
+  const sqlite = await createCliSqliteStorageProvider(join(directory, 'storage.sqlite'))
+  try {
+    await runStorageStreamingContract(sqlite.provider)
+    await runStorageStreamingContract({
+      records: (namespace) => createCliFileStorageBackend(directory, namespace),
+      blobs: (namespace) => createCliFileBlobStorageBackend(directory, namespace),
+    })
+  } finally {
+    sqlite.close()
+  }
+}
+
+export const testCliSqliteRetainsLegacyBlobData = async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tycli-legacy-synthetic-'))
+  const path = join(directory, 'storage.sqlite')
+  const sqlite = await createCliSqliteStorageProvider(path)
+  const fixture = new DatabaseSync(path)
+  try {
+    fixture
+      .prepare(
+        'INSERT INTO taskyon_storage_blobs(namespace,id,data,size,modified_at) VALUES(?,?,?,?,?)',
+      )
+      .run('synthetic', 'legacy', new Uint8Array([1, 2, 3]), 3, 'synthetic')
+    fixture
+      .prepare(
+        'INSERT INTO taskyon_storage_blob_writes(write_id,namespace,id,data) VALUES(?,?,?,?)',
+      )
+      .run('legacy-write', 'synthetic', 'staged', new Uint8Array([1, 2]))
+    const backend = await sqlite.provider.blobs('synthetic')
+    if (!backend) throw new Error('Blob backend unavailable')
+    if ((await backend.readRange('legacy', 1, 2)).data.join(',') !== '2,3')
+      throw new Error('Legacy range changed')
+    await backend.append('legacy', new Uint8Array([4]), 3)
+    if ((await backend.get('legacy'))?.data.join(',') !== '1,2,3,4')
+      throw new Error('Legacy append failed')
+    await backend.writeChunk('staged', 'legacy-write', 1, new Uint8Array([7]))
+    await backend.commitWrite('staged', 'legacy-write', 2)
+    if ((await backend.get('staged'))?.data.join(',') !== '1,7')
+      throw new Error('Legacy staged migration failed')
+  } finally {
+    fixture.close()
+    sqlite.close()
+    await rm(directory, { recursive: true, force: true })
+  }
+}
