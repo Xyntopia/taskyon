@@ -63,6 +63,7 @@
   <AboutDialog
     v-model="showAboutDialog"
     app-name="Taskyon"
+    :version="version"
     description="Taskyon is a local-first AI platform for personalized task management and seamless web integration. It ensures data security with local processing while offering powerful tools like task trees, function execution, and sandboxing. Learn more at taskyon.space."
     data-cy="taskyon-about"
   >
@@ -96,6 +97,7 @@ import { useAppStateStore } from 'src/stores/appState'
 import { ref } from 'vue'
 import AboutDialog from '@taskyon/ui/components/AboutDialog.vue'
 import DarkModeButton from '@taskyon/ui/components/DarkModeButton.vue'
+import appPackage from '../../../package.json' with { type: 'json' }
 
 defineProps<{
   btnSize: 'md' | 'sm' | 'xs' | 'lg' | 'xl'
@@ -103,6 +105,7 @@ defineProps<{
 
 const showAboutDialog = ref(false)
 const state = useAppStateStore()
+const version = appPackage.version
 
 function onThemeChanged(newMode: boolean | 'auto') {
   state.appConfiguration.darkTheme = newMode

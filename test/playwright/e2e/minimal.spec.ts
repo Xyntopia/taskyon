@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import appPackage from '../../../package.json' with { type: 'json' }
 
 import { expectTaskyonReady } from '../support/taskyon'
 
@@ -21,6 +22,9 @@ test.describe('app smoke', () => {
     await page.goto('/')
     await expect(page.locator('body')).toHaveClass(/body--light/)
     const lightDialog = await openAboutDialog()
+    await expect(lightDialog.getByText('Version:', { exact: true }).locator('..')).toContainText(
+      appPackage.version,
+    )
     await expect(lightDialog).toHaveCSS('background-color', 'rgb(255, 255, 255)')
     await lightDialog.getByLabel('Close About Taskyon').click()
 

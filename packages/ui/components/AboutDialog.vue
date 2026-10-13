@@ -24,6 +24,10 @@
       <q-card-section class="about-dialog__build">
         <h3>Build</h3>
         <dl>
+          <div v-if="props.version">
+            <dt>Version:</dt>
+            <dd>{{ props.version }}</dd>
+          </div>
           <div>
             <dt>Commit hash:</dt>
             <dd data-cy="taskyon-build-commit">{{ buildMetadata.commit }}</dd>
@@ -73,6 +77,7 @@ const props = withDefaults(
   defineProps<{
     appName: string
     description: string
+    version?: string
     dataCy?: string
   }>(),
   {
