@@ -146,6 +146,27 @@ prompt or result text; keep them outside the repository and do not publish them.
 precedence over the existing `TYCLI_CHAT_COMPLETION_TRACE_DIR` environment override. Routine
 `tycli --debug` keeps its smaller request-only trace unless a trace directory is explicit.
 
+To debug a browser-only workflow with the CLI, replay the active browser profile. When a
+Playwright run sets `PLAYWRIGHT_CHAT_COMPLETION_TRACE_DIR`, the trace helper writes the browser's
+`llmSettings`, `toolchainProfiles` and selected profile to `runtime-config.json`:
+
+```bash
+PLAYWRIGHT_CHAT_COMPLETION_TRACE_DIR=<trace-dir> \
+  yarn playwright test \
+  test/playwright/e2e/diagnostics.spec.ts \
+  --grep '<test name>'
+yarn tycli:diagnostics \
+  --online \
+  --filter '<test name>' \
+  --runtime-config <trace-dir>/runtime-config.json \
+  --trace-dir <trace-dir>/cli
+```
+
+`--runtime-config` resolves the captured profile and uses its entry function, toolchain settings,
+provider and model for the run. It rejects `--provider` or `--model` values that conflict with the
+captured profile. The CLI still uses its own credential store and fetch transport, so matching
+provider requests do not exercise browser-only transports such as the WSS tunnel.
+
 Run levels select cumulative diagnostic sets. L1 is the quick development check; L2 adds broad
 per-test-fast coverage; L3 adds the slower and online checks required for a release. L4 is reserved
 for open-ended evaluations whose overall outcome needs a quality judgment beyond automated checks.

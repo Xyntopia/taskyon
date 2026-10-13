@@ -26,6 +26,7 @@ import { resolveCliDebugConfiguration } from '../cli/debugOptions'
 import { createCliChatCompletionTraceWriter } from '../cli/chatCompletionTraceWriter'
 import { createDiagnosticsOutput, formatFailedDiagnostics } from './diagnosticsOutput'
 import type { bootstrapCliTaskyon } from '../cli/runtime'
+import { loadDiagnosticsRuntimeConfig } from './runtimeConfig'
 
 const diagnosticsCategories = [
   'standard',
@@ -53,6 +54,7 @@ type CliOptions = {
   category?: DiagnosticsCategory
   provider?: string
   model?: string
+  runtimeConfig?: string
 }
 
 type WrappedSkippedResult = {
@@ -144,6 +146,9 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === '--online') opts.online = true
     else if (arg === '--json') opts.json = true
     else if (arg === '--verbose') opts.verbose = true
+    else if (arg === '--runtime-config') opts.runtimeConfig = args[++i]
+    else if (arg.startsWith('--runtime-config='))
+      opts.runtimeConfig = arg.slice('--runtime-config='.length)
     else if (arg === '--allow-long-run') opts.allowLongRun = true
     else if (arg === '--through-level') opts.throughLevel = parseDiagnosticsRunLevel(args[++i])
     else if (arg.startsWith('--through-level=')) {
@@ -663,12 +668,17 @@ async function main(): Promise<number> {
     const authorizeDiagnosticFetch = ({ capability }: CapabilityRequest) =>
       Promise.resolve(opts.online && capability.action === 'fetch' && capability.access === 'read')
     const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
+    const replayConfig = opts.runtimeConfig
+      ? await loadDiagnosticsRuntimeConfig(opts.runtimeConfig, opts.provider, opts.model)
+      : undefined
     const runtime = (diagnosticRuntime = await bootstrapCliTaskyon({
       nodePgLiteDataDir: diagnosticsDataDir,
       authorizeFetch: authorizeDiagnosticFetch,
       blobStorageRoot: resolveCliInvocationDirectory(),
-      ...(opts.provider ? { selectedApi: opts.provider } : {}),
-      ...(opts.model ? { model: opts.model } : {}),
+      ...(replayConfig || opts.provider
+        ? { selectedApi: replayConfig?.provider ?? opts.provider }
+        : {}),
+      ...(replayConfig || opts.model ? { model: replayConfig?.model ?? opts.model } : {}),
     }))
     const [
       { createCliWorkflowHost, loadProjectInstructions },
@@ -703,8 +713,9 @@ async function main(): Promise<number> {
       ...(runtime.taskyonAuth ? { tyauth: runtime.taskyonAuth } : {}),
       allowLongRun: allowsLongRun(opts),
       selectedApi: runtime.selectedApi,
-      llmSettings: runtime.llmState.settings,
-      toolchainConfig: getSelectedToolchainConfig(runtime.llmState),
+      llmSettings: replayConfig?.llmSettings ?? runtime.llmState.settings,
+      toolchainConfig:
+        replayConfig?.toolchainConfig ?? getSelectedToolchainConfig(runtime.llmState),
       ...(runtime.model ? { model: runtime.model } : {}),
       ...(runtime.providerSession ? { providerSession: runtime.providerSession } : {}),
       storageClient: runtime.storageClient,
