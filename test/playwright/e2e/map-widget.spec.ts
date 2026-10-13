@@ -156,16 +156,47 @@ const runOverpassToolFromVisibleForm = async (
   await executeSelectedTool(page)
 }
 
+const resolveMapWidgetNetworkPrompt = async (page: Page) => {
+  const dialog = page.locator('.taskyon-capability-dialog--network-access:visible').last()
+  if (!(await dialog.isVisible())) return
+
+  const directFetchOption = dialog.getByText('Direct host fetch', { exact: true })
+  if (await directFetchOption.isVisible()) {
+    await directFetchOption.click()
+    await dialog.getByRole('button', { name: 'Use transport', exact: true }).click()
+    return
+  }
+
+  await dialog.getByText('Allow network access this session', { exact: true }).click()
+  await dialog.getByRole('button', { name: 'Allow network', exact: true }).click()
+}
+
+const waitForMapWidgetOutcome = async (page: Page, summaryMessage: Locator, taskError: Locator) => {
+  const outcome: { value: 'pending' | 'summary' | 'error' } = { value: 'pending' }
+  await expect
+    .poll(
+      async () => {
+        await resolveMapWidgetNetworkPrompt(page)
+        outcome.value = (await taskError.isVisible())
+          ? 'error'
+          : (await summaryMessage.isVisible())
+            ? 'summary'
+            : 'pending'
+        return outcome.value
+      },
+      { timeout: 100_000 },
+    )
+    .not.toBe('pending')
+  return outcome.value
+}
+
 const expectMapWidgetInChat = async (page: Page, frame: FrameLocator) => {
   const summaryMessage = page
     .locator('.assistant.message')
     .filter({ hasText: 'Found 2 overpass results' })
     .last()
   const taskError = page.getByText(/^Error: Remote function/).last()
-  const outcome = await Promise.race([
-    summaryMessage.waitFor({ state: 'visible', timeout: 100_000 }).then(() => 'summary' as const),
-    taskError.waitFor({ state: 'visible', timeout: 100_000 }).then(() => 'error' as const),
-  ])
+  const outcome = await waitForMapWidgetOutcome(page, summaryMessage, taskError)
   if (outcome === 'error') {
     for (const error of await page.getByText(/^Error: Remote function/).all()) {
       await error.click()
@@ -205,6 +236,11 @@ const expectMapWidgetInChat = async (page: Page, frame: FrameLocator) => {
 test.describe('map widget in chat', () => {
   test.beforeEach(async ({ page }) => {
     await mockOverpassApi(page)
+    await page.goto('/settings/sandbox-network')
+    const fetchTransport = dataCy(page, 'sandbox-fetch-transport')
+    await fetchTransport.click()
+    await page.getByRole('option', { name: 'Direct host fetch', exact: true }).click()
+    await expect(fetchTransport).toContainText('Direct host fetch')
     await enableExpertMode(page)
   })
 

@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 
 for (const width of [390, 1280]) {
@@ -70,16 +69,7 @@ test('streamed assistant text keeps the shared chat pinned to the newest words',
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'https://127.0.0.1:9000'
-  const routesSource = readFileSync(
-    new URL('../../../src/router/routes_taskyon.ts', import.meta.url),
-    'utf8',
-  )
-  const fixturePath = routesSource.match(
-    /path: '([^']+)'[\s\S]{0,220}TaskChatResponsivenessTest/,
-  )?.[1]
-  if (!fixturePath) throw new Error('Task chat responsiveness fixture route is unavailable.')
-  await page.goto(new URL(fixturePath, baseURL).href)
+  await page.goto('/task-chat-responsiveness-test')
   await page.getByRole('button', { name: 'Open tool example' }).click()
   const thread = page.locator('.task-chat-window__thread')
   await thread.evaluate((element) => {
