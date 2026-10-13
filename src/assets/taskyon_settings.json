@@ -68,7 +68,7 @@
       },
       "webResearchPlanner": {
         "researchMode": "websearch-first",
-        "supportTools": ["storage", "jinaMarkdownReader"],
+        "supportTools": ["storage", "webReader"],
         "enableWebSearch": true,
         "webSearchMaxResults": 5,
         "maxSourcesPerQuery": 5,

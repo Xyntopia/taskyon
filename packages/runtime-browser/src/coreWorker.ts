@@ -72,6 +72,9 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
         : undefined
     const runtime = createTaskyonBrowserCoreRuntime({
       llmSettings: () => llmSettings,
+      ...(event.data.sandboxFetchIdleTimeoutMs !== undefined
+        ? { sandboxFetchIdleTimeoutMs: event.data.sandboxFetchIdleTimeoutMs }
+        : {}),
       entryNode: () => entryNode ?? defaultEntryNode(llmSettings),
       toolchainConfig,
       ...(persistentCrypto ? { cryptoSession: persistentCrypto } : {}),

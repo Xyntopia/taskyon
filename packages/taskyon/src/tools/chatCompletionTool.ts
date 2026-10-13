@@ -361,12 +361,12 @@ export function createChatCompletionTool(
         selectedApi === 'chatgpt-codex' ||
         selectedApi === 'taskyon' ||
         selectedApi === 'openrouter.ai'
-      const tools = Array.from(
-        new Set([
-          ...(allowedTools ?? []),
-          ...(websearch?.enabled === true && !supportsNativeWebSearch ? ['webSearch'] : []),
-        ]),
-      )
+      if (websearch?.enabled === true && !supportsNativeWebSearch) {
+        throw new Error(
+          `Provider '${selectedApi}' does not support web search. Select a provider with web search support or disable web search.`,
+        )
+      }
+      const tools = Array.from(new Set(allowedTools ?? []))
       const useProviderToolCalling = tools.length > 0
       const normalizedToolChoice =
         toolChoice?.type === 'tool' && typeof toolChoice.toolName === 'string'

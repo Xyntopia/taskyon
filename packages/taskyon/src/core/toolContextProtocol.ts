@@ -6,7 +6,7 @@ import { ContentHash, ToolInvocationRevisions } from '../types/tools.ts'
 
 export const toolContextProtocol = defineFrpServiceProtocol({
   service: 'toolContext',
-  version: '1',
+  version: '2',
   commands: {
     getSecret: {
       request: z.object({
@@ -44,6 +44,7 @@ export const toolContextProtocol = defineFrpServiceProtocol({
     },
     fetch: {
       request: z.object({
+        protocolVersion: z.literal(2),
         input: z.string(),
         preferProxy: z.boolean().optional(),
         init: z
@@ -51,6 +52,9 @@ export const toolContextProtocol = defineFrpServiceProtocol({
             method: z.string().optional(),
             headers: z.array(z.tuple([z.string(), z.string()])).optional(),
             body: z.string().optional(),
+            cache: z
+              .enum(['default', 'no-store', 'reload', 'no-cache', 'force-cache', 'only-if-cached'])
+              .optional(),
           })
           .optional(),
       }),
@@ -58,10 +62,26 @@ export const toolContextProtocol = defineFrpServiceProtocol({
         status: z.number(),
         statusText: z.string(),
         headers: z.array(z.tuple([z.string(), z.string()])),
-        body: z.string().optional(),
-        bodyBase64: z.string().optional(),
-        bodyBytes: z.custom<Uint8Array>((value) => value instanceof Uint8Array).optional(),
+        protocolVersion: z.literal(2),
+        bodyId: z.string().optional(),
       }),
+    },
+  },
+  streams: {
+    fetchBody: {
+      fetchBodyReadRequest: z.object({ requestId: z.string(), bodyId: z.string() }),
+      fetchBodyReadResponse: z.object({
+        requestId: z.string(),
+        result: z
+          .object({
+            done: z.boolean(),
+            data: z.array(z.number().int().min(0).max(255)).max(65536).optional(),
+          })
+          .optional(),
+        error: z.object({ name: z.string(), message: z.string() }).optional(),
+      }),
+      fetchBodyCancelRequest: z.object({ requestId: z.string(), bodyId: z.string() }),
+      fetchBodyCancelResponse: z.object({ requestId: z.string() }),
     },
   },
 })

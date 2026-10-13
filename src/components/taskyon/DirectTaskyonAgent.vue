@@ -147,6 +147,7 @@ watch(
             new Request(input, init),
           ),
         fetchPolicy: { policy: 'default' },
+        sandboxFetchIdleTimeoutMs: () => appState.appConfiguration.sandboxFetchIdleTimeoutMs,
         allowPrivateSandboxFetch: true,
         toolSetup: (storageClient) =>
           createDefaultTaskyonToolSetup({
@@ -186,7 +187,16 @@ watch(
           ...tools,
           ...defineTyGuiTools(appState, core, runtime.client, taskyonStore.documentationBases),
         ],
-        createContext: createTrustedUiToolContext(core, runtime.client),
+        createContext: createTrustedUiToolContext(
+          core,
+          runtime.client,
+          (input, init, options) =>
+            taskyonStore.hostFetch.fetch(
+              { kind: 'tool', ...(options ? { options } : {}) },
+              new Request(input, init),
+            ),
+          () => appState.appConfiguration.sandboxFetchIdleTimeoutMs,
+        ),
       })
       if (current !== generation) {
         registration.destroy()

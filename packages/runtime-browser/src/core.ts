@@ -45,6 +45,7 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   createFetchWithPolicy?: (
     storageClient: TaskyonStorageClient,
   ) => NonNullable<NonNullable<Parameters<typeof tyCore>[4]>['fetchWithPolicy']>
+  sandboxFetchIdleTimeoutMs?: NonNullable<Parameters<typeof tyCore>[4]>['sandboxFetchIdleTimeoutMs']
   fetchPolicy?: NonNullable<Parameters<typeof tyCore>[4]>['fetchPolicy']
   allowPrivateSandboxFetch?: boolean
   authorizePopup?: NonNullable<Parameters<typeof tyCore>[4]>['authorizePopup']
@@ -206,6 +207,9 @@ export const createTaskyonBrowserCoreRuntime = (
             : {}),
           ...(options.createFetchWithPolicy
             ? { fetchWithPolicy: options.createFetchWithPolicy(storageClient) }
+            : {}),
+          ...(options.sandboxFetchIdleTimeoutMs !== undefined
+            ? { sandboxFetchIdleTimeoutMs: options.sandboxFetchIdleTimeoutMs }
             : {}),
           ...(options.fetchPolicy ? { fetchPolicy: options.fetchPolicy } : {}),
           ...(options.allowPrivateSandboxFetch ? { allowPrivateSandboxFetch: true } : {}),

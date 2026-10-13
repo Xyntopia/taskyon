@@ -1,3 +1,5 @@
+export const DEFAULT_SANDBOX_FETCH_IDLE_TIMEOUT_MS = 30_000
+
 export type FetchCapability = {
   action: 'fetch'
   origin: string
@@ -121,6 +123,53 @@ export function validateSandboxFetchUrl(
   return url
 }
 
+function waitForNetwork<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal,
+  controller: AbortController,
+  idleTimeoutMs: number,
+  scheduleTimeout: (callback: () => void, delay: number) => () => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const cancelTimeout = scheduleTimeout(
+      () =>
+        controller.abort(
+          new DOMException('Tool fetch timed out waiting for network data', 'TimeoutError'),
+        ),
+      idleTimeoutMs,
+    )
+    const cleanup = () => {
+      cancelTimeout()
+      signal.removeEventListener('abort', abort)
+    }
+    const abort = () => {
+      cleanup()
+      reject(
+        signal.reason instanceof Error || signal.reason instanceof DOMException
+          ? signal.reason
+          : new DOMException(String(signal.reason ?? 'Fetch cancelled'), 'AbortError'),
+      )
+    }
+    if (signal.aborted) {
+      abort()
+      return
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    Promise.resolve()
+      .then(operation)
+      .then(
+        (value) => {
+          cleanup()
+          resolve(value)
+        },
+        (error) => {
+          cleanup()
+          reject(error instanceof Error ? error : new Error(String(error)))
+        },
+      )
+  })
+}
+
 export function createMediatedFetch(options: {
   authorize: FetchAuthorization
   fetch?: typeof fetch
@@ -129,16 +178,26 @@ export function createMediatedFetch(options: {
   maxResponseBytes?: number
   signal?: AbortSignal
   timeoutMs?: number
+  idleTimeoutMs?: number | undefined
+  scheduleTimeout?: (callback: () => void, delay: number) => () => void
   allowPrivateTargets?: boolean
 }) {
   const hostFetch = options.fetch ?? globalThis.fetch
-  const maxResponseBytes = options.maxResponseBytes ?? 16 * 1024 * 1024
-  const timeoutMs = options.timeoutMs ?? 30_000
+  const scheduleTimeout =
+    options.scheduleTimeout ??
+    ((callback, delay) => {
+      const timer = setTimeout(callback, delay)
+      return () => clearTimeout(timer)
+    })
+  const idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_SANDBOX_FETCH_IDLE_TIMEOUT_MS
+  if (!Number.isSafeInteger(idleTimeoutMs) || idleTimeoutMs <= 0)
+    throw new Error('Fetch inactivity timeout must be a positive integer')
 
   const mediatedFetch: FetchWithPolicy = async (input, init = {}, requestedOptions) => {
     const url = validateSandboxFetchUrl(input, options.allowPrivateTargets)
     const fetchOptions = mergeSandboxFetchOptions(options.fetchPolicy, requestedOptions)
-    const method = (init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+    const request = input instanceof Request ? input : undefined
+    const method = (init.method ?? request?.method ?? 'GET').toUpperCase()
     const access = method === 'GET' || method === 'HEAD' || method === 'OPTIONS' ? 'read' : 'write'
     const authorized = await options.authorize({
       action: 'fetch',
@@ -147,58 +206,120 @@ export function createMediatedFetch(options: {
       ...(fetchOptions.preferProxy ? { preferProxy: true } : {}),
       ...(isPrivateSandboxFetchUrl(url) ? { privateTarget: true } : {}),
     })
-    if (!authorized) {
-      throw new Error(`Sandbox fetch was not authorized for ${url.origin}`)
-    }
+    if (!authorized) throw new Error(`Sandbox fetch was not authorized for ${url.origin}`)
 
-    const signals = [
-      options.signal,
-      input instanceof Request ? input.signal : undefined,
-      init.signal,
-      AbortSignal.timeout(timeoutMs),
-    ].filter((signal): signal is AbortSignal => signal instanceof AbortSignal)
+    const controller = new AbortController()
+    const signals = [controller.signal, options.signal, request?.signal, init.signal].filter(
+      (value): value is AbortSignal => value instanceof AbortSignal,
+    )
     const signal = AbortSignal.any(signals)
+    const cancelDeadline =
+      options.timeoutMs === undefined
+        ? undefined
+        : scheduleTimeout(
+            () =>
+              controller.abort(
+                new DOMException('Tool fetch exceeded its explicit deadline', 'TimeoutError'),
+              ),
+            options.timeoutMs,
+          )
     const requestInit = {
+      ...(request ? { method: request.method, headers: request.headers } : {}),
       ...init,
       credentials: 'omit',
       redirect: 'manual',
       signal,
     } satisfies RequestInit
-    const response = options.fetchWithPolicy
-      ? await options.fetchWithPolicy(url, requestInit, fetchOptions)
-      : await hostFetch(url, requestInit)
-    const contentLength = Number(response.headers.get('content-length'))
-    if (Number.isFinite(contentLength) && contentLength > maxResponseBytes) {
+    const hostInput = request ? new Request(request, requestInit) : url
+    let response: Response
+    try {
+      response = await waitForNetwork(
+        () =>
+          options.fetchWithPolicy
+            ? options.fetchWithPolicy(hostInput, requestInit, fetchOptions)
+            : hostFetch(hostInput, requestInit),
+        signal,
+        controller,
+        idleTimeoutMs,
+        scheduleTimeout,
+      )
+    } catch (error) {
+      cancelDeadline?.()
+      throw error
+    }
+    if (
+      options.maxResponseBytes !== undefined &&
+      Number(response.headers.get('content-length')) > options.maxResponseBytes
+    ) {
+      cancelDeadline?.()
       await response.body?.cancel('Response exceeds sandbox fetch limit')
-      throw new Error(`Sandbox fetch response exceeds ${maxResponseBytes} bytes`)
+      throw new Error(`Sandbox fetch response exceeds ${options.maxResponseBytes} bytes`)
     }
-    if (!response.body) return response
-
-    const chunks: Uint8Array[] = []
+    if (!response.body) {
+      cancelDeadline?.()
+      return response
+    }
     const reader = response.body.getReader()
-    let receivedBytes = 0
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      receivedBytes += value.byteLength
-      if (receivedBytes > maxResponseBytes) {
-        await reader.cancel('Response exceeds sandbox fetch limit')
-        throw new Error(`Sandbox fetch response exceeds ${maxResponseBytes} bytes`)
-      }
-      chunks.push(value)
+    let bytes = 0
+    let finished = false
+    const finish = () => {
+      finished = true
+      cancelDeadline?.()
+      signal.removeEventListener('abort', abort)
     }
-    const body = new Uint8Array(receivedBytes)
-    let offset = 0
-    for (const chunk of chunks) {
-      body.set(chunk, offset)
-      offset += chunk.byteLength
+    const abort = () => {
+      void reader.cancel(signal.reason).catch(() => undefined)
     }
+    signal.addEventListener('abort', abort, { once: true })
+    const body = new ReadableStream<Uint8Array<ArrayBuffer>>(
+      {
+        async pull(stream) {
+          try {
+            const next = await waitForNetwork(
+              async () => {
+                let chunk = await reader.read()
+                while (!chunk.done && chunk.value.byteLength === 0 && !signal.aborted)
+                  chunk = await reader.read()
+                return chunk
+              },
+              signal,
+              controller,
+              idleTimeoutMs,
+              scheduleTimeout,
+            )
+            if (next.done) {
+              finish()
+              reader.releaseLock()
+              stream.close()
+              return
+            }
+            bytes += next.value.byteLength
+            if (options.maxResponseBytes !== undefined && bytes > options.maxResponseBytes)
+              throw new Error(`Sandbox fetch response exceeds ${options.maxResponseBytes} bytes`)
+            stream.enqueue(next.value)
+          } catch (error) {
+            finish()
+            controller.abort(error)
+            await reader.cancel(error).catch(() => undefined)
+            reader.releaseLock()
+            stream.error(error)
+          }
+        },
+        async cancel(reason) {
+          if (finished) return
+          finish()
+          controller.abort(reason)
+          await reader.cancel(reason)
+          reader.releaseLock()
+        },
+      },
+      { highWaterMark: 0 },
+    )
     return new Response(body, {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
     })
   }
-
   return mediatedFetch
 }

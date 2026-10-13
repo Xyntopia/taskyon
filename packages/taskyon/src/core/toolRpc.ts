@@ -265,6 +265,7 @@ export function createExternalToolContext(
   stopSignal: AbortSignal,
   options?: {
     getExecutionTaskChain?: () => Promise<TaskNode[]>
+    fetch?: toolContext['fetch']
   },
 ): toolContext {
   const unavailableSecretAccess = () => {
@@ -283,6 +284,7 @@ export function createExternalToolContext(
     setSecret: unavailableSecretAccess,
     stopSignal,
     toolId: 'N/A',
+    ...(options?.fetch ? { fetch: options.fetch } : {}),
   }
 }
 

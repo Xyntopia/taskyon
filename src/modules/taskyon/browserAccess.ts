@@ -34,7 +34,7 @@ export const browserAccessEnsureDefaults = {
 
 export const browserAccessResearchDefaults = {
   researchMode: 'websearch-first',
-  supportTools: ['storage', 'jinaMarkdownReader'],
+  supportTools: ['storage', 'webReader'],
   maxSourcesPerQuery: 5,
   mustDownload: true,
   fileTypeHints: ['pdf'],

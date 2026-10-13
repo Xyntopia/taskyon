@@ -13,7 +13,7 @@ import {
   politeHttpPolicySchema,
   waitForPoliteHttpTurn,
 } from '../utils/politeHttp'
-import { readPublicWebPageAsMarkdown } from './helperCollection'
+import { readPublicWebResource } from './helperCollection'
 
 type BrowserMcpImportArgs = {
   serverUrl?: string
@@ -304,7 +304,10 @@ export const buildEnsureBrowserMcpImportRetryChain = (args: EnsureBrowserMcpTool
   ...buildBrowserMcpImportChain(args),
 ]
 
-const buildProxyHeaders = (args: ResolvedProxyWebReaderArgs, apiKey: string) => {
+const buildProxyHeaders = (
+  args: ResolvedProxyWebReaderArgs,
+  apiKey: string,
+): Record<string, string> => {
   if (args.apiKeyLocation !== 'header') return {}
   const apiKeyHeader = ensureNonEmptyString(args.apiKeyHeader, 'apiKeyHeader')
   const apiKeyScheme = args.apiKeyScheme?.trim() ?? ''
@@ -904,10 +907,11 @@ const webResearchCandidateValidator = createTool({
     required: ['candidates'],
   } as const satisfies JSONSchema7,
   function: async ({ candidates, requireArtifact }, context) => {
-    if (!context.fetch) throw new Error('Web research validation requires a fetch capability.')
+    const request = context.fetch
+    if (!request) throw new Error('Web research validation requires a fetch capability.')
     const validated = await validateWebResearchCandidates(
       candidates,
-      async (url) => await readPublicWebPageAsMarkdown(url, undefined, context.fetch),
+      async (url) => await readPublicWebResource(url, undefined, request),
       requireArtifact,
     )
     await context.reportProgress?.({
@@ -1233,7 +1237,7 @@ Use it when research itself is the current objective and needs durable evidence 
         type: 'array',
         items: { type: 'string' },
         description:
-          'Additional explicit helper tools for each delegated branch. Defaults to updateFiles, downloadFile, bash, and jinaMarkdownReader for tycli/local runtimes; browser profiles should provide storage and jinaMarkdownReader so browser downloads and page validation use the available storage boundary.',
+          'Additional explicit helper tools for each delegated branch. Defaults to updateFiles, downloadFile, bash, and webReader for tycli/local runtimes; browser profiles should provide storage and webReader so browser downloads and page validation use the available storage boundary.',
       },
       enableWebSearch: {
         type: 'boolean',

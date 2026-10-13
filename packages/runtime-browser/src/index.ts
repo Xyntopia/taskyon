@@ -39,6 +39,7 @@ export type TaskyonBrowserRuntimeOptions = {
   toolchainConfig?: Record<string, FunctionArguments>
   providerTransport?: TaskyonBrowserProviderTransport
   approveDirectFallback?: (request: TaskyonDirectFallbackRequest) => Promise<boolean>
+  sandboxFetchIdleTimeoutMs?: number
   hostFetch?: {
     fetch: (context: HostFetchContext, request: Request) => Promise<Response>
     authorize: (tool: ToolIdentity, capability: FetchCapability) => Promise<boolean>
@@ -167,6 +168,9 @@ export const createTaskyonBrowserRuntime = async (
     ...(options.providerTransport ? { providerTransport: options.providerTransport } : {}),
     ...(directFallbackChannel ? { directFallbackPort: directFallbackChannel.port2 } : {}),
     ...(hostFetchChannel ? { hostFetchPort: hostFetchChannel.port2 } : {}),
+    ...(options.sandboxFetchIdleTimeoutMs !== undefined
+      ? { sandboxFetchIdleTimeoutMs: options.sandboxFetchIdleTimeoutMs }
+      : {}),
     storageNamespacePrefix: options.storageNamespacePrefix ?? 'taskyon',
     ...(options.storageSessionId ? { storageSessionId: options.storageSessionId } : {}),
     ...(options.persistCryptoSession ? { persistCryptoSession: true } : {}),

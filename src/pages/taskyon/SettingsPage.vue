@@ -59,6 +59,16 @@
               v-model:cors-proxy-url="state.appConfiguration.sandboxCorsProxyUrl"
               v-model:custom-proxy-template="state.appConfiguration.customProxyTemplate"
             />
+            <q-input
+              v-model.number="state.appConfiguration.sandboxFetchIdleTimeoutMs"
+              type="number"
+              min="1"
+              outlined
+              dense
+              label="Tool network inactivity timeout (ms)"
+              hint="Waiting for headers or data; time spent processing or saving data does not count."
+              data-cy="sandbox-fetch-idle-timeout"
+            />
             <div class="row items-center q-gutter-sm">
               <q-btn
                 data-cy="check-cors-proxy"
@@ -254,6 +264,7 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const corsProxyStatus = ref('')
 const appConfigurationWithoutSandboxFetch = TyProfile.shape.appConfiguration.omit({
+  sandboxFetchIdleTimeoutMs: true,
   sandboxFetchTransport: true,
   sandboxFetchWssUrl: true,
   sandboxCorsProxyUrl: true,
@@ -265,6 +276,7 @@ const appConfigurationModel = computed<Record<string, unknown>>({
       Object.entries(state.appConfiguration).filter(
         ([key]) =>
           ![
+            'sandboxFetchIdleTimeoutMs',
             'sandboxFetchTransport',
             'sandboxFetchWssUrl',
             'sandboxCorsProxyUrl',

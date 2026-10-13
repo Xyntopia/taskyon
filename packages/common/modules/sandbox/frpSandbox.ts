@@ -5,6 +5,7 @@ import {
   type FrpProtocolDefinition,
   type ProtocolClient,
   type ProtocolMessage,
+  type Port,
   type ProtocolServerHandlers,
 } from '../frpBus.ts'
 import { createPortFromTransport } from '../frpTransport.ts'
@@ -62,7 +63,11 @@ export async function serveFrpSandboxCapability<
   protocol: TProtocol
   handlers: ProtocolServerHandlers<TProtocol>
   signal?: AbortSignal | undefined
-}): Promise<{ channel: SandboxChannel; destroy(): void }> {
+}): Promise<{
+  channel: SandboxChannel
+  port: Port<ProtocolMessage<TProtocol>, ProtocolMessage<TProtocol>>
+  destroy(): void
+}> {
   const channel = await options.sandbox.openChannel('() => undefined', [], {
     signal: options.signal,
   })
@@ -82,6 +87,7 @@ export async function serveFrpSandboxCapability<
   const unsubscribe = createPortServer(connection.port, options.protocol, options.handlers)
   return {
     channel,
+    port: connection.port,
     destroy: () => {
       unsubscribe()
       connection.destroy()
@@ -100,17 +106,26 @@ export function createSandboxProtocolClient(
   signal: AbortSignal,
 ) {
   let requestCounter = 0
-  const call = (command: string, payload: Record<string, unknown> = {}) => {
+  const call = (
+    command: string,
+    payload: Record<string, unknown> = {},
+    stream = false,
+    options?: { signal?: AbortSignal; onAbort?: (requestId: string) => void },
+  ) => {
     const requestId = `${service}-${Date.now()}-${requestCounter++}`
-    const responseType = `${service}.${command}Response`
+    const prefix = stream ? command : `${service}.${command}`
+    const responseType = `${prefix}Response`
     return new Promise<unknown>((resolve, reject) => {
       const cleanup = () => {
         signal.removeEventListener('abort', abort)
+        options?.signal?.removeEventListener('abort', abort)
         port.removeEventListener('message', receive)
       }
       const abort = () => {
         cleanup()
-        const error = new Error(String(signal.reason ?? 'Protocol request cancelled'))
+        options?.onAbort?.(requestId)
+        const reason = options?.signal?.aborted ? options.signal.reason : signal.reason
+        const error = new Error(String(reason ?? 'Protocol request cancelled'))
         error.name = 'AbortError'
         reject(error)
       }
@@ -136,13 +151,14 @@ export function createSandboxProtocolClient(
         }
         resolve('result' in message ? message.result : undefined)
       }
-      if (signal.aborted) {
+      if (signal.aborted || options?.signal?.aborted) {
         abort()
         return
       }
       port.addEventListener('message', receive)
       signal.addEventListener('abort', abort, { once: true })
-      port.postMessage({ ...payload, type: `${service}.${command}Request`, requestId })
+      options?.signal?.addEventListener('abort', abort, { once: true })
+      port.postMessage({ ...payload, type: `${prefix}Request`, requestId })
     })
   }
   port.start()

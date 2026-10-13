@@ -296,6 +296,7 @@ const dynamicContext =
         capability: FetchCapability
       }) => Promise<boolean>
       fetchWithPolicy?: FetchWithPolicy
+      sandboxFetchIdleTimeoutMs?: number | (() => number)
       fetchPolicy?: SandboxFetchOptions
       allowPrivateSandboxFetch?: boolean
       authorizePopup?: (args: {
@@ -578,6 +579,10 @@ const dynamicContext =
             stopSignal,
             toolId,
             fetch: createMediatedFetch({
+              idleTimeoutMs:
+                typeof options.sandboxFetchIdleTimeoutMs === 'function'
+                  ? options.sandboxFetchIdleTimeoutMs()
+                  : options.sandboxFetchIdleTimeoutMs,
               authorize: (capability) =>
                 identity
                   ? (options.authorizeSandboxFetch?.({ tool: identity, capability }) ??
@@ -763,6 +768,7 @@ export async function tyCore(
       capability: FetchCapability
     }) => Promise<boolean>
     fetchWithPolicy?: FetchWithPolicy
+    sandboxFetchIdleTimeoutMs?: number | (() => number)
     fetchPolicy?: SandboxFetchOptions
     allowPrivateSandboxFetch?: boolean
     authorizePopup?: (args: {
@@ -868,6 +874,9 @@ export async function tyCore(
         ? { authorizeSandboxFetch: options.authorizeSandboxFetch }
         : {}),
       ...(options?.fetchWithPolicy ? { fetchWithPolicy: options.fetchWithPolicy } : {}),
+      ...(options?.sandboxFetchIdleTimeoutMs !== undefined
+        ? { sandboxFetchIdleTimeoutMs: options.sandboxFetchIdleTimeoutMs }
+        : {}),
       ...(options?.fetchPolicy ? { fetchPolicy: options.fetchPolicy } : {}),
       ...(options?.authorizePopup ? { authorizePopup: options.authorizePopup } : {}),
     },

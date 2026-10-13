@@ -1,3 +1,4 @@
+import { DEFAULT_SANDBOX_FETCH_IDLE_TIMEOUT_MS } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import { llmSettings, partialTaskDraft, ToolchainProfiles } from '@taskyon/taskyon/api'
 import { TASKYON_WSS_PROXY_URL } from '@taskyon/taskyon/token-service-types'
 import { SANDBOX_FETCH_TRANSPORT_SELECTIONS } from '@taskyon/common/modules/webFetching/mediatedFetch'
@@ -123,6 +124,16 @@ export const appConfiguration = z.object({
     title: 'PMTiles Cache Size',
     description: 'Maximum persisted range-cache size per PMTiles archive in megabytes.',
   }),
+  sandboxFetchIdleTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_SANDBOX_FETCH_IDLE_TIMEOUT_MS)
+    .meta({
+      title: 'Tool network inactivity timeout (ms)',
+      description:
+        'Maximum wait for response headers or the next nonempty network chunk. Time spent processing or saving data does not count.',
+    }),
   sandboxFetchTransport: z
     .preprocess(
       (value) => (value === 'http' ? 'custom-proxy' : value),

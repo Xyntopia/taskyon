@@ -1,18 +1,9 @@
 import type { JSONSchema7 } from 'json-schema'
-// import type { JSONSchema } from 'json-schema-to-ts'
-// import type { ToolBase } from '../taskyon/types'
 import { createTool, toolCall } from '../types/toolApi'
 import { createVectorStore } from '../utils/crudWrapper'
 import { sha256UrlSafeHash } from '../utils/encoding'
 import type { TyPGDB } from '../utils/pglite.api'
 import { getDatabase } from '../utils/pglite.api'
-// import { smallHelperTools } from './helperCollection'
-
-// const jinaTool = smallHelperTools.find(
-//   (tool) => tool.name === 'jinaSearch',
-// )! as unknown as ToolBase & { parameters: Readonly<JSONSchema> }
-// const jinaSearchTool = createTool(jinaTool)
-
 // TODO: make it possible to add "unique" identifiers as labels, so that
 //       we can save text which was add from a task and use the task id as the UID
 export const ragSearchTool = createTool({
@@ -84,25 +75,12 @@ export const ragSearchTool = createTool({
 
       throw new Error('searchText parameter must be provided')
     } else if (sourceType === 'web') {
-      const task = toolCall({
-        name: 'jinaSearch',
-        arguments: {
-          query: searchText,
-        },
-      })
-
       return ctx.createSubtasksResult([
         [
-          task,
+          { role: 'user', content: { type: 'message', data: searchText } },
           toolCall({
             name: 'chatCompletion',
-            arguments: {
-              appendSystemPrompts: [
-                `Based on the web search results above, please provide a comprehensive answer to the query: "${searchText}".
-                Use the information from the search results and format your response in a clear, well-structured way.
-                List all the references below the answer, make sure all the links open in a new tab.`,
-              ],
-            },
+            arguments: { websearch: { enabled: true, mode: 'required' } },
           }),
         ],
       ])

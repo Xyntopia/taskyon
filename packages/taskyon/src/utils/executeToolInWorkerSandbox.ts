@@ -2,6 +2,7 @@ import {
   createSandboxProtocolClient,
   serveFrpSandboxCapability,
 } from '@taskyon/common/modules/sandbox/frpSandbox'
+import { decodeUtf8 } from '@taskyon/common/modules/sandbox/decodeUtf8'
 import { createExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import type { ProtocolServerHandlers } from '@taskyon/common/modules/frpBus'
 import { toolContextProtocol } from '../core/toolContextProtocol.ts'
@@ -14,6 +15,7 @@ function buildToolSandboxCode(userCode: string): string {
   return `
     (function () {
       const userFn = ${userCode};
+      const decodeUtf8 = ${decodeUtf8.toString()};
       const createProtocolClient = ${createProtocolClientSource};
 
       function toolCall(f) {
@@ -39,14 +41,6 @@ function buildToolSandboxCode(userCode: string): string {
         if (Array.isArray(headers)) return headers.map(([key, value]) => [String(key), String(value)]);
         if (typeof headers.entries === 'function') return Array.from(headers.entries());
         return Object.entries(headers).map(([key, value]) => [key, String(value)]);
-      }
-
-      function decodeBase64(value) {
-        if (typeof atob !== 'function') {
-          throw new Error('Binary sandbox responses are unavailable in this runtime');
-        }
-        const binary = atob(value);
-        return Uint8Array.from(binary, (character) => character.charCodeAt(0));
       }
 
       class SandboxHeaders {
@@ -147,51 +141,93 @@ function buildToolSandboxCode(userCode: string): string {
         });
       }
 
-      class SandboxResponse {
-        constructor(response) {
-          this.status = response.status;
-          this.statusText = response.statusText;
-          this.headers = new SandboxHeaders(response.headers);
-          this.ok = this.status >= 200 && this.status < 300;
-          this.bodyValue = response.body;
-          this.bodyBase64 = response.bodyBase64;
-          this.bodyBytes = response.bodyBytes;
+      function createSandboxResponse(response, protocol, signal) {
+        if (response.protocolVersion !== 2) throw new Error('Incompatible tool fetch protocol');
+        let locked = false;
+        let used = false;
+        let done = !response.bodyId;
+        let pending = false;
+        const cancel = async () => {
+          if (done) return;
+          done = true;
+          signal?.removeEventListener('abort', abort);
+          await protocol.call('fetchBodyCancel', { bodyId: response.bodyId }, true);
+        };
+        const abort = () => { void cancel().catch(() => undefined); };
+        signal?.addEventListener('abort', abort, { once: true });
+        const read = async () => {
+          if (signal?.aborted) { await cancel(); throw new Error('Fetch cancelled'); }
+          if (done) return { done: true, value: undefined };
+          if (pending) throw new TypeError('Concurrent body reads are not supported');
+          used = true;
+          pending = true;
+          try {
+            const chunk = await protocol.call('fetchBodyRead', { bodyId: response.bodyId }, true);
+            done = chunk.done;
+            if (done) signal?.removeEventListener('abort', abort);
+            return { done, value: chunk.data === undefined ? undefined : Uint8Array.from(chunk.data) };
+          } finally { pending = false; }
+        };
+        const body = response.bodyId ? {
+          get locked() { return locked; },
+          getReader() {
+            if (locked) throw new TypeError('Response body is locked');
+            locked = true;
+            let released = false;
+            return {
+              read() { if (released) throw new TypeError('Reader was released'); return read(); },
+              cancel() { if (released) throw new TypeError('Reader was released'); return cancel(); },
+              releaseLock() { if (pending) throw new TypeError('Read is pending'); released = true; locked = false; },
+            };
+          },
+          cancel() { if (locked) throw new TypeError('Response body is locked'); return cancel(); },
+        } : null;
+        async function arrayBuffer() {
+          if (used || locked) throw new TypeError('Response body has already been consumed');
+          used = true;
+          if (!body) return new ArrayBuffer(0);
+          const reader = body.getReader();
+          const chunks = [];
+          let size = 0;
+          try {
+            for (;;) {
+              const chunk = await reader.read();
+              if (chunk.done) break;
+              chunks.push(chunk.value);
+              size += chunk.value.length;
+            }
+            const bytes = new Uint8Array(size);
+            let offset = 0;
+            for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+            return bytes.buffer;
+          } catch (error) { await reader.cancel().catch(() => undefined); throw error; }
+          finally { reader.releaseLock(); }
         }
-        async arrayBuffer() {
-          if (this.bodyBytes) {
-            return this.bodyBytes.buffer.slice(
-              this.bodyBytes.byteOffset,
-              this.bodyBytes.byteOffset + this.bodyBytes.byteLength,
-            );
-          }
-          if (this.bodyBase64) {
-            const bytes = decodeBase64(this.bodyBase64);
-            return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-          }
-          return new TextEncoder().encode(this.bodyValue ?? '').buffer;
+        if (typeof Response === 'function' && typeof ReadableStream === 'function') {
+          const nativeBody = body ? new ReadableStream({
+            async pull(controller) {
+              try {
+                const chunk = await read();
+                if (chunk.done) controller.close(); else controller.enqueue(chunk.value);
+              } catch (error) { controller.error(error); }
+            },
+            cancel,
+          }, { highWaterMark: 0 }) : null;
+          return new Response(nativeBody, {
+            status: response.status, statusText: response.statusText, headers: response.headers,
+          });
         }
-        async text() {
-          if (this.bodyBytes) return new TextDecoder().decode(this.bodyBytes);
-          if (!this.bodyBase64) return this.bodyValue ?? '';
-          return new TextDecoder().decode(decodeBase64(this.bodyBase64));
-        }
-        async json() { return JSON.parse(await this.text()); }
-      }
-
-      function createSandboxResponse(response) {
-        const canCreateNativeResponse =
-          typeof Response === 'function' && response.status >= 200 && response.status <= 599;
-        if (!canCreateNativeResponse) return new SandboxResponse(response);
-        const bodyForbidden = [204, 205, 304].includes(response.status);
-        const body = bodyForbidden
-          ? null
-          : response.bodyBytes
-            ?? (response.bodyBase64 ? decodeBase64(response.bodyBase64) : response.body ?? '');
-        return new Response(body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        });
+        return {
+          status: response.status, statusText: response.statusText,
+          ok: response.status >= 200 && response.status < 300,
+          headers: new SandboxHeaders(response.headers), body,
+          get bodyUsed() { return used; }, arrayBuffer,
+          async text() {
+            const bytes = new Uint8Array(await arrayBuffer());
+            return typeof TextDecoder === 'function' ? new TextDecoder().decode(bytes) : decodeUtf8(bytes);
+          },
+          async json() { return JSON.parse(await this.text()); },
+        };
       }
 
       let activeFetch;
@@ -220,11 +256,15 @@ function buildToolSandboxCode(userCode: string): string {
               ...(init.method === undefined ? {} : { method: String(init.method) }),
               ...(init.headers === undefined ? {} : { headers: normalizeHeaders(init.headers) }),
               ...(init.body === undefined ? {} : { body: String(init.body) }),
+              ...(init.cache === undefined ? {} : { cache: init.cache }),
             };
-            return createSandboxResponse(await call('fetch', {
-              input: url, init: requestInit,
+            return createSandboxResponse(await protocol.call('fetch', {
+              protocolVersion: 2, input: url, init: requestInit,
               ...(options.preferProxy === undefined ? {} : { preferProxy: options.preferProxy }),
-            }));
+            }, false, {
+              signal: init.signal,
+              onAbort: requestId => { void protocol.call('fetchBodyCancel', { bodyId: requestId }, true).catch(() => undefined); },
+            }), protocol, init.signal);
           };
           const ctx = {
             ...(baseContext || {}),
@@ -270,8 +310,78 @@ function parseCreateSubtasksResultInput(
   return partialTaskDraft.array().array().parse(value)
 }
 
+function createFetchBodyRegistry() {
+  let closed = false
+  const bodies = new Map<
+    string,
+    {
+      controller: AbortController
+      reader?: ReadableStreamDefaultReader<Uint8Array<ArrayBuffer>>
+      pending: boolean
+      remainder?: Uint8Array<ArrayBuffer> | undefined
+    }
+  >()
+  const cancel = async (id: string) => {
+    const body = bodies.get(id)
+    if (!body) return
+    bodies.delete(id)
+    body.controller.abort(new DOMException('Fetch cancelled', 'AbortError'))
+    if (body.reader) {
+      await body.reader.cancel().catch(() => undefined)
+      body.reader.releaseLock()
+    }
+  }
+  return {
+    prepare(id: string) {
+      if (closed || bodies.has(id)) throw new Error('Invalid fetch request lifecycle')
+      const controller = new AbortController()
+      bodies.set(id, { controller, pending: false })
+      return controller.signal
+    },
+    add(id: string, stream: ReadableStream<Uint8Array<ArrayBuffer>>) {
+      const body = bodies.get(id)
+      if (!body || closed) {
+        void stream.cancel().catch(() => undefined)
+        throw new DOMException('Fetch cancelled', 'AbortError')
+      }
+      body.reader = stream.getReader()
+      return id
+    },
+    async read(id: string) {
+      const body = bodies.get(id)
+      if (!body?.reader) throw new Error('Unknown or released fetch body')
+      if (body.pending) throw new Error('Concurrent fetch body read')
+      body.pending = true
+      try {
+        const next = body.remainder
+          ? { done: false, value: body.remainder }
+          : await body.reader.read()
+        if (next.done) {
+          bodies.delete(id)
+          body.reader.releaseLock()
+          return { done: true }
+        }
+        const data = next.value.slice(0, 65536)
+        body.remainder = next.value.length > 65536 ? next.value.subarray(65536) : undefined
+        return { done: false, data: Array.from(data) }
+      } catch (error) {
+        await cancel(id)
+        throw error
+      } finally {
+        body.pending = false
+      }
+    },
+    cancel,
+    async destroy() {
+      closed = true
+      await Promise.all([...bodies.keys()].map(cancel))
+    },
+  }
+}
+
 function buildContextHandlers(
   context: toolContext,
+  bodies: ReturnType<typeof createFetchBodyRegistry>,
 ): ProtocolServerHandlers<typeof toolContextProtocol> {
   return {
     toolContext: {
@@ -295,38 +405,45 @@ function buildContextHandlers(
           ...(token === undefined ? {} : { token }),
         })
       },
-      fetch: async ({ input, init, preferProxy }) => {
-        const assetBytes = await loadSandboxAssetBytes(input)
-        if (assetBytes !== null) {
+      fetch: async ({ input, init, preferProxy, requestId }) => {
+        const requestSignal = bodies.prepare(requestId)
+        try {
+          const assetBytes = await loadSandboxAssetBytes(input)
+          if (assetBytes === null && !context.fetch)
+            throw new Error('Sandbox fetch capability is unavailable')
+          const response =
+            assetBytes !== null
+              ? new Response(new Uint8Array(assetBytes), {
+                  headers: {
+                    'content-type': input.endsWith('.wasm')
+                      ? 'application/wasm'
+                      : 'application/octet-stream',
+                  },
+                })
+              : await context.fetch!(
+                  input,
+                  {
+                    signal: AbortSignal.any([context.stopSignal, requestSignal]),
+                    ...(init?.method ? { method: init.method } : {}),
+                    ...(init?.headers ? { headers: init.headers } : {}),
+                    ...(init?.body !== undefined ? { body: init.body } : {}),
+                    ...(init?.cache ? { cache: init.cache } : {}),
+                  },
+                  preferProxy === undefined ? undefined : { preferProxy },
+                )
+          if (!response.body) await bodies.cancel(requestId)
+          const headers: [string, string][] = []
+          response.headers.forEach((value, key) => headers.push([key, value]))
           return {
-            status: 200,
-            statusText: 'OK',
-            headers: [
-              [
-                'content-type',
-                input.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream',
-              ],
-            ] as [string, string][],
-            bodyBytes: assetBytes,
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+            protocolVersion: 2,
+            ...(response.body ? { bodyId: bodies.add(requestId, response.body) } : {}),
           }
-        }
-        if (!context.fetch) throw new Error('Sandbox fetch capability is unavailable')
-        const response = await context.fetch(
-          input,
-          {
-            ...(init?.method ? { method: init.method } : {}),
-            ...(init?.headers ? { headers: init.headers } : {}),
-            ...(init?.body ? { body: init.body } : {}),
-          },
-          preferProxy === undefined ? undefined : { preferProxy },
-        )
-        const headers: [string, string][] = []
-        response.headers.forEach((value, key) => headers.push([key, value]))
-        return {
-          status: response.status,
-          statusText: response.statusText,
-          headers,
-          body: await response.text(),
+        } catch (error) {
+          await bodies.cancel(requestId)
+          throw error
         }
       },
     },
@@ -369,19 +486,45 @@ export async function executeToolInWorkerSandbox(
   if (shouldExecuteToolInMainThread()) return await executeToolInMainThread(code, args, sourceURL)
 
   const { toolId } = args.context
+  const moduleId = `${toolId}:toolContext-v2`
+  const bodies = createFetchBodyRegistry()
   const sandbox = await createExecutableSandbox({
     id: toolId,
-    reuse: { mode: 'immutable', contentId: toolId },
+    reuse: { mode: 'immutable', contentId: moduleId },
   })
-  await sandbox.installModule(toolId, buildToolSandboxCode(code), sourceURL)
+  await sandbox.installModule(moduleId, buildToolSandboxCode(code), sourceURL)
   const capability = await serveFrpSandboxCapability({
     sandbox,
     protocol: toolContextProtocol,
-    handlers: buildContextHandlers(args.context),
+    handlers: buildContextHandlers(args.context, bodies),
     signal: stopSignal,
   })
+  const unsubscribe = capability.port.receive(async (message) => {
+    if (message.type === 'fetchBodyReadRequest') {
+      try {
+        const result = await bodies.read(message.bodyId)
+        capability.port.send({
+          type: 'fetchBodyReadResponse',
+          requestId: message.requestId,
+          result,
+        })
+      } catch (error) {
+        capability.port.send({
+          type: 'fetchBodyReadResponse',
+          requestId: message.requestId,
+          error: {
+            name: error instanceof Error ? error.name : 'Error',
+            message: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    } else if (message.type === 'fetchBodyCancelRequest') {
+      await bodies.cancel(message.bodyId)
+      capability.port.send({ type: 'fetchBodyCancelResponse', requestId: message.requestId })
+    }
+  })
   try {
-    return await sandbox.executeModule(toolId, [args.params, { toolId }], {
+    return await sandbox.executeModule(moduleId, [args.params, { toolId }], {
       signal: stopSignal,
       sourceURL,
       channel: capability.channel,
@@ -391,6 +534,8 @@ export async function executeToolInWorkerSandbox(
       maxExecutionMs: 5 * 60_000,
     })
   } finally {
+    unsubscribe()
+    await bodies.destroy()
     capability.destroy()
   }
 }

@@ -7,6 +7,13 @@ import {
 import { executePythonScript } from '../tools/executePython'
 import { executeJavaScript } from '../tools/executeJavaScript'
 import { createSubtasksResult } from '../types/toolApi'
+import {
+  callToolOverRpc,
+  createExternalToolContext,
+  registerToolRpcExecutor,
+} from '../core/toolRpc'
+import { createDuplexChannel } from '@taskyon/common/modules/frpBus'
+import type { TaskyonMessage } from '../api/taskyonProtocol'
 import { executeToolInWorkerSandbox } from '../utils/executeToolInWorkerSandbox'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -337,13 +344,14 @@ export async function tool_security_contractsMediatedFetchTimesOut() {
     timeoutMs: 20,
   })
 
+  let failure = ''
   await mediatedFetch('https://gitlab.com/api/v4/user').then(
     () => {
       throw new Error('A stalled sandbox request unexpectedly completed')
     },
-    () => undefined,
+    error => { failure = error instanceof Error ? error.message : String(error) },
   )
-  assert(hostRequestAborted, 'The fetch timeout must abort the host request')
+  assert(hostRequestAborted, `The fetch timeout must abort the host request: ${failure}`)
 }
 
 tool_security_contractsMediatedFetchTimesOut.description =
@@ -697,3 +705,160 @@ response_indexed_db_type = response.js_response.constructor.constructor('return 
 tool_security_contractsPythonUsesReusableBrowserSandbox.description =
   'Browser Python runs in reusable Pyodide with a restricted JavaScript global scope.'
 tool_security_contractsPythonUsesReusableBrowserSandbox.timeoutMs = 120_000
+
+export const testCustomStringToolUsesMediatedGlobalFetch = async () => {
+  const { x, y } = createDuplexChannel<TaskyonMessage, TaskyonMessage>()
+  const requests: string[] = []
+  let fetchEnabled = true
+  const executor = registerToolRpcExecutor({
+    port: y,
+    getTool: (name) => ({
+      name,
+      description: 'Synthetic user-authored string tool',
+      parameters: { type: 'object' },
+      code: `async () => {
+        try { Object.defineProperty(globalThis, 'fetch', { value: () => 'bypass' }); }
+        catch {}
+        return await (await fetch('https://example.test/custom')).text();
+      }`,
+    }),
+    createContext: (_call, signal) =>
+      createExternalToolContext(
+        signal,
+        fetchEnabled
+          ? {
+              fetch: (input) => {
+                requests.push(input instanceof Request ? input.url : String(input))
+                return Promise.resolve(new Response('mediated custom tool'))
+              },
+            }
+          : undefined,
+      ),
+  })
+  try {
+    const result = await callToolOverRpc({ name: 'customStringTool', arguments: {} }, x)
+    assert(result === 'mediated custom tool', 'Custom tool must use mediated global fetch')
+    assert(requests.length === 1, 'Custom tool must reach the supplied host capability once')
+    fetchEnabled = false
+    let denied = false
+    try {
+      await callToolOverRpc({ name: 'customStringTool', arguments: {} }, x)
+    } catch {
+      denied = true
+    }
+    assert(
+      denied && requests.length === 1,
+      'Reused tool sandbox must not retain the previous invocation fetch capability',
+    )
+  } finally {
+    executor.destroy()
+  }
+}
+
+export const testUnconfiguredSandboxHasNoAmbientNetwork = async () => {
+  const result = await executeInWorkerSandbox({
+    id: 'synthetic-offline-sandbox',
+    code: `() => ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource']
+      .every(name => typeof globalThis[name] === 'undefined')`,
+    stopSignal: new AbortController().signal,
+    reuse: { mode: 'disposable' },
+  })
+  assert(result === true, 'Generic sandbox must start without ambient network APIs')
+}
+
+export const testSandboxFetchStreamsBinaryAndCancels = async () => {
+  let reads = 0
+  let cancelled = false
+  const signal = new AbortController().signal
+  const context = createExternalToolContext(signal, {
+    fetch: () =>
+      Promise.resolve().then(
+        () =>
+          new Response(
+            new ReadableStream(
+              {
+                pull(controller) {
+                  reads++
+                  controller.enqueue(new Uint8Array(128 * 1024).fill(255))
+                },
+                cancel() {
+                  cancelled = true
+                },
+              },
+              { highWaterMark: 0 },
+            ),
+          ),
+      ),
+  })
+  const result = await executeToolInWorkerSandbox(
+    `async (_, context) => {
+    const response = await fetch('https://example.test/binary');
+    if (!response.body || typeof response.body.getReader !== 'function') throw new Error('Missing streaming body');
+    const reader = response.body.getReader();
+    const chunk = await reader.read();
+    if (chunk.value.length > 65536 || chunk.value[0] !== 255) throw new Error('Invalid binary stream chunk');
+    const scope = reader.read.constructor.constructor('return typeof process')();
+    if (scope !== 'undefined') throw new Error('Stream reader escaped sandbox');
+    await reader.cancel();
+    return chunk.value.length;
+  }`,
+    { params: {}, context },
+    'synthetic-stream.js',
+    signal,
+  )
+  if (result !== 65536 || reads !== 1 || !cancelled)
+    throw new Error(
+      `Sandbox stream result=${String(result)}, reads=${reads}, cancelled=${cancelled}`,
+    )
+}
+
+export const testSandboxFetchCancelsWhileWaitingForHeaders = async () => {
+  let aborted = false
+  const signal = new AbortController().signal
+  const context = {
+    ...createExternalToolContext(signal),
+    toolId: 'synthetic-stream-header-cancel',
+    fetch: (_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          'abort',
+          () => {
+            aborted = true
+            reject(new Error('synthetic abort'))
+          },
+          { once: true },
+        )
+      }),
+  }
+  const result = await executeToolInWorkerSandbox(
+    `async () => {
+    const controller = new AbortController();
+    const response = fetch('https://example.test/headers',{ signal: controller.signal });
+    setTimeout(() => controller.abort(),20);
+    try { await response; throw new Error('Fetch did not abort'); }
+    catch (error) { return error.name; }
+  }`,
+    { params: {}, context },
+    'synthetic-header-cancel.js',
+    signal,
+  )
+  if (result !== 'AbortError' || !aborted)
+    throw new Error('Header wait cancellation did not reach the host')
+}
+
+export const testSandboxFetchPreservesUtf8Text = async () => {
+  const signal = new AbortController().signal
+  const expected = 'synthetic € 🎉'
+  const context = {
+    ...createExternalToolContext(signal),
+    toolId: 'synthetic-stream-utf8',
+    fetch: () => Promise.resolve(new Response(expected)),
+  }
+  const result = await executeToolInWorkerSandbox(
+    `async () => (await fetch('https://example.test/text')).text()`,
+    { params: {}, context },
+    'synthetic-utf8.js',
+    signal,
+  )
+  if (result !== expected) throw new Error('Sandbox fetch corrupted UTF-8 text')
+}

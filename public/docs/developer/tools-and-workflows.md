@@ -235,6 +235,56 @@ treat it as a universal denial list without checking the active mode.
 Return clear errors with enough context for an entry node or reducer to decide whether to retry,
 request clarification, choose another tool, or stop.
 
+## Tool network access
+
+Every tool defined with a `code` string uses the shared tool sandbox adapter. This includes
+user-installed and AI-generated tools, not just `executeJavaScript`. The adapter installs a
+non-replaceable global `fetch` that calls the same FRP `toolContext.fetch` capability as
+`context.fetch`. No extra network opt-in is required from the tool author. Generic executable
+sandboxes start with `fetch`, XHR, WebSocket, and EventSource unavailable; they do not inherit host
+network access.
+
+Trusted native functions execute in the host and must use their invocation's `context.fetch` for
+ordinary tool HTTP requests. Storage downloads, CLI file downloads, GitHub/GitLab tool API and
+OAuth requests, and map-tool Overpass requests use this path and fail closed without it. Browser
+UI tools receive the browser's authorized transport; CLI native tools receive the same capability
+policy as sandboxed code. CLI permissions use the current registered immutable tool revision;
+unpinned or stale calls cannot authorize network access. Noninteractive workflow hosts deny
+network access unless the caller supplies an authorization callback explicitly. The CLI
+diagnostics runner supplies a public-read grant only with `--online`; write requests and private
+targets remain denied.
+
+The shared mediator returns headers immediately and preserves a pull-driven response body. It
+has no implicit response-size cap or total transfer deadline. `sandboxFetchIdleTimeoutMs` defaults
+to 30000 milliseconds and is configurable in Sandbox network settings or the CLI persisted config.
+The timer runs while waiting for headers or a nonempty network chunk, and pauses while the caller
+processes or saves data. Explicit mediator size limits and absolute deadlines remain available;
+`downloadFile.timeoutMs` is an optional absolute deadline.
+
+The tool-context v2 FRP capability returns an opaque body ID and uses correlated body read/cancel
+messages. Each read returns at most 64 KiB as JSON-safe byte arrays, with one outstanding read per
+body. Cancelling while waiting for headers uses the existing fetch request ID. EOF, errors, tool
+cancellation and disposal release body handles; reads are not retried after ambiguous transport
+failure. Old sandbox adapter modules are invalidated by their protocol version. Node response
+methods are created inside the sandbox realm, so host stream constructors are not exposed.
+`text()`, `json()` and `arrayBuffer()` explicitly collect bytes; `body.getReader()` streams them.
+
+Storage downloads use existing staged blob commands with awaited chunks of at most 1 MiB. PDF
+validation checks the first five bytes, including signatures split across network chunks. Commit
+publishes only complete data; failure cancels the response and aborts staging. PgLite uses
+PostgreSQL Large Objects; SQLite and IndexedDB use chunk rows; OPFS uses chunk files and generation
+manifests. Node files retain in-place staged writes and publish through atomic symlink replacement,
+which requires filesystem symlink support. Committed legacy objects remain readable. Legacy
+unfinished OPFS/Node staging files did not record object IDs and must be restarted.
+
+Taskyon-owned fetch caching collects only as the consumer pulls and stops collecting at its entry
+budget (default 16 MiB; persistent total 64 MiB). It publishes only at EOF and skips oversized,
+cancelled and failed transfers. Downloads use `cache: 'no-store'` to skip this cache. This does not
+change browser HTTP caching or external proxy caching. Redirect destinations are not followed automatically. Independent native functions can
+still misuse host APIs, and Bash/native Python subprocess networking is governed by process
+containment, not a JavaScript `fetch` override. Provider transports and HTML widget resource
+loading have separate boundaries; this does not establish a firewall for the entire application.
+
 ## Trust and dependencies
 
 Tool code runs with the capabilities of its runtime unless an external sandbox narrows them.
@@ -259,3 +309,18 @@ The current peer advertises its FRP services, streams, and registered tools at
 [`/resources/peers/local/api`](/resources/peers/local/api). This runtime OpenAPI document is the
 tool and protocol reference; it changes when the registered capabilities change. TypeScript SDK
 interfaces remain owned by the exported package source.
+
+## Public web reading and search
+
+`webReader` reads the requested HTTP or HTTPS URL through the tool's mediated fetch capability.
+The host enforces authorization and chooses its configured transport: browser direct fetch, WSS,
+a configured proxy, or native HTTP for Tauri's direct route. The tool does not call an external
+reader service. HTML and text responses retain their original content; PDF responses are checked
+for the `%PDF-` signature and return metadata. Use `storage` download/read for stored document
+content and extraction.
+
+Web search uses the selected model provider's search capability. Providers without supported
+search fail explicitly when search is enabled; Taskyon no longer registers a Jina-backed search
+fallback. Existing custom profiles referencing `jinaMarkdownReader` or `tauriHttpWebReader` should
+select `webReader` instead. Previously persisted tool versions and user-installed tools are not
+rewritten by removing the shipped integration.

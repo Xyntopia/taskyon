@@ -58,6 +58,7 @@ import {
 import type { ChatCompletionProviderSettings, ChatCompletionStreamEvent } from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
 import {
+  createMediatedFetch,
   isPrivateSandboxFetchUrl,
   type FetchWithPolicy,
   type SandboxFetchTransport,
@@ -564,15 +565,13 @@ export function defineTyGuiTools(
 }
 
 const getBrowserUnavailableToolNames = () =>
-  new Set(
-    isTauri()
-      ? []
-      : ['tauriBashTool', 'tauriExploreWorkspace', 'tauriHttpWebReader', 'tauriPatchWorkspace'],
-  )
+  new Set(isTauri() ? [] : ['tauriBashTool', 'tauriExploreWorkspace', 'tauriPatchWorkspace'])
 
 export function createTrustedUiToolContext(
   ty: Taskyon,
   taskyonClient: TaskyonClient,
+  fetchWithPolicy: FetchWithPolicy,
+  idleTimeoutMs?: () => number,
 ): ToolRpcCreateContext {
   return async (call, stopSignal) => {
     const resolved = await taskyonClient.tools.resolve({
@@ -607,6 +606,17 @@ export function createTrustedUiToolContext(
       stopSignal,
       toolId: toolSecretId,
       requestPopup: ({ target }) => authorizeBrowserPopup({ tool: capabilityOwner, target }),
+      fetch: createMediatedFetch({
+        idleTimeoutMs: idleTimeoutMs?.(),
+        signal: stopSignal,
+        authorize: (capability) =>
+          authorizeBrowserSandboxFetch({
+            tool: resolved.identity,
+            capability,
+          }),
+        fetchWithPolicy,
+        allowPrivateTargets: true,
+      }),
     }
   }
 }
@@ -1630,11 +1640,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     )
   }
   const createBrowserToolSetup = (storageClient: TaskyonStorageClient) => {
-    const fetchWithPolicy = createBrowserFetchWithPolicy(storageClient)
     return createDefaultTaskyonToolSetup({
       unavailableToolNames: getBrowserUnavailableToolNames(),
       storageClient,
-      storageDownload: (input, init) => fetchWithPolicy(input, init),
       workspaceOperations: createStorageWorkspaceOperations(storageClient, 'workspace-files/v1'),
       chatCompletionFetch: providerChatFetch,
     })
@@ -1652,6 +1660,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     authorizeSandboxFetch: authorizeBrowserSandboxFetch,
     createFetchWithPolicy: createBrowserFetchWithPolicy,
     fetchPolicy: { policy: 'default' },
+    sandboxFetchIdleTimeoutMs: () => stateRefs.appConfiguration.sandboxFetchIdleTimeoutMs,
     allowPrivateSandboxFetch: true,
     authorizePopup: authorizeBrowserPopup,
     storageNamespacePrefix,
@@ -1769,7 +1778,12 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
         ...defineTyGuiTools(stateRefs, ty, client, documentationBases),
         ...extraTools,
       ],
-      createContext: createTrustedUiToolContext(ty, client),
+      createContext: createTrustedUiToolContext(
+        ty,
+        client,
+        storageDownload,
+        () => stateRefs.appConfiguration.sandboxFetchIdleTimeoutMs,
+      ),
     })
   }
   const uiToolRpcHost = taskyon.then(async (ty) => {

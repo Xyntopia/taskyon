@@ -17,6 +17,7 @@ export type TaskyonBrowserWorkerInitMessage = {
   toolchainConfig?: Record<string, FunctionArguments>
   providerTransport?: TaskyonBrowserProviderTransport
   directFallbackPort?: MessagePort
+  sandboxFetchIdleTimeoutMs?: number
   hostFetchPort?: MessagePort
   storageNamespacePrefix: string
   storageSessionId?: string

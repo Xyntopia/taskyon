@@ -1,4 +1,5 @@
 import type { JSONSchema7 } from 'json-schema'
+import { writeBlobStream } from '../api/storageStreaming'
 import type { TaskyonStorageClient } from '../api/storageProtocol'
 import { createTool, type toolContext } from '../types/toolApi'
 import type { TaskNode } from '../types/taskNode'
@@ -65,17 +66,15 @@ const resolveStorageNamespace = (namespace: string, artifactRoot?: string) => {
   return namespace === 'tool-files' && root ? root : namespace
 }
 
-export const createStorageTool = (
-  storageClient: TaskyonStorageClient,
-  download: typeof fetch = globalThis.fetch,
-) =>
+export const createStorageTool = (storageClient: TaskyonStorageClient) =>
   createTool({
     name: 'storage',
     renderOptions: { hideVector: true, hideToolSearch: false },
     description: 'Save, download, read, list, delete, or check persistent binary Taskyon objects.',
     longDescription: `Store persistent binary objects through Taskyon's location-transparent storage service.
 Objects are addressed by a namespace and an opaque object ID. The same tool works with local,
-worker, remote, object-store, and future peer-backed storage providers.`,
+worker, remote, object-store, and future peer-backed storage providers. Downloads require the
+invocation fetch capability and host network permission; host response and redirect restrictions apply.`,
     parameters: {
       type: 'object',
       properties: {
@@ -166,26 +165,38 @@ worker, remote, object-store, and future peer-backed storage providers.`,
         case 'download': {
           if (!url) throw new Error('Url is required for download action')
           const parsedUrl = parseHttpUrl(url)
+          if (!context?.fetch) throw new Error('Storage download fetch capability is unavailable')
           await waitForPoliteHttpTurn(parsedUrl, parsePoliteHttpPolicy(httpPolicy))
-          const response = await download(parsedUrl)
+          const response = await context.fetch(
+            parsedUrl,
+            { cache: 'no-store' },
+            { preferProxy: true },
+          )
           if (!response.ok) {
+            await response.body?.cancel().catch(() => undefined)
             throw new Error(`Download failed with HTTP ${response.status}: ${response.statusText}`)
           }
-          const data = new Uint8Array(await response.arrayBuffer())
+          if (!response.body) throw new Error('Download response has no readable body')
           const contentType = response.headers.get('content-type') ?? mimeType
           const objectId = storageObjectId || objectIdFromUrl(url)
-          if (
-            shouldValidatePdf({ expectedFileType, id: objectId, url }) &&
-            !looksLikePdfBytes(data)
-          ) {
-            throw new Error(`Download did not return PDF bytes. Content-Type was ${contentType}`)
-          }
-          const metadata = await storageClient.setBlob({
-            namespace: storageNamespace,
-            id: objectId,
-            data,
-            contentType,
-          })
+          const validatePrefix = shouldValidatePdf({ expectedFileType, id: objectId, url })
+            ? (prefix: Uint8Array) => {
+                if (!looksLikePdfBytes(prefix))
+                  throw new Error(
+                    `Download did not return PDF bytes. Content-Type was ${contentType}`,
+                  )
+              }
+            : undefined
+          const metadata = await writeBlobStream(
+            storageClient,
+            {
+              namespace: storageNamespace,
+              id: objectId,
+              contentType,
+            },
+            response.body,
+            { ...(validatePrefix ? { validatePrefix } : {}), signal: context.stopSignal },
+          )
           result = {
             success: true,
             namespace: storageNamespace,
