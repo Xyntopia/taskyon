@@ -1,20 +1,21 @@
 import { processTasksDetailed } from '../api'
 import { tyCore } from '../core/init'
 import type { TyTaskStreamData } from '../core/taskWorker'
-import { registerToolRpcTools } from '../core/toolRpc'
-import type { TaskyonStorageClient } from '../api/storageProtocol'
+import { createExternalToolContext, registerToolRpcTools } from '../core/toolRpc'
 import { createSubtasksResult, createTool, toolCall } from '../types/toolApi'
 import { createStorageTool } from '../tools/fileTools'
 import { sleep } from '../utils/asyncUtils'
-import { createPortableTestStorage } from '../testSupport/portableTestStorage'
+import {
+  createPortableBlobTestStorage,
+  createPortableTestStorage,
+} from '../testSupport/portableTestStorage'
 import { createInMemoryDatabasePool } from '../testSupport/inMemoryDatabasePool'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-const createTaskWorkerTestRuntime = async () => {
-  const storage = createPortableTestStorage()
+const createTaskWorkerTestRuntime = async (storage = createPortableTestStorage()) => {
   const databases = createInMemoryDatabasePool()
   try {
     const ty = await tyCore(
@@ -35,12 +36,12 @@ const createTaskWorkerTestRuntime = async () => {
       ty,
       storage,
       cleanup: async () => {
-        storage.destroy()
+        await storage.destroy()
         await databases.closeDatabases()
       },
     }
   } catch (error) {
-    storage.destroy()
+    await storage.destroy()
     await databases.closeDatabases()
     throw error
   }
@@ -102,21 +103,10 @@ const assertEventOrder = (
 }
 
 export const testStorageResultContinuesThroughConfiguredEntryNode = async () => {
-  const { ty, cleanup } = await createTaskWorkerTestRuntime()
-  const storageClient = {
-    setBlob: ({ data }: { data: Uint8Array }) =>
-      Promise.resolve({
-        namespace: 'diagnostics',
-        id: 'document.pdf',
-        size: data.byteLength,
-        contentType: 'application/pdf',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }),
-  } as unknown as TaskyonStorageClient
-  const storageTool = createStorageTool(storageClient, () =>
-    Promise.resolve(new Response('%PDF-test', { headers: { 'content-type': 'application/pdf' } })),
+  const { ty, storage, cleanup } = await createTaskWorkerTestRuntime(
+    await createPortableBlobTestStorage(),
   )
+  const storageTool = createStorageTool(storage.storageClient)
   let entryCalls = 0
   const entryNode = createTool({
     name: 'entryNode',
@@ -137,6 +127,15 @@ export const testStorageResultContinuesThroughConfiguredEntryNode = async () => 
   const registration = await registerToolRpcTools({
     port: ty.port,
     tools: [storageTool, entryNode],
+    createContext: (_call, signal) =>
+      createExternalToolContext(signal, {
+        fetch: () =>
+          Promise.resolve(
+            new Response('%PDF-test', {
+              headers: { 'content-type': 'application/pdf' },
+            }),
+          ),
+      }),
   })
 
   try {

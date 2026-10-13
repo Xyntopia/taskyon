@@ -10,8 +10,11 @@ import { processTasksDetailed } from '../../api'
 import { tyCore } from '../../core/init'
 import { createDefaultTaskyonToolSetup } from '../../tools'
 import { createInMemoryDatabasePool } from '../../testSupport/inMemoryDatabasePool'
+import { createPortableBlobTestStorage } from '../../testSupport/portableTestStorage'
+import { createChatCompletionTool } from '../../tools/chatCompletionTool'
+import { ragSearchTool } from '../../tools/ragTool'
 import { createStorageTool } from '../../tools/fileTools'
-import { readPublicWebPageAsMarkdown } from '../../tools/helperCollection'
+import { readPublicWebResource } from '../../tools/helperCollection'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { createStorageClient, taskyonStorageProtocol } from '../../api/storageProtocol'
 import type { TaskyonStorageClient } from '../../api/storageProtocol'
@@ -33,7 +36,7 @@ import {
   toolCall,
   type InternalTool,
 } from '../../types/toolApi'
-import { registerToolRpcTools } from '../../core/toolRpc'
+import { createExternalToolContext, registerToolRpcTools } from '../../core/toolRpc'
 import { FunctionCall } from '../../types/tools'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -104,8 +107,8 @@ const downloadFileStub = createTool({
   function: () => ({ ok: true }),
 })
 
-const jinaMarkdownReaderStub = createTool({
-  name: 'jinaMarkdownReader',
+const webReaderStub = createTool({
+  name: 'webReader',
   description: 'Test stub for page validation.',
   parameters: {
     type: 'object',
@@ -275,29 +278,63 @@ export const testWebResearchRejectsBrokenArtifactsBeforeStorage = async () => {
   return { success: true }
 }
 
-export const testPublicWebReaderFallsBackToDirectFetch = async () => {
+export const testPublicWebReaderUsesOnlyMediatedSourceFetch = async () => {
   const requestedUrls: string[] = []
-  const result = await readPublicWebPageAsMarkdown(
+  const result = await readPublicWebResource(
     'https://example.test/source',
     undefined,
-    (url) => {
+    (url, _init, options) => {
       requestedUrls.push(requestUrl(url))
+      assert(options?.preferProxy === true, 'Expected host proxy preference')
       return Promise.resolve(
-        requestedUrls.length === 1
-          ? new Response('Unauthorized', { status: 401, statusText: 'Unauthorized' })
-          : new Response('Official source page evidence', {
-              status: 200,
-              headers: { 'content-type': 'text/html' },
-            }),
+        new Response('<h1>Official source</h1>', {
+          headers: { 'content-type': 'text/html' },
+        }),
       )
     },
   )
-  assert(
-    requestedUrls.join('|') ===
-      'https://r.jina.ai/https://example.test/source|https://example.test/source',
-    'Expected Jina first and a direct source-page fallback second',
+  assert(requestedUrls.join('|') === 'https://example.test/source', 'Expected only the source URL')
+  assert(result === '<h1>Official source</h1>', 'Expected original source content')
+  return { success: true }
+}
+
+export const testPublicWebReaderChecksPdfBytesAndHttpErrors = async () => {
+  const valid = await readPublicWebResource('https://example.test/source.pdf', undefined, () =>
+    Promise.resolve(
+      new Response('%PDF-1.7 synthetic fixture', {
+        headers: { 'content-type': 'application/pdf' },
+      }),
+    ),
   )
-  assert(result === 'Official source page evidence', 'Expected direct fallback response text')
+  assert(valid.includes('Header: %PDF-'), 'Expected PDF preflight evidence')
+  for (const response of [
+    new Response('Not a PDF', { headers: { 'content-type': 'application/pdf' } }),
+    new Response('Unauthorized', { status: 401, statusText: 'Unauthorized' }),
+  ]) {
+    let failure = ''
+    try {
+      await readPublicWebResource('https://example.test/source.pdf', undefined, () =>
+        Promise.resolve(response),
+      )
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error)
+    }
+    assert(
+      failure.includes(response.ok ? 'valid PDF bytes' : '401'),
+      'Expected explicit source failure',
+    )
+  }
+  return { success: true }
+}
+
+export const testDefaultWebToolsHaveNoJinaDependency = () => {
+  const names = createDefaultTaskyonToolSetup({ pythonTool: null }).baseTools.map(
+    (tool) => tool.name,
+  )
+  assert(names.includes('webReader'), 'Expected the shared mediated web reader')
+  assert(!names.some((name) => /jina/i.test(name)), 'Expected no Jina reader or search alias')
+  assert(!names.includes('webSearch'), 'Expected no Jina-backed fallback search tool')
+  assert(!names.includes('tauriHttpWebReader'), 'Expected one portable web reader')
   return { success: true }
 }
 
@@ -332,7 +369,7 @@ export const testWebResearchCandidateValidatorUsesMediatedFetch = async () => {
     },
   )
   assert(
-    requestedUrls.join('|') === 'https://r.jina.ai/https://official.example/rules',
+    requestedUrls.join('|') === 'https://official.example/rules',
     'Expected candidate validation to use the mediated tool fetch capability',
   )
   assert(
@@ -991,7 +1028,7 @@ export const testWebResearchPlannerProcessTasksKeepsSaveTool = async () => {
   )
   const toolRpcExecutor = await registerToolRpcTools({
     port: ty.port,
-    tools: [updateFilesStub, storageStub, downloadFileStub, bashStub, jinaMarkdownReaderStub],
+    tools: [updateFilesStub, storageStub, downloadFileStub, bashStub, webReaderStub],
   })
 
   try {
@@ -1153,43 +1190,54 @@ export const testStorageToolSupportsBrowserDownloads = () => {
   return { success: true }
 }
 
-export const testStorageToolUsesInjectedDownloadTransport = async () => {
+export const testStorageToolUsesInvocationFetch = async () => {
   let fetchedUrl = ''
-  let storedData: Uint8Array | undefined
-  const storageClient = {
-    setBlob: ({ data }: { data: Uint8Array }) => {
-      storedData = data
-      return Promise.resolve({ size: data.byteLength })
+  const fixture = await createPortableBlobTestStorage()
+  const storage = createStorageTool(fixture.storageClient)
+  const context = createExternalToolContext(new AbortController().signal, {
+    fetch: (input) => {
+      fetchedUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      return Promise.resolve(
+        new Response('%PDF-test', { headers: { 'content-type': 'application/pdf' } }),
+      )
     },
-  } as unknown as TaskyonStorageClient
-  const storage = createStorageTool(storageClient, (input) => {
-    fetchedUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    return Promise.resolve(
-      new Response('%PDF-test', { headers: { 'content-type': 'application/pdf' } }),
+  })
+
+  try {
+    const result = await storage.function(
+      {
+        action: 'download',
+        namespace: 'diagnostics',
+        id: 'document.pdf',
+        url: 'https://example.test/document.pdf',
+        expectedFileType: 'pdf',
+      },
+      context,
     )
-  })
 
-  const result = await storage.function?.({
-    action: 'download',
-    namespace: 'diagnostics',
-    id: 'document.pdf',
-    url: 'https://example.test/document.pdf',
-    expectedFileType: 'pdf',
-  })
-
-  assert(fetchedUrl === 'https://example.test/document.pdf', 'Expected injected download transport')
-  assert(storedData && new TextDecoder().decode(storedData) === '%PDF-test', 'Expected PDF bytes')
-  assert(
-    typeof result === 'object' &&
-      result !== null &&
-      'metadata' in result &&
-      typeof result.metadata === 'object' &&
-      result.metadata !== null &&
-      'size' in result.metadata &&
-      result.metadata.size === 9,
-    'Expected storage to return the saved object metadata directly',
-  )
-  return { fetchedUrl }
+    assert(
+      fetchedUrl === 'https://example.test/document.pdf',
+      'Expected invocation fetch capability',
+    )
+    const stored = await fixture.storageClient.getBlob({
+      namespace: 'diagnostics',
+      id: 'document.pdf',
+    })
+    assert(stored && new TextDecoder().decode(stored.data) === '%PDF-test', 'Expected PDF bytes')
+    assert(
+      typeof result === 'object' &&
+        result !== null &&
+        'metadata' in result &&
+        typeof result.metadata === 'object' &&
+        result.metadata !== null &&
+        'size' in result.metadata &&
+        result.metadata.size === 9,
+      'Expected storage to return the saved object metadata directly',
+    )
+    return { fetchedUrl }
+  } finally {
+    await fixture.destroy()
+  }
 }
 
 export const testStorageToolReadReportsSuccessfulDownloadUrl = async () => {
@@ -1234,34 +1282,44 @@ export const testStorageToolReadReportsSuccessfulDownloadUrl = async () => {
 }
 
 export const testStorageToolInfersPdfValidationFromObjectId = async () => {
-  const storage = createStorageTool(
-    {
-      setBlob: () => Promise.resolve({ size: 1 }),
-    } as unknown as TaskyonStorageClient,
-    () =>
+  const fixture = await createPortableBlobTestStorage()
+  const storage = createStorageTool(fixture.storageClient)
+  const context = createExternalToolContext(new AbortController().signal, {
+    fetch: () =>
       Promise.resolve(
         new Response('<html>blocked</html>', {
           headers: { 'content-type': 'text/html' },
         }),
       ),
-  )
+  })
   let message = ''
   try {
-    await storage.function?.({
-      action: 'download',
-      namespace: 'research',
-      id: 'document.pdf',
-      url: 'https://example.test/document.pdf',
-    })
-  } catch (error) {
-    message = error instanceof Error ? error.message : String(error)
-  }
+    try {
+      await storage.function(
+        {
+          action: 'download',
+          namespace: 'research',
+          id: 'document.pdf',
+          url: 'https://example.test/document.pdf',
+        },
+        context,
+      )
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
 
-  assert(
-    message.includes('did not return PDF bytes'),
-    `Expected PDF object IDs to trigger byte validation, got ${message || '(no error)'}`,
-  )
-  return { success: true }
+    assert(
+      message.includes('did not return PDF bytes'),
+      `Expected PDF object IDs to trigger byte validation, got ${message || '(no error)'}`,
+    )
+    assert(
+      (await fixture.storageClient.getBlob({ namespace: 'research', id: 'document.pdf' })) === null,
+      'Rejected PDF bytes must not publish a blob',
+    )
+    return { success: true }
+  } finally {
+    await fixture.destroy()
+  }
 }
 
 export const testStorageToolUsesArtifactRootWhenNamespaceIsOmitted = async () => {
@@ -1349,9 +1407,118 @@ testWebResearchPlannerIgnoresLegacyBrowserRouting.description =
   'Accepts legacy browser-routing arguments without leaking runtime-specific routing into the explicit research pipeline.'
 testStorageToolSupportsBrowserDownloads.description =
   'Exposes a browser storage download action so research can save accessible URLs without local filesystem access.'
-testStorageToolUsesInjectedDownloadTransport.description =
-  'Uses the injected browser download transport and returns storage metadata to the task worker for normal entry-node continuation.'
+testStorageToolUsesInvocationFetch.description =
+  'Uses the invocation fetch capability and returns storage metadata to the task worker for normal entry-node continuation.'
 testStorageToolInfersPdfValidationFromObjectId.description =
   'Infers PDF byte validation from a .pdf storage object ID even when the model omits expectedFileType.'
 testLocalBrowsingToolsExposePoliteHttpPolicy.description =
   'Exposes a default polite HTTP policy on low-level local browsing tools.'
+
+export const testWebSearchWithoutProviderSupportFailsExplicitly = async () => {
+  const unavailable = () => {
+    throw new Error('Unexpected capability access')
+  }
+  const { chatCompletion } = createChatCompletionTool(
+    {
+      provider: 'local',
+      name: 'local',
+      baseURL: 'https://example.test',
+      streamSupport: true,
+      routes: { chatCompletion: '/chat/completions', models: '/models' },
+    },
+    {
+      getTaskChain: unavailable,
+      getTaskChainSelection: unavailable,
+      getTask: unavailable,
+      listToolDefinitions: unavailable,
+    },
+  )
+  let failure = ''
+  try {
+    await chatCompletion.function(
+      { model: 'synthetic', websearch: { enabled: true, mode: 'required' } },
+      {
+        getExecutionTaskChain: () => Promise.resolve([]),
+        createSubtasksResult,
+        getSecret: unavailable,
+        setSecret: unavailable,
+        stopSignal: new AbortController().signal,
+        toolId: 'search-test',
+      },
+    )
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error)
+  }
+  assert(
+    failure.includes('does not support web search'),
+    'Expected provider capability error before requesting secrets',
+  )
+  return { success: true }
+}
+
+export const testRagWebSearchUsesProviderSearch = async () => {
+  assert(ragSearchTool.function, 'Expected RAG implementation')
+  const result = await ragSearchTool.function(
+    { sourceType: 'web', searchText: 'synthetic source' },
+    {
+      getExecutionTaskChain: () => Promise.resolve([]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve(null),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'rag-test',
+    },
+  )
+  assert(
+    result && typeof result === 'object' && 'taskChainList' in result,
+    'Expected delegated search chain',
+  )
+  const chain = result.taskChainList[0]
+  assert(
+    chain?.[0]?.content?.type === 'message' && chain[0].content.data === 'synthetic source',
+    'Expected the supplied search query in model context',
+  )
+  const call = getFunctionCall(chain?.[1])
+  assert(call?.name === 'chatCompletion', 'Expected delegation to chatCompletion')
+  const args = call.arguments
+  assert(
+    args &&
+      typeof args === 'object' &&
+      !Array.isArray(args) &&
+      'websearch' in args &&
+      args.websearch &&
+      typeof args.websearch === 'object' &&
+      !Array.isArray(args.websearch) &&
+      args.websearch.enabled === true &&
+      args.websearch.mode === 'required',
+    'Expected required provider search',
+  )
+  return { success: true }
+}
+
+export const testPublicWebReaderReadsOnlyPdfSignature = async () => {
+  let reads = 0
+  let cancelled = false
+  const result = await readPublicWebResource('https://example.test/synthetic.pdf', undefined, () =>
+    Promise.resolve(
+      new Response(
+        new ReadableStream(
+          {
+            pull(controller) {
+              reads++
+              if (reads > 2) throw new Error('PDF metadata reader downloaded the entire body')
+              controller.enqueue(new TextEncoder().encode(reads === 1 ? '%P' : 'DF-'))
+            },
+            cancel() {
+              cancelled = true
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+        { headers: { 'content-type': 'application/pdf' } },
+      ),
+    ),
+  )
+  if (reads !== 2 || !cancelled || !result.includes('Header: %PDF-'))
+    throw new Error('PDF signature preflight did not cancel its source')
+}

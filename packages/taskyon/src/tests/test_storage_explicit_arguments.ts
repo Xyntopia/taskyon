@@ -79,7 +79,8 @@ export const testStorageDoesNotSubstituteConversationDownloads = async () => {
   const database = await createInMemoryDatabase('storage-download-test')
   const storage = await createStorage(database, ['scratch'])
   const requests: string[] = []
-  const tool = createStorageTool(storage.storageClient, (input) => {
+  const tool = createStorageTool(storage.storageClient)
+  const download = (input: RequestInfo | URL) => {
     const url = input instanceof Request ? input.url : String(input)
     requests.push(url)
     return Promise.resolve(
@@ -87,8 +88,9 @@ export const testStorageDoesNotSubstituteConversationDownloads = async () => {
         ? new Response('', { status: 404 })
         : new Response('%PDF-1.7 unrelated'),
     )
-  })
+  }
   const context = createExternalToolContext(new AbortController().signal, {
+    fetch: download,
     getExecutionTaskChain: () =>
       Promise.resolve([
         {
@@ -121,4 +123,76 @@ export const testStorageDoesNotSubstituteConversationDownloads = async () => {
     storage.destroy()
     await database.close()
   }
+}
+
+export const testStorageDownloadRequiresInvocationFetch = async () => {
+  const database = await createInMemoryDatabase('storage-invocation-fetch-test')
+  const storage = await createStorage(database, ['reports'])
+  const tool = createStorageTool(storage.storageClient)
+  const requests: string[] = []
+  const context = {
+    ...createExternalToolContext(new AbortController().signal),
+    fetch: (input: RequestInfo | URL) => {
+      requests.push(input instanceof Request ? input.url : String(input))
+      return Promise.resolve(new Response('%PDF-synthetic'))
+    },
+  }
+  const args = {
+    action: 'download' as const,
+    namespace: 'reports',
+    id: 'synthetic.pdf',
+    url: 'https://example.test/synthetic.pdf',
+    httpPolicy: { minDelayMs: 0 },
+  }
+  try {
+    await tool.function(args, context)
+    if (requests.length !== 1 || requests[0] !== args.url)
+      throw new Error('Storage bypassed invocation fetch')
+    let message = ''
+    try {
+      await tool.function(args, createExternalToolContext(new AbortController().signal))
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    if (!message.includes('fetch capability'))
+      throw new Error('Storage must fail closed without invocation fetch')
+  } finally {
+    storage.destroy()
+    await database.close()
+  }
+}
+
+export const testStorageDownloadValidatesSplitPdfPrefixBeforePublication = async () => {
+  const database = await createInMemoryDatabase('synthetic-streamed-pdf-test')
+  const storage = await createStorage(database,['reports'])
+  const tool = createStorageTool(storage.storageClient)
+  let valid = true
+  let cancelled = false
+  const context = createExternalToolContext(new AbortController().signal, {
+    fetch: (_input,init) => {
+      if (init?.cache !== 'no-store') throw new Error('Download did not skip Taskyon cache')
+      const chunks = valid ? ['%P','DF-','synthetic'] : ['<h','tml>','synthetic']
+      const response = new Response(new ReadableStream({
+        pull(controller) {
+          const chunk = chunks.shift()
+          if (chunk === undefined) controller.close()
+          else controller.enqueue(new TextEncoder().encode(chunk))
+        },
+        cancel() { cancelled = true },
+      },{ highWaterMark: 0 }))
+      response.arrayBuffer = () => Promise.reject(new Error('Whole-response buffering is forbidden'))
+      return Promise.resolve(response)
+    },
+  })
+  const args = { action: 'download' as const,namespace: 'reports',id: 'synthetic.pdf',url: 'https://example.test/synthetic.pdf',httpPolicy: { minDelayMs: 0 } }
+  try {
+    await tool.function(args,context)
+    valid = false
+    let rejected = false
+    try { await tool.function(args,context) } catch { rejected = true }
+    if (!rejected || !cancelled) throw new Error('Invalid PDF stream was not cancelled')
+    const stored = await storage.storageClient.getBlob({ namespace: 'reports',id: 'synthetic.pdf' })
+    if (!stored || new TextDecoder().decode(stored.data) !== '%PDF-synthetic')
+      throw new Error('Failed PDF download replaced the previous object')
+  } finally { storage.destroy(); await database.close() }
 }

@@ -201,16 +201,14 @@ const createRetrievalRuntime = async (
         toolSetup: createDefaultTaskyonToolSetup({
           pythonTool: null,
           storageClient,
-          ...(storageDownload ? { storageDownload } : {}),
         }),
         authorizeSandboxFetch: ({ tool, capability }) =>
           Promise.resolve(
-            tool.name === 'webResearchCandidateValidator' &&
+            ['webResearchCandidateValidator', 'storage', 'webReader'].includes(tool.name) &&
               capability.access === 'read' &&
-              ['https://r.jina.ai', 'https://www.uscourts.gov', 'https://uscourts.gov'].includes(
-                capability.origin,
-              ),
+              ['https://www.uscourts.gov', 'https://uscourts.gov'].includes(capability.origin),
           ),
+        ...(storageDownload ? { fetchWithPolicy: storageDownload } : {}),
         indexTaskVectors: false,
         taskManagerStorageFactory: storage.taskManagerStorageFactory,
       },
