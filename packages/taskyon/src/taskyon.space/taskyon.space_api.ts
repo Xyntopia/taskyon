@@ -185,12 +185,17 @@ export function createBoundServiceTokenProvider(
   }
 }
 
-export function createTunnelTokenProvider(serviceUrl: string, baseUrl: string, authToken: string) {
+export function createTunnelTokenProvider(
+  serviceUrl: string,
+  baseUrl: string,
+  authToken: string | (() => string | Promise<string>),
+) {
+  const getAuthToken = typeof authToken === 'function' ? authToken : () => authToken
   const getToken = createBoundServiceTokenProvider(
     serviceUrl,
     baseUrl,
     'web_tunnel',
-    () => authToken,
+    getAuthToken,
     'proxy',
   )
   return async (destination: { host: string; port: 80 | 443 }, refreshInstanceKey = false) => {

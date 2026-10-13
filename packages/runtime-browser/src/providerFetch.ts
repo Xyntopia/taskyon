@@ -4,10 +4,7 @@ import {
   type SecureFetchFailurePhase,
   type TunnelTokenProvider,
 } from '@taskyon/secure-tunnel'
-import {
-  createBoundServiceTokenProvider,
-  createTunnelTokenProvider,
-} from '@taskyon/taskyon/taskyon-space-api'
+import { createTunnelTokenProvider } from '@taskyon/taskyon/taskyon-space-api'
 
 export type TaskyonBrowserProviderTransport = {
   kind: 'secure-wss'
@@ -128,12 +125,6 @@ export const createTaskyonProviderFetchWithTokenGetter = (
 ): typeof fetch =>
   createProviderFetch(
     transport,
-    createBoundServiceTokenProvider(
-      transport.tunnelUrl,
-      transport.tokenServiceBaseUrl,
-      'web_tunnel',
-      getAuthToken,
-      'proxy',
-    ),
+    createTunnelTokenProvider(transport.tunnelUrl, transport.tokenServiceBaseUrl, getAuthToken),
     options,
   )

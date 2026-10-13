@@ -40,6 +40,10 @@ const openSocket = async (
 
   let closed = false
   let closeError: Error | undefined
+  let resolveClose: (() => void) | undefined
+  const closeEvent = new Promise<void>((resolve) => {
+    resolveClose = resolve
+  })
   let pending: ((value: Uint8Array | null) => void) | undefined
   const queue: Uint8Array[] = []
   ws.onmessage = (event) => {
@@ -61,17 +65,20 @@ const openSocket = async (
     if (code !== 1000 && !(code === 4500 && reason === 'tcp closed')) {
       closeError = new WsProxyCloseError(code, reason)
     }
+    resolveClose?.()
     pending?.(null)
     pending = undefined
   }
 
   return {
-    write: (data) => {
+    write: async (data) => {
       if (closed || ws.readyState !== 1) {
-        return Promise.reject(closeError ?? new Error('Tunnel connection is closed'))
+        // The socket can leave OPEN before the close event is dispatched; wait for it so the
+        // server's close code and reason are not replaced by the generic fallback.
+        if (!closed) await closeEvent
+        throw closeError ?? new Error('Tunnel connection is closed')
       }
       ws.send(data)
-      return Promise.resolve()
     },
     read: async () => {
       const value = queue.shift()
