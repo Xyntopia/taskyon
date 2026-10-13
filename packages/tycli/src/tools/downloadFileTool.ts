@@ -1,6 +1,6 @@
 import { mkdir, open, rename, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { createTool } from '@taskyon/taskyon/api'
+import { createTool, type toolContext } from '@taskyon/taskyon/api'
 import { resolvePathInsideArtifactRoot, resolveWorkspacePath } from './workspacePaths'
 
 type DownloadFileArgs = {
@@ -35,7 +35,7 @@ export const downloadFileTool = createTool({
   description:
     'Download an accessible URL to a workspace file and verify the saved bytes match the expected file type.',
   longDescription:
-    'Downloads stream to a temporary file inside the workspace and are renamed into place only after size and optional file-signature validation succeed. Recoverable network and validation failures return structured error context without leaving a partial destination file.',
+    'Downloads require the invocation fetch capability and host network permission. Host response-size, timeout, and redirect restrictions also apply. Returned bytes are written to a temporary workspace file and renamed into place only after size and optional file-signature validation succeed. Recoverable failures return structured error context without leaving a partial destination file.',
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -69,34 +69,41 @@ export const downloadFileTool = createTool({
       },
       timeoutMs: {
         type: 'integer',
-        default: 120000,
-        description: 'Download timeout in milliseconds.',
+        minimum: 1,
+        description:
+          'Optional absolute download deadline in milliseconds. Otherwise only the host network inactivity timeout applies.',
       },
     },
   } as const,
-  function: async (args: DownloadFileArgs) => {
+  function: async (args: DownloadFileArgs, context?: toolContext) => {
     const url = args.url?.trim()
     const filePath = args.filePath?.trim()
     if (!url) throw new Error('downloadFile requires a non-empty url.')
     if (!filePath) throw new Error('downloadFile requires a non-empty filePath.')
 
     const controller = new AbortController()
-    const timeout = setTimeout(
-      () => controller.abort('downloadFile timed out'),
-      args.timeoutMs ?? 120000,
-    )
+    const timeout =
+      args.timeoutMs === undefined
+        ? undefined
+        : setTimeout(() => controller.abort('downloadFile timed out'), args.timeoutMs)
     try {
       try {
         const resolvedFilePath = resolvePathInsideArtifactRoot(filePath, args.artifactRoot)
         const fullPath = resolveWorkspacePath(resolvedFilePath)
-        const response = await fetch(url, {
-          signal: controller.signal,
+        if (!context?.fetch) throw new Error('Download fetch capability is unavailable')
+        const response = await context.fetch(url, {
+          signal: AbortSignal.any([
+            controller.signal,
+            ...(context.stopSignal ? [context.stopSignal] : []),
+          ]),
+          cache: 'no-store',
           headers: {
             accept: 'application/pdf,application/octet-stream;q=0.9,*/*;q=0.8',
             'user-agent': 'Taskyon tycli downloadFile/0.1',
           },
         })
         if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined)
           throw new Error(`Download failed with HTTP ${response.status}: ${response.statusText}`)
         }
 
@@ -137,6 +144,9 @@ export const downloadFileTool = createTool({
                 written += result.bytesWritten
               }
             }
+          } catch (error) {
+            await reader.cancel(error).catch(() => undefined)
+            throw error
           } finally {
             reader.releaseLock()
           }

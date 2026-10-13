@@ -1,3 +1,7 @@
+import {
+  createMediatedFetch,
+  type FetchWithPolicy,
+} from '@taskyon/common/modules/webFetching/mediatedFetch'
 import './node-shims'
 import type { SecretStore } from '../../taskyon/src/utils/crudWrapper'
 import { createStepTimer, type StepTimingEvent } from '@taskyon/common/modules/stepTiming'
@@ -269,6 +273,9 @@ export function createCliWorkflowHost(options: {
   nativePythonExecutable: string | null
   getReadline: () => ReturnType<typeof createInterface> | undefined
   authorizePython: () => Promise<boolean>
+  authorizeFetch?: ReturnType<typeof createCapabilityPolicy>['authorize']
+  fetchWithPolicy?: FetchWithPolicy
+  sandboxFetchIdleTimeoutMs?: number
 }) {
   const { host, workspaceOperations, explorationContextFiles, nativePythonExecutable } = options
   const unavailableToolNames = new Set(
@@ -339,7 +346,15 @@ export function createCliWorkflowHost(options: {
       const clientPort = runtime?.clientPort ?? ty.port
       const taskyonApi = runtime?.taskyonApi ?? createCliTaskyonClient(clientPort)
       const tools = runtime?.tools ?? createTools({ taskyon: ty, extraTools })
-      return await registerCliTools(taskyonApi, clientPort, tools, runtime?.timing)
+      return await registerCliTools(
+        taskyonApi,
+        clientPort,
+        tools,
+        options.authorizeFetch,
+        options.fetchWithPolicy,
+        options.sandboxFetchIdleTimeoutMs,
+        runtime?.timing,
+      )
     },
   }
 }
@@ -1324,7 +1339,6 @@ export const DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES = new Set([
   'newWindowOpener',
   'notification',
   'proceduralTreeGenerator',
-  'tauriHttpWebReader',
   'waitForPostMessage',
   'wfcGenerator',
   'windowManager',
@@ -3821,14 +3835,29 @@ async function registerCliTools(
   taskyonApi: ReturnType<typeof createCliTaskyonClient>,
   clientPort: ReturnType<typeof createProtocolPort<typeof taskyonProtocol>>['x'],
   tools: InternalTool[],
+  authorizeFetch: ReturnType<typeof createCapabilityPolicy>['authorize'] | undefined,
+  fetchWithPolicy: FetchWithPolicy | undefined,
+  sandboxFetchIdleTimeoutMs: number | undefined,
   timing?: Pick<Awaited<ReturnType<typeof createCliBootstrap>>, 'timeStartup'>,
 ) {
   const register = () =>
     registerToolRpcTools({
       port: clientPort,
       tools: () => tools,
-      createContext: (call, stopSignal) =>
-        createExternalToolContext(stopSignal, {
+      createContext: async (call, stopSignal) => {
+        const resolved = await taskyonApi.tools.resolve({ name: call.functionName })
+        const identity = resolved?.identity
+        const fetch = createMediatedFetch({
+          idleTimeoutMs: sandboxFetchIdleTimeoutMs,
+          signal: stopSignal,
+          ...(fetchWithPolicy ? { fetchWithPolicy } : {}),
+          authorize: (capability) =>
+            identity && call.toolRevision === identity.revision
+              ? (authorizeFetch?.({ tool: identity, capability }) ?? Promise.resolve(false))
+              : Promise.resolve(false),
+        })
+        return createExternalToolContext(stopSignal, {
+          fetch,
           getExecutionTaskChain: () => {
             if (!call.taskId) {
               throw new Error(
@@ -3840,7 +3869,8 @@ async function registerCliTools(
               selection: { method: 'lineage', includeSubtaskResults: 'terminal-visible' },
             })
           },
-        }),
+        })
+      },
     })
   return timing ? timing.timeStartup('cli.tool-registration', register) : register()
 }
@@ -3885,12 +3915,18 @@ async function createCliEnginePreparation(
   const taskyonRef: { current?: Taskyon } = {}
   const interactiveReadlineRef: { current?: ReturnType<typeof createInterface> } = {}
   const approvalUiRef: { current?: CliInteractiveApprovalUi } = {}
+  const sandboxCapabilityPolicy = createCliSandboxCapabilityPolicy(
+    interactiveReadlineRef,
+    approvalUiRef,
+  )
   const workflowHost = createCliWorkflowHost({
     host,
     projectInstructions,
     workspaceOperations: bootstrap.workspaceOperations,
     explorationContextFiles: bootstrap.explorationContextFiles,
     nativePythonExecutable: nativePythonExecutable ?? null,
+    authorizeFetch: sandboxCapabilityPolicy.authorize,
+    sandboxFetchIdleTimeoutMs: bootstrap.stored.sandboxFetchIdleTimeoutMs,
     getReadline: () => interactiveReadlineRef.current,
     authorizePython: async () => {
       const readline = interactiveReadlineRef.current
@@ -3905,10 +3941,6 @@ async function createCliEnginePreparation(
   const entryTool = workflowHost.createEntryTool(taskyonRef)
   const storage = await createCliStorageRuntime(host, bootstrap)
   const logging = createCliLoggingRuntime(bootstrap, bootstrap.sessionStartedAt)
-  const sandboxCapabilityPolicy = createCliSandboxCapabilityPolicy(
-    interactiveReadlineRef,
-    approvalUiRef,
-  )
   return {
     uiSettings,
     toolRenderOptions,

@@ -1,4 +1,4 @@
-import { createTool } from '@taskyon/taskyon/api'
+import { createTool, type toolContext } from '@taskyon/taskyon/api'
 import { readGitlabAuthState, requireGitlabAuth, type GitlabAuthState } from '../gitlabCli'
 
 type GitlabToolArgs = {
@@ -67,11 +67,12 @@ const authHeaders = (auth: GitlabAuthState) => ({
 const parseJson = (text: string): unknown => (text.trim() ? JSON.parse(text) : null)
 
 const gitlabJson = async <T>(
+  request: NonNullable<toolContext['fetch']>,
   auth: GitlabAuthState,
   path: string,
   init?: RequestInit,
 ): Promise<T> => {
-  const response = await fetch(`${auth.baseUrl}/api/v4${path}`, {
+  const response = await request(`${auth.baseUrl}/api/v4${path}`, {
     ...init,
     headers: {
       ...authHeaders(auth),
@@ -86,6 +87,7 @@ const gitlabJson = async <T>(
 }
 
 const gitlabJsonPages = async <T>(
+  request: NonNullable<toolContext['fetch']>,
   auth: GitlabAuthState,
   path: string,
   options: GitlabPageOptions,
@@ -96,6 +98,7 @@ const gitlabJsonPages = async <T>(
   for (let page = 1; page <= maxPages; page += 1) {
     const separator = path.includes('?') ? '&' : '?'
     const pageItems = await gitlabJson<T[]>(
+      request,
       auth,
       `${path}${separator}per_page=${perPage}&page=${page}`,
     )
@@ -105,15 +108,20 @@ const gitlabJsonPages = async <T>(
   return results
 }
 
-const requireAuth = async (args: GitlabToolArgs) =>
+const requireAuth = async (request: NonNullable<toolContext['fetch']>, args: GitlabToolArgs) =>
   await requireGitlabAuth({
+    fetchFn: request,
     ...(args.baseUrl ? { baseUrl: args.baseUrl } : {}),
     ...(args.clientId ? { clientId: args.clientId } : {}),
     ...(args.scope ? { scope: args.scope } : {}),
     ...(args.forceLogin !== undefined ? { force: args.forceLogin } : {}),
   })
 
-const listProjects = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
+const listProjects = async (
+  request: NonNullable<toolContext['fetch']>,
+  auth: GitlabAuthState,
+  args: GitlabToolArgs,
+) => {
   const query = args.query?.trim()
   const params = new URLSearchParams({
     membership: 'true',
@@ -128,7 +136,7 @@ const listProjects = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
     name_with_namespace?: string
     web_url?: string
     open_issues_count?: number
-  }>(auth, `/projects?${params.toString()}`, args)
+  }>(request, auth, `/projects?${params.toString()}`, args)
   return projects.map((project) => ({
     id: project.id,
     path: project.path_with_namespace,
@@ -138,7 +146,11 @@ const listProjects = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
   }))
 }
 
-const listIssues = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
+const listIssues = async (
+  request: NonNullable<toolContext['fetch']>,
+  auth: GitlabAuthState,
+  args: GitlabToolArgs,
+) => {
   const project = requireProject(args.project)
   const params = new URLSearchParams({
     state: args.state ?? 'opened',
@@ -154,7 +166,7 @@ const listIssues = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
     created_at?: string
     labels?: string[]
     description?: string
-  }>(auth, `/projects/${projectPath(project)}/issues?${params.toString()}`, args)
+  }>(request, auth, `/projects/${projectPath(project)}/issues?${params.toString()}`, args)
   return issues.map((issue) => ({
     iid: issue.iid,
     title: issue.title,
@@ -167,19 +179,25 @@ const listIssues = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
   }))
 }
 
-const getIssue = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
+const getIssue = async (
+  request: NonNullable<toolContext['fetch']>,
+  auth: GitlabAuthState,
+  args: GitlabToolArgs,
+) => {
   const project = requireProject(args.project)
   const issueIid = requireIssueIid(args.issueIid)
-  return await gitlabJson(auth, `/projects/${projectPath(project)}/issues/${issueIid}`)
+  return await gitlabJson(request, auth, `/projects/${projectPath(project)}/issues/${issueIid}`)
 }
 
 const commentIssue = async (
+  request: NonNullable<toolContext['fetch']>,
   auth: GitlabAuthState,
   project: string,
   issueIid: number,
   comment: string,
 ) =>
   await gitlabJson<{ id?: number; body?: string; web_url?: string }>(
+    request,
     auth,
     `/projects/${projectPath(project)}/issues/${issueIid}/notes`,
     {
@@ -190,18 +208,19 @@ const commentIssue = async (
   )
 
 const closeIssue = async (
+  request: NonNullable<toolContext['fetch']>,
   auth: GitlabAuthState,
   project: string,
   issueIid: number,
   comment: string,
 ) => {
-  const note = await commentIssue(auth, project, issueIid, comment)
+  const note = await commentIssue(request, auth, project, issueIid, comment)
   const issue = await gitlabJson<{
     iid?: number
     state?: string
     web_url?: string
     title?: string
-  }>(auth, `/projects/${projectPath(project)}/issues/${issueIid}`, {
+  }>(request, auth, `/projects/${projectPath(project)}/issues/${issueIid}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ state_event: 'close' }),
@@ -209,7 +228,11 @@ const closeIssue = async (
   return { issueIid, note, issue }
 }
 
-const bulkCloseIssues = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
+const bulkCloseIssues = async (
+  request: NonNullable<toolContext['fetch']>,
+  auth: GitlabAuthState,
+  args: GitlabToolArgs,
+) => {
   const project = requireProject(args.project)
   const issues = args.issues ?? []
   if (issues.length === 0) throw new Error('bulkCloseIssues requires at least one issue.')
@@ -221,7 +244,7 @@ const bulkCloseIssues = async (auth: GitlabAuthState, args: GitlabToolArgs) => {
       results.push({
         issueIid,
         ok: true,
-        result: await closeIssue(auth, project, issueIid, comment),
+        result: await closeIssue(request, auth, project, issueIid, comment),
       })
     } catch (error) {
       results.push({
@@ -353,7 +376,7 @@ export const gitlabTool = createTool({
       },
     },
   } as const,
-  function: async (args: GitlabToolArgs) => {
+  function: async (args: GitlabToolArgs, context?: toolContext) => {
     if (args.action === 'authStatus') {
       const baseUrl = normalizeBaseUrl(args.baseUrl)
       const auth = await readGitlabAuthState(baseUrl)
@@ -369,18 +392,20 @@ export const gitlabTool = createTool({
     }
 
     validateBeforeAuth(args)
-    const auth = await requireAuth(args)
+    if (!context?.fetch) throw new Error('Tool fetch capability is unavailable')
+    const request = context.fetch
+    const auth = await requireAuth(request, args)
     switch (args.action) {
       case 'listProjects':
-        return { ok: true, projects: await listProjects(auth, args) }
+        return { ok: true, projects: await listProjects(request, auth, args) }
       case 'listIssues':
         return {
           ok: true,
           project: requireProject(args.project),
-          issues: await listIssues(auth, args),
+          issues: await listIssues(request, auth, args),
         }
       case 'getIssue':
-        return { ok: true, issue: await getIssue(auth, args) }
+        return { ok: true, issue: await getIssue(request, auth, args) }
       case 'commentIssue': {
         const project = requireProject(args.project)
         const issueIid = requireIssueIid(args.issueIid)
@@ -388,7 +413,7 @@ export const gitlabTool = createTool({
           ok: true,
           project,
           issueIid,
-          note: await commentIssue(auth, project, issueIid, requireComment(args.comment)),
+          note: await commentIssue(request, auth, project, issueIid, requireComment(args.comment)),
         }
       }
       case 'closeIssue': {
@@ -397,11 +422,11 @@ export const gitlabTool = createTool({
         return {
           ok: true,
           project,
-          ...(await closeIssue(auth, project, issueIid, requireComment(args.comment))),
+          ...(await closeIssue(request, auth, project, issueIid, requireComment(args.comment))),
         }
       }
       case 'bulkCloseIssues':
-        return { ok: true, ...(await bulkCloseIssues(auth, args)) }
+        return { ok: true, ...(await bulkCloseIssues(request, auth, args)) }
       default:
         throw new Error(`Unsupported gitlab action: ${String(args.action)}`)
     }

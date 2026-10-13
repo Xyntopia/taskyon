@@ -1,3 +1,4 @@
+import { createExternalToolContext } from '@taskyon/taskyon'
 import { gitlabTool } from '../../tools/gitlabTool'
 import { loginGitlab, readGitlabAuthState } from '../../gitlabCli'
 
@@ -38,23 +39,10 @@ const createFetchSequence = (responses: MockResponse[]) => {
   return { fetchFn, requests }
 }
 
-const withMockedFetch = async <T>(fetchFn: typeof fetch, run: () => Promise<T>): Promise<T> => {
-  const originalFetch = globalThis.fetch
-  Object.defineProperty(globalThis, 'fetch', {
-    configurable: true,
-    writable: true,
-    value: fetchFn,
-  })
-  try {
-    return await run()
-  } finally {
-    Object.defineProperty(globalThis, 'fetch', {
-      configurable: true,
-      writable: true,
-      value: originalFetch,
-    })
-  }
-}
+const withInvocationFetch = async <T>(
+  fetchFn: typeof fetch,
+  run: (context: ReturnType<typeof createExternalToolContext>) => Promise<T>,
+) => run(createExternalToolContext(new AbortController().signal, { fetch: fetchFn }))
 
 const uniqueBaseUrl = () => `https://gitlab-diagnostics-${Date.now()}.example`
 
@@ -172,22 +160,28 @@ export const testGitlabToolListsProjectsAndIssues = async () => {
     },
   ])
 
-  await withMockedFetch(apiFetch.fetchFn, async () => {
-    const projects = await gitlabTool.function?.({
-      action: 'listProjects',
-      baseUrl,
-      clientId: 'client-2',
-      query: 'taskyon',
-      maxPages: 1,
-    })
-    const issues = await gitlabTool.function?.({
-      action: 'listIssues',
-      baseUrl,
-      clientId: 'client-2',
-      project: 'xyntopia/componardogui',
-      state: 'opened',
-      maxPages: 1,
-    })
+  await withInvocationFetch(apiFetch.fetchFn, async (context) => {
+    const projects = await gitlabTool.function?.(
+      {
+        action: 'listProjects',
+        baseUrl,
+        clientId: 'client-2',
+        query: 'taskyon',
+        maxPages: 1,
+      },
+      context,
+    )
+    const issues = await gitlabTool.function?.(
+      {
+        action: 'listIssues',
+        baseUrl,
+        clientId: 'client-2',
+        project: 'xyntopia/componardogui',
+        state: 'opened',
+        maxPages: 1,
+      },
+      context,
+    )
 
     assert(
       projects &&
@@ -262,15 +256,18 @@ export const testGitlabToolBulkCloseCommentsBeforeClosing = async () => {
     },
   ])
 
-  await withMockedFetch(apiFetch.fetchFn, async () => {
-    const result = await gitlabTool.function?.({
-      action: 'bulkCloseIssues',
-      baseUrl,
-      clientId: 'client-3',
-      project: 'xyntopia/componardogui',
-      comment: 'closing as obsolete',
-      issues: [{ issueIid: 12 }],
-    })
+  await withInvocationFetch(apiFetch.fetchFn, async (context) => {
+    const result = await gitlabTool.function?.(
+      {
+        action: 'bulkCloseIssues',
+        baseUrl,
+        clientId: 'client-3',
+        project: 'xyntopia/componardogui',
+        comment: 'closing as obsolete',
+        issues: [{ issueIid: 12 }],
+      },
+      context,
+    )
     assert(
       result &&
         typeof result === 'object' &&

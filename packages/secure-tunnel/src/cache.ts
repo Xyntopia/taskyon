@@ -1,3 +1,5 @@
+export const DEFAULT_FETCH_CACHE_ENTRY_BYTES = 16 * 1024 * 1024
+
 export type SecureFetchCacheEntry = {
   url: string
   status: number
@@ -10,6 +12,7 @@ export type SecureFetchCacheEntry = {
 }
 
 export type SecureFetchCache = {
+  maxEntryBytes?: number
   get(url: string): Promise<SecureFetchCacheEntry | null>
   set(entry: SecureFetchCacheEntry): Promise<void>
   delete(url: string): Promise<void>
@@ -85,7 +88,7 @@ export const createCachedSecureFetch =
       return toResponse(cached)
     }
 
-    const conditionalHeaders = new Headers(init.headers)
+    const conditionalHeaders = new Headers(requestHeaders)
     if (cached) {
       const cachedHeaders = new Headers(cached.headers)
       const etag = cachedHeaders.get('etag')
@@ -93,7 +96,11 @@ export const createCachedSecureFetch =
       if (etag) conditionalHeaders.set('if-none-match', etag)
       if (modified) conditionalHeaders.set('if-modified-since', modified)
     }
-    const response = await fetchImpl(url, { ...init, headers: conditionalHeaders }, fetchOptions)
+    const response = await fetchImpl(
+      request ?? url,
+      { ...init, headers: conditionalHeaders },
+      fetchOptions,
+    )
     if (response.status === 304 && cached) {
       const headers = new Headers(cached.headers)
       response.headers.forEach((value, name) => headers.set(name, value))
@@ -103,18 +110,79 @@ export const createCachedSecureFetch =
       return toResponse(refreshed)
     }
     const expiresAt = cacheableRequest ? expiry(response.headers, now()) : undefined
-    if (expiresAt !== undefined) {
-      const body = new Uint8Array(await response.clone().arrayBuffer())
-      await cache.set({
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        headers: [...response.headers.entries()],
-        body,
-        vary: varyValues(response.headers, requestHeaders),
-        storedAt: now(),
-        expiresAt,
-      })
-    } else if (cached) await cache.delete(url)
-    return response
+    if (expiresAt === undefined) {
+      if (cached) await cache.delete(url)
+      return response
+    }
+    const limit = cache.maxEntryBytes ?? DEFAULT_FETCH_CACHE_ENTRY_BYTES
+    const reader = response.body?.getReader()
+    const chunks: Uint8Array[] = []
+    let size = 0
+    let cacheable = true
+    const store = async () => {
+      if (!cacheable) return
+      const body = new Uint8Array(size)
+      let offset = 0
+      for (const chunk of chunks) {
+        body.set(chunk, offset)
+        offset += chunk.length
+      }
+      chunks.length = 0
+      await cache
+        .set({
+          url,
+          status: response.status,
+          statusText: response.statusText,
+          headers: [...response.headers.entries()],
+          body,
+          vary: varyValues(response.headers, requestHeaders),
+          storedAt: now(),
+          expiresAt,
+        })
+        .catch(() => undefined)
+    }
+    if (!reader) {
+      await store()
+      return response
+    }
+    const body = new ReadableStream(
+      {
+        async pull(controller) {
+          try {
+            const chunk = await reader.read()
+            if (chunk.done) {
+              await store()
+              reader.releaseLock()
+              controller.close()
+              return
+            }
+            size += chunk.value.length
+            if (size > limit) {
+              cacheable = false
+              chunks.length = 0
+            }
+            if (cacheable) chunks.push(chunk.value.slice())
+            controller.enqueue(chunk.value)
+          } catch (error) {
+            cacheable = false
+            chunks.length = 0
+            await reader.cancel(error).catch(() => undefined)
+            reader.releaseLock()
+            controller.error(error)
+          }
+        },
+        async cancel(reason) {
+          cacheable = false
+          chunks.length = 0
+          await reader.cancel(reason)
+          reader.releaseLock()
+        },
+      },
+      { highWaterMark: 0 },
+    )
+    return new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    })
   }

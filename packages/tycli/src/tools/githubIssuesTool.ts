@@ -1,4 +1,4 @@
-import { createTool } from '@taskyon/taskyon/api'
+import { createTool, type toolContext } from '@taskyon/taskyon/api'
 import { login, readAuthState, type GithubAuthState } from '../githubCli'
 
 type GithubIssuesArgs = {
@@ -26,11 +26,12 @@ const authHeaders = (auth: GithubAuthState) => ({
 })
 
 const githubJson = async <T>(
+  request: NonNullable<toolContext['fetch']>,
   auth: GithubAuthState,
   path: string,
   init?: RequestInit,
 ): Promise<T> => {
-  const response = await fetch(`${GITHUB_API}${path}`, {
+  const response = await request(`${GITHUB_API}${path}`, {
     ...init,
     headers: {
       ...authHeaders(auth),
@@ -45,19 +46,22 @@ const githubJson = async <T>(
   return data as T
 }
 
-const requireAuth = async (args: GithubIssuesArgs) => {
+const requireAuth = async (request: NonNullable<toolContext['fetch']>, args: GithubIssuesArgs) => {
   const cached = await readAuthState()
   if (cached && args.forceLogin !== true) return cached
 
-  return await login({
-    command: 'login',
-    positionals: [],
-    flags: {
-      ...(args.clientId ? { 'client-id': [args.clientId] } : {}),
-      ...(args.scope ? { scope: [args.scope] } : {}),
-      ...(args.forceLogin ? { force: ['true'] } : {}),
+  return await login(
+    {
+      command: 'login',
+      positionals: [],
+      flags: {
+        ...(args.clientId ? { 'client-id': [args.clientId] } : {}),
+        ...(args.scope ? { scope: [args.scope] } : {}),
+        ...(args.forceLogin ? { force: ['true'] } : {}),
+      },
     },
-  })
+    request,
+  )
 }
 
 const repoPath = (repo: string) => {
@@ -68,10 +72,15 @@ const repoPath = (repo: string) => {
   return `${encodeURIComponent(owner)}/${encodeURIComponent(name)}`
 }
 
-const listRepos = async (auth: GithubAuthState, query?: string) => {
+const listRepos = async (
+  request: NonNullable<toolContext['fetch']>,
+  auth: GithubAuthState,
+  query?: string,
+) => {
   const repos = await githubJson<
     Array<{ full_name?: string; private?: boolean; html_url?: string; open_issues_count?: number }>
   >(
+    request,
     auth,
     '/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member',
   )
@@ -88,7 +97,12 @@ const listRepos = async (auth: GithubAuthState, query?: string) => {
   }))
 }
 
-const listIssues = async (auth: GithubAuthState, repository: string, state: string) => {
+const listIssues = async (
+  request: NonNullable<toolContext['fetch']>,
+  auth: GithubAuthState,
+  repository: string,
+  state: string,
+) => {
   const issues = await githubJson<
     Array<{
       number?: number
@@ -97,7 +111,11 @@ const listIssues = async (auth: GithubAuthState, repository: string, state: stri
       html_url?: string
       pull_request?: unknown
     }>
-  >(auth, `/repos/${repoPath(repository)}/issues?state=${encodeURIComponent(state)}&per_page=100`)
+  >(
+    request,
+    auth,
+    `/repos/${repoPath(repository)}/issues?state=${encodeURIComponent(state)}&per_page=100`,
+  )
   return issues
     .filter((item) => item.pull_request === undefined)
     .map((issue) => ({
@@ -119,7 +137,12 @@ const normalizeIssueDrafts = (issues: GithubIssuesArgs['issues']) =>
     }))
     .filter((issue) => issue.title.length > 0)
 
-const createIssues = async (auth: GithubAuthState, repository: string, args: GithubIssuesArgs) => {
+const createIssues = async (
+  request: NonNullable<toolContext['fetch']>,
+  auth: GithubAuthState,
+  repository: string,
+  args: GithubIssuesArgs,
+) => {
   const issues = normalizeIssueDrafts(args.issues)
   if (issues.length === 0) throw new Error('createIssues requires at least one issue title.')
   if (args.dryRun === true) return { dryRun: true, repository, issues }
@@ -127,6 +150,7 @@ const createIssues = async (auth: GithubAuthState, repository: string, args: Git
   const created = []
   for (const issue of issues) {
     const result = await githubJson<{ number?: number; html_url?: string }>(
+      request,
       auth,
       `/repos/${repoPath(repository)}/issues`,
       {
@@ -213,7 +237,7 @@ export const githubIssuesTool = createTool({
       },
     },
   } as const,
-  function: async (args: GithubIssuesArgs) => {
+  function: async (args: GithubIssuesArgs, context?: toolContext) => {
     if (args.action === 'authStatus') {
       const auth = await readAuthState()
       return auth
@@ -221,23 +245,25 @@ export const githubIssuesTool = createTool({
         : { ok: true, authenticated: false }
     }
 
-    const auth = await requireAuth(args)
+    if (!context?.fetch) throw new Error('Tool fetch capability is unavailable')
+    const request = context.fetch
+    const auth = await requireAuth(request, args)
     if ('error' in auth) return { ok: false, error: auth.error }
 
     switch (args.action) {
       case 'listRepos':
-        return { ok: true, repositories: await listRepos(auth, args.query) }
+        return { ok: true, repositories: await listRepos(request, auth, args.query) }
       case 'listIssues': {
         if (!args.repository) throw new Error('listIssues requires repository.')
         return {
           ok: true,
           repository: args.repository,
-          issues: await listIssues(auth, args.repository, args.state ?? 'open'),
+          issues: await listIssues(request, auth, args.repository, args.state ?? 'open'),
         }
       }
       case 'createIssues': {
         if (!args.repository) throw new Error('createIssues requires repository.')
-        return { ok: true, ...(await createIssues(auth, args.repository, args)) }
+        return { ok: true, ...(await createIssues(request, auth, args.repository, args)) }
       }
       default:
         throw new Error(`Unsupported githubIssues action: ${String(args.action)}`)

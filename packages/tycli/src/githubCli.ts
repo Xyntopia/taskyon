@@ -178,8 +178,12 @@ const parseAccessTokenResponse = (data: unknown) => {
   }
 }
 
-const postGithubForm = async (url: string, body: URLSearchParams): Promise<unknown> => {
-  const response = await fetch(url, {
+const postGithubForm = async (
+  request: typeof fetch,
+  url: string,
+  body: URLSearchParams,
+): Promise<unknown> => {
+  const response = await request(url, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -194,7 +198,10 @@ const postGithubForm = async (url: string, body: URLSearchParams): Promise<unkno
   return data
 }
 
-export const login = async (args: ParsedArgs): Promise<GithubAuthState> => {
+export const login = async (
+  args: ParsedArgs,
+  request: typeof fetch = globalThis.fetch,
+): Promise<GithubAuthState> => {
   const cached = await readAuthState()
   if (cached && !hasFlag(args, 'force')) return cached
 
@@ -202,6 +209,7 @@ export const login = async (args: ParsedArgs): Promise<GithubAuthState> => {
   const scope = firstFlag(args, 'scope') ?? DEFAULT_SCOPE
   const device = parseDeviceCodeResponse(
     await postGithubForm(
+      request,
       GITHUB_DEVICE_CODE_URL,
       new URLSearchParams({
         client_id: clientId,
@@ -232,6 +240,7 @@ export const login = async (args: ParsedArgs): Promise<GithubAuthState> => {
     await new Promise((resolve) => setTimeout(resolve, intervalMs))
     const token = parseAccessTokenResponse(
       await postGithubForm(
+        request,
         GITHUB_TOKEN_URL,
         new URLSearchParams({
           client_id: clientId,

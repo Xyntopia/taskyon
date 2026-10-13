@@ -59,8 +59,7 @@ export const testTaskyonMapWidgetStateParser = () => {
 }
 
 export const testOverpassMapToolBuildsChatMapWidget = async () => {
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = (input: RequestInfo | URL) => {
+  const request: typeof fetch = (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (url !== 'https://overpass-api.de/api/interpreter') {
       return Promise.reject(new Error(`Unexpected fetch URL: ${url}`))
@@ -91,44 +90,43 @@ export const testOverpassMapToolBuildsChatMapWidget = async () => {
     )
   }
 
-  try {
-    const result = await buildMapToolDataResult({
+  const result = await buildMapToolDataResult(
+    {
       overpassQuery:
         '[out:json];node["amenity"="cafe"](around:300,52.5208,13.4095);out tags center geom;',
       searchType: 'overpass results',
-    })
+    },
+    request,
+  )
 
-    assert(result.locations.length === 2, 'Expected two Overpass locations')
-    assert(result.featureCollection.features.length === 2, 'Expected two GeoJSON features')
+  assert(result.locations.length === 2, 'Expected two Overpass locations')
+  assert(result.featureCollection.features.length === 2, 'Expected two GeoJSON features')
 
-    const tasks = taskResult.parse(buildDataAndMapTasks(result))
-    const mapMessage = tasks.taskChainList.flat().find((task) => {
-      if (task.role !== 'assistant' || task.content.type !== 'message') return false
-      return (
-        typeof task.content.data === 'string' && task.content.data.includes('taskyon-world-pmtiles')
-      )
-    })
-
-    if (mapMessage?.content.type !== 'message' || typeof mapMessage.content.data !== 'string') {
-      throw new Error('Expected assistant map widget message')
-    }
-    const mapHtml = mapMessage.content.data
-    assert(
-      mapHtml.includes('<!doctype html>'),
-      'Expected Node map widget message to be standalone HTML',
+  const tasks = taskResult.parse(buildDataAndMapTasks(result))
+  const mapMessage = tasks.taskChainList.flat().find((task) => {
+    if (task.role !== 'assistant' || task.content.type !== 'message') return false
+    return (
+      typeof task.content.data === 'string' && task.content.data.includes('taskyon-world-pmtiles')
     )
-    const stateMatch = mapHtml.match(/const state = (.+)\n/)
-    const serializedState = stateMatch?.[1]
-    if (!serializedState) throw new Error('Expected serialized widget state')
+  })
 
-    const parsed = parseTaskyonMapWidgetState(JSON.parse(serializedState))
-    if (!parsed) throw new Error('Expected parseable widget state')
-    assert(parsed.featureCollection?.features.length === 2, 'Expected two parsed GeoJSON features')
-    assert(
-      parsed.locations.some((location) => location.name === 'Cafe Alexanderplatz'),
-      'Expected parsed widget state to include Cafe Alexanderplatz',
-    )
-  } finally {
-    globalThis.fetch = originalFetch
+  if (mapMessage?.content.type !== 'message' || typeof mapMessage.content.data !== 'string') {
+    throw new Error('Expected assistant map widget message')
   }
+  const mapHtml = mapMessage.content.data
+  assert(
+    mapHtml.includes('<!doctype html>'),
+    'Expected Node map widget message to be standalone HTML',
+  )
+  const stateMatch = mapHtml.match(/const state = (.+)\n/)
+  const serializedState = stateMatch?.[1]
+  if (!serializedState) throw new Error('Expected serialized widget state')
+
+  const parsed = parseTaskyonMapWidgetState(JSON.parse(serializedState))
+  if (!parsed) throw new Error('Expected parseable widget state')
+  assert(parsed.featureCollection?.features.length === 2, 'Expected two parsed GeoJSON features')
+  assert(
+    parsed.locations.some((location) => location.name === 'Cafe Alexanderplatz'),
+    'Expected parsed widget state to include Cafe Alexanderplatz',
+  )
 }

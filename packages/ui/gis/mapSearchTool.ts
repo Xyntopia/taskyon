@@ -38,10 +38,14 @@ export const mapSearchTool = createClientTool({
       throw new Error('mapSearchTool expected either query or a structured Overpass search result.')
     }
 
-    const result = await buildMapToolDataResult({
-      overpassQuery: structuredTask.content.data.overpassQuery,
-      searchType: structuredTask.content.data.searchType ?? 'map results',
-    })
+    if (!context.fetch) throw new Error('Map tool fetch capability is unavailable')
+    const result = await buildMapToolDataResult(
+      {
+        overpassQuery: structuredTask.content.data.overpassQuery,
+        searchType: structuredTask.content.data.searchType ?? 'map results',
+      },
+      context.fetch,
+    )
     return buildDataAndMapTasks(result)
   },
 })

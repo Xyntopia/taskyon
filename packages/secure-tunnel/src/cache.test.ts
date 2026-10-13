@@ -114,3 +114,78 @@ void test('cache forwards transport options on a cache miss', async () => {
   await fetch('https://example.com/data', {}, { mode: 'http-proxy' })
   assert.equal(receivedMode, 'http-proxy')
 })
+
+void test('cache returns headers without pulling and skips oversized streams', async () => {
+  let reads = 0
+  let writes = 0
+  const fetch = createCachedSecureFetch(
+    () =>
+      Promise.resolve().then(
+        () =>
+          new Response(
+            new ReadableStream(
+              {
+                pull(controller) {
+                  if (reads++ < 3) controller.enqueue(new Uint8Array(8))
+                  else controller.close()
+                },
+              },
+              { highWaterMark: 0 },
+            ),
+            { headers: { 'cache-control': 'max-age=60' } },
+          ),
+      ),
+    {
+      maxEntryBytes: 16,
+      get: () => Promise.resolve().then(() => null),
+      set: () =>
+        Promise.resolve().then(() => {
+          writes++
+        }),
+      delete: async () => {},
+    },
+  )
+  const response = await fetch('https://example.test/large')
+  assert.equal(reads, 0)
+  assert.equal((await response.arrayBuffer()).byteLength, 24)
+  assert.equal(writes, 0)
+})
+
+void test('cache does not store cancelled partial streams', async () => {
+  let writes = 0
+  let cancelled = false
+  const fetch = createCachedSecureFetch(
+    () =>
+      Promise.resolve().then(
+        () =>
+          new Response(
+            new ReadableStream(
+              {
+                pull(controller) {
+                  controller.enqueue(new Uint8Array([1]))
+                },
+                cancel() {
+                  cancelled = true
+                },
+              },
+              { highWaterMark: 0 },
+            ),
+            { headers: { 'cache-control': 'max-age=60' } },
+          ),
+      ),
+    {
+      get: () => Promise.resolve().then(() => null),
+      set: () =>
+        Promise.resolve().then(() => {
+          writes++
+        }),
+      delete: async () => {},
+    },
+  )
+  const response = await fetch('https://example.test/cancel')
+  const reader = response.body!.getReader()
+  await reader.read()
+  await reader.cancel()
+  assert.equal(writes, 0)
+  assert.equal(cancelled, true)
+})

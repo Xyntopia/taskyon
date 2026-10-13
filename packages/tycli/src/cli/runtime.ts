@@ -3,7 +3,11 @@ import { join } from 'node:path'
 import { createProtocolPort } from '@taskyon/common/modules/frpBus'
 import { createUnavailableIframeMux } from '@taskyon/common/modules/frpBusWeb'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
-import { CODEX_PROVIDER_NAME, resolveProviderAccessToken } from '@taskyon/taskyon'
+import {
+  CODEX_PROVIDER_NAME,
+  resolveProviderAccessToken,
+  type CapabilityRequest,
+} from '@taskyon/taskyon'
 import {
   createTaskyonHostClient,
   setTaskyonProviderCredential,
@@ -140,6 +144,7 @@ export async function bootstrapCliTaskyon(args?: {
   oauthSecretId?: string
   environmentPrefix?: string
   storageNamespace?: string
+  authorizeFetch?: (request: CapabilityRequest) => Promise<boolean>
 }): Promise<{
   taskyon: Taskyon
   host: TaskyonHostClient
@@ -205,6 +210,10 @@ export async function bootstrapCliTaskyon(args?: {
     cryptoSession,
     {
       toolSetup: createDefaultTaskyonToolSetup({ pythonTool: null, storageClient }),
+      ...(stored.sandboxFetchIdleTimeoutMs !== undefined
+        ? { sandboxFetchIdleTimeoutMs: stored.sandboxFetchIdleTimeoutMs }
+        : {}),
+      ...(args?.authorizeFetch ? { authorizeSandboxFetch: args.authorizeFetch } : {}),
       createIframeMultiPlexer: () =>
         createUnavailableIframeMux('Iframe message bridging is not available in tycli.'),
       nodePgLiteDataDir: pgliteNodeDir,

@@ -32,10 +32,14 @@ export const overpassMapTool = createClientTool({
   parameters: overpassMapToolSchema,
   async function(args, context) {
     if (typeof args.overpassQuery === 'string' && args.overpassQuery.trim()) {
-      const result = await buildMapToolDataResult({
-        overpassQuery: args.overpassQuery,
-        searchType: 'overpass results',
-      })
+      if (!context.fetch) throw new Error('Map tool fetch capability is unavailable')
+      const result = await buildMapToolDataResult(
+        {
+          overpassQuery: args.overpassQuery,
+          searchType: 'overpass results',
+        },
+        context.fetch,
+      )
       return buildDataAndMapTasks(result)
     }
 
@@ -50,10 +54,14 @@ export const overpassMapTool = createClientTool({
       )
     }
 
-    const result = await buildMapToolDataResult({
-      overpassQuery: structuredTask.content.data.overpassQuery,
-      searchType: structuredTask.content.data.searchType ?? 'overpass results',
-    })
+    if (!context.fetch) throw new Error('Map tool fetch capability is unavailable')
+    const result = await buildMapToolDataResult(
+      {
+        overpassQuery: structuredTask.content.data.overpassQuery,
+        searchType: structuredTask.content.data.searchType ?? 'overpass results',
+      },
+      context.fetch,
+    )
     return buildDataAndMapTasks(result)
   },
 })

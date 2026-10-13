@@ -1,3 +1,4 @@
+import { createExternalToolContext } from '@taskyon/taskyon'
 import { mkdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,28 +20,26 @@ const withTempCwd = async <T>(prefix: string, fn: (dir: string) => Promise<T>) =
   }
 }
 
-const withMockFetch = async <T>(fetchImpl: typeof fetch, fn: () => Promise<T>) => {
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = fetchImpl
-  try {
-    return await fn()
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-}
+const withInvocationFetch = async <T>(
+  fetchImpl: typeof fetch,
+  fn: (context: ReturnType<typeof createExternalToolContext>) => Promise<T>,
+) => fn(createExternalToolContext(new AbortController().signal, { fetch: fetchImpl }))
 
 export const testDownloadFileReturnsRecoverableFailureForHttpErrors = async () =>
   await withTempCwd(
     'tycli-download-file-http-error',
     async () =>
-      await withMockFetch(
+      await withInvocationFetch(
         () => Promise.resolve(new Response('not found', { status: 404, statusText: 'Not Found' })),
-        async () => {
-          const result = await downloadFileTool.function?.({
-            url: 'https://example.test/missing.pdf',
-            filePath: 'downloads/missing.pdf',
-            expectedFileType: 'pdf',
-          })
+        async (context) => {
+          const result = await downloadFileTool.function?.(
+            {
+              url: 'https://example.test/missing.pdf',
+              filePath: 'downloads/missing.pdf',
+              expectedFileType: 'pdf',
+            },
+            context,
+          )
 
           assert(
             result &&
@@ -62,7 +61,7 @@ export const testDownloadFileReturnsRecoverableFailureForNonPdfBytes = async () 
   await withTempCwd(
     'tycli-download-file-html-error',
     async () =>
-      await withMockFetch(
+      await withInvocationFetch(
         () =>
           Promise.resolve(
             new Response('<html>blocked</html>', {
@@ -70,12 +69,15 @@ export const testDownloadFileReturnsRecoverableFailureForNonPdfBytes = async () 
               headers: { 'content-type': 'text/html' },
             }),
           ),
-        async () => {
-          const result = await downloadFileTool.function?.({
-            url: 'https://example.test/wrapper.pdf',
-            filePath: 'downloads/wrapper.pdf',
-            expectedFileType: 'pdf',
-          })
+        async (context) => {
+          const result = await downloadFileTool.function?.(
+            {
+              url: 'https://example.test/wrapper.pdf',
+              filePath: 'downloads/wrapper.pdf',
+              expectedFileType: 'pdf',
+            },
+            context,
+          )
 
           assert(
             result &&
@@ -120,20 +122,23 @@ export const testDownloadFilePlacesBasenameInsideArtifactRoot = async () =>
   await withTempCwd(
     'tycli-download-file-artifact-root-basename',
     async (dir) =>
-      await withMockFetch(
+      await withInvocationFetch(
         () =>
           Promise.resolve(
             new Response('%PDF-basename', {
               headers: { 'content-type': 'application/pdf' },
             }),
           ),
-        async () => {
-          const result = await downloadFileTool.function?.({
-            url: 'https://example.test/result.pdf',
-            filePath: 'result.pdf',
-            artifactRoot: 'research/home-battery-specs',
-            expectedFileType: 'pdf',
-          })
+        async (context) => {
+          const result = await downloadFileTool.function?.(
+            {
+              url: 'https://example.test/result.pdf',
+              filePath: 'result.pdf',
+              artifactRoot: 'research/home-battery-specs',
+              expectedFileType: 'pdf',
+            },
+            context,
+          )
 
           assert(
             result &&
@@ -159,7 +164,7 @@ export const testDownloadFileReturnsRecoverableFailureForMaxBytes = async () =>
   await withTempCwd(
     'tycli-download-file-max-bytes',
     async () =>
-      await withMockFetch(
+      await withInvocationFetch(
         () =>
           Promise.resolve(
             new Response('large page body', {
@@ -167,12 +172,15 @@ export const testDownloadFileReturnsRecoverableFailureForMaxBytes = async () =>
               headers: { 'content-type': 'text/html' },
             }),
           ),
-        async () => {
-          const result = await downloadFileTool.function?.({
-            url: 'https://example.test/page.html',
-            filePath: 'research/page.html',
-            maxBytes: 4,
-          })
+        async (context) => {
+          const result = await downloadFileTool.function?.(
+            {
+              url: 'https://example.test/page.html',
+              filePath: 'research/page.html',
+              maxBytes: 4,
+            },
+            context,
+          )
 
           assert(
             result &&
@@ -194,7 +202,7 @@ export const testDownloadFileStreamsResponseChunksToWorkspace = async () =>
   await withTempCwd(
     'tycli-download-file-stream',
     async (dir) =>
-      await withMockFetch(
+      await withInvocationFetch(
         () =>
           Promise.resolve(
             new Response(
@@ -208,12 +216,15 @@ export const testDownloadFileStreamsResponseChunksToWorkspace = async () =>
               { headers: { 'content-type': 'application/pdf' } },
             ),
           ),
-        async () => {
-          const result = await downloadFileTool.function?.({
-            url: 'https://example.test/streamed.pdf',
-            filePath: 'downloads/streamed.pdf',
-            expectedFileType: 'pdf',
-          })
+        async (context) => {
+          const result = await downloadFileTool.function?.(
+            {
+              url: 'https://example.test/streamed.pdf',
+              filePath: 'downloads/streamed.pdf',
+              expectedFileType: 'pdf',
+            },
+            context,
+          )
 
           assert(
             result && typeof result === 'object' && 'ok' in result && result.ok === true,
@@ -246,3 +257,42 @@ testDownloadFileReturnsRecoverableFailureForMaxBytes.description =
   'downloadFile returns ok=false when a raw download exceeds the requested maxBytes limit.'
 testDownloadFileStreamsResponseChunksToWorkspace.description =
   'downloadFile streams response chunks directly into the workspace file.'
+
+export const testDownloadFileUsesInvocationFetch = async () =>
+  withTempCwd('tycli-mediated-download', async (dir) => {
+    const requests: string[] = []
+    const context = {
+      ...createExternalToolContext(new AbortController().signal),
+      fetch: (input: RequestInfo | URL) => {
+        requests.push(input instanceof Request ? input.url : String(input))
+        return Promise.resolve(new Response('%PDF-mediated'))
+      },
+    }
+    const result = await downloadFileTool.function(
+      {
+        url: 'https://example.test/mediated.pdf',
+        filePath: 'mediated.pdf',
+        expectedFileType: 'pdf',
+      },
+      context,
+    )
+    assert(result.ok && requests.length === 1, 'Download bypassed invocation fetch')
+    assert(
+      (await readFile(join(dir, 'mediated.pdf'), 'utf8')) === '%PDF-mediated',
+      'Expected mediated bytes to be saved',
+    )
+  })
+
+export const testDownloadFileFailsClosedWithoutFetch = async () => {
+  const result = await downloadFileTool.function(
+    {
+      url: 'https://example.test/denied.pdf',
+      filePath: 'denied.pdf',
+    },
+    createExternalToolContext(new AbortController().signal),
+  )
+  assert(
+    !result.ok && result.error.includes('fetch capability'),
+    'Download must fail closed without invocation fetch',
+  )
+}

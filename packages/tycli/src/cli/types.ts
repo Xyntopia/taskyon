@@ -1,6 +1,7 @@
 import type { EncryptedDataRow } from '../../../taskyon/src/utils/encrypt'
 
 export type StoredConfig = {
+  sandboxFetchIdleTimeoutMs?: number
   storage?: {
     records?: 'files' | 'sqlite' | 'pglite'
     blobs?: 'files' | 'sqlite' | 'pglite'

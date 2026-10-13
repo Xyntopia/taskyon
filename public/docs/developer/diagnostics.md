@@ -262,3 +262,11 @@ long-running agent behavior.
 
 Documentation changes must run `yarn docs:check`. Source changes should format only edited files.
 Run the full `yarn lint` before committing when the broader repository check is required.
+
+### Tool HTTP permissions in CLI diagnostics
+
+The CLI runner grants ordinary tool public-read HTTP access only when `--online` is supplied.
+The core and native CLI tool hosts receive the same explicit diagnostic authorization callback.
+Tool writes (including POST requests) and private/local targets remain denied; tests that exercise
+those operations must supply synthetic invocation fetch fixtures or an explicit scoped policy.
+Provider authentication and model transport retain their existing dedicated host boundary.

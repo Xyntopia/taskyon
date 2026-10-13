@@ -1,9 +1,12 @@
 import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
-import type { SecureFetchCache, SecureFetchCacheEntry } from '@taskyon/secure-tunnel'
+import {
+  DEFAULT_FETCH_CACHE_ENTRY_BYTES,
+  type SecureFetchCache,
+  type SecureFetchCacheEntry,
+} from '@taskyon/secure-tunnel'
 import type { TaskyonStorageClient } from './storageProtocol'
 
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024
-const DEFAULT_MAX_ENTRY_BYTES = 16 * 1024 * 1024
 export const secureFetchCacheNamespace = 'secure-fetch-cache/v1'
 
 type StoredEntry = Omit<SecureFetchCacheEntry, 'body'> & {
@@ -41,12 +44,18 @@ export const createStorageClientSecureFetchCache = (
   options: { maxBytes?: number; maxEntryBytes?: number } = {},
 ): SecureFetchCache => {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
-  const maxEntryBytes = options.maxEntryBytes ?? DEFAULT_MAX_ENTRY_BYTES
+  const maxEntryBytes = options.maxEntryBytes ?? DEFAULT_FETCH_CACHE_ENTRY_BYTES
   return {
+    maxEntryBytes,
     get: async (url) => {
       const { value } = await storage.get({ namespace: secureFetchCacheNamespace, id: idFor(url) })
       const stored = parseStoredEntry(value)
-      if (!stored || stored.url !== url) return null
+      if (
+        !stored ||
+        stored.url !== url ||
+        stored.bodyBase64.length > Math.ceil(maxEntryBytes / 3) * 4
+      )
+        return null
       await storage.set({
         namespace: secureFetchCacheNamespace,
         id: idFor(url),

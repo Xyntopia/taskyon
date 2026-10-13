@@ -142,8 +142,11 @@ const getOverpassInterpreterUrl = () => {
   return env?.TASKYON_OVERPASS_INTERPRETER_URL ?? 'https://overpass-api.de/api/interpreter'
 }
 
-export const fetchOverpassElements = async (overpassQuery: string): Promise<OverpassElement[]> => {
-  const response = await fetch(getOverpassInterpreterUrl(), {
+export const fetchOverpassElements = async (
+  overpassQuery: string,
+  request: typeof fetch,
+): Promise<OverpassElement[]> => {
+  const response = await request(getOverpassInterpreterUrl(), {
     method: 'POST',
     body: overpassQuery,
     headers: {

@@ -186,11 +186,11 @@ export const buildOverpassPreparationTask = (query: string) =>
     ],
   ])
 
-export const buildMapToolDataResult = async (args: {
-  overpassQuery: string
-  searchType: string
-}): Promise<MapToolDataResult> => {
-  const elements = await fetchOverpassElements(args.overpassQuery)
+export const buildMapToolDataResult = async (
+  args: { overpassQuery: string; searchType: string },
+  request: typeof fetch,
+): Promise<MapToolDataResult> => {
+  const elements = await fetchOverpassElements(args.overpassQuery, request)
   return {
     overpassQuery: args.overpassQuery,
     searchType: args.searchType,

@@ -14,6 +14,7 @@ import {
   parseDiagnosticsRunLevel,
   type DiagnosticsRunLevel,
 } from '@taskyon/common/modules/diagnosticsLevels'
+import type { CapabilityRequest } from '@taskyon/taskyon'
 import { closeDatabases } from '@taskyon/taskyon/db'
 import { setChatCompletionTraceWriter } from '@taskyon/taskyon/tools/chatCompletionTrace'
 import { mkdtemp, readFile, readdir } from 'node:fs/promises'
@@ -658,9 +659,13 @@ async function main(): Promise<number> {
       return 1
     }
 
+    // --online authorizes public reads for diagnostics, never tool writes or private targets.
+    const authorizeDiagnosticFetch = ({ capability }: CapabilityRequest) =>
+      Promise.resolve(opts.online && capability.action === 'fetch' && capability.access === 'read')
     const diagnosticsDataDir = await mkdtemp(join(tmpdir(), 'tycli-diagnostics-pglite-'))
     const runtime = (diagnosticRuntime = await bootstrapCliTaskyon({
       nodePgLiteDataDir: diagnosticsDataDir,
+      authorizeFetch: authorizeDiagnosticFetch,
       blobStorageRoot: resolveCliInvocationDirectory(),
       ...(opts.provider ? { selectedApi: opts.provider } : {}),
       ...(opts.model ? { model: opts.model } : {}),
@@ -690,6 +695,7 @@ async function main(): Promise<number> {
         }),
         explorationContextFiles,
         nativePythonExecutable: await findNativePythonExecutable(),
+        authorizeFetch: authorizeDiagnosticFetch,
         getReadline: () => undefined,
         authorizePython: () =>
           Promise.reject(new Error('Native Python requires interactive approval')),
