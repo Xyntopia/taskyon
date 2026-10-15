@@ -12,7 +12,12 @@
 // control over evaluation order and caching.
 
 import type { DagStorageBackend } from './caching.ts'
-import { canonicalHash, getDefaultInMemoryBackend, type Hash } from './caching.ts'
+import {
+  readCachedDagArtifact,
+  canonicalHash,
+  getDefaultInMemoryBackend,
+  type Hash,
+} from './caching.ts'
 import { iterateCandidatePatches, type GridOrder } from './candidateOrder.ts'
 import { iterateSpatialCandidates, type SpatialCandidate } from './spatialCandidates.ts'
 import type { SpatialCandidateDomain } from './optimization.ts'
@@ -357,6 +362,7 @@ export interface DagNode<
   // normalized inputs (both exposed & internal)
   hiddenInputs?: Record<string, DagNode> | undefined
   exposedInputs?: Record<string, ExposedInputDef> | undefined
+  structuralChoice?: { parameter: string; default: string } | undefined
 
   // internal implementation, used only by the engine
   _runImpl: (params: unknown, helpers: unknown, ctx?: NodeContext) => unknown
@@ -667,6 +673,51 @@ const selectInputNodeByParams = (
   return input.options[0] ?? null
 }
 
+export const selectStructuralProvider = (
+  choice: { parameter: string; default: string },
+  params: Record<string, unknown>,
+  providers: readonly string[],
+) => {
+  const name = params[choice.parameter] ?? choice.default
+  if (typeof name !== 'string' || !providers.includes(name))
+    throw new Error('Unknown choice provider.')
+  return name
+}
+
+export const resolveStructuralChoice = (
+  node: DagNode,
+  params: Record<string, unknown>,
+): {
+  node: DagNode
+  params: Record<string, unknown>
+  parameterPath: string[]
+  selectorPaths: string[][]
+} => {
+  const choice = node.structuralChoice
+  if (!choice) return { node, params, parameterPath: [], selectorPaths: [] }
+  const name = selectStructuralProvider(choice, params, Object.keys(node.hiddenInputs ?? {}))
+  const selected = node.hiddenInputs?.[name]
+  if (!selected) throw new Error('Unknown choice provider.')
+  const providers = params.providers
+  const selectedParams =
+    typeof providers === 'object' && providers !== null ? Reflect.get(providers, name) : undefined
+  if (
+    selectedParams !== undefined &&
+    (typeof selectedParams !== 'object' || selectedParams === null || Array.isArray(selectedParams))
+  )
+    throw new Error('Provider parameters must be an object.')
+  const parsed = parseSchema<Record<string, unknown>>(selected.paramsSchema, selectedParams ?? {})
+  const resolved = resolveStructuralChoice(selected, parsed)
+  return {
+    ...resolved,
+    parameterPath: ['providers', name, ...resolved.parameterPath],
+    selectorPaths: [
+      [choice.parameter],
+      ...resolved.selectorPaths.map((path) => ['providers', name, ...path]),
+    ],
+  }
+}
+
 export const getDagExplodeMetadata = (
   node: DagNode,
 ): { sourceNode: DagNode; path: string } | null => {
@@ -772,8 +823,35 @@ const resolveSourceParamsForExplodedInput = (
   )
 }
 
+const getSourceSelectorPaths = (node: DagNode, params: Record<string, unknown>): string[][] => {
+  const resolved = resolveStructuralChoice(node, params)
+  if (node.structuralChoice)
+    return [
+      ...resolved.selectorPaths,
+      ...getSourceSelectorPaths(resolved.node, resolved.params).map((path) => [
+        ...resolved.parameterPath,
+        ...path,
+      ]),
+    ]
+  const exploded = getDagExplodeMetadata(node)
+  if (exploded) return getSourceSelectorPaths(exploded.sourceNode, params)
+  return Object.entries(node.exposedInputs ?? {}).flatMap(([alias, input]) => {
+    const value = params[alias]
+    const candidate =
+      typeof value === 'object' && value !== null && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {}
+    const selected = selectInputNodeByParams(input, undefined, [candidate, params, {}])
+    return selected
+      ? getSourceSelectorPaths(selected, candidate).map((path) => [alias, ...path])
+      : []
+  })
+}
+
 type ResolvedExplodedInput = {
   alias: string
+  parameterPath: string[]
+  selectorPaths: string[]
   sourceNode: DagNode
   sourcePath: string
   sourceParams: Record<string, unknown>
@@ -800,11 +878,15 @@ const getResolvedExplodedInputs = async (
       typeof aliasCandidateRaw === 'object' && aliasCandidateRaw !== null
         ? (aliasCandidateRaw as Record<string, unknown>)
         : {}
-    const selected = selectInputNodeByParams(def, inputOpts?.provider, [
+    let selected = selectInputNodeByParams(def, inputOpts?.provider, [
       aliasCandidate,
       paramsValue,
       {},
     ])
+    const explicitChoice = selected?.structuralChoice
+      ? resolveStructuralChoice(selected, aliasCandidate)
+      : undefined
+    if (explicitChoice) selected = explicitChoice.node
     const providerCandidates = isOneOfInput(def) ? def.options.map((x) => x.name) : [def.name]
     const autoMatches = isOneOfInput(def)
       ? def.options
@@ -843,7 +925,11 @@ const getResolvedExplodedInputs = async (
       zipGroup: inputOpts?.zipGroup ?? null,
     })
 
-    const sourceParams = resolveSourceParamsForExplodedInput(alias, paramsValue, selected)
+    const sourceParams = resolveSourceParamsForExplodedInput(
+      alias,
+      explicitChoice ? { ...paramsValue, [alias]: explicitChoice.params } : paramsValue,
+      selected,
+    )
     const sourceRun = await executeNode(
       explodeMeta.sourceNode,
       sourceParams,
@@ -871,6 +957,13 @@ const getResolvedExplodedInputs = async (
 
     entries.push({
       alias,
+      parameterPath: [alias, ...(explicitChoice?.parameterPath ?? [])],
+      selectorPaths: [
+        ...(explicitChoice?.selectorPaths.map((path) => [alias, ...path].join('.')) ?? []),
+        ...getSourceSelectorPaths(explodeMeta.sourceNode, sourceParams).map((path) =>
+          [alias, ...(explicitChoice?.parameterPath ?? []), ...path].join('.'),
+        ),
+      ],
       sourceNode: explodeMeta.sourceNode,
       sourcePath: explodeMeta.path,
       sourceParams,
@@ -1439,6 +1532,7 @@ export function createNode<
 
   hiddenInputs?: HiddenInputs
   exposedInputs?: ExposedInputs
+  structuralChoice?: { parameter: string; default: string }
   localParams?: LocalParamsSchema
 
   outputSchema: OSchema
@@ -1504,6 +1598,7 @@ export function createNode<
     defaultPolicy,
     hiddenInputs,
     exposedInputs,
+    ...(args.structuralChoice ? { structuralChoice: args.structuralChoice } : {}),
 
     _runImpl: (params: unknown, helpers: unknown, ctx?: NodeContext) =>
       run(
@@ -1562,8 +1657,9 @@ export function createNode<
             describeDagEnvironment(node).sources.length === 0
           ) {
             const cached = await backend.getCacheEntry(key)
-            if (cached) {
-              const value = await backend.readArtifact(cached.artifact)
+            const artifact = cached ? await readCachedDagArtifact(backend, cached.artifact) : null
+            if (cached && artifact) {
+              const value = artifact.value
               return { value: value as O, artifactHash: cached.artifact } as {
                 value: O
                 artifactHash: Hash
@@ -1662,8 +1758,16 @@ export function createNode<
           actualCtx,
           actualEngineConfig,
         )
-
         for (const entry of resolved) {
+          const changesSelector = variableDims.some((dimension) =>
+            entry.selectorPaths.some(
+              (path) => path === dimension.path || path.startsWith(`${dimension.path}.`),
+            ),
+          )
+          if (changesSelector)
+            throw new Error(
+              'Sweep provider alternatives through invocation variables so each selected candidate domain is resolved separately.',
+            )
           const strategy = entry.inputOpts?.strategy
           if (!strategy || entry.sourceIndices.length <= 1) continue
           const proposedRaw = await strategy({
@@ -1753,16 +1857,16 @@ export function createNode<
             const comboEntry = combo[alias]!
             const entry = byAlias.get(alias)
             if (!entry) continue
-            const existingAliasRaw = runParams[alias]
+            const parameterPath = entry.parameterPath.join('.')
+            const existingAliasRaw = getObjectPathValue(runParams, parameterPath)
             const existingAlias =
               typeof existingAliasRaw === 'object' && existingAliasRaw !== null
                 ? (existingAliasRaw as Record<string, unknown>)
                 : {}
-            runParams[alias] = {
-              ...entry.sourceParams,
+            setPathValue(runParams, parameterPath, {
               ...existingAlias,
               itemIndex: comboEntry.sourceIndex,
-            }
+            })
             sourceIndexByAlias[alias] = comboEntry.sourceIndex
             const idVal = getObjectPathValue(entry.arr[comboEntry.sourceIndex], 'id')
             keyRow[alias] =
@@ -1856,6 +1960,16 @@ export function createNode<
           const baseParams = cloneValue(paramsValue) as Record<string, unknown>
           for (const [path, value] of Object.entries(patch)) {
             setPathValue(baseParams, path, value)
+          }
+          // Inferred source parameters satisfy required exposed inputs before validation.
+          for (const entry of resolved) {
+            const path = entry.parameterPath.join('.')
+            const existing = getObjectPathValue(baseParams, path)
+            const overrides =
+              typeof existing === 'object' && existing !== null && !Array.isArray(existing)
+                ? (existing as Record<string, unknown>)
+                : {}
+            setPathValue(baseParams, path, { ...entry.sourceParams, ...overrides })
           }
           const validatedBase = parseSchema<Record<string, unknown>>(node.paramsSchema, baseParams)
 
@@ -2182,16 +2296,27 @@ export async function executeNode(
       refreshedInRun: sourceExecution.refreshedAcquisitionKeys.has(acquisitionKey),
     })
     if (!refresh && manifest) {
-      const value = await backend.readArtifact(manifest.artifactHash)
+      const value = parseSchema(
+        node.outputSchema,
+        await backend.readArtifact(manifest.artifactHash),
+      )
+      if (canonicalHash(value) !== manifest.artifactHash)
+        throw new Error('Source artifact integrity mismatch.')
       ctx.log('DAG source loaded from manifest', dagExecutionLogData(node, 'cached'))
+      engineConfig.onSourceManifest?.(acquisitionKey, manifest.id)
       return { value, artifactHash: manifest.artifactHash }
     }
   }
 
   if (snapshot && (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite')) {
-    const cached = await readSourceComputation(backend, key, snapshot)
+    const cached = await readSourceComputation(
+      backend,
+      key,
+      snapshot,
+      engineConfig.sourceExecution!.repository,
+    )
     if (cached) {
-      const value = parseSchema(node.outputSchema, await backend.readArtifact(cached.artifact))
+      const value = parseSchema(node.outputSchema, cached.value)
       if (canonicalHash(value) !== cached.artifact)
         throw new Error('Cached computation artifact integrity mismatch.')
       for (const [acquisition, id] of Object.entries(cached.sources.manifests)) {
@@ -2207,8 +2332,9 @@ export async function executeNode(
     (policy.cache === 'ReadOnly' || policy.cache === 'ReadWrite')
   ) {
     const cached = await backend.getCacheEntry(key)
-    if (cached) {
-      const value = await backend.readArtifact(cached.artifact)
+    const artifact = cached ? await readCachedDagArtifact(backend, cached.artifact) : null
+    if (cached && artifact) {
+      const value = artifact.value
       ctx.log('DAG node loaded from cache', dagExecutionLogData(node, 'cached'))
       return { value, artifactHash: cached.artifact }
     }
@@ -2264,7 +2390,14 @@ export async function executeNode(
   }
 
   if (policy.cache === 'WriteOnly' || policy.cache === 'ReadWrite') {
-    if (snapshot) await writeSourceComputation(backend, key, consumed, artifactHash)
+    if (snapshot)
+      await writeSourceComputation(
+        backend,
+        key,
+        consumed,
+        artifactHash,
+        engineConfig.sourceExecution!.repository,
+      )
     else await backend.setCacheEntry(key, { artifact: artifactHash })
   }
 
@@ -2287,6 +2420,7 @@ export async function executeNode(
       )
     }
     sourceExecution.refreshedAcquisitionKeys.add(acquisitionKey)
+    engineConfig.onSourceManifest?.(acquisitionKey, manifest.id)
   }
 
   ctx.log('DAG node completed', dagExecutionLogData(node, 'completed'))

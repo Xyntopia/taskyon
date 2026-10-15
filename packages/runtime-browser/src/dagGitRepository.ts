@@ -1,5 +1,8 @@
+import { graphSourcePath } from '@taskyon/comp-dag/designGraphSources'
 import {
   DESIGN_GRAPH_GIT_DIRECTORIES,
+  DESIGN_GRAPH_GIT_SOURCE_DIRECTORIES,
+  DESIGN_GRAPH_GIT_FILES,
   synchronizeDesignGraphRepository,
   type DagProjectedFile,
   type DesignGraphSnapshotSelector,
@@ -122,13 +125,25 @@ export const createBrowserDagGitRepository = async (args: {
   }
 
   const listProjectionPaths = async () => {
-    return (
-      await Promise.all(
-        DESIGN_GRAPH_GIT_DIRECTORIES.map(async (directory) => await listFiles(directory)),
-      )
+    const sources = new Set<string>(DESIGN_GRAPH_GIT_SOURCE_DIRECTORIES)
+    for (const archived of DESIGN_GRAPH_GIT_DIRECTORIES.filter((path) => !sources.has(path)))
+      if ((await listFiles(archived)).length)
+        throw new Error(
+          'Portable archive records cannot be synchronized as Git sources. Choose a separate source checkout directory.',
+        )
+    const rootFiles: string[] = []
+    for (const path of DESIGN_GRAPH_GIT_FILES) {
+      try {
+        await promises.stat(`${dir}/${path}`)
+        rootFiles.push(path)
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+      }
+    }
+    const directories = await Promise.all(
+      DESIGN_GRAPH_GIT_SOURCE_DIRECTORIES.map((directory) => listFiles(directory)),
     )
-      .flat()
-      .sort()
+    return [...rootFiles, ...directories.flat()].sort()
   }
 
   const init = async (defaultBranch = 'main') => {
@@ -141,6 +156,10 @@ export const createBrowserDagGitRepository = async (args: {
   }
 
   const writeProjection = async (files: readonly DagProjectedFile[], branch = 'main') => {
+    const expectedPaths = new Set(
+      files.map(({ path }) => graphSourcePath(normalizeProjectedPath(path))),
+    )
+    await listProjectionPaths()
     await init(branch)
     const branchExists = await git.resolveRef({ fs, dir, ref: `refs/heads/${branch}` }).then(
       () => true,
@@ -151,14 +170,13 @@ export const createBrowserDagGitRepository = async (args: {
       await git.branch({ fs, dir, ref: branch, checkout: true })
     }
     for (const file of files) {
-      const path = normalizeProjectedPath(file.path)
+      const path = graphSourcePath(normalizeProjectedPath(file.path))
       const separator = path.lastIndexOf('/')
       const directory = separator === -1 ? '' : path.slice(0, separator)
       await ensureDirectory(promises, `${dir}/${directory}`)
       await promises.writeFile(`${dir}/${path}`, file.content, 'utf8')
     }
 
-    const expectedPaths = new Set(files.map(({ path }) => normalizeProjectedPath(path)))
     for (const path of await listProjectionPaths()) {
       if (!expectedPaths.has(path)) await promises.unlink(`${dir}/${path}`)
     }

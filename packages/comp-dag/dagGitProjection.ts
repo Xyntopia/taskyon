@@ -1,3 +1,5 @@
+import { isDesignGraphSourceBundle } from './designGraphSources.ts'
+import { exportDesignGraphSources } from './designGraphSourceExport.ts'
 import { canonicalHash, canonicalJson } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
 import {
@@ -19,11 +21,21 @@ import type { DesignGraphObjectStore } from './designGraphRepository.ts'
 import { getDagNodeRecordInputHashes, type DagNodeRecordInputRef } from './dagNodeRecord.ts'
 import {
   loadStoredGraphNodeFile,
+  parseStoredGraphNodeHashFromPath,
   loadStoredGraphNodeFiles,
   saveStoredGraphNodeSource,
   type SavedStoredGraphNode,
 } from './dagNodeLoader.ts'
 import { SELF_HASH_PLACEHOLDER } from './dagNodeIdentity.ts'
+import {
+  expandGraphAuthoringProjection,
+  parseGraphLock,
+  readAuthoredGraph,
+  assertGraphRevisionMatchesAuthoringLock,
+  parseAuthoredGraphDefinition,
+  resolveAuthoredGraph,
+} from './dagGraphAuthoring.ts'
+import { rewriteDagDeclaration } from './dagNodeLoader.ts'
 import {
   createStoredDagSourceGraph,
   getStoredDagSourceGraphLocalNameIndex,
@@ -54,7 +66,18 @@ export type DesignGraphGitSynchronizer = {
   readProjection: () => Promise<DagProjectedFile[]>
 }
 
+export const DESIGN_GRAPH_GIT_SOURCE_DIRECTORIES = [
+  'nodes',
+  'modules',
+  'imports',
+  'projects',
+  'assets',
+] as const
+export const DESIGN_GRAPH_GIT_FILES = ['graph.lock.json'] as const
+
 export const DESIGN_GRAPH_GIT_DIRECTORIES = [
+  'authoring',
+  'graph-locks',
   'modules',
   'module-locks',
   'nodes',
@@ -336,7 +359,7 @@ const decorateProjectedNodeSources = async (files: readonly DagProjectedFile[]) 
   )
 }
 
-const normalizeProjectedPath = (path: string) => {
+export const normalizeProjectedPath = (path: string) => {
   if (
     !path ||
     path.startsWith('/') ||
@@ -362,7 +385,7 @@ const readOptionalText = async (store: DesignGraphObjectStore, path: string) => 
   }
 }
 
-const repositoryJson = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`
+const repositoryJson = (value: unknown) => `${canonicalJson(value, 2)}\n`
 
 const sourceJsonPath = (
   kind: 'source-snapshots' | 'source-manifests' | 'source-artifacts',
@@ -446,17 +469,30 @@ const collectGraphRevision = async (
   store: DesignGraphObjectStore,
   revisionId: Hash,
   visited = new Set<Hash>(),
+  history = true,
 ): Promise<string[]> => {
   if (visited.has(revisionId)) return []
   visited.add(revisionId)
   const path = objectPath('graph-revisions', revisionId)
   const revision = parseGraphRevision(await readJson(store, path))
+  const authoringPaths = revision.authoringLockId
+    ? [
+        objectPath('graph-locks', revision.authoringLockId),
+        ...Object.values(
+          parseGraphLock(await readJson(store, objectPath('graph-locks', revision.authoringLockId)))
+            .nodeSources,
+        ).map((hash) => `authoring/${hashFilePart(hash)}.ts`),
+      ]
+    : []
   return [
     path,
+    ...authoringPaths,
     ...(await collectNodeClosure(store, Object.values(revision.nodes))),
     ...(
       await Promise.all(
-        revision.parents.map(async (parent) => await collectGraphRevision(store, parent, visited)),
+        (history ? revision.parents : []).map(
+          async (parent) => await collectGraphRevision(store, parent, visited),
+        ),
       )
     ).flat(),
   ]
@@ -489,6 +525,7 @@ const collectInvocation = async (
   store: DesignGraphObjectStore,
   sourceRecords: SourceManifestStorage | undefined,
   id: Hash,
+  observations = true,
 ) => {
   const path = objectPath('invocations', id)
   const invocation = parseInvocationDefinition(await readJson(store, path))
@@ -498,7 +535,12 @@ const collectInvocation = async (
     throw new Error(`Invocation root node is unavailable: ${invocation.rootNodeId}`)
   }
   return {
-    paths: [path, ...(await collectSourceSnapshot(sourceRecords, invocation.sourceSnapshotId))],
+    paths: [
+      path,
+      ...(observations
+        ? await collectSourceSnapshot(sourceRecords, invocation.sourceSnapshotId)
+        : []),
+    ],
     nodeRoots: storedRoot ? [invocation.rootNodeId] : [],
   }
 }
@@ -508,6 +550,7 @@ const collectProjectRevision = async (
   sourceRecords: SourceManifestStorage | undefined,
   revisionId: Hash,
   visited = new Set<Hash>(),
+  mode: 'sources' | 'portable' = 'portable',
 ): Promise<{ paths: string[]; nodeRoots: Hash[] }> => {
   if (visited.has(revisionId)) return { paths: [], nodeRoots: [] }
   visited.add(revisionId)
@@ -515,7 +558,7 @@ const collectProjectRevision = async (
   const revision = parseProjectRevision(await readJson(store, path))
   const invocationEntries = await Promise.all(
     Object.values(revision.invocations).map(
-      async (id) => await collectInvocation(store, sourceRecords, id),
+      async (id) => await collectInvocation(store, sourceRecords, id, mode === 'portable'),
     ),
   )
   const extensionPaths = await Promise.all(
@@ -524,15 +567,21 @@ const collectProjectRevision = async (
       const extension = parseProjectExtension(await readJson(store, extensionPath))
       const dependencies = await Promise.all(
         Object.values(extension.dependencies?.invocations ?? {}).map(
-          async (invocationId) => await collectInvocation(store, sourceRecords, invocationId),
+          async (invocationId) =>
+            await collectInvocation(
+              store,
+              sourceRecords,
+              invocationId,
+              mode === 'portable' || !Object.values(revision.invocations).includes(invocationId),
+            ),
         ),
       )
       return { path: extensionPath, dependencies }
     }),
   )
   const parents = await Promise.all(
-    revision.parents.map(
-      async (parent) => await collectProjectRevision(store, sourceRecords, parent, visited),
+    (mode === 'portable' ? revision.parents : []).map(
+      async (parent) => await collectProjectRevision(store, sourceRecords, parent, visited, mode),
     ),
   )
   return {
@@ -559,11 +608,18 @@ const collectProject = async (
   store: DesignGraphObjectStore,
   sourceRecords: SourceManifestStorage | undefined,
   projectRef: string,
+  mode: 'sources' | 'portable' = 'portable',
 ) => {
   const refName = projectRef.startsWith('projects/') ? projectRef : `projects/${projectRef}`
   const refPath = `refs/${normalizeProjectedPath(refName)}.json`
   const ref = parseDesignGraphRef(await readJson(store, refPath))
-  const revision = await collectProjectRevision(store, sourceRecords, ref.revisionId)
+  const revision = await collectProjectRevision(
+    store,
+    sourceRecords,
+    ref.revisionId,
+    new Set(),
+    mode,
+  )
   return [refPath, ...revision.paths, ...(await collectNodeClosure(store, revision.nodeRoots))]
 }
 
@@ -571,17 +627,38 @@ export const projectDesignGraphSnapshot = async (args: {
   store: DesignGraphObjectStore
   sourceRecords?: SourceManifestStorage
   selector: DesignGraphSnapshotSelector
+  format?: 'sources' | 'portable'
 }): Promise<DagProjectedFile[]> => {
   let paths: string[]
   switch (args.selector.kind) {
     case 'global':
-      paths = await listPaths(args.store, DESIGN_GRAPH_GIT_DIRECTORIES)
+      if (args.format === 'sources') {
+        const ref = parseDesignGraphRef(await readJson(args.store, 'refs/graph/main.json'))
+        paths = [
+          'refs/graph/main.json',
+          ...(await collectGraphRevision(args.store, ref.revisionId, new Set(), false)),
+        ]
+        for (const path of await listPaths(args.store, ['refs/projects']))
+          paths.push(
+            ...(await collectProject(args.store, args.sourceRecords, path.slice(5, -5), 'sources')),
+          )
+      } else paths = await listPaths(args.store, DESIGN_GRAPH_GIT_DIRECTORIES)
       break
     case 'project':
-      paths = await collectProject(args.store, args.sourceRecords, args.selector.projectRef)
+      paths = await collectProject(
+        args.store,
+        args.sourceRecords,
+        args.selector.projectRef,
+        args.format ?? 'portable',
+      )
       break
     case 'graphRevision':
-      paths = await collectGraphRevision(args.store, args.selector.revisionId)
+      paths = await collectGraphRevision(
+        args.store,
+        args.selector.revisionId,
+        new Set(),
+        args.format !== 'sources',
+      )
       break
     case 'node':
       paths = await collectNodeClosure(args.store, [args.selector.nodeId])
@@ -597,13 +674,79 @@ export const projectDesignGraphSnapshot = async (args: {
   )
   const namedPaths = await createNamedObjectPaths(files)
   const namedFiles = await decorateProjectedNodeSources(files)
-  return namedFiles.map((file) => ({
+  const projected = namedFiles.map((file) => ({
     ...file,
     path: namedPaths.get(file.path) ?? file.path,
   }))
+  const graphRef = await readOptionalText(args.store, 'refs/graph/main.json')
+  if (!graphRef) {
+    if (args.format === 'sources')
+      throw new Error('Source export requires an authored graph revision.')
+    return projected
+  }
+  const ref = parseDesignGraphRef(JSON.parse(graphRef))
+  const active = parseGraphRevision(
+    await readJson(
+      args.store,
+      objectPath(
+        'graph-revisions',
+        args.selector.kind === 'graphRevision' ? args.selector.revisionId : ref.revisionId,
+      ),
+    ),
+  )
+  if (!active.authoringLockId) {
+    if (args.format === 'sources')
+      throw new Error('Source export requires authored definitions. Use a portable archive.')
+    return projected
+  }
+  const lock = parseGraphLock(
+    await readJson(args.store, objectPath('graph-locks', active.authoringLockId)),
+  )
+  const included = new Set(
+    files
+      .filter((file) => file.path.startsWith('nodes/'))
+      .map((file) => file.path.split('/').at(-1)!.slice(0, -3).replace('_', ':')),
+  )
+  const { files: authored } = await readAuthoredGraph(args.store, lock.id)
+  const selectedFiles: { path: string; source: string }[] = []
+  for (const file of authored) {
+    const definition = await parseAuthoredGraphDefinition(file)
+    const selectedIds = Object.fromEntries(
+      Object.entries(definition.bindings).filter(([id]) => included.has(lock.bindings[id]!)),
+    )
+    if (Object.keys(selectedIds).length)
+      selectedFiles.push({
+        path: file.path,
+        source:
+          Object.keys(selectedIds).length === Object.keys(definition.bindings).length
+            ? file.source
+            : await rewriteDagDeclaration(file.source, { ids: JSON.stringify(selectedIds) }),
+      })
+  }
+  if (!selectedFiles.length) {
+    if (args.format === 'sources')
+      throw new Error('No current authored definitions are available for source export.')
+    return projected
+  }
+  const resolved = await resolveAuthoredGraph(selectedFiles)
+  const current = new Set(Object.keys(resolved.resolvedNodes))
+  const result = [
+    ...projected.filter((file) => !file.path.startsWith('nodes/')),
+    ...files
+      .filter(
+        (file) =>
+          file.path.startsWith('nodes/') &&
+          !current.has(file.path.split('/').at(-1)!.slice(0, -3).replace('_', ':')),
+      )
+      .map((file) => ({ ...file, path: file.path.replace('nodes/', 'applications/') })),
+    ...selectedFiles.map((file) => ({ path: file.path, content: file.source })),
+    { path: 'graph.lock.json', content: `${canonicalJson(resolved.lock, 2)}\n` },
+  ]
+  return args.format === 'sources' ? await exportDesignGraphSources(result) : result
 }
 
 const parseProjectedJson = (path: string, value: unknown): Hash | null => {
+  if (path.startsWith('graph-locks/')) return parseGraphLock(value).id
   if (path.startsWith('modules/')) return parseDagModuleArtifact(value).id
   if (path.startsWith('module-locks/')) return parseDagModuleLock(value).id
   if (path.startsWith('graph-revisions/')) return parseGraphRevision(value).id
@@ -625,13 +768,21 @@ const normalizeProjectedFile = async (
   loadNodeFile: ProjectedNodeFileLoader = loadProjectedNodeFile,
 ): Promise<DagProjectedFile> => {
   normalizeProjectedPath(file.path)
+  if (file.path.startsWith('authoring/')) {
+    await parseAuthoredGraphDefinition({ path: file.path, source: file.content })
+    const filename = file.path.split('/').at(-1)
+    if (filename !== `${hashFilePart(canonicalHash(file.content))}.ts`)
+      throw new Error('Authored source hash mismatch.')
+    return file
+  }
   if (file.path.startsWith('nodes/')) {
     const loaded = await loadNodeFile({ path: file.path, source: file.content })
     return { path: file.path, content: loaded.file.source }
   }
   if (!file.path.endsWith('.json')) throw new Error(`Unsupported design graph file: ${file.path}`)
-  parseProjectedJson(file.path, JSON.parse(file.content) as unknown)
-  return file
+  const value: unknown = JSON.parse(file.content)
+  parseProjectedJson(file.path, value)
+  return { ...file, content: repositoryJson(value) }
 }
 
 const resolveCanonicalProjectedPath = async (
@@ -639,6 +790,7 @@ const resolveCanonicalProjectedPath = async (
   loadNodeFile: ProjectedNodeFileLoader,
 ): Promise<string> => {
   if (file.path.startsWith('refs/')) return file.path
+  if (file.path.startsWith('authoring/')) return file.path
   if (file.path.startsWith('nodes/')) {
     const loaded = await loadNodeFile({ path: file.path, source: file.content })
     return `nodes/${hashFilePart(loaded.hash)}.ts`
@@ -656,7 +808,11 @@ export const canonicalProjectedPaths = async (
   files: readonly DagProjectedFile[],
   nodeFileLoader: typeof loadStoredGraphNodeFiles = loadStoredGraphNodeFiles,
 ): Promise<Map<string, string>> => {
-  const nodeFiles = files.filter(({ path }) => path.startsWith('nodes/'))
+  // Generated canonical names need no second full normalization pass. Closure loading and
+  // import validation still verify each requested application's declared and computed hash.
+  const nodeFiles = files.filter(
+    ({ path }) => path.startsWith('nodes/') && !parseStoredGraphNodeHashFromPath(path),
+  )
   const nodes = await nodeFileLoader(
     nodeFiles.map(({ path, content }) => ({ path, source: content })),
   )
@@ -667,6 +823,8 @@ export const canonicalProjectedPaths = async (
         if (!file.path.startsWith('nodes/')) {
           return [file.path, await canonicalProjectedPath(file)] as const
         }
+        const hash = parseStoredGraphNodeHashFromPath(file.path)
+        if (hash) return [file.path, `nodes/${hashFilePart(hash)}.ts`] as const
         const node = nodesByPath.get(file.path)
         if (!node) throw new Error(`Design repository node loader omitted ${file.path}`)
         return [file.path, `nodes/${hashFilePart(node.hash)}.ts`] as const
@@ -905,6 +1063,7 @@ const validateProjectedClosure = async (
   store: DesignGraphObjectStore,
   projected: ReadonlyMap<string, string>,
   loadNodeFile: ProjectedNodeFileLoader,
+  externalObservations = false,
 ) => {
   const readAvailable = async (path: string) => projected.get(path) ?? (await store.readText(path))
   const validateInvocation = async (invocationId: Hash) => {
@@ -918,7 +1077,7 @@ const validateProjectedClosure = async (
     } else if (!invocation.sourceSnapshotId) {
       throw new Error(`Invocation root node is unavailable: ${invocation.rootNodeId}`)
     }
-    if (invocation.sourceSnapshotId) {
+    if (invocation.sourceSnapshotId && !externalObservations) {
       const snapshot = parseSourceSnapshot(
         JSON.parse(
           await readAvailable(sourceJsonPath('source-snapshots', invocation.sourceSnapshotId)),
@@ -978,6 +1137,13 @@ const validateProjectedClosure = async (
     }
     if (path.startsWith('graph-revisions/')) {
       const revision = parseGraphRevision(JSON.parse(content) as unknown)
+      if (revision.authoringLockId) {
+        const { lock } = await readAuthoredGraph(
+          { readText: readAvailable },
+          revision.authoringLockId,
+        )
+        assertGraphRevisionMatchesAuthoringLock(revision, lock)
+      }
       for (const parent of revision.parents) {
         parseGraphRevision(
           JSON.parse(await readAvailable(objectPath('graph-revisions', parent))) as unknown,
@@ -993,6 +1159,56 @@ export type DesignGraphSnapshotImportProgress = {
   details?: Record<string, unknown>
 }
 
+const parentSourceRevisions = async (
+  store: DesignGraphObjectStore,
+  files: readonly DagProjectedFile[],
+) => {
+  const output = new Map(files.map((file) => [file.path, file]))
+  for (const file of files.filter((file) => file.path.startsWith('refs/'))) {
+    const previous = await readOptionalText(store, file.path)
+    if (!previous) continue
+    const oldRef = parseDesignGraphRef(JSON.parse(previous))
+    const incoming = parseDesignGraphRef(JSON.parse(file.content))
+    const graph = file.path.startsWith('refs/graph/')
+    const directory = graph ? 'graph-revisions' : 'project-revisions'
+    const nextContent = output.get(objectPath(directory, incoming.revisionId))!.content
+    const previousContent = await store.readText(objectPath(directory, oldRef.revisionId))
+    const next = graph
+      ? parseGraphRevision(JSON.parse(nextContent))
+      : parseProjectRevision(JSON.parse(nextContent))
+    const old = graph
+      ? parseGraphRevision(JSON.parse(previousContent))
+      : parseProjectRevision(JSON.parse(previousContent))
+    const { id: nextId, parents: nextParents, ...nextValue } = next
+    const { id: oldId, parents: oldParents, ...oldValue } = old
+    void nextId
+    void nextParents
+    void oldId
+    void oldParents
+    const revision =
+      canonicalHash(nextValue) === canonicalHash(oldValue)
+        ? old
+        : graph
+          ? createGraphRevision({
+              ...parseGraphRevision(JSON.parse(nextContent)),
+              parents: [old.id],
+            })
+          : createProjectRevision({
+              ...parseProjectRevision(JSON.parse(nextContent)),
+              parents: [old.id],
+            })
+    output.set(objectPath(directory, revision.id), {
+      path: objectPath(directory, revision.id),
+      content: repositoryJson(revision),
+    })
+    output.set(file.path, {
+      path: file.path,
+      content: repositoryJson({ schemaVersion: 2, revisionId: revision.id }),
+    })
+  }
+  return [...output.values()]
+}
+
 export const importDesignGraphSnapshot = async (args: {
   store: DesignGraphObjectStore
   sourceRecords?: SourceManifestStorage
@@ -1001,6 +1217,9 @@ export const importDesignGraphSnapshot = async (args: {
   preloadedNodes?: Readonly<Record<Hash, SavedStoredGraphNode>>
   onProgress?: (event: DesignGraphSnapshotImportProgress) => void
 }) => {
+  const sourceBundle = await isDesignGraphSourceBundle(args.files)
+  const expanded = await expandGraphAuthoringProjection(args.files)
+  const expandedFiles = sourceBundle ? await parentSourceRevisions(args.store, expanded) : expanded
   const timeImportStep = async <T>(
     step: string,
     run: () => T | Promise<T>,
@@ -1021,7 +1240,7 @@ export const importDesignGraphSnapshot = async (args: {
     async () =>
       await updateNamedNodeReferences({
         store: args.store,
-        files: args.files,
+        files: expandedFiles,
         loadNodeFile,
       }),
     (files) => ({ fileCount: files.length }),
@@ -1063,7 +1282,7 @@ export const importDesignGraphSnapshot = async (args: {
   await timeImportStep(
     'validate-projected-closure',
     async () => {
-      await validateProjectedClosure(args.store, projected, loadNodeFile)
+      await validateProjectedClosure(args.store, projected, loadNodeFile, sourceBundle)
     },
     () => ({ objectCount: projected.size }),
   )
@@ -1137,16 +1356,24 @@ export const importDesignGraphSnapshot = async (args: {
     },
     () => ({ checkedFileCount: immutable.length, missingFileCount: missing.length }),
   )
-  await timeImportStep(
+  const expectedRefContents = await timeImportStep(
     'validate-refs',
     async () => {
+      const contents = new Map<string, string | null>()
       for (const file of refs) {
         const current = await readOptionalText(args.store, file.path)
         const expected = args.expectedRefs?.[file.path] ?? null
-        if (current !== expected) {
+        if (
+          current === null || expected === null
+            ? current !== expected
+            : repositoryJson(parseDesignGraphRef(JSON.parse(current))) !==
+              repositoryJson(parseDesignGraphRef(JSON.parse(expected)))
+        ) {
           throw new Error(`Design graph ref conflict: ${file.path}`)
         }
+        contents.set(file.path, current)
       }
+      return contents
     },
     () => ({ refFileCount: refs.length }),
   )
@@ -1215,7 +1442,7 @@ export const importDesignGraphSnapshot = async (args: {
     'write-refs',
     async () => {
       for (const file of refs) {
-        const expected = args.expectedRefs?.[file.path] ?? null
+        const expected = expectedRefContents.get(file.path) ?? null
         const result = await args.store.writeTextIfUnchanged(
           file.path,
           expected === null ? null : canonicalHash(expected),
@@ -1236,7 +1463,16 @@ export const synchronizeDesignGraphRepository = async (args: {
   branch: string
   commit: { message: string; author: { name: string; email: string } }
 }) => {
+  const expectedRefs = Object.fromEntries(
+    await Promise.all(
+      (await listPaths(args.store, ['refs/graph', 'refs/projects'])).map(async (path) => [
+        path,
+        await args.store.readText(path),
+      ]),
+    ),
+  )
   const files = await projectDesignGraphSnapshot({
+    format: 'sources',
     store: args.store,
     ...(args.sourceRecords ? { sourceRecords: args.sourceRecords } : {}),
     selector: args.selector,
@@ -1248,9 +1484,6 @@ export const synchronizeDesignGraphRepository = async (args: {
     return { ...result, commitId, exported: files.length, imported: 0 }
   }
   const pulledFiles = await args.synchronizer.readProjection()
-  const expectedRefs = Object.fromEntries(
-    files.filter((file) => file.path.startsWith('refs/')).map((file) => [file.path, file.content]),
-  )
   const imported = await importDesignGraphSnapshot({
     store: args.store,
     ...(args.sourceRecords ? { sourceRecords: args.sourceRecords } : {}),

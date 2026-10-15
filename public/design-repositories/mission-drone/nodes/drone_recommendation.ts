@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:pm_AADsbMJPEbsMjwqioM1ZiPLPbn9HQ05Fqr1XqtGc',
-  localName: 'drone_recommendation',
-  label: 'Mission Drone Recommendation',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -132,19 +129,6 @@ export default {
     required: ['recommendation', 'ranked', 'viableCount', 'constraints'],
     type: 'object',
   },
-  // Input node references:
-  // ranked -> constraint_scoring — Constraint & Score Evaluation
-  // requirements -> mission_requirements — Mission Requirements
-  inputs: {
-    ranked: {
-      nodeId: 'sha256:rwdYC4xHbwd-9OdKsUtkmNyd_dvZnnH7r2xcax_cfFE',
-      role: 'internal',
-    },
-    requirements: {
-      nodeId: 'sha256:3607AP71clSTVgxipIkSRnY2FVRFqAkP8lX2yz_Z59Y',
-      role: 'exposed',
-    },
-  },
   run: async ({ use }) => {
     const scored = await use.ranked({})
     const requirements = await use.requirements({})
@@ -154,5 +138,21 @@ export default {
       viableCount: scored.viable.length,
       constraints: requirements,
     }
+  },
+  ids: {
+    drone_recommendation: {
+      inputs: {
+        ranked: { source: 'constraint_scoring', role: 'internal' },
+        requirements: { source: 'mission_requirements', role: 'exposed' },
+      },
+      label: 'Mission Drone Recommendation',
+    },
+    main: {
+      inputs: {
+        ranked: { source: 'constraint_scoring', role: 'internal' },
+        requirements: { source: 'mission_requirements', role: 'exposed' },
+      },
+      label: 'Mission Drone Recommendation',
+    },
   },
 }

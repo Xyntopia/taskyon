@@ -1,3 +1,4 @@
+import { createCachedDesignRepositoryNodeFileLoader } from '@taskyon/comp-dag/designRepositorySnapshot'
 import type { Hash } from '@taskyon/comp-dag/caching'
 import type { SavedStoredGraphNode, StoredGraphNodeFile } from '@taskyon/comp-dag/dagNodeLoader'
 
@@ -73,17 +74,19 @@ export const createBrowserStoredGraphNodeLoader = (
     return worker
   }
   return {
-    load: (files: readonly StoredGraphNodeFile[]) =>
-      new Promise<Record<Hash, SavedStoredGraphNode>>((resolve, reject) => {
-        const id = ++requestId
-        pending.set(id, {
-          resolve,
-          reject,
-          fileCount: files.length,
-          startedAt: performance.now(),
-        })
-        requireWorker().postMessage({ type: 'load', requestId: id, files })
-      }),
+    load: createCachedDesignRepositoryNodeFileLoader(
+      (files) =>
+        new Promise<Record<Hash, SavedStoredGraphNode>>((resolve, reject) => {
+          const id = ++requestId
+          pending.set(id, {
+            resolve,
+            reject,
+            fileCount: files.length,
+            startedAt: performance.now(),
+          })
+          requireWorker().postMessage({ type: 'load', requestId: id, files })
+        }),
+    ),
     stop: () => {
       rejectPending(new Error('The stored graph node loader worker was stopped.'))
       worker?.terminate()

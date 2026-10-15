@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:2i5iPgpJkS0Ap_aQnSQpmQdcNNBxq0JWb-_VuctaCV0',
-  localName: 'battery_recommendation',
-  label: 'Home Battery System Recommendation',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -132,19 +129,6 @@ export default {
     required: ['recommendation', 'ranked', 'viableCount', 'constraints'],
     type: 'object',
   },
-  // Input node references:
-  // ranked -> constraint_scoring — Constraint & Score Evaluation
-  // requirements -> mission_requirements — Mission Requirements
-  inputs: {
-    ranked: {
-      nodeId: 'sha256:dQKY4N14QSfu4kT-hHg8GBpTi0d3pvzQBD2wuNTT4tg',
-      role: 'internal',
-    },
-    requirements: {
-      nodeId: 'sha256:8-eiDExF1j-oilsD5CNykl5syV_ZMfZwMMn6TK3noCs',
-      role: 'exposed',
-    },
-  },
   run: async ({ use }) => {
     const scored = await use.ranked({})
     const requirements = await use.requirements({})
@@ -154,5 +138,21 @@ export default {
       viableCount: scored.viable.length,
       constraints: requirements,
     }
+  },
+  ids: {
+    battery_recommendation: {
+      inputs: {
+        ranked: { source: 'constraint_scoring', role: 'internal' },
+        requirements: { source: 'mission_requirements', role: 'exposed' },
+      },
+      label: 'Home Battery System Recommendation',
+    },
+    main: {
+      inputs: {
+        ranked: { source: 'constraint_scoring', role: 'internal' },
+        requirements: { source: 'mission_requirements', role: 'exposed' },
+      },
+      label: 'Home Battery System Recommendation',
+    },
   },
 }

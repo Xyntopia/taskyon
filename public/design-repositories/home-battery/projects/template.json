@@ -1,0 +1,21 @@
+{
+  "displayName": "Home Battery",
+  "extensions": {},
+  "invocations": {
+    "main": {
+      "configuration": {
+        "capture": [],
+        "constraints": [],
+        "inputs": {},
+        "objectives": [],
+        "policy": {
+          "accuracy": "auto"
+        },
+        "reducerOverrides": {},
+        "variables": {}
+      },
+      "root": "main"
+    }
+  },
+  "refs": ["template"]
+}

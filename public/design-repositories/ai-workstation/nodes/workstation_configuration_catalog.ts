@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:039gEFdzfKtvphe1DPBgNiGvzNJbh8y9BusrnvqrfYY',
-  localName: 'workstation_configuration_catalog',
-  label: 'Workstation Configuration Catalog',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -93,7 +90,6 @@ export default {
     required: ['configurations'],
     type: 'object',
   },
-  inputs: {},
   run: () => ({
     configurations: [
       {
@@ -206,4 +202,7 @@ export default {
       },
     ],
   }),
+  ids: {
+    workstation_configuration_catalog: { label: 'Workstation Configuration Catalog', inputs: {} },
+  },
 }

@@ -194,10 +194,15 @@ sharing, and persistence.
 - Exclude secrets, personal widget/workspace state, drafts, undo history, engine settings, execution
   attempts, invocation runs, caches, result payloads, and result artifacts from Git graph snapshots.
   Include explicitly saved project extensions because they are definitions, not personal state.
-- Store reachable pinned file-source snapshots, source manifests and source artifact bytes in Git
-  project projections. Store other source manifests with the expected content hash and a
-  capability-safe retrieval recipe. Fetch through the owning capability and verify exact bytes
-  before replay.
+- Ordinary Git projection contains readable sources, authored project settings and report assets,
+  and a committed graph lock. Source snapshot references may appear in project definitions, but
+  manifests, captured bytes and application revision histories remain in StorageClient. Preserve
+  complete histories and captured input closures through a separate portable archive export.
+- Treat run records, results and compilation caches as disposable execution products. Captured
+  source inputs and their manifest closure are durable dependencies. A shared artifact namespace
+  does not imply a shared retention policy; cleanup must protect referenced source artifacts.
+- Cross-computer replication and complete closure transfer belong inside StorageClient. Domain
+  graph code must not create a separate P2P synchronization mechanism.
 
 - Remote publication is opt-in for private tasks, files, documentation, and computation results.
 - Content addressing proves byte identity, not correctness, authorization, or confidentiality.

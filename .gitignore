@@ -85,6 +85,9 @@ packages/taskyon-vscode/media/webview.bundle.js
 
 # Private interactive diagnostic transcripts
 /packages/tycli/tycli-e2e-*.log
+/.cache/graph-authoring-backups/
 
 # Redacted host-native diagnostics remain local
 /native-custody-diagnostics-*.json
+
+/.cache/graph-source-backups/

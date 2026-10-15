@@ -3,6 +3,7 @@ import {
   type FetchWithPolicy,
 } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import './node-shims'
+import type { DagRunCodeCompiler } from '@taskyon/comp-dag/designRepositorySnapshot'
 import type { SecretStore } from '../../taskyon/src/utils/crudWrapper'
 import { createStepTimer, type StepTimingEvent } from '@taskyon/common/modules/stepTiming'
 
@@ -254,6 +255,9 @@ export type InteractiveCliHost = {
   defaultAllowedTools?: string[]
   unavailableToolNames?: ReadonlySet<string>
   additionalTools?: readonly InternalTool[]
+  createDagRunCodeCompiler?: (
+    storageClient: ReturnType<typeof createStorageClient>,
+  ) => DagRunCodeCompiler
   initializeStorage?: (
     storageClient: ReturnType<typeof createStorageClient>,
     onProgress?: (event: StepTimingEvent) => void,
@@ -322,6 +326,9 @@ export function createCliWorkflowHost(options: {
         storageClient,
         workspaceOperations,
         ...(prepareGraphRepository ? { prepareGraphRepository } : {}),
+        ...(host.createDagRunCodeCompiler
+          ? { compileDagRunCode: host.createDagRunCodeCompiler(storageClient) }
+          : {}),
       }),
     createEntryTool: (taskyonRef: { current?: Taskyon }) =>
       createCliEntryNodeTool(

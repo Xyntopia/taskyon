@@ -39,9 +39,12 @@ inside the workspace.
 
 - Produce Git commits from the shared deterministic design-graph snapshot projector. Full-graph,
   project, revision, and node-closure snapshots must use the same path and validation contracts.
-- Export a project ref with its complete reachable project-revision ancestry, invocation
-  definitions, computational closure, source manifests, and explicitly saved project extensions.
-  Never emit dangling revision-parent hashes.
+- Ordinary Git export contains readable sources, authored project settings and report assets,
+  and the generated committed graph lock. Keep saved application history and captured source data
+  in StorageClient. A portable archive export preserves complete ancestry and input closure.
+- Validate committed locks without silently regenerating them at startup. Lock updates are explicit
+  authoring actions. Git source imports create parented application revisions through the shared
+  resolver and preserve pinned source snapshot references without embedding their manifests.
 - Exclude execution attempts, invocation runs, result artifacts, caches, local drafts, undo history,
   personal widget state, and engine settings from Git. Git synchronizes reproducible definitions,
   not execution products.

@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:GygE4bN_4kbDjXcPjoF1FwGj39TgYTe0Vguwde5ZsrE',
-  localName: 'workstation_requirements',
-  label: 'Workload & Requirements',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -143,6 +140,6 @@ export default {
     ],
     type: 'object',
   },
-  inputs: {},
   run: ({ params }) => ({ ...params }),
+  ids: { workstation_requirements: { label: 'Workload & Requirements', inputs: {} } },
 }

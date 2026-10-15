@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:EXNCCXyfBC7KT0CDpYIP__d8AjYyaRzrZ2und-l_u-s',
-  localName: 'trip_requirements',
-  label: 'Trip Requirements',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -25,10 +22,10 @@ export default {
     required: ['days', 'weather', 'maxWeightKg'],
     type: 'object',
   },
-  inputs: {},
   run: async () => ({
     days: 2,
     weather: 'rain',
     maxWeightKg: 7,
   }),
+  ids: { trip_requirements: { label: 'Trip Requirements', inputs: {} } },
 }

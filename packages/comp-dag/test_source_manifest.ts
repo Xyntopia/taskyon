@@ -6,13 +6,14 @@ import {
   extendSourceSnapshot,
   MissingSourceObservation,
 } from './sourceManifest.ts'
-import { canonicalHash } from './caching.ts'
+import { canonicalHash, type Hash } from './caching.ts'
 import { createNode, type EngineConfig } from './dagCore.ts'
 import { createStorageDagBackend } from './storageDagBackend.ts'
 
 const createMemorySourceStorage = () => {
   const values = new Map<string, unknown>()
   return {
+    values,
     get: (namespace: string, id: string) => Promise.resolve(values.get(`${namespace}/${id}`)),
     set: (namespace: string, id: string, value: unknown) => {
       values.set(`${namespace}/${id}`, value)
@@ -351,3 +352,183 @@ export const testSourceExecutionCreatesAndReusesManifest = async () => {
 
 testSourceExecutionCreatesAndReusesManifest.description =
   'Records successful source artifacts and reuses the project-pinned manifest on later calls.'
+
+export const testSourceSnapshotUnchangedRefreshReusesCalculations = async () => {
+  const storage = createMemorySourceStorage()
+  const repository = createSourceManifestRepository(storage)
+  const backend = createStorageDagBackend(storage)
+  let calculations = 0
+  let downloads = 0
+  const source = createNode({
+    name: 'UnchangedRefreshSource',
+    version: 1,
+    effect: 'source',
+    outputSchema: { type: 'number' },
+    run: () => {
+      downloads++
+      return 5
+    },
+  })
+  const root = createNode({
+    name: 'UnchangedRefreshConsumer',
+    version: 1,
+    hiddenInputs: { source },
+    outputSchema: { type: 'number' },
+    run: async (_, use) => {
+      calculations++
+      return (await use.source({})) * 2
+    },
+  })
+  const captured: Record<Hash, Hash> = {}
+  await source.call({}).run(
+    { nowUtcMs: 100, log: () => undefined },
+    {
+      execution: { mode: 'local' },
+      storageBackend: backend,
+      sourceExecution: {
+        repository,
+        defaultPolicy: { mode: 'always' },
+        refreshedAcquisitionKeys: new Set(),
+      },
+      onSourceManifest: (key, id) => {
+        captured[key] = id
+      },
+    },
+  )
+  const first = createSourceSnapshot(captured)
+  const config: EngineConfig = {
+    execution: { mode: 'local' },
+    storageBackend: backend,
+    sourceExecution: {
+      repository,
+      defaultPolicy: { mode: 'manual' },
+      refreshedAcquisitionKeys: new Set(),
+      snapshot: first,
+    },
+  }
+  const initial = await root.call({}).run({ nowUtcMs: 100, log: () => undefined }, config)
+  const key = Object.keys(first.manifests)[0] as Hash
+  const old = (await repository.getManifest(first.manifests[key]!))!
+  const checked = createSourceLockManifest({ ...old, createdAtMs: 200 })
+  await repository.putManifest(checked)
+  config.sourceExecution!.snapshot = createSourceSnapshot({ [key]: checked.id })
+  const traces: string[] = []
+  const refreshed = await root
+    .call({})
+    .run(
+      { nowUtcMs: 200, log: () => undefined },
+      { ...config, onSourceManifest: (_, id) => traces.push(id) },
+    )
+  if (calculations !== 1 || initial.artifactHash !== refreshed.artifactHash || downloads !== 1)
+    throw new Error(
+      'Identical refreshed content must reuse downstream calculations without fetching.',
+    )
+  if (!traces.includes(checked.id))
+    throw new Error('Cache hits must report the currently selected observation.')
+}
+testSourceSnapshotUnchangedRefreshReusesCalculations.description =
+  'Refresh timestamps preserve current provenance without invalidating identical consumed content.'
+
+export const testSourceSnapshotRebuildsMissingOutputWithRetainedCacheIndex = async () => {
+  const storage = createMemorySourceStorage()
+  const repository = createSourceManifestRepository(storage)
+  const backend = createStorageDagBackend(storage)
+  let acquisitions = 0
+  let calculations = 0
+  const source = createNode({
+    name: 'EvictionSource',
+    version: 1,
+    effect: 'source',
+    outputSchema: { type: 'number' },
+    run: () => {
+      acquisitions++
+      return 7
+    },
+  })
+  const root = createNode({
+    name: 'EvictionConsumer',
+    version: 1,
+    hiddenInputs: { source },
+    outputSchema: { type: 'number' },
+    run: async (_, use) => {
+      calculations++
+      return (await use.source({})) * 3
+    },
+  })
+  const manifests: Record<Hash, Hash> = {}
+  const config: EngineConfig = {
+    execution: { mode: 'local' },
+    storageBackend: backend,
+    sourceExecution: {
+      repository,
+      defaultPolicy: { mode: 'manual' },
+      refreshedAcquisitionKeys: new Set(),
+    },
+    onSourceManifest: (key, id) => {
+      manifests[key] = id
+    },
+  }
+  await source.call({}).run({ nowUtcMs: 100, log: () => undefined }, config)
+  config.sourceExecution!.snapshot = createSourceSnapshot(manifests)
+  const initial = await root.call({}).run({ nowUtcMs: 100, log: () => undefined }, config)
+  storage.values.delete(`dag/artifacts/${initial.artifactHash}`)
+  const rebuilt = await root.call({}).run({ nowUtcMs: 200, log: () => undefined }, config)
+  if (rebuilt.artifactHash !== initial.artifactHash || calculations !== 2 || acquisitions !== 1)
+    throw new Error(
+      'Evicted derived output must be recomputed from retained inputs without acquisition.',
+    )
+  const manifest = (await repository.getManifest(Object.values(manifests)[0]!))!
+  storage.values.delete(`dag/artifacts/${manifest.artifactHash}`)
+  storage.values.delete(`dag/artifacts/${initial.artifactHash}`)
+  let missingInputRejected = false
+  try {
+    await root.call({}).run({ nowUtcMs: 300, log: () => undefined }, config)
+  } catch (error) {
+    missingInputRejected = error instanceof Error && error.message.includes('Artifact not found')
+  }
+  if (!missingInputRejected || acquisitions !== 1)
+    throw new Error('Missing pinned input bytes must fail without live reacquisition.')
+}
+testSourceSnapshotRebuildsMissingOutputWithRetainedCacheIndex.description =
+  'Rebuilds missing computation artifacts offline even when their cache mappings survive eviction.'
+
+export const testSourceCacheRejectsCorruptedArtifacts = async () => {
+  for (const effect of ['pure', 'source'] as const) {
+    const storage = createMemorySourceStorage()
+    const backend = createStorageDagBackend(storage)
+    let calls = 0
+    const node = createNode({
+      name: `CorruptionFixture_${effect}`,
+      version: 1,
+      effect,
+      outputSchema: { type: 'number' },
+      run: () => {
+        calls++
+        return 7
+      },
+    })
+    const config: EngineConfig = {
+      execution: { mode: 'local' },
+      storageBackend: backend,
+      sourceExecution: {
+        repository: createSourceManifestRepository(storage),
+        defaultPolicy: { mode: 'manual' },
+        refreshedAcquisitionKeys: new Set(),
+      },
+    }
+    const first = await node.call({}).run({ nowUtcMs: 100, log: () => undefined }, config)
+    storage.values.set(`dag/artifacts/${first.artifactHash}`, 99)
+    let rejected = false
+    try {
+      await node.call({}).run({ nowUtcMs: 200, log: () => undefined }, config)
+    } catch (error) {
+      rejected = error instanceof Error && error.message.includes('integrity mismatch')
+    }
+    if (!rejected || calls !== 1)
+      throw new Error(
+        'Corruption must fail explicitly without returning or overwriting invalid artifacts.',
+      )
+  }
+}
+testSourceCacheRejectsCorruptedArtifacts.description =
+  'Rejects corrupted captured and calculated artifacts without treating integrity failures as cache misses.'

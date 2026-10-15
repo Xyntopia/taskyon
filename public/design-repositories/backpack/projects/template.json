@@ -1,0 +1,21 @@
+{
+  "displayName": "Backpack",
+  "extensions": {},
+  "invocations": {
+    "main": {
+      "configuration": {
+        "capture": [],
+        "constraints": [],
+        "inputs": {},
+        "objectives": [],
+        "policy": {
+          "accuracy": "auto"
+        },
+        "reducerOverrides": {},
+        "variables": {}
+      },
+      "root": "packing_recommendation"
+    }
+  },
+  "refs": ["template"]
+}

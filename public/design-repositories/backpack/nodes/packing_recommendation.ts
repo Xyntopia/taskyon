@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:Pl7tqYQn8fKwmktzWFb9fXfR5QU0657MBEnG55L3lOE',
-  localName: 'packing_recommendation',
-  label: 'Packing Recommendation',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -14,24 +11,6 @@ export default {
     properties: {},
     required: [],
     type: 'object',
-  },
-  // Input node references:
-  // policy -> recommendation_policy — Recommendation Policy
-  // score -> utility_score — Utility Score
-  // weightCheck -> weight_check — Weight Check
-  inputs: {
-    policy: {
-      nodeId: 'sha256:c4fozV-mLLupocGOKRHhgRrMWS0_JpAwwguOieH6CWE',
-      role: 'exposed',
-    },
-    score: {
-      nodeId: 'sha256:wnOLjdjLaifhj9vdFbTWEF98YwstC8JMUKOABW8CseY',
-      role: 'internal',
-    },
-    weightCheck: {
-      nodeId: 'sha256:DKiW4slj1FqUvZDi6fasATvw_cayXE3pOXGpr1L5vk0',
-      role: 'internal',
-    },
   },
   run: async ({
     use,
@@ -54,5 +33,23 @@ export default {
       maxWeightKg: weightCheck.maxWeightKg,
       score: score.score,
     }
+  },
+  ids: {
+    packing_recommendation: {
+      inputs: {
+        policy: { source: 'recommendation_policy', role: 'exposed' },
+        score: { source: 'utility_score', role: 'internal' },
+        weightCheck: { source: 'weight_check', role: 'internal' },
+      },
+      label: 'Packing Recommendation',
+    },
+    main: {
+      inputs: {
+        policy: { source: 'recommendation_policy', role: 'exposed' },
+        score: { source: 'utility_score', role: 'internal' },
+        weightCheck: { source: 'weight_check', role: 'internal' },
+      },
+      label: 'Packing Recommendation',
+    },
   },
 }

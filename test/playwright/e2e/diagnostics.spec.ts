@@ -117,6 +117,46 @@ test('runs storage targeting and spatial regression diagnostics in the browser',
   }
 })
 
+test('runs graph locks and pinned source cache diagnostics in the browser', async ({ page }) => {
+  await page.goto('/diagnostics')
+  await dataCy(page, 'diagnostics-run-level').click()
+  await page.getByRole('option', { name: 'L3 · Release checks', exact: true }).click()
+  const cases = [
+    [
+      'testGraphAuthoringCommittedSourceLockPinsImports',
+      'Test Graph Authoring Committed Source Lock Pins Imports',
+    ],
+    [
+      'testGraphAuthoringGitSourcesPreservePinsWithoutDataOrHistory',
+      'Test Graph Authoring Git Sources Preserve Pins Without Data Or History',
+    ],
+    [
+      'testSourceSnapshotUnchangedRefreshReusesCalculations',
+      'Test Source Snapshot Unchanged Refresh Reuses Calculations',
+    ],
+    [
+      'testSourceSnapshotRebuildsMissingOutputWithRetainedCacheIndex',
+      'Test Source Snapshot Rebuilds Missing Output With Retained Cache Index',
+    ],
+    [
+      'testPublicDesignRepositoriesLoadImmutableRootClosures',
+      'Test Public Design Repositories Load Immutable Root Closures',
+    ],
+  ]
+  for (const [index, [filter, label]] of cases.entries()) {
+    await page.getByLabel('Filter tests').fill(filter!)
+    if (index === 0) {
+      await page.getByText('tests', { exact: true }).first().click()
+      await page.getByText('Tests', { exact: true }).first().click()
+    }
+    await page.getByRole('button', { name: label!, exact: true }).first().click()
+    await expect(dataCy(page, 'test-finished')).toContainText('Test Finished')
+    await expect(dataCy(page, 'diagnostics-result')).toContainText(label!)
+    await expect(dataCy(page, 'diagnostics-result')).toContainText('status: OK')
+    await expect(dataCy(page, 'diagnostics-result')).toContainText('failed tests: 0/1')
+  }
+})
+
 test.describe('diagnostics page', () => {
   test.skip(!onlineEnv, 'requires playwright.env.json with Taskyon, OpenAI, and OpenRouter keys')
   test.setTimeout(diagnosticsTimeoutMs + 30_000)

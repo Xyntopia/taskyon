@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:v7zln4rwBsnMxPf3ZYBHGuUH5g_qLdSP6yHK-dOD21U',
-  localName: 'model_memory_estimate',
-  label: 'Model Memory Estimate',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -52,14 +49,6 @@ export default {
       'sourceUrl',
     ],
     type: 'object',
-  },
-  // Input node references:
-  // requirements -> workstation_requirements — Workload & Requirements
-  inputs: {
-    requirements: {
-      nodeId: 'sha256:GygE4bN_4kbDjXcPjoF1FwGj39TgYTe0Vguwde5ZsrE',
-      role: 'internal',
-    },
   },
   run: async ({ use }) => {
     const input = await use.requirements({})
@@ -112,5 +101,11 @@ export default {
       requiredVramGb,
       sourceUrl: model.sourceUrl,
     }
+  },
+  ids: {
+    model_memory_estimate: {
+      label: 'Model Memory Estimate',
+      inputs: { requirements: { source: 'workstation_requirements', role: 'internal' } },
+    },
   },
 }

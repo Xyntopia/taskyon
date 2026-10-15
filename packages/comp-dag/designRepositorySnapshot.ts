@@ -1,5 +1,6 @@
-import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
+import { canonicalHash, canonicalJson } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
+import type { DesignGraphStorageClient } from './designGraphRepository.ts'
 import { canonicalProjectedPaths, type DagProjectedFile } from './dagGitProjection.ts'
 import {
   parseDesignGraphRef,
@@ -13,6 +14,11 @@ import {
   type ProjectRevision,
 } from './designGraphModel.ts'
 import { getDagNodeRecordInputHashes } from './dagNodeRecord.ts'
+import {
+  readAuthoredGraph,
+  assertGraphRevisionMatchesAuthoringLock,
+  expandGraphAuthoringProjection,
+} from './dagGraphAuthoring.ts'
 import {
   getDagModuleLockModuleIds,
   parseDagModuleArtifact,
@@ -41,36 +47,60 @@ export type DesignRepositoryFileReader = {
 }
 export type DesignRepositoryNodeFileLoader = typeof loadStoredGraphNodeFiles
 
+export type DesignRepositoryReadOptions = {
+  readText: DesignRepositoryTextReader
+  readManyText?: DesignRepositoryBulkTextReader
+  loadNodeFiles?: DesignRepositoryNodeFileLoader
+  loadAuthoredGraph?: (id: Hash) => ReturnType<typeof readAuthoredGraph>
+}
+
 export const createCachedDesignRepositoryNodeFileLoader = (
   loadNodeFiles: DesignRepositoryNodeFileLoader,
 ): DesignRepositoryNodeFileLoader => {
-  const nodesBySource = new Map<string, SavedStoredGraphNode>()
+  const nodesBySource = new Map<string, Promise<SavedStoredGraphNode>>()
   return async (files) => {
+    for (const file of files) {
+      if (!file.path.endsWith('.ts'))
+        throw new Error(`Stored graph node ${file.path}: only .ts node files are supported`)
+    }
     const missing = [
       ...new Map(
         files.filter(({ source }) => !nodesBySource.has(source)).map((file) => [file.source, file]),
       ).values(),
     ]
     if (missing.length > 0) {
-      const loaded = await loadNodeFiles(missing)
-      for (const node of Object.values(loaded)) nodesBySource.set(node.file.source, node)
+      const batch = loadNodeFiles(missing).then(
+        (loaded) => new Map(Object.values(loaded).map((node) => [node.file.source, node])),
+      )
+      for (const file of missing) {
+        const pending = batch
+          .then((loaded) => {
+            const node = loaded.get(file.source)
+            if (!node) throw new Error(`Design repository node loader omitted ${file.path}`)
+            return node
+          })
+          .catch((error: unknown) => {
+            if (nodesBySource.get(file.source) === pending) nodesBySource.delete(file.source)
+            throw error
+          })
+        nodesBySource.set(file.source, pending)
+      }
     }
     return Object.fromEntries(
-      files.map((file) => {
-        if (!file.path.endsWith('.ts')) {
-          throw new Error(`Stored graph node ${file.path}: only .ts node files are supported`)
-        }
-        const node = nodesBySource.get(file.source)
-        if (!node) throw new Error(`Design repository node loader omitted ${file.path}`)
-        const filenameHash = parseStoredGraphNodeHashFromPath(file.path)
-        if (filenameHash && filenameHash !== node.hash) {
-          throw new Error(
-            `Stored graph node ${file.path}: filename hash ${filenameHash} does not match normalized hash ${node.hash}`,
-          )
-        }
-        return [node.hash, { ...node, file }] as const
-      }),
-    ) as Record<Hash, SavedStoredGraphNode>
+      await Promise.all(
+        files.map(async (file) => {
+          const node = await nodesBySource.get(file.source)
+          if (!node) throw new Error(`Design repository node loader omitted ${file.path}`)
+          const filenameHash = parseStoredGraphNodeHashFromPath(file.path)
+          if (filenameHash && filenameHash !== node.hash) {
+            throw new Error(
+              `Stored graph node ${file.path}: filename hash ${filenameHash} does not match normalized hash ${node.hash}`,
+            )
+          }
+          return [node.hash, { ...node, file }] as const
+        }),
+      ),
+    )
   }
 }
 
@@ -78,16 +108,24 @@ export const createDesignRepositoryFileReader = (
   files: readonly DagProjectedFile[],
   loadNodeFiles: DesignRepositoryNodeFileLoader = loadStoredGraphNodeFiles,
 ): DesignRepositoryFileReader => {
-  const sourceFiles = files.filter(({ path }) => path !== 'repository-index.json')
-  const direct = new Map(sourceFiles.map(({ path, content }) => [path, content]))
+  const incoming = files.filter(({ path }) => path !== 'repository-index.json')
+  const direct = new Map(
+    incoming
+      .filter((file) => !file.path.startsWith('nodes/'))
+      .map(({ path, content }) => [path, content]),
+  )
   let canonical: Promise<Map<string, string>> | undefined
   const getCanonical = async () => {
     canonical ??= Promise.resolve().then(async () => {
+      const sourceFiles = await expandGraphAuthoringProjection(incoming)
       const canonicalPaths = await canonicalProjectedPaths(sourceFiles, loadNodeFiles)
       const entries = sourceFiles.map((file) => {
         const path = canonicalPaths.get(file.path)
         if (!path) throw new Error(`Design repository index omitted ${file.path}`)
-        return [path, file.content] as const
+        const content = file.path.endsWith('.json')
+          ? `${canonicalJson(JSON.parse(file.content), 2)}\n`
+          : file.content
+        return [path, content] as const
       })
       const index = new Map<string, string>()
       for (const [path, content] of entries) {
@@ -220,7 +258,7 @@ const resolveProjectRevisionId = async (
   return parseDesignGraphRef(await readJson(readText, `refs/${safeRefName(name)}.json`)).revisionId
 }
 
-const loadProjectRevisionDefinition = async (
+export const loadProjectRevisionDefinition = async (
   readText: DesignRepositoryTextReader,
   revision: ProjectRevision,
 ): Promise<{
@@ -247,7 +285,7 @@ const loadProjectRevisionDefinition = async (
   return { revision, invocations, extensions }
 }
 
-const loadProjectDefinition = async (
+export const loadProjectDefinition = async (
   readText: DesignRepositoryTextReader,
   checkout: ProjectRepositoryCheckout,
 ) => {
@@ -538,6 +576,24 @@ export const createCachedDagRunCodeCompiler = (
   return { get, compile }
 }
 
+/** Bind the shared compiler cache to the runtime's authorized storage client. */
+export const createStorageDagRunCodeCompiler = (
+  storageClient: DesignGraphStorageClient,
+  compiler: DagRunCodeArtifactCompiler,
+  onCache?: (event: DagRunCodeCacheEvent) => void,
+): DagRunCodeCompiler =>
+  createCachedDagRunCodeCompiler(
+    {
+      get: async (id) =>
+        (await storageClient.get({ namespace: 'design-graph/compiler-cache/v1', id })).value,
+      set: async (id, value) => {
+        await storageClient.set({ namespace: 'design-graph/compiler-cache/v1', id, value })
+      },
+    },
+    compiler,
+    onCache,
+  )
+
 export const compileDesignRepositoryNodes = async (
   snapshot: Pick<
     LoadedDesignRepositorySnapshot,
@@ -558,7 +614,7 @@ export const compileDesignRepositoryNodes = async (
           throw new Error(`DAG node ${id} references unavailable module lock.`)
         }
         const artifact = await compile.compile({
-          nodeId: id as Hash,
+          nodeId: saved.node.definitionHash ?? (id as Hash),
           ...(saved.node.importsSource ? { importsSource: saved.node.importsSource } : {}),
           ...(saved.node.preambleSource ? { preambleSource: saved.node.preambleSource } : {}),
           runSource: saved.node.runSource,
@@ -580,12 +636,9 @@ export const compileDesignRepositoryNodes = async (
   ) as Record<Hash, SavedStoredGraphNode>
 }
 
-export const loadDesignRepositorySnapshot = async (args: {
-  readText: DesignRepositoryTextReader
-  readManyText?: DesignRepositoryBulkTextReader
-  loadNodeFiles?: DesignRepositoryNodeFileLoader
-  checkout: DesignRepositoryCheckout
-}): Promise<LoadedDesignRepositorySnapshot> => {
+export const loadDesignRepositorySnapshot = async (
+  args: DesignRepositoryReadOptions & { checkout: DesignRepositoryCheckout },
+): Promise<LoadedDesignRepositorySnapshot> => {
   const revisionId = await resolveRevisionId(args.readText, args.checkout)
   const revision = parseGraphRevision(
     await readJson(args.readText, `graph-revisions/${hashFilePart(revisionId)}.json`),
@@ -596,10 +649,62 @@ export const loadDesignRepositorySnapshot = async (args: {
     ...(args.readManyText ? { readManyText: args.readManyText } : {}),
     ...(args.loadNodeFiles ? { loadNodeFiles: args.loadNodeFiles } : {}),
   })
+  let nodesByHash = nodeSnapshot.nodesByHash
+  if (revision.authoringLockId) {
+    const resolved = args.loadAuthoredGraph
+      ? await args.loadAuthoredGraph(revision.authoringLockId)
+      : await readAuthoredGraph({ readText: args.readText }, revision.authoringLockId)
+    assertGraphRevisionMatchesAuthoringLock(revision, resolved.lock)
+    nodesByHash = applyGraphBindingNames(nodesByHash, resolved)
+  }
   return {
     revision,
     ...nodeSnapshot,
+    nodesByHash,
   }
+}
+
+const applyGraphBindingNames = (
+  nodesByHash: LoadedDesignRepositoryNodeSnapshot['nodesByHash'],
+  resolved: { bindings: Record<string, Hash>; bindingLabels: Record<string, string> },
+) => {
+  const names = new Map(
+    Object.entries(resolved.bindings).map(([name, nodeHash]) => [
+      nodeHash,
+      { localName: name, label: resolved.bindingLabels[name] ?? name },
+    ]),
+  )
+  return Object.fromEntries(
+    Object.entries(nodesByHash).map(([hash, saved]) => {
+      const name = names.get(saved.hash)
+      return [hash, name ? { ...saved, node: { ...saved.node, ...name } } : saved]
+    }),
+  )
+}
+
+export const decorateProjectNodeBindings = async (
+  readText: DesignRepositoryTextReader,
+  nodesByHash: LoadedDesignRepositoryNodeSnapshot['nodesByHash'],
+  loadAuthoredGraph?: DesignRepositoryReadOptions['loadAuthoredGraph'],
+) => {
+  let text: string
+  try {
+    text = await readText('refs/graph/main.json')
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Design graph object not found:'))
+      return nodesByHash
+    throw error
+  }
+  const ref = parseDesignGraphRef(parseJson(text, 'refs/graph/main.json'))
+  const revision = parseGraphRevision(
+    await readJson(readText, `graph-revisions/${hashFilePart(ref.revisionId)}.json`),
+  )
+  if (!revision.authoringLockId) return nodesByHash
+  const resolved = loadAuthoredGraph
+    ? await loadAuthoredGraph(revision.authoringLockId)
+    : await readAuthoredGraph({ readText }, revision.authoringLockId)
+  assertGraphRevisionMatchesAuthoringLock(revision, resolved.lock)
+  return applyGraphBindingNames(nodesByHash, resolved)
 }
 
 const loadProjectDefinitionSnapshot = async (
@@ -607,6 +712,7 @@ const loadProjectDefinitionSnapshot = async (
   definition: Awaited<ReturnType<typeof loadProjectRevisionDefinition>>,
   readManyText?: DesignRepositoryBulkTextReader,
   loadNodeFiles?: DesignRepositoryNodeFileLoader,
+  loadAuthoredGraph?: DesignRepositoryReadOptions['loadAuthoredGraph'],
 ): Promise<LoadedProjectRepositorySnapshot> => {
   const projectInvocationIds = new Set(Object.keys(definition.invocations))
   const extensionInvocationIds = Object.values(definition.extensions).flatMap((extension) =>
@@ -643,14 +749,18 @@ const loadProjectDefinitionSnapshot = async (
       }
     }),
   )
-  const nodesByHash = await loadNodeClosure(
+  const nodesByHash = await decorateProjectNodeBindings(
     readText,
-    [
-      ...Object.values(definition.invocations).map((invocation) => invocation.rootNodeId),
-      ...extensionRootHashes.filter((id): id is Hash => id !== null),
-    ],
-    readManyText,
-    loadNodeFiles,
+    await loadNodeClosure(
+      readText,
+      [
+        ...Object.values(definition.invocations).map((invocation) => invocation.rootNodeId),
+        ...extensionRootHashes.filter((id): id is Hash => id !== null),
+      ],
+      readManyText,
+      loadNodeFiles,
+    ),
+    loadAuthoredGraph,
   )
   const modules = await loadModuleClosure(readText, nodesByHash, readManyText)
   return {
@@ -664,33 +774,29 @@ const loadProjectDefinitionSnapshot = async (
   }
 }
 
-export const loadProjectRepositorySnapshot = async (args: {
-  readText: DesignRepositoryTextReader
-  readManyText?: DesignRepositoryBulkTextReader
-  loadNodeFiles?: DesignRepositoryNodeFileLoader
-  checkout: ProjectRepositoryCheckout
-}): Promise<LoadedProjectRepositorySnapshot> => {
+export const loadProjectRepositorySnapshot = async (
+  args: DesignRepositoryReadOptions & { checkout: ProjectRepositoryCheckout },
+): Promise<LoadedProjectRepositorySnapshot> => {
   const definition = await loadProjectDefinition(args.readText, args.checkout)
   return await loadProjectDefinitionSnapshot(
     args.readText,
     definition,
     args.readManyText,
     args.loadNodeFiles,
+    args.loadAuthoredGraph,
   )
 }
 
-export const loadProjectRevisionSnapshot = async (args: {
-  readText: DesignRepositoryTextReader
-  readManyText?: DesignRepositoryBulkTextReader
-  loadNodeFiles?: DesignRepositoryNodeFileLoader
-  revision: ProjectRevision
-}): Promise<LoadedProjectRepositorySnapshot> => {
+export const loadProjectRevisionSnapshot = async (
+  args: DesignRepositoryReadOptions & { revision: ProjectRevision },
+): Promise<LoadedProjectRepositorySnapshot> => {
   const definition = await loadProjectRevisionDefinition(args.readText, args.revision)
   return await loadProjectDefinitionSnapshot(
     args.readText,
     definition,
     args.readManyText,
     args.loadNodeFiles,
+    args.loadAuthoredGraph,
   )
 }
 
@@ -699,43 +805,44 @@ const loadProjectDefinitionPresentation = async (
   definition: Awaited<ReturnType<typeof loadProjectRevisionDefinition>>,
   readManyText?: DesignRepositoryBulkTextReader,
   loadNodeFiles?: DesignRepositoryNodeFileLoader,
+  loadAuthoredGraph?: DesignRepositoryReadOptions['loadAuthoredGraph'],
 ): Promise<LoadedProjectRepositoryPresentation> => {
-  const nodesByHash = await loadDirectNodes(
+  const nodesByHash = await decorateProjectNodeBindings(
     readText,
-    Object.values(definition.invocations).map(({ rootNodeId }) => rootNodeId),
-    readManyText,
-    loadNodeFiles,
+    await loadDirectNodes(
+      readText,
+      Object.values(definition.invocations).map(({ rootNodeId }) => rootNodeId),
+      readManyText,
+      loadNodeFiles,
+    ),
+    loadAuthoredGraph,
   )
   return { ...definition, nodesByHash }
 }
 
-export const loadProjectRepositoryPresentation = async (args: {
-  readText: DesignRepositoryTextReader
-  readManyText?: DesignRepositoryBulkTextReader
-  loadNodeFiles?: DesignRepositoryNodeFileLoader
-  checkout: ProjectRepositoryCheckout
-}): Promise<LoadedProjectRepositoryPresentation> => {
+export const loadProjectRepositoryPresentation = async (
+  args: DesignRepositoryReadOptions & { checkout: ProjectRepositoryCheckout },
+): Promise<LoadedProjectRepositoryPresentation> => {
   const definition = await loadProjectDefinition(args.readText, args.checkout)
   return await loadProjectDefinitionPresentation(
     args.readText,
     definition,
     args.readManyText,
     args.loadNodeFiles,
+    args.loadAuthoredGraph,
   )
 }
 
-export const loadProjectRevisionPresentation = async (args: {
-  readText: DesignRepositoryTextReader
-  readManyText?: DesignRepositoryBulkTextReader
-  loadNodeFiles?: DesignRepositoryNodeFileLoader
-  revision: ProjectRevision
-}): Promise<LoadedProjectRepositoryPresentation> => {
+export const loadProjectRevisionPresentation = async (
+  args: DesignRepositoryReadOptions & { revision: ProjectRevision },
+): Promise<LoadedProjectRepositoryPresentation> => {
   const definition = await loadProjectRevisionDefinition(args.readText, args.revision)
   return await loadProjectDefinitionPresentation(
     args.readText,
     definition,
     args.readManyText,
     args.loadNodeFiles,
+    args.loadAuthoredGraph,
   )
 }
 

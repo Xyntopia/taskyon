@@ -1,12 +1,11 @@
 import { createTool } from '../types/toolApi'
 import type { Hash } from '@taskyon/comp-dag/caching'
+import { canonicalHash } from '@taskyon/comp-dag/caching'
 import {
   compileDagNodeRecordGraph,
   savedStoredNodesToRecordGraph,
 } from '@taskyon/comp-dag/dagNodeRecordGraph'
-import { saveStoredGraphNodeSource } from '@taskyon/comp-dag/dagNodeLoader'
 import {
-  createGraphRevision,
   createInvocationDefinition,
   createProjectRevision,
   type InvocationConstraint,
@@ -21,6 +20,7 @@ import {
 import {
   compileDesignRepositoryNodes,
   loadDesignRepositoryNodeClosure,
+  type DagRunCodeCompiler,
 } from '@taskyon/comp-dag/designRepositorySnapshot'
 import {
   createDagInvocationEvaluators,
@@ -48,6 +48,21 @@ import {
   createStorageInvocationArtifactStore,
   type InvocationArtifactStorageClient,
 } from '@taskyon/comp-dag/storageInvocationArtifacts'
+import {
+  parseAuthoredGraphDefinition,
+  publishAuthoredGraph,
+  readAuthoredGraph,
+} from '@taskyon/comp-dag/dagGraphAuthoring'
+import {
+  projectInputReadCapability,
+  projectInputSourceDeclaration,
+  readProjectInput,
+} from '@taskyon/comp-dag/projectInputSource'
+import {
+  createSourceManifestRepository,
+  createSourceSnapshot,
+} from '@taskyon/comp-dag/sourceManifest'
+import { httpSourceDeclaration } from '@taskyon/comp-dag/httpSource'
 
 type GraphProjectAction =
   | 'createNode'
@@ -56,6 +71,8 @@ type GraphProjectAction =
   | 'runInvocation'
   | 'readRunRows'
   | 'inspectProject'
+  | 'inspectGraph'
+  | 'importInputFile'
 
 type DagGraphProjectToolArgs = {
   action: GraphProjectAction
@@ -63,6 +80,11 @@ type DagGraphProjectToolArgs = {
   displayName?: string
   invocationName?: string
   nodeSource?: string
+  definitionPath?: string
+  expectedGraphRevisionId?: Hash
+  inputPath?: string
+  inputContent?: string
+  bindingId?: string
   rootNodeId?: Hash
   invocationId?: Hash
   runId?: Hash
@@ -91,11 +113,38 @@ const requireInvocationFields = (args: DagGraphProjectToolArgs) => {
   })
 }
 
+const requireStoredInvocation = async (
+  args: DagGraphProjectToolArgs,
+  repository: ReturnType<typeof createDesignGraphRepository>,
+) => {
+  const invocation = args.invocationId
+    ? await repository.getInvocation(args.invocationId).catch((cause: unknown) => {
+        throw new Error(
+          `Saved invocation ${args.invocationId} is unavailable. Copy the complete pinnedInvocationId returned by runInvocation into invocationId, including its final characters; do not shorten or reconstruct the hash.`,
+          { cause },
+        )
+      })
+    : requireInvocationFields(args)
+  try {
+    await loadDesignRepositoryNodeClosure({
+      readText: repository.store.readText,
+      rootNodeId: invocation.rootNodeId,
+    })
+  } catch (cause) {
+    throw new Error(
+      `Invocation root or dependency is unavailable: ${invocation.rootNodeId}. Use inspectGraph and copy the exact returned nodeId before saving.`,
+      { cause },
+    )
+  }
+  return invocation
+}
+
 export const createDagGraphProjectTool = (
   storageClient: DesignGraphStorageClient &
     InvocationArtifactStorageClient &
     InvocationRowStorageClient,
   prepareRepository?: () => Promise<void>,
+  compileRunCode?: DagRunCodeCompiler,
 ) => {
   const store = createStorageDesignGraphObjectStore(storageClient)
   const repository = createDesignGraphRepository(store)
@@ -124,9 +173,10 @@ export const createDagGraphProjectTool = (
 
   return createTool({
     name: 'dagGraphProject',
-    description: 'Create nodes and manage immutable design-graph projects and invocation runs.',
+    description:
+      'Author computational graphs and external data sources, then save, pin and run their studies.',
     longDescription:
-      'Create and run a computational design. createNode writes to the global graph and needs no projectId. For a new project, pass its returned nodeId as createProject.rootNodeId, then run the project with the invocationName returned by createProject (default: main). runInvocation takes the name, not the invocation hash. Use readRunRows with the returned run.id to inspect scored results before recommending a candidate.',
+      'Create and run a computational design. If a service URL is unknown, discover and verify it from the provider catalog or official API documentation before wiring a saved study. A guessed URL or an HTML response is not verified API metadata. Use inspectProject with inputPath to read an existing small project input before assuming its field names. Inspection is read-only; saved calculations must still consume a declared source to pin that input. For external data, keep acquisition and calculation separate: an HTTP source returns the complete unmodified response body as text or bytes (optionally with status/headers). Put JSON parsing, filtering, counts and all derived outputs in a connected pure consumer, and save that consumer as the study root. Pinning a derived summary alone loses the original evidence. inspectGraph returns readable binding IDs and node hashes. createNode writes to the global graph and needs no projectId. A binding input is an object: { source: "upstreamBindingId" }, never a bare string or { type, id }. Keep inputsSchema (upstream output contracts) separate from ids.<binding>.inputs (connections). Source parameters are passed at execution through use.<alias>({ ...params }); they are not binding fields. For a new project, pass the returned nodeId as createProject.rootNodeId. For an existing project, add or replace a named study using saveInvocation with rootNodeId and invocationName; do not call createProject again. Then run the project with the invocationName returned by createProject or saveInvocation (default: main). runInvocation takes the name, not the invocation hash. Use readRunRows with the returned run.id to inspect scored results before recommending a candidate. To retain acquired data, save the returned pinnedInvocationId using saveInvocation.invocationId with the same projectId and invocationName; omitting the name saves under main. Rerun the pinned study before reading its rows because earlier runs belong to the earlier invocation definition.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -141,9 +191,11 @@ export const createDagGraphProjectTool = (
             'runInvocation',
             'readRunRows',
             'inspectProject',
+            'inspectGraph',
+            'importInputFile',
           ] as GraphProjectAction[],
           description:
-            'Operation to perform. For a new node-based project: createNode → createProject with its returned nodeId as rootNodeId → runInvocation with the returned invocationName. runInvocation takes the name, not the invocation hash.',
+            'Operation to perform. Inspect an existing project with inspectProject; add its study with createNode → saveInvocation (projectId, invocationName, returned nodeId as rootNodeId) → runInvocation. Use createProject only for a project that does not exist. runInvocation takes the invocationName, not the invocation hash. After a completed run, save its pinnedInvocationId with saveInvocation.invocationId and the SAME projectId and invocationName to retain acquired sources. Omitting invocationName saves under main. After pinning, run the pinned study again before reading its rows; the earlier run belongs to the earlier invocation definition.',
         },
         projectId: {
           type: 'string',
@@ -163,10 +215,41 @@ export const createDagGraphProjectTool = (
         nodeSource: {
           type: 'string',
           description:
-            "Full standalone TypeScript source for createNode. Its only export must be a direct object literal written as `export default { ... }` (no parentheses, named variable, `as` assertion, or `satisfies` wrapper). Set formatVersion to 2 and include id '__TASKYON_SELF_HASH__', localName, label, version, localParamsSchema, outputSchema, optional hashed inputs, and a `run` property whose value is an async arrow function. Do not import application types.",
+            "Reusable TypeScript definition for createNode: export default { formatVersion: 3, localParamsSchema, inputsSchema, outputSchema, ids: { bindingId: { inputs: { alias: { source: 'upstream-binding' } } } }, run: async ({ params, use, services }) => ... }. Use the exact readable IDs returned in nodeIds. The ids keys name newly declared nodes; they are not input aliases. Every use.alias call must have the same alias in inputsSchema and ids.<binding>.inputs. To call an existing calculation internally, declare inputsSchema.calculator: true and ids.<binding>.inputs.calculator: { source: 'existingBinding', role: 'internal' }, then await use.calculator(calculationParams). The internal role keeps those parameters at the explicit call instead of exposing them as root study inputs. Inputs are objects, never strings. The resolver writes recursive hashes into the graph lock. Compatible alternatives must be parameters through choose. Repeated bindings serve simultaneous roles. Imports require exact module locks. HTTP sources declare effect: 'source' and await mediated services.fetch with an absolute URL; await response.text() for raw text or response.arrayBuffer() for bytes. Fetch authorization is supplied by the host, separate from the capabilities list. Keep JSON parsing and calculations in a separate pure consumer that awaits use.<alias>({...params}). Required source parameters (such as path or url) must be forwarded explicitly by that consumer: use.<alias>({ path: params.path }) or use.<alias>({ url: params.url }). Calling use.<alias>({}) passes an empty object; invocation variables do not fill that object automatically. Project input paths are logical repository paths, not host filesystem paths. Project file readers declare effect: 'source', declare capability 'taskyon.project-input.read-text/v1', and call services.callCapability('taskyon.project-input.read-text/v1', { path }); do not fetch file paths or use host filesystem tools to read them. To inspect an existing JSON input before assuming its field names, connect a pure JSON-parsing preview consumer to that source, save/run it as the named study, and read its result rows. The HTTP and file source examples below have complete output contracts; consumer inputsSchema must match the producer contract, not just its top-level type. Loading never executes arbitrary code. Examples include a project file source, a connected pure converter and a reusable HTTP GET source.",
           examples: [
-            "export default { formatVersion: 2, id: '__TASKYON_SELF_HASH__', localName: 'score', label: 'Score', version: 1, localParamsSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] }, outputSchema: { type: 'number' }, inputs: {}, run: async ({ params }) => params.value }",
+            "export default { formatVersion: 3, localParamsSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] }, outputSchema: { type: 'number' }, ids: { score: { inputs: {} } }, run: async ({ params }) => params.value }",
+            projectInputSourceDeclaration,
+            "export default { formatVersion: 3, localParamsSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }, inputsSchema: { data: { type: 'string' } }, outputSchema: { type: 'object', additionalProperties: true, description: 'Inspect the parsed contents of a pinned JSON input before configuring its consumer.' }, ids: { inspectJsonInput: { inputs: { data: { source: 'projectInput' } } } }, run: async ({ params, use }) => JSON.parse(await use.data({ path: params.path })) }",
+            "export default { formatVersion: 3, localParamsSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }, inputsSchema: { data: { type: 'string' } }, outputSchema: { type: 'object', properties: { parcelCount: { type: 'integer' } }, required: ['parcelCount'] }, ids: { parcelCount: { inputs: { data: { source: 'projectInput' } } } }, run: async ({ params, use }) => ({ parcelCount: JSON.parse(await use.data({ path: params.path })).parcels.length }) }",
+            httpSourceDeclaration,
+            "export default { formatVersion: 3, localParamsSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }, inputsSchema: { data: { type: 'string' }, calculator: true }, outputSchema: { type: 'object', properties: { score: { type: 'number' } }, required: ['score'] }, ids: { scoredProjectInput: { inputs: { data: { source: 'projectInput' }, calculator: { source: 'score', role: 'internal' } } } }, run: async ({ params, use }) => { const data = JSON.parse(await use.data({ path: params.path })); return { score: await use.calculator({ value: data.value }) } } }",
           ] as string[],
+        },
+        definitionPath: {
+          type: 'string',
+          description:
+            'Graph-relative nodes/*.ts declaration path to create, replace, or inspect. Replacing a shared definition updates all its bindings.',
+        },
+        inputPath: {
+          type: 'string',
+          description:
+            'Logical project input path under inputs/<projectId>/. Use inspectProject with inputPath to read an existing small input without creating a study or accessing host files; inspection returns the exact content up to 64 KiB and rejects larger files. importInputFile writes inputContent to this path. Both operations are project scoped.',
+        },
+        bindingId: {
+          type: 'string',
+          description:
+            'Optional readable binding ID to inspect with its resolved input/output and parameter contracts.',
+        },
+        inputContent: {
+          type: 'string',
+          maxLength: 2000000,
+          description:
+            'Exact UTF-8 data file contents for importInputFile; retained observations are pinned on evaluation.',
+        },
+        expectedGraphRevisionId: {
+          type: 'string',
+          description:
+            'Exact revision returned by inspectGraph; rejects edits after concurrent changes.',
         },
         rootNodeId: {
           type: 'string',
@@ -235,6 +318,11 @@ export const createDagGraphProjectTool = (
       },
       anyOf: [
         {
+          properties: { action: { const: 'importInputFile' } },
+          required: ['action', 'projectId', 'inputPath', 'inputContent'],
+        },
+        { properties: { action: { const: 'inspectGraph' } }, required: ['action'] },
+        {
           properties: { action: { const: 'createNode' } },
           required: ['action', 'nodeSource'],
         },
@@ -270,7 +358,7 @@ export const createDagGraphProjectTool = (
         },
       ],
     } as JSONSchema7 & JSONSchema,
-    function: async (rawArgs: DagGraphProjectToolArgs) => {
+    function: async (rawArgs: DagGraphProjectToolArgs, ctx) => {
       await prepareRepository?.()
       const requested = rawArgs.projectId?.trim()
       const projectRef = requested
@@ -281,30 +369,82 @@ export const createDagGraphProjectTool = (
         : undefined
       const projectId = projectRef?.slice('projects/'.length)
 
+      if (rawArgs.action === 'inspectGraph') {
+        const ref = await repository.getGraphRef('graph/main')
+        const revision = ref ? await repository.getGraphRevision(ref.revisionId) : undefined
+        const resolved = revision?.authoringLockId
+          ? await readAuthoredGraph(store, revision.authoringLockId)
+          : undefined
+        const files = resolved?.files ?? []
+        const graph = resolved ? compileDagNodeRecordGraph({ graph: resolved.resolvedNodes }) : {}
+        const bindings = Object.entries(revision?.nodes ?? {}).filter(
+          ([id]) => !rawArgs.bindingId || id === rawArgs.bindingId,
+        )
+        const page = bindings.slice(
+          rawArgs.startRow ?? 0,
+          (rawArgs.startRow ?? 0) + Math.min(rawArgs.limit ?? 20, 100),
+        )
+        return {
+          type: 'dagGraphInspection' as const,
+          graphRevisionId: ref?.revisionId ?? null,
+          bindings: page.map(([id, nodeId]) => ({
+            id,
+            nodeId,
+            label: resolved?.bindingLabels[id] ?? id,
+            paramsSchema: graph[nodeId]?.paramsSchema,
+            outputSchema: graph[nodeId]?.outputSchema,
+            inputs: resolved?.resolvedNodes[nodeId]?.inputs ?? {},
+          })),
+          totalBindings: bindings.length,
+          definitions: files.map((file) => ({
+            path: file.path,
+            ...(rawArgs.definitionPath === file.path ? { source: file.source } : {}),
+          })),
+        }
+      }
       if (rawArgs.action === 'createNode') {
         if (!rawArgs.nodeSource) throw new Error('createNode requires nodeSource.')
-        const saved = await saveStoredGraphNodeSource(rawArgs.nodeSource, { directory: 'nodes' })
-        await store.writeText(saved.file.path, saved.file.source)
         const currentRef = await repository.getGraphRef('graph/main')
         const current = currentRef
           ? await repository.getGraphRevision(currentRef.revisionId)
           : undefined
-        const revision = createGraphRevision({
-          parents: current ? [current.id] : [],
-          nodes: { ...(current?.nodes ?? {}), [saved.node.localName]: saved.hash },
+        if (current && Object.keys(current.nodes).length && !current.authoringLockId)
+          throw new Error(
+            'This repository requires the explicit graph authoring cutover before edits.',
+          )
+        const parsed = await parseAuthoredGraphDefinition({
+          path: 'nodes/new.ts',
+          source: rawArgs.nodeSource,
         })
-        await repository.putGraphRevision(revision)
-        await repository.advanceGraphRef({
-          name: 'graph/main',
-          revisionId: revision.id,
-          expected: currentRef?.revisionId ?? null,
+        const localName = Object.keys(parsed.bindings)[0]!
+        const definitionPath = rawArgs.definitionPath ?? `nodes/${localName}.ts`
+        if (
+          !/^nodes\/[A-Za-z0-9_./-]+\.ts$/.test(definitionPath) ||
+          definitionPath.split('/').some((part) => part === '..' || part === '.')
+        )
+          throw new Error('Unsafe definition path.')
+        const existing = current?.authoringLockId
+          ? (await readAuthoredGraph(store, current.authoringLockId)).files
+          : []
+        const saved = await publishAuthoredGraph({
+          store,
+          files: [
+            ...existing.filter((file) => file.path !== definitionPath),
+            { path: definitionPath, source: rawArgs.nodeSource },
+          ],
+          expectedGraphRevisionId:
+            rawArgs.expectedGraphRevisionId ?? currentRef?.revisionId ?? null,
         })
         return {
           type: 'dagGraphNodeCreated' as const,
           ...(projectId ? { projectId } : {}),
-          nodeId: saved.hash,
-          localName: saved.node.localName,
-          graphRevisionId: revision.id,
+          nodeId: saved.bindings[localName],
+          nodeIds: Object.fromEntries(
+            Object.keys(parsed.bindings).map((id) => [id, saved.bindings[id]]),
+          ),
+          localName,
+          graphRevisionId: saved.revision.id,
+          graphLockId: saved.lock.id,
         }
       }
 
@@ -325,9 +465,11 @@ export const createDagGraphProjectTool = (
         throw new Error('Choose an existing invocationId or a new definition, not both.')
 
       if (rawArgs.action === 'createProject') {
-        const invocation = rawArgs.invocationId
-          ? await repository.getInvocation(rawArgs.invocationId)
-          : requireInvocationFields(rawArgs)
+        if (await repository.getProjectRef(projectRef))
+          throw new Error(
+            'Project already exists. Use saveInvocation with this projectId, invocationName, and rootNodeId to add a study; or supply invocationId to pin an existing invocation.',
+          )
+        const invocation = await requireStoredInvocation(rawArgs, repository)
         await repository.putInvocation(invocation)
         const revision = createProjectRevision({
           parents: [],
@@ -353,11 +495,27 @@ export const createDagGraphProjectTool = (
       const ref = await repository.getProjectRef(projectRef)
       if (!ref) throw new Error(`Design graph project not found: ${projectId}`)
       const project = await repository.getProjectRevision(ref.revisionId)
+      if (rawArgs.action === 'importInputFile') {
+        if (
+          !rawArgs.inputPath?.startsWith(`inputs/${projectId}/`) ||
+          rawArgs.inputContent === undefined
+        )
+          throw new Error(
+            `Input files must belong to inputs/${projectId}/. Use a full project-relative inputPath such as inputs/${projectId}/data.json; bare filenames are not accepted.`,
+          )
+        await readProjectInput({ path: rawArgs.inputPath }, () =>
+          Promise.resolve(rawArgs.inputContent!),
+        )
+        await store.writeText(rawArgs.inputPath, rawArgs.inputContent)
+        return {
+          type: 'projectInputImported' as const,
+          path: rawArgs.inputPath,
+          contentHash: canonicalHash(rawArgs.inputContent),
+        }
+      }
 
       if (rawArgs.action === 'saveInvocation') {
-        const invocation = rawArgs.invocationId
-          ? await repository.getInvocation(rawArgs.invocationId)
-          : requireInvocationFields(rawArgs)
+        const invocation = await requireStoredInvocation(rawArgs, repository)
         await repository.putInvocation(invocation)
         const revision = createProjectRevision({
           parents: [project.id],
@@ -389,12 +547,33 @@ export const createDagGraphProjectTool = (
           ...(store.readManyText ? { readManyText: store.readManyText } : {}),
           rootNodeId: invocation.rootNodeId,
         })
-        const graph = savedStoredNodesToRecordGraph(await compileDesignRepositoryNodes(snapshot))
-        const compiled = compileDagNodeRecordGraph({ graph, rootHash: invocation.rootNodeId })
+        const graph = savedStoredNodesToRecordGraph(
+          await compileDesignRepositoryNodes(snapshot, compileRunCode),
+        )
+        const compiled = compileDagNodeRecordGraph({
+          graph,
+          rootHash: invocation.rootNodeId,
+          ...(ctx?.fetch ? { mediatedFetch: ctx.fetch } : {}),
+          callCapability: async (id, input) => {
+            if (id !== projectInputReadCapability)
+              throw new Error(`Capability ${id} is unavailable in this runtime.`)
+            return await readProjectInput(input, store.readText, projectId)
+          },
+        })
+        const sourceRecords = {
+          get: async (namespace: string, id: string) =>
+            (await storageClient.get({ namespace, id })).value,
+          set: async (namespace: string, id: string, value: unknown) => {
+            await storageClient.set({ namespace, id, value })
+          },
+        }
+        const sourceRepository = createSourceManifestRepository(sourceRecords)
+        const consumed: Record<string, Hash> = {}
         const root = compiled[invocation.rootNodeId]
         if (!root) throw new Error(`Invocation root node not found: ${invocation.rootNodeId}`)
         const result = await executeInvocation({
           invocation,
+          reuseCompletedRun: !Object.values(graph).some((node) => node.effect === 'source'),
           dependencies: {
             repository,
             artifacts: artifactStore,
@@ -405,11 +584,54 @@ export const createDagGraphProjectTool = (
               engineConfig: {
                 execution: { mode: 'local' },
                 storageBackend: dagBackend,
+                sourceExecution: {
+                  repository: sourceRepository,
+                  defaultPolicy: { mode: 'manual' },
+                  nodePolicies: Object.fromEntries(
+                    Object.values(graph)
+                      .filter((node) => node.capabilities?.includes(projectInputReadCapability))
+                      .map((node) => [node.id, { mode: 'always' as const }]),
+                  ),
+                  refreshedAcquisitionKeys: new Set(),
+                },
+                onSourceManifest: (key, hash) => {
+                  consumed[key] = hash
+                },
               },
             }),
           },
         })
-        return { type: 'designInvocationRun' as const, projectId, invocationName, ...result }
+        if (result.run.status !== 'completed')
+          return {
+            type: 'designInvocationRun' as const,
+            projectId,
+            invocationName,
+            ...result,
+            pinnedInvocationId: undefined,
+            sourceSnapshotId: undefined,
+            nextAction:
+              'Inspect the run error and fix the source, connection or parameters before pinning a completed evaluation. inspectGraph exposes each node paramsSchema. Set required root variables and forward required upstream parameters inside the consumer through use.<alias>({ path: params.path }) or use.<alias>({ url: params.url }); use.<alias>({}) does not inherit invocation variables. Rerun successfully, then save pinnedInvocationId with saveInvocation.invocationId.',
+          }
+        const observationSnapshot = createSourceSnapshot(consumed)
+        await sourceRepository.putSnapshot(observationSnapshot)
+        const pinned = createInvocationDefinition({
+          ...invocation,
+          sourceSnapshotId: observationSnapshot.id,
+        })
+        await repository.putInvocation(pinned)
+        return {
+          type: 'designInvocationRun' as const,
+          projectId,
+          invocationName,
+          ...result,
+          pinnedInvocationId: pinned.id,
+          sourceSnapshotId: observationSnapshot.id,
+          ...(Object.keys(consumed).length
+            ? {
+                nextAction: `Preserve this exact source replay with saveInvocation: projectId=${JSON.stringify(projectId)}, invocationName=${JSON.stringify(invocationName)}, invocationId=${JSON.stringify(pinned.id)}. Keep the same invocationName; omitting it saves under main. Then runInvocation with this projectId and invocationName before readRunRows; the earlier run belongs to the earlier invocation definition.`,
+              }
+            : {}),
+        }
       }
 
       if (rawArgs.action === 'readRunRows') {
@@ -452,6 +674,20 @@ export const createDagGraphProjectTool = (
       }
 
       if (rawArgs.action === 'inspectProject') {
+        const input = rawArgs.inputPath
+          ? {
+              path: rawArgs.inputPath,
+              content: await readProjectInput(
+                { path: rawArgs.inputPath },
+                store.readText,
+                projectId,
+              ),
+            }
+          : undefined
+        if (input && new TextEncoder().encode(input.content).byteLength > 64 * 1024)
+          throw new Error(
+            'Project input inspection is limited to 64 KiB. Evaluate the project-input source for larger data.',
+          )
         const invocations = Object.fromEntries(
           await Promise.all(
             Object.entries(project.invocations).map(async ([name, id]) => [
@@ -460,7 +696,14 @@ export const createDagGraphProjectTool = (
             ]),
           ),
         )
-        return { type: 'designProjectInspected' as const, projectId, ref, project, invocations }
+        return {
+          type: 'designProjectInspected' as const,
+          projectId,
+          ref,
+          project,
+          invocations,
+          ...(input ? { input } : {}),
+        }
       }
 
       throw new Error(`Unknown dagGraphProject action: ${String(rawArgs.action)}`)

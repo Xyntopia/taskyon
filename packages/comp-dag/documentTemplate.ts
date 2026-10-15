@@ -307,7 +307,9 @@ export const projectDocumentRow = (
         typeof value !== 'number' &&
         typeof value !== 'boolean'
       )
-        throw new Error(`Column ${name} must select a scalar or declare a simple aggregation.`)
+        throw new Error(
+          `Column ${name} must select a scalar, declare a simple aggregation, or set format: "geojson" for map geometry.`,
+        )
       if (typeof value === 'string' && value.length > 4096)
         throw new Error(`Column ${name} exceeds 4096 characters.`)
       return [name, value]

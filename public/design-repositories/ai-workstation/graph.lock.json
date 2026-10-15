@@ -1,0 +1,28 @@
+{
+  "graph": {
+    "bindings": {
+      "main": "sha256:Qb_wxH5Eljp5qxnLE2TrKRuxpPRr7sxLQgWAciTblqY",
+      "model_memory_estimate": "sha256:6B6QGL-79iCQVegyWvvHQZPLWK92CnUvMsJ76VugBvU",
+      "workstation_configuration_catalog": "sha256:o_kBwMj0nAFggDuT2niOnGFKl1Kwu_yPCEk_Y9S5UVQ",
+      "workstation_recommendation": "sha256:Qb_wxH5Eljp5qxnLE2TrKRuxpPRr7sxLQgWAciTblqY",
+      "workstation_requirements": "sha256:w6bFAezOzL8AoMOlcr82TrnGPgrP16ijYKk_pOV20mQ"
+    },
+    "id": "sha256:vt4lR8UHodFmZyg5c9uy9XpN2MSUMG9iS29zJ6XrPEE",
+    "nodeSources": {
+      "nodes/model_memory_estimate.ts": "sha256:yAftRZPD0kQ3pEl78YCURVURg5dmFUiZbWb2Crnw9Kg",
+      "nodes/workstation_configuration_catalog.ts": "sha256:EfrgZlSZTYI8QZpenrMl8f-LFxH9wdv84FAQbTBvoBI",
+      "nodes/workstation_recommendation.ts": "sha256:UVqg8lwg56hrkbc4ICF80GJZ8R5Wv3yUFnbVuw9LWR8",
+      "nodes/workstation_requirements.ts": "sha256:gH6_1nLUraDtyIpCNVW1hbgwTzKeVgOPonW7EXUEpeA"
+    },
+    "resolver": "taskyon.graph-authoring.v1",
+    "schemaVersion": 3,
+    "unboundNodes": [
+      "sha256:5VDuUnf3dy2wuhMCwt_R3aqD8ugvnhHX9i8ckQolO0Y"
+    ]
+  },
+  "id": "sha256:h_5eUFRNu9dR7uVb5myQXCRrQoPcQilee5a7Hj16r3A",
+  "kind": "taskyon.graph-source-lock",
+  "moduleLocks": {},
+  "schemaVersion": 3,
+  "supportHashes": {}
+}

@@ -1,0 +1,21 @@
+{
+  "displayName": "Mars Rover",
+  "extensions": {},
+  "invocations": {
+    "main": {
+      "configuration": {
+        "capture": [],
+        "constraints": [],
+        "inputs": {},
+        "objectives": [],
+        "policy": {
+          "accuracy": "auto"
+        },
+        "reducerOverrides": {},
+        "variables": {}
+      },
+      "root": "rover_recommendation"
+    }
+  },
+  "refs": ["template"]
+}

@@ -1,4 +1,5 @@
 import type { TyCoreToolSetup } from '../core/init'
+import type { DagRunCodeCompiler } from '@taskyon/comp-dag/designRepositorySnapshot'
 import { resolveChatCompletionConnection } from '../types/chatCompletion'
 import { createDagGraphPatchTool } from '@taskyon/comp-dag/dagGraphTool'
 import { createTool, type InternalTool } from '../types/toolApi'
@@ -41,6 +42,7 @@ export const createDefaultTaskyonToolSetup = (options?: {
   unavailableToolNames?: ReadonlySet<string>
   storageClient?: TaskyonStorageClient
   prepareGraphRepository?: () => Promise<void>
+  compileDagRunCode?: DagRunCodeCompiler
   pythonTool?: InternalTool | null
   workspaceOperations?: WorkspaceOperations
   chatCompletionFetch?: (
@@ -59,7 +61,11 @@ export const createDefaultTaskyonToolSetup = (options?: {
     ...(options?.storageClient
       ? [
           createStorageTool(options.storageClient),
-          createDagGraphProjectTool(options.storageClient, options.prepareGraphRepository),
+          createDagGraphProjectTool(
+            options.storageClient,
+            options.prepareGraphRepository,
+            options.compileDagRunCode,
+          ),
         ]
       : []),
     ...taskOrganizationTools,

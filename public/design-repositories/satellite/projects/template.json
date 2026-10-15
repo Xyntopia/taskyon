@@ -1,0 +1,21 @@
+{
+  "displayName": "Satellite",
+  "extensions": {},
+  "invocations": {
+    "main": {
+      "configuration": {
+        "capture": [],
+        "constraints": [],
+        "inputs": {},
+        "objectives": [],
+        "policy": {
+          "accuracy": "auto"
+        },
+        "reducerOverrides": {},
+        "variables": {}
+      },
+      "root": "satellite_recommendation"
+    }
+  },
+  "refs": ["template"]
+}

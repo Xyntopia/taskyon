@@ -11,7 +11,7 @@ import {
   savedStoredNodesToRecordGraph,
 } from './dagNodeRecordGraph.ts'
 import { createDagGraphPatchTool } from './dagGraphTool.ts'
-import { loadStoredGraphNodeFiles, type StoredGraphNodeFile } from './dagNodeLoader.ts'
+import { loadStoredGraphNodeFiles, saveStoredGraphNodeRecord, type StoredGraphNodeFile } from './dagNodeLoader.ts'
 import {
   createStoredDagSourceGraph,
   getStoredDagSourceGraphLocalNameIndex,
@@ -152,17 +152,11 @@ const loadBackpackRepository = async (): Promise<{
   files: StoredGraphNodeFile[]
   rootHash: Hash
 }> => {
-  const { readFile } = await import('node:fs/promises')
+  const { fileURLToPath } = await import('node:url')
+  const { readDesignGraphSourceDirectory } =
+    await import('@taskyon/comp-dag/designGraphSourcesNode')
   const repositoryUrl = new URL('../../public/design-repositories/backpack/', import.meta.url)
-  const paths = JSON.parse(
-    await readFile(new URL('repository-index.json', repositoryUrl), 'utf8'),
-  ) as string[]
-  const files = await Promise.all(
-    paths.map(async (path) => ({
-      path,
-      content: await readFile(new URL(path, repositoryUrl), 'utf8'),
-    })),
-  )
+  const files = await readDesignGraphSourceDirectory(fileURLToPath(repositoryUrl))
   const reader = createDesignRepositoryFileReader(files)
   const snapshot = await loadDesignRepositorySnapshot({
     readText: reader.readText,
@@ -171,7 +165,9 @@ const loadBackpackRepository = async (): Promise<{
   })
   const root = snapshot.revision.nodes.main
   assert(root, 'Expected Backpack repository main ref to select a root')
-  return { files: snapshot.files, rootHash: root }
+  // The concrete-record patch API needs binding names; the storage files keep canonical hash labels.
+  const concrete = await Promise.all(Object.values(snapshot.nodesByHash).map(({ node }) => saveStoredGraphNodeRecord(node, { directory: 'nodes' })))
+  return { files: concrete.map(({ file }) => file), rootHash: root }
 }
 
 const createIdentityTool = <T>(tool: T): T => tool

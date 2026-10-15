@@ -5,6 +5,7 @@
   "version": "0.5.1",
   "sideEffects": false,
   "exports": {
+    "./bundled-design-repositories": "./src/examples/bundledDesignRepositories.ts",
     ".": {
       "import": "./src/index.ts"
     },

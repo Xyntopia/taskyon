@@ -1,3 +1,4 @@
+import type { Hash } from './caching.ts'
 import { sha256HashBytes } from '@taskyon/common/modules/canonicalHash'
 import { STORED_DAG_PACKAGE_ALLOWLIST, type StoredDagPackageName } from './dagModule.ts'
 import type { DagPackageArtifactResolver, DagPackageCompilerArtifact } from './dagModuleCompiler.ts'
@@ -5,7 +6,7 @@ import type { DagPackageArtifactResolver, DagPackageCompilerArtifact } from './d
 export type DagRuntimePackageManifest = {
   schemaVersion: 1
   packages: Partial<
-    Record<StoredDagPackageName, { version: string; integrity: string; path: string }>
+    Record<StoredDagPackageName, { version: string; integrity: Hash; path: string }>
   >
 }
 
@@ -62,7 +63,7 @@ export const parseDagRuntimePackageManifest = (value: unknown): DagRuntimePackag
     if (!/^sha256:[A-Za-z0-9_-]{43}$/.test(integrity)) {
       throw new Error(`DAG runtime package ${name} has invalid integrity.`)
     }
-    packages[name as StoredDagPackageName] = { version, integrity, path }
+    packages[name as StoredDagPackageName] = { version, integrity: integrity as Hash, path }
   }
   return { schemaVersion: 1, packages }
 }
@@ -86,6 +87,10 @@ export const createDagPackageArtifactResolver = (args: {
               `Runtime package ${name}@${entry.version} does not satisfy ${requirement.range}.`,
             )
           }
+          if (entry.version !== requirement.version || entry.integrity !== requirement.integrity)
+            throw new Error(
+              `Runtime package ${name} differs from its exact lock. Restore the pinned package or explicitly update the graph lock.`,
+            )
           return { name, version: entry.version, integrity: entry.integrity }
         }),
       )

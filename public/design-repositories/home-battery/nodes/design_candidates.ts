@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:eyBa6ShsylMpwau5N_2IGU_jkAzVfqFZI3MXOipH1Vg',
-  localName: 'design_candidates',
-  label: 'Design Candidates',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -65,7 +62,6 @@ export default {
     required: ['candidates'],
     type: 'object',
   },
-  inputs: {},
   run: async () => ({
     candidates: [
       {
@@ -110,4 +106,5 @@ export default {
       },
     ],
   }),
+  ids: { design_candidates: { label: 'Design Candidates', inputs: {} } },
 }

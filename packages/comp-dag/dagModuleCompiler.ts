@@ -1,5 +1,9 @@
 import type { Hash } from './caching.ts'
-import { getDagModuleLockModuleIds, type StoredDagPackageName } from './dagModule.ts'
+import {
+  getDagModuleLockModuleIds,
+  type StoredDagPackageName,
+  type DagLockedPackage,
+} from './dagModule.ts'
 import type {
   DagCompiledNodeArtifact,
   DagResolvedPackage,
@@ -16,7 +20,7 @@ export type DagPackageCompilerArtifact = DagResolvedPackage & {
 
 export type DagPackageArtifactResolver = {
   resolve: (
-    requirements: Readonly<Partial<Record<StoredDagPackageName, { range: string }>>>,
+    requirements: Readonly<Partial<Record<StoredDagPackageName, DagLockedPackage>>>,
   ) => Promise<readonly DagResolvedPackage[]>
   load: (resolved: DagResolvedPackage) => Promise<DagPackageCompilerArtifact>
 }
@@ -83,6 +87,44 @@ const unsupportedPackages: DagPackageArtifactResolver = {
   load: () => Promise.reject(new Error('Runtime package artifacts are unavailable.')),
 }
 
+const transpileLockedModule = (
+  ts: typeof import('typescript'),
+  fileName: string,
+  source: string,
+) => {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true)
+  let output = ''
+  const program = ts.createProgram(
+    [fileName],
+    {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      noLib: true,
+      noResolve: true,
+      noCheck: true,
+      isolatedModules: true,
+      types: [],
+    },
+    {
+      getSourceFile: (path) => (path === fileName ? sourceFile : undefined),
+      writeFile: (_, text) => {
+        output = text
+      },
+      getDefaultLibFileName: () => '',
+      getCurrentDirectory: () => '',
+      getCanonicalFileName: (path) => path,
+      useCaseSensitiveFileNames: () => true,
+      getNewLine: () => '\n',
+      fileExists: (path) => path === fileName,
+      readFile: () => undefined,
+      // The immutable closure owns resolution, including erased type-only imports.
+      resolveModuleNames: (names) => names.map(() => undefined),
+    },
+  )
+  program.emit()
+  return output
+}
+
 const createTypeScriptBundle = async (request: DagModuleBundleRequest): Promise<string> => {
   const tsModule = await import('typescript')
   const sources: Array<[string, string]> = [['$node', request.entrySource]]
@@ -92,14 +134,7 @@ const createTypeScriptBundle = async (request: DagModuleBundleRequest): Promise<
     ),
   )
   const transpiled = sources.map(([id, source]) => {
-    const output = tsModule.transpileModule(source, {
-      compilerOptions: {
-        target: tsModule.ScriptTarget.ES2022,
-        module: tsModule.ModuleKind.CommonJS,
-        removeComments: false,
-      },
-      fileName: `${id.replace(':', '_')}.ts`,
-    }).outputText
+    const output = transpileLockedModule(tsModule, `${id.replace(':', '_')}.ts`, source)
     return [id, output] as const
   })
   const factories = transpiled
@@ -134,7 +169,7 @@ const createTypeScriptBundle = async (request: DagModuleBundleRequest): Promise<
  */
 export const createLockedDagNodeRunCodeCompiler = (): DagRunCodeArtifactCompiler =>
   createBundledDagNodeArtifactCompiler({
-    compilerAbi: 'taskyon-typescript-module-bundle-es2022-v2',
+    compilerAbi: 'taskyon-typescript-module-bundle-es2022-v3',
     bundle: createTypeScriptBundle,
     packages: unsupportedPackages,
   })

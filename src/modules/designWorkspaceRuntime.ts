@@ -1,4 +1,6 @@
 import type { GraphData } from '@taskyon/common/modules/graph'
+import { loadBundledDesignRepositorySources } from '@taskyon/taskyon/bundled-design-repositories'
+import { importDesignGraphSnapshot } from '@taskyon/comp-dag/dagGitProjection'
 import type { Hash } from '@taskyon/comp-dag/caching'
 import {
   createInvocationDefinition,
@@ -13,7 +15,7 @@ import type {
 } from '@taskyon/comp-dag/designGraphRepository'
 import {
   compileDesignRepositoryNodes,
-  createUrlDesignRepositoryReader,
+  createDesignRepositoryFileReader,
   loadDesignRepositoryNodeClosure,
   loadDesignRepositorySnapshot,
   loadProjectRepositorySnapshot,
@@ -142,18 +144,15 @@ const nodeInputPorts = (records: DagNodeRecordGraph, hash: Hash): DesignGraphPor
     : [{ name: 'params', type: parameterType, role: 'parameter' }, ...dependencies]
 }
 
-const projectBaseUrl = (projectId: string) =>
-  new URL(`/design-repositories/${projectId}/`, location.origin)
-
 export const prepareBundledDesignProject = async (args: {
   projectId: string
   store: DesignGraphObjectStore
   repository: DesignGraphRepository
 }): Promise<{ graph: GraphRevision; project: ProjectRevision }> => {
-  const readText = createUrlDesignRepositoryReader({
-    baseUrl: projectBaseUrl(args.projectId),
-    fetch,
-  })
+  const sourceFiles = await loadBundledDesignRepositorySources(args.projectId)
+  const { compileDesignGraphSources } = await import('@taskyon/comp-dag/designGraphSources')
+  const generated = await compileDesignGraphSources(sourceFiles)
+  const { readText } = createDesignRepositoryFileReader(generated)
   const [graphSnapshot, projectSnapshot] = await Promise.all([
     loadDesignRepositorySnapshot({ readText, checkout: { kind: 'ref', name: 'graph/main' } }),
     loadProjectRepositorySnapshot({
@@ -161,15 +160,10 @@ export const prepareBundledDesignProject = async (args: {
       checkout: { kind: 'ref', name: 'projects/template' },
     }),
   ])
-  for (const file of graphSnapshot.files) await args.store.writeText(file.path, file.source)
-  await args.repository.putGraphRevision(graphSnapshot.revision)
-  for (const invocation of Object.values(projectSnapshot.invocations)) {
-    await args.repository.putInvocation(invocation)
-  }
-  for (const extension of Object.values(projectSnapshot.extensions)) {
-    await args.repository.putExtension(extension)
-  }
-  await args.repository.putProjectRevision(projectSnapshot.revision)
+  await importDesignGraphSnapshot({
+    store: args.store,
+    files: generated.filter((file) => !file.path.startsWith('refs/')),
+  })
 
   return { graph: graphSnapshot.revision, project: projectSnapshot.revision }
 }

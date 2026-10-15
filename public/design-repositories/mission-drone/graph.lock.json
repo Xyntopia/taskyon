@@ -1,0 +1,26 @@
+{
+  "graph": {
+    "bindings": {
+      "constraint_scoring": "sha256:Bet58vardolA1p5nlew1bpeIc3qH8Nc9lIew0lOccz0",
+      "design_candidates": "sha256:xv0stXnX3vo65ZdzPheg_0mMbEbNF1uSl3zHeHZxRNk",
+      "drone_recommendation": "sha256:Ed6ARMo1ZkJ_WWdkLjr7fCQUzCrlH45yIa9e1z51wDY",
+      "main": "sha256:Ed6ARMo1ZkJ_WWdkLjr7fCQUzCrlH45yIa9e1z51wDY",
+      "mission_requirements": "sha256:NIFqm7cBQYGK5o5kiQxAZlqJHB2X-X_o3OWEGE5rFTI"
+    },
+    "id": "sha256:d5-_-vZnOyQMkuKqK3AJRXlu49G_ITq4SVjUUCiVl2E",
+    "nodeSources": {
+      "nodes/constraint_scoring.ts": "sha256:9TgtIy46eLiF_zR6JPJFwLFwzbs-xKMeIfqTnv1rQ3Q",
+      "nodes/design_candidates.ts": "sha256:rCwZue3MErprdlq4k0jnO8bwFK6fm2Tzihgz9_yIB7o",
+      "nodes/drone_recommendation.ts": "sha256:Dax0bziYXHrJEDwatPsOesyGuOXBrMAEvnYu9J7_YmI",
+      "nodes/mission_requirements.ts": "sha256:GhoQPB7D_je8sQ9aPC1M9bpb117GcD9juBqjcuUfplw"
+    },
+    "resolver": "taskyon.graph-authoring.v1",
+    "schemaVersion": 3,
+    "unboundNodes": []
+  },
+  "id": "sha256:Ssq-gZCEQB6Cq6CMlidZXOTAjeeXaDBjOamR-UdoCn0",
+  "kind": "taskyon.graph-source-lock",
+  "moduleLocks": {},
+  "schemaVersion": 3,
+  "supportHashes": {}
+}

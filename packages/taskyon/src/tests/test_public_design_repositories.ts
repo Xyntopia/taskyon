@@ -1,6 +1,6 @@
+import { loadBundledDesignRepositorySources } from '../examples/bundledDesignRepositories'
 import {
   createDesignRepositoryFileReader,
-  createUrlDesignRepositoryReader,
   loadDesignRepositorySnapshot,
 } from '@taskyon/comp-dag/designRepositorySnapshot'
 
@@ -19,19 +19,31 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const repositoryReader = async (projectId: string) => {
   if (typeof window !== 'undefined') {
-    return createUrlDesignRepositoryReader({
-      baseUrl: new URL(`/design-repositories/${projectId}/`, location.origin),
-      fetch,
-    })
+    return createDesignRepositoryFileReader(await loadBundledDesignRepositorySources(projectId))
+      .readText
   }
-  const { readFile } = await import('node:fs/promises')
+  const { fileURLToPath } = await import('node:url')
+  const { readdir } = await import('node:fs/promises')
+  const { readDesignGraphSourceDirectory } =
+    await import('@taskyon/comp-dag/designGraphSourcesNode')
   const baseUrl = new URL(`../../../../public/design-repositories/${projectId}/`, import.meta.url)
-  const paths = JSON.parse(
-    await readFile(new URL('repository-index.json', baseUrl), 'utf8'),
-  ) as string[]
-  const files = await Promise.all(
-    paths.map(async (path) => ({ path, content: await readFile(new URL(path, baseUrl), 'utf8') })),
+  const paths = await readdir(fileURLToPath(baseUrl), { recursive: true })
+  assert(
+    paths.every(
+      (path) =>
+        [
+          'nodes',
+          'modules',
+          'imports',
+          'projects',
+          'assets',
+          'taskyon.json',
+          'graph.lock.json',
+        ].includes(path.split('/')[0]!) && !path.includes('sha256_'),
+    ),
+    `${projectId} must contain flat source files and its authored descriptor only.`,
   )
+  const files = await readDesignGraphSourceDirectory(fileURLToPath(baseUrl))
   return createDesignRepositoryFileReader(files).readText
 }
 

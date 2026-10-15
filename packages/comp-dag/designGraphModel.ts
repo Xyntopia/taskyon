@@ -18,6 +18,7 @@ export type GraphRevision = {
   id: Hash
   parents: Hash[]
   nodes: Record<string, Hash>
+  authoringLockId?: Hash
 }
 
 export type InvocationConstraint = {
@@ -203,7 +204,12 @@ const assertIdentity = (actual: unknown, expected: Hash, label: string) => {
 export const createGraphRevision = (
   input: Omit<GraphRevision, 'schemaVersion' | 'id'>,
 ): GraphRevision => {
-  const value = { schemaVersion: 2 as const, parents: [...input.parents], nodes: input.nodes }
+  const value = {
+    schemaVersion: 2 as const,
+    parents: [...input.parents],
+    nodes: input.nodes,
+    ...(input.authoringLockId ? { authoringLockId: input.authoringLockId } : {}),
+  }
   return { ...value, id: hashIdentity('taskyon.graphRevision.v2', value) }
 }
 
@@ -217,6 +223,9 @@ export const parseGraphRevision = (value: unknown): GraphRevision => {
       hashAtBoundary(parent, `Graph revision parent ${index}`),
     ),
     nodes: hashMapAtBoundary(input.nodes, 'Graph revision nodes'),
+    ...(input.authoringLockId
+      ? { authoringLockId: hashAtBoundary(input.authoringLockId, 'Graph authoring lock') }
+      : {}),
   })
   assertIdentity(input.id, record.id, 'Graph revision')
   return record
@@ -341,13 +350,9 @@ export const createInvocationDefinition = (
   return { ...value, id: hashIdentity('taskyon.invocation.v2', value) }
 }
 
-export const parseInvocationDefinition = (value: unknown): InvocationDefinition => {
+export const resolveInvocationDefinition = (value: unknown): InvocationDefinition => {
   const input = objectAtBoundary(value, 'Invocation definition')
-  if (
-    input.schemaVersion !== 2 ||
-    !Array.isArray(input.objectives) ||
-    !Array.isArray(input.constraints)
-  ) {
+  if (!Array.isArray(input.objectives) || !Array.isArray(input.constraints)) {
     throw new Error('Unsupported invocation definition.')
   }
   const variables = Object.fromEntries(
@@ -382,6 +387,13 @@ export const parseInvocationDefinition = (value: unknown): InvocationDefinition 
     policy: parseRequestedPolicy(input.policy),
     reducerOverrides: parseReducerOverrides(input.reducerOverrides),
   })
+  return record
+}
+
+export const parseInvocationDefinition = (value: unknown): InvocationDefinition => {
+  const input = objectAtBoundary(value, 'Invocation definition')
+  if (input.schemaVersion !== 2) throw new Error('Unsupported invocation definition.')
+  const record = resolveInvocationDefinition(input)
   assertIdentity(input.id, record.id, 'Invocation definition')
   return record
 }

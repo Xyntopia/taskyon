@@ -1,0 +1,106 @@
+{
+  "displayName": "Ai Workstation",
+  "extensions": {},
+  "invocations": {
+    "main": {
+      "configuration": {
+        "capture": [],
+        "constraints": [
+          {
+            "limit": 5500,
+            "operator": "<=",
+            "path": "recommendation.estimatedPriceUsd"
+          },
+          {
+            "limit": 1200,
+            "operator": "<=",
+            "path": "recommendation.estimatedSystemPowerW"
+          },
+          {
+            "limit": 0,
+            "operator": ">=",
+            "path": "recommendation.usableVramGb"
+          }
+        ],
+        "inputs": {
+          "candidate": {
+            "strategy": {
+              "id": "sequential"
+            }
+          }
+        },
+        "objectives": [
+          {
+            "direction": "max",
+            "target": {
+              "op": "identity",
+              "path": "recommendation.score"
+            }
+          }
+        ],
+        "policy": {
+          "accuracy": "auto"
+        },
+        "reducerOverrides": {},
+        "variables": {
+          "requirements.budgetUsd": {
+            "end": 20000,
+            "kind": "sweep",
+            "method": "linear",
+            "start": 500,
+            "step": 100
+          },
+          "requirements.concurrency": {
+            "end": 16,
+            "kind": "sweep",
+            "method": "linear",
+            "start": 1,
+            "step": 1
+          },
+          "requirements.contextTokens": {
+            "end": 262144,
+            "kind": "sweep",
+            "method": "linear",
+            "start": 2048,
+            "step": 2048
+          },
+          "requirements.minimumSystemRamGb": {
+            "end": 512,
+            "kind": "sweep",
+            "method": "linear",
+            "start": 16,
+            "step": 16
+          },
+          "requirements.model": {
+            "kind": "grid",
+            "values": ["llama-3.1-8b", "qwen2.5-32b", "llama-3.3-70b"]
+          },
+          "requirements.noisePreference": {
+            "kind": "grid",
+            "values": ["any", "quiet"]
+          },
+          "requirements.powerLimitW": {
+            "end": 2500,
+            "kind": "sweep",
+            "method": "linear",
+            "start": 250,
+            "step": 50
+          },
+          "requirements.quantization": {
+            "kind": "grid",
+            "values": ["q4", "q8", "fp16"]
+          },
+          "requirements.region": {
+            "kind": "constant"
+          },
+          "requirements.runtime": {
+            "kind": "grid",
+            "values": ["any", "cuda", "metal"]
+          }
+        }
+      },
+      "root": "workstation_recommendation"
+    }
+  },
+  "refs": ["template"]
+}

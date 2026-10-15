@@ -5,8 +5,18 @@ import {
 
 export type Hash = Sha256Hash
 
+export class MissingDagArtifact extends Error {
+  readonly hash: Hash
+  constructor(hash: Hash) {
+    super(`Artifact not found: ${hash}`)
+    this.name = 'MissingDagArtifact'
+    this.hash = hash
+  }
+}
+
 // Storage backend abstraction
 export interface DagStorageBackend {
+  /** Missing data throws MissingDagArtifact; other failures remain explicit errors. */
   readArtifact<O>(hash: Hash): Promise<O> | O
   writeArtifact(value: unknown): Promise<Hash> | Hash
   getCacheEntry(key: string): Promise<{ artifact: Hash } | null> | { artifact: Hash } | null
@@ -36,7 +46,7 @@ const inMemoryBackend: DagStorageBackend = {
   readArtifact<O>(hash: Hash) {
     const json = artifactStore.get(hash)
     if (!json) {
-      throw new Error(`Artifact not found: ${hash}`)
+      throw new MissingDagArtifact(hash)
     }
     return JSON.parse(json) as O
   },
@@ -64,4 +74,19 @@ const inMemoryBackend: DagStorageBackend = {
  */
 export function getDefaultInMemoryBackend(): DagStorageBackend {
   return inMemoryBackend
+}
+
+/** Missing derived data is rebuildable; corruption and storage failures are not cache misses. */
+export const readCachedDagArtifact = async (
+  backend: DagStorageBackend,
+  hash: Hash,
+): Promise<{ value: unknown } | null> => {
+  try {
+    const value = await backend.readArtifact<unknown>(hash)
+    if (canonicalHash(value) !== hash) throw new Error('Cached DAG artifact integrity mismatch.')
+    return { value }
+  } catch (error) {
+    if (error instanceof MissingDagArtifact) return null
+    throw error
+  }
 }

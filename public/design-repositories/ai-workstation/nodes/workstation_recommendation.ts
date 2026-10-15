@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:ZS47WA2w3T-O_r1dwR4NvuSvNLcLlPcZozHNQRxfxgM',
-  localName: 'workstation_recommendation',
-  label: 'AI Workstation Design Result',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -285,24 +282,6 @@ export default {
     ],
     type: 'object',
   },
-  // Input node references:
-  // candidate -> selected_workstation_configuration — Selected Workstation Configuration
-  // modelEstimate -> model_memory_estimate — Model Memory Estimate
-  // requirements -> workstation_requirements — Workload & Requirements
-  inputs: {
-    candidate: {
-      nodeId: 'sha256:TngzrenlLhjkgA_48UxK8RpPOC4uPCm6za8F5NOJcqw',
-      role: 'exposed',
-    },
-    modelEstimate: {
-      nodeId: 'sha256:v7zln4rwBsnMxPf3ZYBHGuUH5g_qLdSP6yHK-dOD21U',
-      role: 'internal',
-    },
-    requirements: {
-      nodeId: 'sha256:GygE4bN_4kbDjXcPjoF1FwGj39TgYTe0Vguwde5ZsrE',
-      role: 'exposed',
-    },
-  },
   run: async ({ use }) => {
     const candidate = await use.candidate()
     const requirements = await use.requirements()
@@ -411,5 +390,23 @@ export default {
         priceBasis: candidate.priceKind,
       },
     }
+  },
+  ids: {
+    workstation_recommendation: {
+      inputs: {
+        candidate: { source: 'workstation_configuration_catalog', explode: 'configurations' },
+        modelEstimate: { source: 'model_memory_estimate', role: 'internal' },
+        requirements: { source: 'workstation_requirements', role: 'exposed' },
+      },
+      label: 'AI Workstation Design Result',
+    },
+    main: {
+      inputs: {
+        candidate: { source: 'workstation_configuration_catalog', explode: 'configurations' },
+        modelEstimate: { source: 'model_memory_estimate', role: 'internal' },
+        requirements: { source: 'workstation_requirements', role: 'exposed' },
+      },
+      label: 'AI Workstation Design Result',
+    },
   },
 }

@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:JmoQIMTb6mGdsgP4wrnQgNq3LAZVOK4jd1rIo8wpKLs',
-  localName: 'rover_recommendation',
-  label: 'Autonomous Mars Rover Recommendation',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -132,19 +129,6 @@ export default {
     required: ['recommendation', 'ranked', 'viableCount', 'constraints'],
     type: 'object',
   },
-  // Input node references:
-  // ranked -> constraint_scoring — Constraint & Score Evaluation
-  // requirements -> mission_requirements — Mission Requirements
-  inputs: {
-    ranked: {
-      nodeId: 'sha256:R9A24gcmDjX3yhSUgguIryEkUHqHVHn1g2EljsfEq8M',
-      role: 'internal',
-    },
-    requirements: {
-      nodeId: 'sha256:SbqiYLA6nmSqnXC29hETtfhAS6DOf1W7ICeQlUcZemk',
-      role: 'exposed',
-    },
-  },
   run: async ({ use }) => {
     const scored = await use.ranked({})
     const requirements = await use.requirements({})
@@ -154,5 +138,21 @@ export default {
       viableCount: scored.viable.length,
       constraints: requirements,
     }
+  },
+  ids: {
+    rover_recommendation: {
+      inputs: {
+        ranked: { source: 'constraint_scoring', role: 'internal' },
+        requirements: { source: 'mission_requirements', role: 'exposed' },
+      },
+      label: 'Autonomous Mars Rover Recommendation',
+    },
+    main: {
+      inputs: {
+        ranked: { source: 'constraint_scoring', role: 'internal' },
+        requirements: { source: 'mission_requirements', role: 'exposed' },
+      },
+      label: 'Autonomous Mars Rover Recommendation',
+    },
   },
 }

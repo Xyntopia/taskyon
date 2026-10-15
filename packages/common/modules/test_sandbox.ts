@@ -333,3 +333,39 @@ export const testEnvironmentWorkerUsesFrpCapabilitiesConcurrently = async () => 
 
 testEnvironmentWorkerUsesFrpCapabilitiesConcurrently.description =
   'Routes concurrent environment-worker calls through isolated FRP capability channels.'
+
+export const testExecutableSandboxDisablesAmbientNetwork = async () => {
+  const sandbox = await createExecutableSandbox({
+    id: 'ambient-network-boundary',
+    reuse: { mode: 'disposable' },
+  })
+  try {
+    const blocked = await sandbox.execute<boolean>(
+      `() => {
+      const names = ['WebSocket', 'XMLHttpRequest', 'EventSource',
+        'Worker', 'SharedWorker', 'importScripts'];
+      const fetchDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'fetch');
+      if (!fetchDescriptor || fetchDescriptor.value !== undefined || fetchDescriptor.writable)
+        return false;
+      return names.every((name) => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+        if (!descriptor || descriptor.value !== undefined || descriptor.configurable || descriptor.writable)
+          return false;
+        try { Object.defineProperty(globalThis, name, { value: () => 'restored' }); }
+        catch { return globalThis[name] === undefined; }
+        return false;
+      });
+    }`,
+      [],
+    )
+    assert(
+      blocked,
+      'Sandbox native networking must be unavailable and alternative transports locked.',
+    )
+    return { success: true }
+  } finally {
+    sandbox.terminate()
+  }
+}
+testExecutableSandboxDisablesAmbientNetwork.description =
+  'Checks native fetch is absent and alternative network transports and worker creation are removed and locked.'

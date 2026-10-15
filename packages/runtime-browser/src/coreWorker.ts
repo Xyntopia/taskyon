@@ -1,3 +1,5 @@
+import { createBrowserDagRunCodeCompiler } from './dagRunCodeCompiler'
+import { createStorageDagRunCodeCompiler } from '@taskyon/comp-dag/designRepositorySnapshot'
 import { createNativeDeviceRequester } from './nativeCryptoBridge'
 import {
   createProtocolPort,
@@ -70,6 +72,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
             ...(nativeDevice ? { nativeDevice: nativeDevice.commands } : {}),
           })
         : undefined
+    const dagCompiler = createBrowserDagRunCodeCompiler()
     const runtime = createTaskyonBrowserCoreRuntime({
       llmSettings: () => llmSettings,
       ...(event.data.sandboxFetchIdleTimeoutMs !== undefined
@@ -106,6 +109,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
       toolSetup: (storageClient) =>
         createDefaultTaskyonToolSetup({
           storageClient,
+          compileDagRunCode: createStorageDagRunCodeCompiler(storageClient, dagCompiler.compiler),
           ...(hostFetch
             ? {
                 chatCompletionFetch: (connection) => (input, init) =>
@@ -145,6 +149,7 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
         directFallback?.destroy()
         hostFetch?.stop()
         nativeDevice?.stop()
+        dagCompiler.stop()
         chatCompletionStreamPort?.close()
         workerStreamPort?.close()
       }

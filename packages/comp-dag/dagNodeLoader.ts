@@ -30,11 +30,12 @@ export type SavedStoredGraphNode = {
 }
 
 type ParsedNodeFields = {
-  formatVersion: 2
+  formatVersion: 2 | 3
   id: string
   localName: string
   label: string
   version: number
+  definitionHash?: Hash
   effect?: DagNodeEffect
   timeoutMs?: number
   structure?: unknown
@@ -76,7 +77,7 @@ export const parseStoredGraphNodeHashFromPath = (path: string): Hash | null => {
 
 const loadTypescript = async (): Promise<typeof ts> => await import('typescript')
 
-const formatTypeScript = async (source: string): Promise<string> => {
+export const formatDagTypeScript = async (source: string): Promise<string> => {
   const prettier = (await import('prettier/standalone')) as PrettierStandaloneModule
   const estreePlugin = (await import('prettier/plugins/estree')) as PrettierPlugin
   const typescriptPlugin = (await import('prettier/plugins/typescript')) as PrettierPlugin
@@ -131,16 +132,17 @@ const parseLiteralValue = (tsModule: typeof ts, node: ts.Expression): unknown =>
     return expression.elements.map((element) => parseLiteralValue(tsModule, element))
   }
   if (tsModule.isObjectLiteralExpression(expression)) {
-    const out: Record<string, unknown> = {}
+    const entries: [string, unknown][] = []
     for (const prop of expression.properties) {
       if (!tsModule.isPropertyAssignment(prop)) {
         throw new Error('Stored graph node objects only support property assignments')
       }
       const name = propertyNameText(tsModule, prop.name)
       if (!name) throw new Error('Stored graph node object has unsupported property name')
-      out[name] = parseLiteralValue(tsModule, prop.initializer)
+      if (entries.some(([key]) => key === name)) throw new Error('Duplicate DAG literal property.')
+      entries.push([name, parseLiteralValue(tsModule, prop.initializer)])
     }
-    return out
+    return Object.fromEntries(entries)
   }
   throw new Error(`Stored graph node has unsupported literal expression: ${expression.getText()}`)
 }
@@ -299,7 +301,7 @@ const parseRecordInputRefs = (value: unknown): Record<string, DagNodeRecordInput
   return out
 }
 
-const parseDagJsonSchema = (value: unknown, fieldName: string): DagJsonSchema => {
+export const parseDagJsonSchema = (value: unknown, fieldName: string): DagJsonSchema => {
   if (typeof value === 'boolean') return value
   if (value && typeof value === 'object' && !Array.isArray(value)) return value as DagJsonSchema
   throw new Error(`Stored graph node field "${fieldName}" must be a JSON schema`)
@@ -310,9 +312,21 @@ const parseNodeStructure = (value: unknown): DagNodeRecordStructure | undefined 
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Stored graph node field "structure" must be an object')
   }
-  const structure = value as { kind?: unknown; sourceAlias?: unknown; path?: unknown }
+  const structure = value as {
+    kind?: unknown
+    sourceAlias?: unknown
+    path?: unknown
+    parameter?: unknown
+    default?: unknown
+  }
   if (
-    structure.kind !== 'explode' ||
+    structure.kind === 'choose' &&
+    typeof structure.parameter === 'string' &&
+    typeof structure.default === 'string'
+  )
+    return { kind: 'choose', parameter: structure.parameter, default: structure.default }
+  if (
+    (structure.kind !== 'explode' && structure.kind !== 'select') ||
     typeof structure.sourceAlias !== 'string' ||
     !structure.sourceAlias ||
     typeof structure.path !== 'string' ||
@@ -321,7 +335,7 @@ const parseNodeStructure = (value: unknown): DagNodeRecordStructure | undefined 
     throw new Error('Stored graph node explode structure requires sourceAlias and path')
   }
   return {
-    kind: 'explode',
+    kind: structure.kind,
     sourceAlias: structure.sourceAlias,
     path: structure.path,
   }
@@ -388,6 +402,67 @@ const parseStaticImports = (
   }
 }
 
+/** Reads declarations without evaluating imports, helpers, or executable code. */
+export const parseDagDeclaration = async (source: string) => {
+  const tsModule = await loadTypescript()
+  const sourceFile = tsModule.createSourceFile('dag.ts', source, tsModule.ScriptTarget.Latest, true)
+  const object = findDefaultExportObject(tsModule, sourceFile)
+  const fields = new Map<string, unknown>()
+  let runSource: string | undefined
+  for (const prop of object.properties) {
+    if (!tsModule.isPropertyAssignment(prop))
+      throw new Error('DAG declarations require literal properties.')
+    const name = propertyNameText(tsModule, prop.name)
+    if (!name || fields.has(name)) throw new Error('Duplicate or invalid DAG declaration field.')
+    if (name === 'run') {
+      const implementation = stripExpression(tsModule, prop.initializer)
+      const factory = tsModule.isCallExpression(implementation)
+        ? stripExpression(tsModule, implementation.expression)
+        : undefined
+      if (
+        !tsModule.isArrowFunction(implementation) &&
+        !tsModule.isFunctionExpression(implementation) &&
+        !tsModule.isIdentifier(implementation) &&
+        !tsModule.isPropertyAccessExpression(implementation) &&
+        !(factory && (tsModule.isArrowFunction(factory) || tsModule.isFunctionExpression(factory)))
+      )
+        throw new Error(
+          'A DAG implementation must be a function, a bound reference, or an explicit function factory.',
+        )
+      runSource = implementation.getText(sourceFile)
+      fields.set('run', true)
+    } else fields.set(name, parseLiteralValue(tsModule, prop.initializer))
+  }
+  return {
+    fields: Object.fromEntries(fields),
+    runSource,
+    ...parseStaticImports(tsModule, sourceFile),
+    preambleSource: parsePreamble(tsModule, sourceFile),
+  }
+}
+
+export const rewriteDagDeclaration = async (
+  source: string,
+  updates: Record<string, string | undefined>,
+) => {
+  const tsModule = await loadTypescript()
+  const sourceFile = tsModule.createSourceFile('dag.ts', source, tsModule.ScriptTarget.Latest, true)
+  const object = findDefaultExportObject(tsModule, sourceFile)
+  const remaining = new Map(Object.entries(updates))
+  const properties = object.properties.flatMap((property) => {
+    const name = propertyNameText(tsModule, property.name!)
+    if (!name || !remaining.has(name)) return [property.getText(sourceFile)]
+    const replacement = remaining.get(name)
+    remaining.delete(name)
+    return replacement === undefined ? [] : [`${name}: ${replacement}`]
+  })
+  for (const [name, value] of remaining)
+    if (value !== undefined) properties.push(`${name}: ${value}`)
+  return await formatDagTypeScript(
+    `${source.slice(0, object.getStart(sourceFile))}{\n${properties.join(',\n')}\n}${source.slice(object.end)}`,
+  )
+}
+
 const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
   const tsModule = await loadTypescript()
   const sourceFile = tsModule.createSourceFile(
@@ -411,13 +486,14 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
   }
 
   const run = fields.get('run')
-  if (!run) throw new Error('Stored graph node is missing required field "run"')
+  if (!run && !fields.has('structure'))
+    throw new Error('Stored graph node is missing required field "run"')
 
   const timeoutMs = parseOptionalNumberField(tsModule, fields, 'timeoutMs')
   const effect = parseOptionalNodeEffect(tsModule, fields)
   const formatVersion = parseNumberField(tsModule, fields, 'formatVersion')
-  if (formatVersion !== 2) {
-    throw new Error(`Stored graph node formatVersion must be 2, received ${formatVersion}`)
+  if (formatVersion !== 2 && formatVersion !== 3) {
+    throw new Error(`Unsupported stored graph node formatVersion ${formatVersion}`)
   }
   const moduleLockId = fields.has('moduleLockId')
     ? parseHash(parseStringField(tsModule, fields, 'moduleLockId'), 'moduleLockId')
@@ -425,7 +501,7 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
   if (imports.importSpecifiers?.length && !moduleLockId) {
     throw new Error('Stored graph nodes with imports require a moduleLockId.')
   }
-  const runSource = stripExpression(tsModule, run).getText(sourceFile)
+  const runSource = run ? stripExpression(tsModule, run).getText(sourceFile) : ''
   const capabilities = parseOptionalLiteralField(tsModule, fields, 'capabilities')
   if (
     capabilities !== undefined &&
@@ -439,6 +515,14 @@ const parseSourceFields = async (source: string): Promise<ParsedNodeFields> => {
     localName: parseStringField(tsModule, fields, 'localName'),
     label: parseStringField(tsModule, fields, 'label'),
     version: parseNumberField(tsModule, fields, 'version'),
+    ...(fields.has('definitionHash')
+      ? {
+          definitionHash: parseHash(
+            parseStringField(tsModule, fields, 'definitionHash'),
+            'definitionHash',
+          ),
+        }
+      : {}),
     ...(effect ? { effect } : {}),
     ...(typeof timeoutMs === 'number' ? { timeoutMs } : {}),
     structure: parseOptionalLiteralField(tsModule, fields, 'structure'),
@@ -486,6 +570,7 @@ const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
   source += emitField('localName', node.localName)
   source += emitField('label', node.label)
   source += emitField('version', node.version)
+  if (node.definitionHash) source += emitField('definitionHash', node.definitionHash)
   if (node.effect === 'source') source += emitField('effect', node.effect)
   if (typeof node.timeoutMs === 'number') source += emitField('timeoutMs', node.timeoutMs)
   if (node.structure) source += emitField('structure', node.structure)
@@ -499,7 +584,7 @@ const emitStoredGraphNodeSource = (node: StoredDagNodeDefinition): string => {
     source += emitField('exposedInputs', node.exposedInputs ?? {})
   }
   if (node.moduleLockId) source += emitField('moduleLockId', node.moduleLockId)
-  source += `  run: ${node.runSource},\n`
+  if (!node.structure || node.formatVersion === 2) source += `  run: ${node.runSource},\n`
   source += `}\n`
   return source
 }
@@ -512,6 +597,7 @@ const toStoredGraphNodeDefinition = (fields: ParsedNodeFields): StoredDagNodeDef
     localName: fields.localName,
     label: fields.label,
     version: fields.version,
+    ...(fields.definitionHash ? { definitionHash: fields.definitionHash } : {}),
     ...(fields.effect === 'source' ? { effect: fields.effect } : {}),
     ...(typeof fields.timeoutMs === 'number' ? { timeoutMs: fields.timeoutMs } : {}),
     ...(structure ? { structure } : {}),
@@ -543,6 +629,7 @@ const hashStoredGraphNodeDefinition = async (node: StoredDagNodeDefinition): Pro
     localName: node.localName,
     label: node.label,
     version: node.version,
+    ...(node.definitionHash ? { definitionHash: node.definitionHash } : {}),
     ...(node.effect === 'source' ? { effect: node.effect } : {}),
     ...(typeof node.timeoutMs === 'number' ? { timeoutMs: node.timeoutMs } : {}),
     ...(node.structure ? { structure: node.structure } : {}),
@@ -571,7 +658,7 @@ export const normalizeStoredGraphNodeSource = async (
 }> => {
   const parsed = toStoredGraphNodeDefinition(await parseSourceFields(source))
   const requestedNode = { ...parsed, id: opts?.id ?? parsed.id }
-  const normalizedSource = await formatTypeScript(emitStoredGraphNodeSource(requestedNode))
+  const normalizedSource = await formatDagTypeScript(emitStoredGraphNodeSource(requestedNode))
   const node = toStoredGraphNodeDefinition(await parseSourceFields(normalizedSource))
   return {
     node,
@@ -630,6 +717,15 @@ export const loadStoredGraphNodeFile = async (
   if (!file.path.endsWith('.ts')) {
     throw new Error(`Stored graph node ${file.path}: only .ts node files are supported`)
   }
+  const declaration = await parseDagDeclaration(file.source)
+  if (declaration.fields.ids !== undefined) {
+    const { resolveAuthoredGraph } = await import('./dagGraphAuthoring.ts')
+    const resolved = await resolveAuthoredGraph([file])
+    const hashes = [...new Set(Object.values(resolved.bindings))]
+    if (hashes.length !== 1)
+      throw new Error('Load reusable definitions together through the graph resolver.')
+    return await saveStoredGraphNodeRecord(resolved.resolvedNodes[hashes[0]!]!)
+  }
   const declaredNode = toStoredGraphNodeDefinition(await parseSourceFields(file.source))
   const normalized = await normalizeStoredGraphNodeSource(file.source, {
     id: SELF_HASH_PLACEHOLDER,
@@ -656,7 +752,33 @@ export const loadStoredGraphNodeFile = async (
 
 export const loadStoredGraphNodeFiles = async (
   files: readonly StoredGraphNodeFile[],
-): Promise<Record<Hash, SavedStoredGraphNode>> =>
-  Object.fromEntries(
+): Promise<Record<Hash, SavedStoredGraphNode>> => {
+  if (files.length && (await parseDagDeclaration(files[0]!.source)).fields.ids !== undefined) {
+    const { resolveAuthoredGraph } = await import('./dagGraphAuthoring.ts')
+    const resolved = await resolveAuthoredGraph(files)
+    return Object.fromEntries(
+      await Promise.all(
+        Object.values(resolved.resolvedNodes).map(async (node) => {
+          const saved = await saveStoredGraphNodeRecord(node)
+          const name = Object.entries(resolved.bindings).find(([, hash]) => hash === node.id)?.[0]
+          return [
+            saved.hash,
+            name
+              ? {
+                  ...saved,
+                  node: {
+                    ...saved.node,
+                    localName: name,
+                    label: resolved.bindingLabels[name]!,
+                  },
+                }
+              : saved,
+          ]
+        }),
+      ),
+    )
+  }
+  return Object.fromEntries(
     (await Promise.all(files.map(loadStoredGraphNodeFile))).map((loaded) => [loaded.hash, loaded]),
-  ) as Record<Hash, SavedStoredGraphNode>
+  )
+}

@@ -16,7 +16,10 @@ import { compileLockedDagNodeRunCode } from './dagModuleCompiler.ts'
 import { executeDagNodeRun } from './dagNodeRecordCompiler.ts'
 import { defineDagNodeRecord } from './dagNodeRecord.ts'
 import { compileDagNodeRecordGraph } from './dagNodeRecordGraph.ts'
-import type { SandboxFetchOptions } from '@taskyon/common/modules/webFetching/mediatedFetch.ts'
+import {
+  createMediatedFetch,
+  type SandboxFetchOptions,
+} from '@taskyon/common/modules/webFetching/mediatedFetch.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -102,7 +105,11 @@ export const testDagModuleLockUsesExactReferrerMappings = () => {
       [moduleId]: { './helper.js': { kind: 'module', id: moduleId } },
     },
     packages: {
-      zod: { range: '^4.0.0' },
+      zod: {
+        range: '^4.0.0',
+        version: '4.0.5',
+        integrity: 'sha256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      },
     },
   })
   assert(
@@ -143,6 +150,7 @@ export const testLockedDagModulesCompileWithoutAmbientPackageResolution = async 
   })
   const value = await executeDagNodeRun({
     id: 'locked-module-test',
+    effect: 'pure',
     runCode,
     run: undefined,
     params: { value: 4 },
@@ -165,7 +173,7 @@ export const testLockedDagModulesCompileWithBrowserProcessShim = async () => {
   const processDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'process')
   Object.defineProperty(globalThis, 'process', {
     configurable: true,
-    value: { env: {}, versions: {} },
+    value: { env: {} },
   })
 
   try {
@@ -186,6 +194,7 @@ export const featureId = (feature: Feature) => String(feature.id)`,
     })
     const value = await executeDagNodeRun({
       id: 'browser-process-shim-test',
+      effect: 'pure',
       runCode,
       run: undefined,
       params: { feature: { id: 'parcel-1', type: 'Feature', properties: {}, geometry: null } },
@@ -204,11 +213,16 @@ testLockedDagModulesCompileWithBrowserProcessShim.description =
 export const testStoredDagNodeReceivesFetchAsASeparateService = async () => {
   const value = await executeDagNodeRun({
     id: 'stored-fetch-service-test',
+    effect: 'source',
     runCode: `async ({ services }) => await (await services.fetch('https://example.test/value')).text()`,
     run: undefined,
     params: {},
     use: {},
-    fetch: () => Promise.resolve(new Response('service-result')),
+    mediatedFetch: createMediatedFetch({
+      authorize: async (capability) =>
+        capability.origin === 'https://example.test' && capability.access === 'read',
+      fetch: () => Promise.resolve(new Response('service-result')),
+    }),
   })
   assert(
     value === 'service-result',
@@ -223,6 +237,7 @@ export const testCompiledDagNodeRecordReceivesFetchService = async () => {
   const record = await defineDagNodeRecord({
     formatVersion: 2,
     localName: 'compiled_fetch_service_test',
+    effect: 'source',
     label: 'Compiled Fetch Service Test',
     version: 1,
     localParamsSchema: {},
@@ -239,6 +254,8 @@ export const testCompiledDagNodeRecordReceivesFetchService = async () => {
       [record.id]: { ...recordWithoutRun, runCode: record.runSource },
     },
     rootHash: record.id,
+    authorizeFetch: async (_record, capability) =>
+      capability.origin === 'https://example.test' && capability.access === 'read',
     fetch: () => Promise.resolve(new Response('graph-result')),
   })
   const result = await compiled[record.id]!.call({}).run(undefined, {
@@ -255,6 +272,7 @@ export const testCompiledDagNodePassesFetchPolicyToHost = async () => {
   const record = await defineDagNodeRecord({
     formatVersion: 2,
     localName: 'compiled_fetch_policy_test',
+    effect: 'source',
     label: 'Compiled Fetch Policy Test',
     version: 1,
     localParamsSchema: {},
@@ -268,6 +286,8 @@ export const testCompiledDagNodePassesFetchPolicyToHost = async () => {
   const compiled = compileDagNodeRecordGraph({
     graph: { [record.id]: record },
     rootHash: record.id,
+    authorizeFetch: async (_record, capability) =>
+      capability.origin === 'https://example.test' && capability.access === 'read',
     fetch: () => Promise.resolve(new Response('direct-result')),
     fetchWithPolicy: (_input, _init, options) => {
       receivedOptions = options

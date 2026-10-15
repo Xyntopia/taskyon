@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:_f9_PhbjBSxk-XoTB-XyMVqlrqKIv2Zk6GcSgDJF9u8',
-  localName: 'item_candidates',
-  label: 'Item Candidates',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -15,7 +12,6 @@ export default {
     required: [],
     type: 'object',
   },
-  inputs: {},
   run: async () => ({
     items: [
       { name: 'tent', weightKg: 2.2, utility: 9, tags: ['sleep'] },
@@ -28,4 +24,5 @@ export default {
       { name: 'camera', weightKg: 0.7, utility: 3, tags: ['fun'] },
     ],
   }),
+  ids: { item_candidates: { label: 'Item Candidates', inputs: {} } },
 }

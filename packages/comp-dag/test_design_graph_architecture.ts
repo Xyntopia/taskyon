@@ -1,4 +1,5 @@
 import { canonicalHash, type Hash } from './caching.ts'
+import { strToU8, zipSync } from 'fflate'
 import { iterateCandidatePatches } from './candidateOrder.ts'
 import {
   createGraphRevision,
@@ -19,6 +20,7 @@ import {
 } from './designGraphRepository.ts'
 import { createProjectDraftStore } from './projectDraft.ts'
 import { importDesignGraphSnapshot, projectDesignGraphSnapshot } from './dagGitProjection.ts'
+import { decodeDesignGraphZip, encodeDesignGraphZip } from './designGraphArchive.ts'
 import { createDagModuleArtifact, createDagModuleLock } from './dagModule.ts'
 import { SELF_HASH_PLACEHOLDER, hashFilePart } from './dagNodeIdentity.ts'
 import { loadStoredGraphNodeFiles, saveStoredGraphNodeSource } from './dagNodeLoader.ts'
@@ -33,7 +35,9 @@ import {
   iterateInvocationCandidates,
   type StagedArtifactWriter,
 } from './invocationExecution.ts'
-import { createNode } from './dagCore.ts'
+import { createNode, explode } from './dagCore.ts'
+import { createOptimizationConfig, validateOptimizationBeforeRun } from './optimization.ts'
+import { safeParseSchema } from './dagSchema.ts'
 import {
   createSourceManifestRepository,
   createSourceSnapshot,
@@ -50,6 +54,7 @@ import {
   createDesignRepositoryFileReader,
   loadDesignRepositorySnapshot,
   loadProjectRepositoryPresentation,
+  loadProjectDefinition,
   loadProjectRevisionSnapshot,
 } from './designRepositorySnapshot.ts'
 
@@ -106,11 +111,122 @@ export const testInvocationPinsSourceSnapshotIdentity = async () => {
 testInvocationPinsSourceSnapshotIdentity.description =
   'Hashes and loads explicit source snapshots through the canonical invocation evaluator.'
 
+export const testInvocationInheritsExplodedSourceParameters = async () => {
+  const source = createNode({
+    name: 'InheritedSourceParameters',
+    version: 1,
+    localParams: {
+      type: 'object',
+      properties: { factor: { type: 'number' } },
+      required: ['factor'],
+    },
+    outputSchema: {
+      type: 'object',
+      properties: { items: { type: 'array', items: { type: 'number' } } },
+      required: ['items'],
+    },
+    run: ({ factor }: { factor: number }) => ({ items: [factor, factor * 2] }),
+  })
+  const root = createNode({
+    name: 'InheritedSourceConsumer',
+    version: 1,
+    contentHash: canonicalHash('InheritedSourceConsumer'),
+    localParams: source.paramsSchema,
+    exposedInputs: { item: explode(source, 'items') },
+    outputSchema: { type: 'number' },
+    run: async (_params, use) => await use.item(),
+  })
+  const invocation = createInvocationDefinition({
+    rootNodeId: root.contentHash!,
+    variables: { factor: { kind: 'list', values: [2, 3] } },
+    inputs: { item: { strategy: { id: 'sequential' } } },
+    objectives: [],
+    constraints: [],
+    capture: [],
+    policy: { accuracy: 'exact' },
+    reducerOverrides: {},
+  })
+  const config = {
+    ...createOptimizationConfig({
+      paramsSchema: root.paramsSchema,
+      explodedInputAliases: ['item'],
+    }),
+    variables: invocation.variables,
+    inputs: invocation.inputs,
+  }
+  const preflight = (variables = config.variables) =>
+    validateOptimizationBeforeRun({
+      config: { ...config, variables },
+      nodeParamsSchema: root.paramsSchema,
+      plannedInputAliases: ['item'],
+    })
+  assert(
+    preflight().ok,
+    `Preflight must defer required exploded-input parameters to the planner: ${JSON.stringify(preflight().issues)}`,
+  )
+  assert(
+    !preflight({ factor: { kind: 'constant', value: undefined } }).ok,
+    'Root requirements must still be checked before execution.',
+  )
+  assert(
+    !preflight({ ...config.variables, 'item.factor': { kind: 'constant', value: 'invalid' } }).ok,
+    'Explicitly invalid input values must still be rejected.',
+  )
+  const { evaluateRows } = createDagInvocationEvaluators({
+    root,
+    invocation,
+    engineConfig: { execution: { mode: 'local' } },
+  })
+  if (!evaluateRows) throw new Error('Canonical evaluation must expose row execution.')
+  const rows: unknown[] = []
+  for (const params of iterateInvocationCandidates(invocation))
+    await evaluateRows({
+      rootNodeId: invocation.rootNodeId,
+      params,
+      onRow: async ({ outputs }) => {
+        rows.push(outputs)
+      },
+    })
+  if (rows.join(',') !== '2,4,3,6')
+    throw new Error(
+      'Exploded inputs must inherit each candidate without duplicating source parameters.',
+    )
+}
+testInvocationInheritsExplodedSourceParameters.description =
+  'Evaluates multiple invocation candidates with inferred exploded-input parameters before schema validation.'
+
+export const testSchemaRequiredErrorsIdentifyMissingProperty = () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      'nested/value': {
+        type: 'object',
+        properties: { factor: { type: 'number' } },
+        required: ['factor'],
+      },
+    },
+    required: ['nested/value'],
+  } as const
+  for (const [value, path] of [
+    [{}, ['nested/value']],
+    [{ 'nested/value': {} }, ['nested/value', 'factor']],
+  ] as const) {
+    const parsed = safeParseSchema(schema, value)
+    assert(!parsed.success, 'Required properties must fail schema validation.')
+    assert(
+      JSON.stringify(parsed.error.issues[0]?.path) === JSON.stringify(path),
+      'Required-property errors must identify the missing leaf, including escaped parent paths.',
+    )
+  }
+}
+testSchemaRequiredErrorsIdentifyMissingProperty.description =
+  'Reports exact missing root and nested property paths from the canonical schema validator.'
+
 const assert: (condition: unknown, message: string) => asserts condition = (condition, message) => {
   if (!condition) throw new Error(message)
 }
 
-const createMemoryStore = () => {
+export const createMemoryStore = () => {
   const values = new Map<string, string>()
   let bulkReads = 0
   let bulkWrites = 0
@@ -159,8 +275,9 @@ const createMemoryStore = () => {
     },
   }
 }
+createMemoryStore.helper = true
 
-const createMemoryRecords = (): SourceManifestStorage => {
+export const createMemoryRecords = (): SourceManifestStorage => {
   const values = new Map<string, unknown>()
   return {
     get: (namespace, id) => Promise.resolve(values.get(`${namespace}/${id}`) ?? null),
@@ -170,6 +287,7 @@ const createMemoryRecords = (): SourceManifestStorage => {
     },
   }
 }
+createMemoryRecords.helper = true
 
 export const testDesignGraphImportBatchesImmutableObjects = async () => {
   const memory = createMemoryStore()
@@ -324,6 +442,19 @@ export const testProjectPresentationDoesNotLoadUpstreamClosure = async () => {
   memory.values.set(`invocations/${hashFilePart(invocation.id)}.json`, JSON.stringify(invocation))
   memory.values.set(`extensions/${hashFilePart(extension.id)}.json`, JSON.stringify(extension))
   memory.values.set(`project-revisions/${hashFilePart(revision.id)}.json`, JSON.stringify(revision))
+
+  const definition = await loadProjectDefinition(
+    async (path) => {
+      if (path.startsWith('nodes/') || path.startsWith('authoring/') || path.startsWith('modules/'))
+        throw new Error('Project definition must not read calculation source.')
+      return await memory.store.readText(path)
+    },
+    { kind: 'projectRevision', id: revision.id },
+  )
+  assert(
+    definition.invocations[invocation.id]?.rootNodeId === root.hash,
+    'Expected the pinned root without loading it.',
+  )
 
   const presentation = await loadProjectRepositoryPresentation({
     readText: memory.store.readText,
@@ -629,7 +760,7 @@ export const testProjectProjectionCarriesExtensionInvocationSourceFiles = async 
   await importDesignGraphSnapshot({
     store: imported.store,
     sourceRecords: importedSources,
-    files: projected,
+    files: decodeDesignGraphZip(encodeDesignGraphZip(projected)),
   })
   const importedRepository = createDesignGraphRepository(imported.store)
   const importedTemplate = await importedRepository.getInvocation(template.id)
@@ -954,7 +1085,13 @@ testStoredModuleEditRewritesEverySharingNodeAndItsDependents.description =
 export const testPackageUpdateCreatesImmutableReplacementPath = async () => {
   const lock = createDagModuleLock({
     imports: { $node: { zod: { kind: 'package', name: 'zod' } } },
-    packages: { zod: { range: '^4.0.0' } },
+    packages: {
+      zod: {
+        range: '^4.0.0',
+        version: '4.0.5',
+        integrity: 'sha256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      },
+    },
   })
   const node = await saveStoredGraphNodeSource(`import { z } from 'zod'
 export default {
@@ -1455,3 +1592,170 @@ export const testInvocationRowsAreReadThroughBoundedArtifactRanges = async () =>
 
 testInvocationRowsAreReadThroughBoundedArtifactRanges.description =
   'Reads selected invocation rows lazily through the named row-index artifact.'
+
+export const testStoredNodeLoaderSharesConcurrentSourcesAndRetriesFailures = async () => {
+  const saved = await saveStoredGraphNodeSource(`export default {
+    formatVersion: 2,
+    id: '${SELF_HASH_PLACEHOLDER}',
+    localName: 'ConcurrentSource',
+    label: 'Concurrent source',
+    version: 1,
+    localParamsSchema: {},
+    outputSchema: {},
+    inputs: {},
+    run: () => 1,
+  }`)
+  let batches = 0
+  let fail = true
+  const load = createCachedDesignRepositoryNodeFileLoader(async (files) => {
+    batches += 1
+    await Promise.resolve()
+    if (fail) throw new Error('Synthetic parser failure')
+    return await loadStoredGraphNodeFiles(files)
+  })
+  const failures = await Promise.allSettled([load([saved.file]), load([saved.file])])
+  assert(
+    failures.every(({ status }) => status === 'rejected'),
+    'Both callers must receive failure',
+  )
+  assert(batches === 1, 'Concurrent identical sources must share one parser request')
+  fail = false
+  const renamed = { ...saved.file, path: 'RenamedSource.ts' }
+  const loaded = await Promise.all([load([saved.file]), load([renamed])])
+  assert(Number(batches) === 2, 'A failed parser request must be retryable and shared')
+  assert(loaded[0]![saved.hash]?.file.path === saved.file.path, 'Preserve the first file path')
+  assert(loaded[1]![saved.hash]?.file.path === renamed.path, 'Preserve each caller file path')
+  await load([saved.file])
+  assert(Number(batches) === 2, 'Completed parsing must be reused')
+  const [invalid] = await Promise.allSettled([
+    load([{ ...saved.file, path: `nodes/${hashFilePart(canonicalHash('wrong'))}.ts` }]),
+  ])
+  const error: unknown = invalid?.status === 'rejected' ? invalid.reason : null
+  assert(
+    error instanceof Error && error.message.includes('does not match normalized hash'),
+    'A cached source must still validate its requested filename hash',
+  )
+}
+testStoredNodeLoaderSharesConcurrentSourcesAndRetriesFailures.description =
+  'Shares concurrent source parsing, retries failed loads, and preserves file identity checks.'
+
+export const testDesignGraphZipProjectRoundTrip = async () => {
+  const source = createMemoryStore()
+  const repository = createDesignGraphRepository(source.store)
+  const node = await saveStoredGraphNodeSource(`export default {
+    formatVersion: 3, id: '${SELF_HASH_PLACEHOLDER}', localName: 'ZipNode',
+    label: 'ZIP node', version: 1, localParamsSchema: {}, outputSchema: {},
+    run: () => ({ value: 7 }),
+  }`)
+  await source.store.writeText(`nodes/${hashFilePart(node.hash)}.ts`, node.file.source)
+  const invocation = createInvocationDefinition({
+    rootNodeId: node.hash,
+    variables: {},
+    objectives: [],
+    constraints: [],
+    policy: { accuracy: 'exact' },
+    reducerOverrides: {},
+  })
+  await repository.putInvocation(invocation)
+  const graph = createGraphRevision({ parents: [], nodes: { zip: node.hash } })
+  await repository.putGraphRevision(graph)
+  const graphFiles = await projectDesignGraphSnapshot({
+    store: source.store,
+    selector: { kind: 'graphRevision', revisionId: graph.id },
+  })
+  const graphTarget = createMemoryStore()
+  await importDesignGraphSnapshot({
+    store: graphTarget.store,
+    files: decodeDesignGraphZip(encodeDesignGraphZip(graphFiles)),
+  })
+  assert(
+    (await createDesignGraphRepository(graphTarget.store).getGraphRevision(graph.id)).nodes.zip ===
+      node.hash,
+    'Graph ZIP must retain the exact node closure.',
+  )
+  const project = createProjectRevision({
+    parents: [],
+    displayName: 'ZIP project',
+    invocations: { study: invocation.id },
+    extensions: {},
+  })
+  await repository.putProjectRevision(project)
+  await repository.advanceProjectRef({
+    name: 'projects/zip-project',
+    revisionId: project.id,
+    expected: null,
+  })
+  const files = await projectDesignGraphSnapshot({
+    store: source.store,
+    selector: { kind: 'project', projectRef: 'projects/zip-project' },
+  })
+  const restored = createMemoryStore()
+  await importDesignGraphSnapshot({
+    store: restored.store,
+    files: decodeDesignGraphZip(encodeDesignGraphZip(files)),
+  })
+  const reopened = createDesignGraphRepository(restored.store)
+  const ref = await reopened.getProjectRef('projects/zip-project')
+  assert(ref?.revisionId === project.id, 'ZIP import must preserve the exact project revision.')
+  assert(
+    (await reopened.getInvocation(invocation.id)).rootNodeId === node.hash,
+    'Project ZIP must retain its invocation and node closure.',
+  )
+  const before = [...restored.values.entries()]
+  let conflict = false
+  try {
+    await importDesignGraphSnapshot({ store: restored.store, files })
+  } catch (error) {
+    conflict = error instanceof Error && error.message.includes('ref conflict')
+  }
+  assert(conflict, 'Import must reject an existing project ref without overwrite authorization.')
+  assert(
+    JSON.stringify([...restored.values.entries()]) === JSON.stringify(before),
+    'A rejected import must preserve existing data.',
+  )
+}
+testDesignGraphZipProjectRoundTrip.description =
+  'Reopens a portable ZIP project in a fresh repository and rejects ref collisions without changing saved data.'
+
+export const testDesignGraphZipRejectsUnsafeEntries = () => {
+  for (const path of [
+    '../nodes/escape.ts',
+    '/nodes/absolute.ts',
+    'nodes/../escape.ts',
+    'nodes\\escape.ts',
+  ]) {
+    let rejected = false
+    try {
+      encodeDesignGraphZip([{ path, content: 'untrusted' }])
+    } catch {
+      rejected = true
+    }
+    assert(rejected, 'ZIP archives must reject noncanonical paths.')
+    let rejectedOnRead = false
+    try {
+      decodeDesignGraphZip(zipSync({ [path]: strToU8('untrusted') }))
+    } catch {
+      rejectedOnRead = true
+    }
+    assert(rejectedOnRead, 'Uploaded ZIP paths must be checked before importing repository files.')
+  }
+  let duplicates = false
+  try {
+    encodeDesignGraphZip([
+      { path: 'nodes/duplicate.ts', content: 'first' },
+      { path: 'nodes/duplicate.ts', content: 'second' },
+    ])
+  } catch {
+    duplicates = true
+  }
+  assert(duplicates, 'ZIP archives must reject duplicate entry names.')
+  let invalidZip = false
+  try {
+    decodeDesignGraphZip(new TextEncoder().encode('not a ZIP archive'))
+  } catch {
+    invalidZip = true
+  }
+  assert(invalidZip, 'Malformed ZIP bytes must be rejected.')
+}
+testDesignGraphZipRejectsUnsafeEntries.description =
+  'Rejects unsafe archive paths, duplicate entries and malformed ZIP bytes.'

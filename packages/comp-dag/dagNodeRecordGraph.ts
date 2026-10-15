@@ -294,7 +294,7 @@ export const replaceDagNodeRecordPackageRange = async (args: {
         imports: lock.imports,
         packages: {
           ...lock.packages,
-          [args.packageName]: { range: args.range },
+          [args.packageName]: { ...lock.packages[args.packageName]!, range: args.range },
         },
       }),
     )
@@ -395,6 +395,7 @@ export const getDagNodeRecordInputSchema = (
 export const compileDagNodeRecordGraph = (args: {
   graph: DagNodeRecordGraph
   rootHash?: Hash
+  mediatedFetch?: FetchWithPolicy
   authorizeFetch?: (record: DagNodeRecord, capability: FetchCapability) => Promise<boolean>
   fetch?: typeof fetch
   fetchWithPolicy?: FetchWithPolicy
@@ -419,6 +420,7 @@ export const compileDagNodeRecordGraph = (args: {
     compiled[hash] = compileDagNodeRecord({
       record,
       nodeById: compiled,
+      ...(args.mediatedFetch ? { mediatedFetch: args.mediatedFetch } : {}),
       ...(args.authorizeFetch
         ? { authorizeFetch: async (capability) => await args.authorizeFetch!(record, capability) }
         : {}),

@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:rwdYC4xHbwd-9OdKsUtkmNyd_dvZnnH7r2xcax_cfFE',
-  localName: 'constraint_scoring',
-  label: 'Constraint & Score Evaluation',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -114,19 +111,6 @@ export default {
     required: ['ranked', 'viable'],
     type: 'object',
   },
-  // Input node references:
-  // candidates -> design_candidates — Design Candidates
-  // requirements -> mission_requirements — Mission Requirements
-  inputs: {
-    candidates: {
-      nodeId: 'sha256:q1N7z14ANQvm9YdNBggW_yQc7uTH2PHZ2h7EqvLHw18',
-      role: 'internal',
-    },
-    requirements: {
-      nodeId: 'sha256:3607AP71clSTVgxipIkSRnY2FVRFqAkP8lX2yz_Z59Y',
-      role: 'internal',
-    },
-  },
   run: async ({ use }) => {
     const requirements = await use.requirements({})
     const source = await use.candidates({})
@@ -149,5 +133,14 @@ export default {
       })
       .sort((a, b) => b.score - a.score)
     return { ranked, viable: ranked.filter((candidate) => candidate.viable) }
+  },
+  ids: {
+    constraint_scoring: {
+      label: 'Constraint & Score Evaluation',
+      inputs: {
+        candidates: { source: 'design_candidates', role: 'internal' },
+        requirements: { source: 'mission_requirements', role: 'internal' },
+      },
+    },
   },
 }

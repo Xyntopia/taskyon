@@ -57,6 +57,29 @@ exists.
   identity.
 - Create replacement downstream paths for semantic edits; never mutate an existing hashed node in
   place.
+- Resolve readable authoring IDs through one shared resolver into recursively hashed nodes.
+  Keep authored definitions and binding sets, generated graph locks, resolved nodes, source
+  observation snapshots, and execution artifacts distinct. Browser edits and Git import must use
+  the same resolution rules; a generated lock never replaces recursive computation identity.
+- Derive structural applications and their contracts from declarations. Persist their resolved
+  identity without adding authored placeholder functions. Pin builtin semantic versions in the
+  identity and reject runtime versions that cannot execute those semantics. Bump that identity
+  whenever execution semantics change; a matching hash does not ensure old code remains available.
+- Prefer representing compatible alternatives, provider choices, model variants, filters, and
+  scenario controls as parameters in one design graph. Do not create parallel structural node
+  trees merely because a study needs to evaluate several alternatives. A downstream node may
+  expose no choice, reject unsupported selected alternatives, or adapt only the alternatives it
+  understands, but the graph should retain the broadest valid design space. Use structural
+  variation only when the alternatives have different semantics, incompatible contracts, or
+  planner behavior that cannot be represented safely as a parameter.
+- Treat parameterized selector or multiplexer nodes, aggregators, filters, reducers, indexers,
+  and candidate expanders as reusable higher-level operations when the evaluator must understand
+  their behavior. Keep their planner semantics explicit and versioned while allowing ordinary
+  domain converters and simulations to remain ordinary stored computations.
+- Applying an ordinary model after `explode` already represents computation across candidates;
+  do not add a second fan-out mechanism for the same behavior. Objective ranking and candidate
+  ordering belong to invocation evaluation. Aggregate declarations specify scope and mathematical
+  meaning; shared reducer evaluation owns scheduling, streaming, reuse, and authorized estimation.
 - Use one current stored-node and repository format. During early development, incompatible
   changes invalidate old local data and regenerate bundled hashes; do not retain compatibility
   readers, legacy types, aliases, or parallel persistence paths.
@@ -159,6 +182,10 @@ exists.
 
 - Use core structural combinators only when the engine must understand a construct for execution
   planning, activity, identity, or optimization.
+- Keep the evaluator-facing contract uniform: a built-in structural operation and a stored
+  computation must both resolve to an immutable executable identity with typed inputs, outputs,
+  parameters, dependencies, and cache semantics. Built-in status changes who owns the implementation
+  and planner rules; it must not create an untracked second graph model.
 - `oneOf` evaluates only its selected provider. Compatible alternatives must agree on shape,
   units, coordinate systems, semantics, validity, and failure behavior, or use explicit adapters.
 - `explode` exposes candidate-array selection to planning and optimization without making domain
@@ -218,8 +245,9 @@ exists.
   runtime. Keep the package allowlist and resolver generic and Taskyon-owned.
 - Compile stored nodes outside the UI thread with tree shaking. Cache a self-contained executable
   artifact through StorageClient under the node hash, module-lock hash, compiler ABI, and exact
-  resolved package identities. A package range belongs in the immutable lock; the exact provider
-  version and integrity belong in the compiled artifact and run provenance.
+  resolved package identities. Authored imports declare package ranges; immutable module locks pin
+  exact package versions and integrity as part of recursive node identity. Compiled artifacts and
+  run provenance retain the same pins. Reject an unavailable or different exact package.
 - Repository loading is metadata-only. Compile on save for validation, on explicit artifact
   inspection, or on first execution. Opening the Compiled view performs a cache-only read until the
   user explicitly requests compilation.
@@ -293,11 +321,12 @@ This is an additive foundation, not a completed reproducible invocation workflow
   the consolidated row artifacts.
 - Pinned evaluation currently uses the local orchestrator. A worker-only configuration that
   forbids local fallback remains unsupported; it must not silently relax isolation requirements.
-- Project Git projection can transfer reachable pinned file-source snapshots, referenced manifests
+- Portable project archives can transfer reachable pinned file-source snapshots, referenced manifests
   and source artifact bytes when the source invocation is selected by a project invocation or an
   extension dependency. Broader source-retrieval recipes, cache repair after eviction, and durable
   planner checkpoints remain follow-up work. Keep the source snapshot, referenced manifests, and
-  artifacts available together; an invocation hash alone does not transport that closure.
+  artifacts available together; an invocation hash alone does not transport that closure. Ordinary
+  Git source projection stores only snapshot references; missing inputs remain explicit.
 - The consumed-source candidate index uses the existing cache/artifact backend. Concurrent index
   updates can lose a candidate and reduce reuse; they must not change computation identity. This
   does not replace row storage with partitions or claim a concurrent index transaction protocol.
@@ -325,8 +354,9 @@ This is an additive foundation, not a completed reproducible invocation workflow
   including transitive dependencies and cache hits. Validate that dependency trace against the
   selected snapshot before reuse. Do not eagerly evaluate unused inputs or put the entire snapshot
   hash into every row key. An untraceable old cache entry cannot prove compatible reuse.
-- Replacing a consumed manifest invalidates dependent computations and may require rebuilding
-  adaptive planner state. Adding an unconsumed source does not invalidate verified earlier rows.
+- Changing consumed output content invalidates dependent computations and may require rebuilding
+  adaptive planner state. A new acquisition timestamp with identical content preserves computation
+  reuse; cache hits propagate the currently selected observation IDs for provenance. Adding an unconsumed source does not invalidate verified earlier rows.
   Artifact availability and compatible checkpoints determine whether recovery also needs storage
   reads or planner replay; never promise zero I/O merely because computation is cached.
 
@@ -406,8 +436,35 @@ This is an additive foundation, not a completed reproducible invocation workflow
 - Patch and revision diagnostics preserve old roots and prove deterministic replay after creating
   replacement paths.
 - Diagnostics cover bounded-memory row execution, reducer cache reuse, run-artifact completeness,
-  draft/ref separation, complete Git ancestry, and exclusion of run products from Git snapshots.
+  draft/ref separation, complete portable-archive ancestry, source-lock Git round trips, and
+  exclusion of execution products and captured observations from ordinary Git exports.
 - Cover add-only snapshot continuation, changed consumed sources, overlapping invocations,
   cross-project reuse, absent cached artifacts, and checkpoint recovery without repeated retained
   calculations. Test finite grids, zero-result/nested expansions, continuous sampling, estimates,
   cancellation, and early stopping. Test view reuse across prose and storage-layout changes.
+
+## Committed Source Locks And Retention
+
+- Commit generated source locks alongside readable graph declarations. Pin source/import identities,
+  exact approved package versions and integrity hashes, builtin semantics and recursive computation
+  identities. Startup validates locks; updating them is an explicit authoring action.
+- Lock readable binding IDs to recursive node hashes, pin remaining unbound node hashes (including
+  unnamed structural expressions), and record compiled node declarations plus raw helper-module and
+  import hashes. Keep schemas, wiring, structural settings and parsed definition hashes in
+  definitions and resolved node artifacts rather than copying node descriptions into the lock.
+  Resolve presentation labels from pinned authored bindings. Version lock serialization separately
+  from computation and builtin semantics so a representation-only change preserves node hashes.
+- Pin both compilation inputs and the resulting node identity closure. Startup recompiles the
+  pinned sources and rejects a differing closure as stale, so compiler, helper-module or package
+  behavior changes cannot silently invalidate stored revisions, runs or caches. Treat the resolver
+  as a black box: execute the pinned sources and verify its results rather than trusting manual
+  engine-version bumps. Transitive compiler hashing remains planned.
+- Retain separate Git and application histories. Git owns source history; StorageClient revisions
+  and refs own saved application states. Source imports preserve application ancestry.
+- Keep source manifests and captured inputs outside ordinary Git exports, regardless of their size.
+  Portable archives can include them. Hash-only references do not guarantee data availability.
+- Run records, results and compiled artifacts are reproducible execution products and stay outside
+  Git. Losing them must permit recomputation when exact code, runtime and captured inputs survive.
+  A missing derived cache artifact is a cache miss; corruption remains an integrity failure.
+- Protect source inputs independently of result retention, including in shared artifact stores.
+  P2P replication, retention automation and large-manifest indexing are separate future work.

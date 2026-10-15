@@ -17,6 +17,8 @@ The main ownership boundaries are:
 - `dagGraphView.ts`: presentation-only projection of runtime nodes;
 - `designGraphModel.ts` and `designGraphRepository.ts`: immutable graph, project, invocation, run,
   ref, and extension records over an injected object store;
+- `dagGraphAuthoring.ts` and `designGraphSourceLock.ts`: authored declarations, shared binding
+  resolution, and committed graph/source locks;
 - `dagGitProjection.ts`: validated global or closure-scoped Git snapshots and fast-forward-only
   synchronization;
 - `sourceManifest.ts`: immutable source-observation locks and refresh policy.
@@ -32,6 +34,14 @@ edited by creating immutable replacements in the repository.
 Stored imports resolve only through a content-addressed module lock. The repository stores one
 deduplicated copy of each locked module rather than a `node_modules` tree. Runtime services such as
 mediated fetch are injected separately from `use`, which remains reserved for DAG dependencies.
+
+Committed graph sources use version-3 graph and source locks. A source lock pins the authored
+inputs — compiled node declarations, raw helper-module/import hashes and exact module/package
+identities — while the graph lock pins the resulting node identity closure (`bindings` plus
+`unboundNodes`). Boot recompiles the pinned sources and compares; a differing closure is a stale
+lock rather than a silent change. The resolver is treated as a black box, so behavior-preserving
+engine refactors leave the lock untouched, and compiler or dependency changes that alter node
+identities fail explicitly instead of orphaning stored revisions, runs or caches.
 
 Mounted nodes can be projected into Taskyon tools through the shared `createDagNodeTool` adapter.
 The node remains the owner of its name, schemas, execution, version, and cache behavior; Taskyon

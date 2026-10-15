@@ -1,15 +1,18 @@
 import {
   createNode,
+  selectStructuralProvider,
   explode,
   oneOf,
+  type DagNodeEffect,
   type DagExposedInputDef,
   type DagInputAccessor,
   type DagNode,
   type DagQueryBinding,
 } from './dagCore.ts'
-import { schemaDescription, type DagJsonSchema } from './dagSchema.ts'
+import { schemaDescription, objectSchema, type DagJsonSchema } from './dagSchema.ts'
 import {
   recordInputsToRuntimeInputs,
+  getDagStructuralDefinitionHash,
   type DagNodeRecord,
   type DagNodeRunFunction,
 } from './dagNodeRecord.ts'
@@ -20,6 +23,8 @@ import {
 } from '@taskyon/common/modules/sandbox/frpSandbox'
 import { acquireExecutableSandbox } from '@taskyon/common/modules/sandbox/workerSandbox'
 import { z } from 'zod'
+import { projectInputReadCapability } from './projectInputSource.ts'
+import { canonicalHash } from './caching.ts'
 import {
   createMediatedFetch,
   type FetchAuthorization,
@@ -144,12 +149,19 @@ const buildSandboxRunModule = (runCode: string, preambleSource = ''): string => 
             },
             ...(options === undefined ? {} : { options }),
           });
-          const bodyBytes = response.bodyBytes;
+          const bodyBytes = response.bodyBytes instanceof Uint8Array
+            ? response.bodyBytes
+            : new Uint8Array(Object.values(response.bodyBytes));
           return {
             status: response.status,
             statusText: response.statusText,
             ok: response.status >= 200 && response.status < 300,
-            headers: response.headers,
+            headers: {
+              get: (name) => response.headers.find(([key]) => key.toLowerCase() === String(name).toLowerCase())?.[1] ?? null,
+              has: (name) => response.headers.some(([key]) => key.toLowerCase() === String(name).toLowerCase()),
+              forEach: (callback) => response.headers.forEach(([key, value]) => callback(value, key)),
+              entries: () => response.headers[Symbol.iterator](),
+            },
             arrayBuffer: async () => bodyBytes.buffer.slice(
               bodyBytes.byteOffset,
               bodyBytes.byteOffset + bodyBytes.byteLength,
@@ -207,6 +219,7 @@ const createTimeoutSignal = (
 
 export const executeDagNodeRun = async (args: {
   id: string
+  effect: DagNodeEffect
   timeoutMs?: number
   runCode?: string
   preambleSource?: string
@@ -214,16 +227,36 @@ export const executeDagNodeRun = async (args: {
   run: DagNodeRunFunction | undefined
   params: Record<string, unknown>
   use: Record<string, DagInputAccessor>
-  fetch?: typeof fetch
-  fetchWithPolicy?: FetchWithPolicy
-  fetchPolicy?: SandboxFetchOptions
+  mediatedFetch?: FetchWithPolicy
   capabilities?: readonly string[]
   callCapability?: (id: string, input: unknown) => Promise<unknown>
 }) => {
   const timeoutMs = Math.max(100, Math.min(args.timeoutMs ?? 60_000, 60_000))
   const timeout = createTimeoutSignal(args.id, timeoutMs)
   try {
+    const fetch: FetchWithPolicy = async (input, init, options) => {
+      if (args.effect !== 'source') {
+        throw new Error(
+          `DAG node ${args.id}: pure nodes cannot fetch external data through services.fetch. ` +
+            `Declare the acquisition node with effect: 'source', then pass its recorded result ` +
+            `to the pure calculation through a declared input.`,
+        )
+      }
+      if (!args.mediatedFetch)
+        throw new Error(
+          `DAG node ${args.id}: HTTP authorization is unavailable. ` +
+            `The host must supply an authorized mediated fetch capability or an HTTP authorization handler and transport. ` +
+            `Changing node code or retrying cannot grant network access.`,
+        )
+      return await args.mediatedFetch(input, init, options)
+    }
     const callCapability = async (id: string, input: unknown) => {
+      if (id === projectInputReadCapability && args.effect !== 'source')
+        throw new Error(
+          `DAG node ${args.id}: pure nodes cannot acquire project input files. ` +
+            `Declare the file-reading node with effect: 'source', then pass its recorded text ` +
+            `to the pure calculation through a declared input.`,
+        )
       if (!args.capabilities?.includes(id)) {
         throw new Error(`DAG node ${args.id}: undeclared capability ${id}`)
       }
@@ -237,9 +270,7 @@ export const executeDagNodeRun = async (args: {
         params: args.params,
         use: args.use,
         services: {
-          fetch:
-            args.fetch ??
-            (() => Promise.reject(new Error(`DAG node ${args.id}: fetch is unavailable`))),
+          fetch,
           callCapability,
         },
       })
@@ -247,18 +278,16 @@ export const executeDagNodeRun = async (args: {
     const runCode = args.runCode ?? (await args.loadRunCode?.())
     if (!runCode) throw new Error(`DAG node ${args.id}: missing runCode`)
     const aliases = Object.keys(args.use)
-    const moduleId = `dag-node-${args.id}`
+    const moduleSource = buildSandboxRunModule(runCode, args.runCode ? '' : args.preambleSource)
+    const moduleHash = canonicalHash(moduleSource)
+    const moduleId = `dag-node-${moduleHash}`
     const lease = await acquireExecutableSandbox({
       id: moduleId,
-      reuse: { mode: 'immutable', contentId: args.id },
+      reuse: { mode: 'immutable', contentId: moduleHash },
     })
     const { sandbox } = lease
     try {
-      await sandbox.installModule(
-        moduleId,
-        buildSandboxRunModule(runCode, args.runCode ? '' : args.preambleSource),
-        `${args.id}.dag-node.js`,
-      )
+      await sandbox.installModule(moduleId, moduleSource, `${moduleId}.js`)
       const capability = await serveFrpSandboxCapability({
         sandbox,
         protocol: dagNodeUseProtocol,
@@ -311,11 +340,7 @@ export const executeDagNodeRun = async (args: {
                 ...(init?.headers ? { headers: init.headers } : {}),
                 ...(init?.body ? { body: init.body } : {}),
               }
-              const response = args.fetchWithPolicy
-                ? await args.fetchWithPolicy(input, requestInit, options ?? args.fetchPolicy)
-                : args.fetch
-                  ? await args.fetch(input, requestInit)
-                  : await Promise.reject(new Error(`DAG node ${args.id}: fetch is unavailable`))
+              const response = await fetch(input, requestInit, options)
               const headers: [string, string][] = []
               response.headers.forEach((value, key) => headers.push([key, value]))
               const bodyBytes = new Uint8Array(await response.arrayBuffer())
@@ -370,6 +395,7 @@ export const createLazyDagUse = (
 export const compileDagNodeRecord = (args: {
   record: DagNodeRecord
   nodeById: Record<string, DagNode>
+  mediatedFetch?: FetchWithPolicy
   authorizeFetch?: FetchAuthorization
   fetch?: typeof fetch
   fetchWithPolicy?: FetchWithPolicy
@@ -403,6 +429,14 @@ export const compileDagNodeRecord = (args: {
     }
   }
 
+  if (
+    args.record.formatVersion === 3 &&
+    args.record.structure &&
+    args.record.definitionHash !== getDagStructuralDefinitionHash(args.record.structure.kind)
+  )
+    throw new Error(
+      'This engine does not support the pinned structural implementation. Use its matching runtime version.',
+    )
   if (args.record.structure?.kind === 'explode') {
     const { sourceAlias, path } = args.record.structure
     const sourceNode = hiddenInputs[sourceAlias]
@@ -425,19 +459,87 @@ export const compileDagNodeRecord = (args: {
     })
   }
 
-  const mediatedFetch = args.authorizeFetch
-    ? createMediatedFetch({
-        authorize: args.authorizeFetch,
-        ...(args.fetch ? { fetch: args.fetch } : {}),
-        ...(args.fetchWithPolicy ? { fetchWithPolicy: args.fetchWithPolicy } : {}),
-        ...(args.fetchPolicy ? { fetchPolicy: args.fetchPolicy } : {}),
-      })
-    : undefined
+  const structure = args.record.structure
+  if (structure?.kind === 'choose' || structure?.kind === 'select') {
+    const localParams =
+      structure.kind === 'choose'
+        ? {
+            ...objectSchema({
+              properties: {
+                [structure.parameter]: {
+                  type: 'string',
+                  enum: Object.keys(hiddenInputs),
+                  default: structure.default,
+                },
+                providers: {
+                  type: 'object',
+                  properties: Object.fromEntries(
+                    Object.keys(hiddenInputs).map((name) => [name, {}]),
+                  ),
+                  additionalProperties: false,
+                  default: {},
+                },
+              },
+            }),
+            allOf: Object.entries(hiddenInputs).map(([name, node]) => ({
+              if: {
+                properties: { [structure.parameter]: { const: name } },
+                required: [structure.parameter],
+              },
+              then: { properties: { providers: { properties: { [name]: node.paramsSchema } } } },
+            })),
+          }
+        : hiddenInputs[structure.sourceAlias]!.paramsSchema
+    return createNode<
+      DagJsonSchema,
+      DagJsonSchema,
+      Record<string, DagNode>,
+      Record<string, DagExposedInputDef>,
+      Record<string, unknown>,
+      unknown
+    >({
+      name: args.record.id,
+      localName: args.record.localName,
+      contentHash: args.record.id,
+      version: args.record.version,
+      hiddenInputs,
+      ...(structure.kind === 'choose'
+        ? { structuralChoice: { parameter: structure.parameter, default: structure.default } }
+        : {}),
+      localParams,
+      outputSchema: args.record.outputSchema,
+      run: async (params, use) => {
+        if (structure.kind === 'choose') {
+          const selected = selectStructuralProvider(structure, params, Object.keys(hiddenInputs))
+          const providers = z.record(z.string(), z.unknown()).parse(params.providers ?? {})
+          const providerParams = z.record(z.string(), z.unknown()).parse(providers[selected] ?? {})
+          return await use[selected]!(providerParams)
+        }
+        const value = await use[structure.sourceAlias]!(params)
+        return structure.path.split('.').reduce<unknown>((current, key) => {
+          if (typeof current !== 'object' || current === null || !(key in current))
+            throw new Error(`Missing output path ${structure.path}.`)
+          return Reflect.get(current, key)
+        }, value)
+      },
+    })
+  }
+
+  const mediatedFetch =
+    args.record.effect === 'source'
+      ? (args.mediatedFetch ??
+        (args.authorizeFetch
+          ? createMediatedFetch({
+              authorize: args.authorizeFetch,
+              ...(args.fetch ? { fetch: args.fetch } : {}),
+              ...(args.fetchWithPolicy ? { fetchWithPolicy: args.fetchWithPolicy } : {}),
+              ...(args.fetchPolicy ? { fetchPolicy: args.fetchPolicy } : {}),
+            })
+          : undefined))
+      : undefined
   const directRunCode =
     !args.record.runCode && !args.record.importsSource ? args.record.runSource : undefined
   const runCode = args.record.runCode ?? directRunCode
-  const nodeFetch = mediatedFetch ?? args.fetch
-  const nodeFetchWithPolicy = mediatedFetch ?? args.fetchWithPolicy
 
   return createNode<
     DagJsonSchema,
@@ -461,6 +563,7 @@ export const compileDagNodeRecord = (args: {
     run: async (params, use) => {
       return await executeDagNodeRun({
         id: args.record.id,
+        effect: args.record.effect ?? 'pure',
         ...(typeof args.record.timeoutMs === 'number' ? { timeoutMs: args.record.timeoutMs } : {}),
         ...(runCode ? { runCode } : {}),
         ...(directRunCode && args.record.preambleSource
@@ -474,9 +577,7 @@ export const compileDagNodeRecord = (args: {
         use: createLazyDagUse(runtimeInputs, use),
         ...(args.record.capabilities ? { capabilities: args.record.capabilities } : {}),
         ...(args.callCapability ? { callCapability: args.callCapability } : {}),
-        ...(nodeFetch ? { fetch: nodeFetch } : {}),
-        ...(nodeFetchWithPolicy ? { fetchWithPolicy: nodeFetchWithPolicy } : {}),
-        ...(args.fetchPolicy ? { fetchPolicy: args.fetchPolicy } : {}),
+        ...(mediatedFetch ? { mediatedFetch } : {}),
       })
     },
   })

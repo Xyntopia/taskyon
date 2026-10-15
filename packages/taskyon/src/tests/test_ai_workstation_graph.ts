@@ -21,20 +21,14 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const nodeRepositoryReader = async (path: string): Promise<string> => {
-  const { readFile } = await import('node:fs/promises')
+  const { fileURLToPath } = await import('node:url')
+  const { readDesignGraphSourceDirectory } =
+    await import('@taskyon/comp-dag/designGraphSourcesNode')
   const repositoryUrl = new URL(
     '../../../../public/design-repositories/ai-workstation/',
     import.meta.url,
   )
-  const paths = JSON.parse(
-    await readFile(new URL('repository-index.json', repositoryUrl), 'utf8'),
-  ) as string[]
-  const files = await Promise.all(
-    paths.map(async (filePath) => ({
-      path: filePath,
-      content: await readFile(new URL(filePath, repositoryUrl), 'utf8'),
-    })),
-  )
+  const files = await readDesignGraphSourceDirectory(fileURLToPath(repositoryUrl))
   return await createDesignRepositoryFileReader(files).readText(path)
 }
 

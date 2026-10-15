@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:wnOLjdjLaifhj9vdFbTWEF98YwstC8JMUKOABW8CseY',
-  localName: 'utility_score',
-  label: 'Utility Score',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -14,19 +11,6 @@ export default {
     properties: {},
     required: [],
     type: 'object',
-  },
-  // Input node references:
-  // weatherCheck -> weather_check — Weather Check
-  // weightCheck -> weight_check — Weight Check
-  inputs: {
-    weatherCheck: {
-      nodeId: 'sha256:PTChioJ6O7AwmIEo-9uu1XJA056ggSdBGHJvDKj4dQQ',
-      role: 'internal',
-    },
-    weightCheck: {
-      nodeId: 'sha256:DKiW4slj1FqUvZDi6fasATvw_cayXE3pOXGpr1L5vk0',
-      role: 'internal',
-    },
   },
   run: async ({
     use,
@@ -51,5 +35,14 @@ export default {
       selected,
       score: selected.reduce((sum, item) => sum + item.utility + (item.weatherReady ? 2 : 0), 0),
     }
+  },
+  ids: {
+    utility_score: {
+      label: 'Utility Score',
+      inputs: {
+        weatherCheck: { source: 'weather_check', role: 'internal' },
+        weightCheck: { source: 'weight_check', role: 'internal' },
+      },
+    },
   },
 }

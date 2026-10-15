@@ -735,6 +735,7 @@ export type OptimizationValidationReport = {
 export const validateOptimizationBeforeRun = (args: {
   config: OptimizationConfig
   nodeParamsSchema: DagJsonSchema
+  plannedInputAliases?: readonly string[]
 }): OptimizationValidationReport => {
   const issues: OptimizationValidationIssue[] = []
   const variables = (args.config as Partial<OptimizationConfig>).variables
@@ -847,6 +848,13 @@ export const validateOptimizationBeforeRun = (args: {
   if (!parsed.success) {
     for (const i of parsed.error.issues) {
       const p = i.path.join('.')
+      // The planner fills required parameters for exploded inputs after source resolution.
+      // Explicit invalid values and all root requirements remain preflight errors.
+      if (
+        i.code === 'required' &&
+        args.plannedInputAliases?.some((alias) => p === alias || p.startsWith(`${alias}.`))
+      )
+        continue
 
       issues.push({
         path: p ? `variables.${p}.value` : 'variables',

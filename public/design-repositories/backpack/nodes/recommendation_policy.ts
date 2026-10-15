@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:c4fozV-mLLupocGOKRHhgRrMWS0_JpAwwguOieH6CWE',
-  localName: 'recommendation_policy',
-  label: 'Recommendation Policy',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -19,8 +16,8 @@ export default {
     required: ['mode'],
     type: 'object',
   },
-  inputs: {},
   run: async () => ({
     mode: 'utility-first',
   }),
+  ids: { recommendation_policy: { label: 'Recommendation Policy', inputs: {} } },
 }

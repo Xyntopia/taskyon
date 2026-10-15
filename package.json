@@ -103,7 +103,8 @@
     "test:e2e:headed": "yarn check:file-sizes && playwright test --headed",
     "test:e2e:discover": "yarn check:file-sizes && playwright test --list",
     "test:e2e:ui": "yarn check:file-sizes && yarn test:e2e:discover && playwright test --ui",
-    "serve:spa": "node scripts/serve-spa.mjs"
+    "serve:spa": "node scripts/serve-spa.mjs",
+    "graph:lock": "node --import ./packages/tycli/src/register.ts --experimental-strip-types scripts/update-design-graph-lock.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.124",

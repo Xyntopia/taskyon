@@ -2,7 +2,7 @@ import { canonicalHash } from '@taskyon/common/modules/canonicalHash'
 import type { Hash } from './caching.ts'
 
 export type DagModuleMediaType = 'application/javascript' | 'text/typescript'
-export const STORED_DAG_PACKAGE_ALLOWLIST = ['fflate', 'zod'] as const
+export const STORED_DAG_PACKAGE_ALLOWLIST = ['fflate', 'zod', 'proj4', 'polygon-clipping'] as const
 export type StoredDagPackageName = (typeof STORED_DAG_PACKAGE_ALLOWLIST)[number]
 
 export type DagModuleArtifact = {
@@ -16,12 +16,12 @@ export type DagModuleImportTarget =
   | { kind: 'module'; id: Hash }
   | { kind: 'package'; name: StoredDagPackageName }
 
-export type DagLockedPackage = { range: string }
+export type DagLockedPackage = { range: string; version: string; integrity: Hash }
 
 export type DagModuleLock = {
-  schemaVersion: 2
+  schemaVersion: 3
   id: Hash
-  resolver: { id: 'taskyon'; version: 2 }
+  resolver: { id: 'taskyon'; version: 3 }
   imports: Record<string, Record<string, DagModuleImportTarget>>
   packages: Partial<Record<StoredDagPackageName, DagLockedPackage>>
 }
@@ -84,17 +84,21 @@ export const createDagModuleLock = (input: {
     }
   }
   for (const name of Object.keys(input.packages ?? {})) {
+    const pkg = input.packages![name as StoredDagPackageName]!
+    if (!/^\d+\.\d+\.\d+(?:[-+].*)?$/.test(pkg.version))
+      throw new Error(`Locked package ${name} requires an exact semantic version.`)
+    moduleHashAtBoundary(pkg.integrity, `Locked package ${name} integrity`)
     if (!importedPackages.has(name as StoredDagPackageName)) {
       throw new Error(`Locked runtime package ${name} is not imported by the module closure.`)
     }
   }
   const value = {
-    schemaVersion: 2 as const,
-    resolver: { id: 'taskyon' as const, version: 2 as const },
+    schemaVersion: 3 as const,
+    resolver: { id: 'taskyon' as const, version: 3 as const },
     imports: input.imports,
     packages: input.packages ?? {},
   }
-  return { ...value, id: createModuleIdentity('taskyon.dagModuleLock.v2', value) }
+  return { ...value, id: createModuleIdentity('taskyon.dagModuleLock.v3', value) }
 }
 
 const parseImportTarget = (value: unknown, label: string): DagModuleImportTarget => {
@@ -115,7 +119,7 @@ const parseImportTarget = (value: unknown, label: string): DagModuleImportTarget
 export const parseDagModuleLock = (value: unknown): DagModuleLock => {
   const input = moduleObjectAtBoundary(value, 'DAG module lock')
   const resolver = moduleObjectAtBoundary(input.resolver, 'DAG module lock resolver')
-  if (input.schemaVersion !== 2 || resolver.id !== 'taskyon' || resolver.version !== 2) {
+  if (input.schemaVersion !== 3 || resolver.id !== 'taskyon' || resolver.version !== 3) {
     throw new Error('Unsupported DAG module lock.')
   }
   const imports = Object.fromEntries(
@@ -143,7 +147,16 @@ export const parseDagModuleLock = (value: unknown): DagModuleLock => {
         if (typeof pkg.range !== 'string' || !pkg.range.trim()) {
           throw new Error(`Locked package ${name} requires a compatibility range.`)
         }
-        return [name, { range: pkg.range }]
+        if (typeof pkg.version !== 'string' || !pkg.version.trim())
+          throw new Error(`Locked runtime package ${name} requires an exact version.`)
+        return [
+          name,
+          {
+            range: pkg.range,
+            version: pkg.version,
+            integrity: moduleHashAtBoundary(pkg.integrity, `Locked package ${name} integrity`),
+          },
+        ]
       },
     ),
   )

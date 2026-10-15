@@ -4507,6 +4507,7 @@ __metadata:
     ajv: "npm:^8.17.1"
     ajv-formats: "npm:^3.0.1"
     esbuild: "npm:0.28.1"
+    fflate: "npm:^0.8.2"
     json-schema: "npm:^0.4.0"
     json-schema-to-ts: "npm:^3.1.1"
     prettier: "npm:^3.3.3"

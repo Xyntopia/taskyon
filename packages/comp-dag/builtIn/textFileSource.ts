@@ -4,7 +4,10 @@ import { createInvocationDefinition, type InvocationDefinition } from '../design
 import { createSourceManifestRepository, createSourceSnapshot } from '../sourceManifest'
 import { createStorageDagBackend, type DagStorageRecords } from '../storageDagBackend'
 
-const readTextFile = async (path: string, read: (path: string) => Promise<string>) => {
+// Bump when acquisition semantics change; identity must survive bundling and minification.
+export const TEXT_FILE_SOURCE_SEMANTIC_VERSION = 1
+
+export const readTextFile = async (path: string, read: (path: string) => Promise<string>) => {
   if (
     !path ||
     path.startsWith('/') ||
@@ -24,8 +27,8 @@ export const createTextFileSourceNode = (read: (path: string) => Promise<string>
     version: 1,
     effect: 'source',
     contentHash: canonicalHash({
-      operation: 'textFileSource.v1',
-      implementation: readTextFile.toString(),
+      operation: 'taskyon.textFileSource',
+      version: TEXT_FILE_SOURCE_SEMANTIC_VERSION,
     }),
     localParams: {
       type: 'object',

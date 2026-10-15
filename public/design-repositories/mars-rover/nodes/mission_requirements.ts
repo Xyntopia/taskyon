@@ -1,8 +1,5 @@
 export default {
-  formatVersion: 2,
-  id: 'sha256:SbqiYLA6nmSqnXC29hETtfhAS6DOf1W7ICeQlUcZemk',
-  localName: 'mission_requirements',
-  label: 'Mission Requirements',
+  formatVersion: 3,
   version: 1,
   localParamsSchema: {
     additionalProperties: false,
@@ -70,6 +67,6 @@ export default {
     required: [],
     type: 'object',
   },
-  inputs: {},
   run: async ({ params }) => ({ ...params }),
+  ids: { mission_requirements: { label: 'Mission Requirements', inputs: {} } },
 }

@@ -1,7 +1,8 @@
 import type { Hash } from '@taskyon/comp-dag/caching'
+import { loadBundledDesignRepositorySources } from './bundledDesignRepositories'
 import {
   compileDesignRepositoryNodes,
-  createUrlDesignRepositoryReader,
+  createDesignRepositoryFileReader,
   loadProjectRepositorySnapshot,
   type DesignRepositoryTextReader,
   type LoadedProjectRepositorySnapshot,
@@ -14,21 +15,20 @@ export type AiWorkstationExample = LoadedProjectRepositorySnapshot & {
   rootHash: Hash
 }
 
-const browserRepositoryReader = (): DesignRepositoryTextReader => {
+const browserRepositoryReader = async (): Promise<DesignRepositoryTextReader> => {
   if (typeof location === 'undefined' || typeof fetch === 'undefined') {
     throw new Error('A design repository reader is required outside the browser.')
   }
-  return createUrlDesignRepositoryReader({
-    baseUrl: new URL(AI_WORKSTATION_REPOSITORY_PATH, location.origin),
-    fetch,
-  })
+  return createDesignRepositoryFileReader(
+    await loadBundledDesignRepositorySources('ai-workstation'),
+  ).readText
 }
 
 export const createAiWorkstationExample = async (options?: {
   readText?: DesignRepositoryTextReader
 }): Promise<AiWorkstationExample> => {
   const snapshot = await loadProjectRepositorySnapshot({
-    readText: options?.readText ?? browserRepositoryReader(),
+    readText: options?.readText ?? (await browserRepositoryReader()),
     checkout: { kind: 'ref', name: 'projects/template' },
   })
   const invocationId = snapshot.revision.invocations.main

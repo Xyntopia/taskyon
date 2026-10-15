@@ -14,13 +14,13 @@ const stableValue = (value: unknown): unknown => {
 
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
       .map(([key, entry]) => [key, stableValue(entry)]),
   )
 }
 
-export const canonicalJson = (value: unknown): string => {
-  const json = JSON.stringify(stableValue(value))
+export const canonicalJson = (value: unknown, indentation?: number): string => {
+  const json = JSON.stringify(stableValue(value), null, indentation)
   if (json === undefined) throw new Error('Canonical hashing requires a JSON-serializable value.')
   return json
 }

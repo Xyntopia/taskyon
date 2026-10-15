@@ -1,4 +1,4 @@
-import { canonicalHash, type DagStorageBackend, type Hash } from './caching'
+import { MissingDagArtifact, canonicalHash, type DagStorageBackend, type Hash } from './caching'
 
 export type DagStorageRecords = {
   get: (namespace: string, id: string) => Promise<unknown>
@@ -26,7 +26,7 @@ export const createStorageDagBackend = (
 ): DagStorageBackend => ({
   async readArtifact<O>(hash: Hash): Promise<O> {
     const value = await storage.get(`${namespace}/artifacts`, hash)
-    if (value === null || value === undefined) throw new Error(`Artifact not found: ${hash}`)
+    if (value === null || value === undefined) throw new MissingDagArtifact(hash)
     return value as O
   },
   async writeArtifact(value: unknown): Promise<Hash> {

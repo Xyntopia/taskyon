@@ -84,10 +84,10 @@ const missingObject = (path: string) => new Error(`Design graph object not found
 
 export const createStorageDesignGraphObjectStore = (
   storage: DesignGraphStorageClient,
-  namespace = 'design-graph/v2',
+  namespace = 'design-graph/authoring-v1',
 ): DesignGraphObjectStore => {
   const cache = new Map<string, string>()
-  const isImmutablePath = (id: string) => !id.startsWith('refs/')
+  const isImmutablePath = (id: string) => !id.startsWith('refs/') && !id.startsWith('inputs/')
   const readStoredText = (id: string, value: unknown) => {
     if (typeof value !== 'string') throw new Error(`Design graph object is not text: ${id}`)
     if (isImmutablePath(id)) cache.set(id, value)
@@ -179,7 +179,7 @@ export const createStorageDesignGraphObjectStore = (
 
 const hashFilePart = (id: Hash) => id.replace(':', '_')
 const objectPath = (kind: string, id: Hash) => `${kind}/${hashFilePart(id)}.json`
-const jsonText = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`
+const jsonText = (value: unknown) => `${canonicalJson(value, 2)}\n`
 
 const readJson = async (store: DesignGraphObjectStore, path: string): Promise<unknown> => {
   try {
@@ -202,7 +202,19 @@ const readOptionalJson = async (store: DesignGraphObjectStore, path: string): Pr
   }
 }
 
-const putImmutable = async (
+/** Content-addressed source and application bytes cannot be replaced by a later publication. */
+export const putImmutableDesignGraphText = async (
+  store: DesignGraphObjectStore,
+  path: string,
+  content: string,
+) => {
+  const result = await store.writeTextIfUnchanged(path, null, content)
+  if (result.written) return
+  if (result.currentContentHash !== canonicalHash(content))
+    throw new Error(`Immutable design graph object collision: ${path}`)
+}
+
+export const putImmutableDesignGraphObject = async (
   store: DesignGraphObjectStore,
   path: string,
   value: unknown,
@@ -236,7 +248,7 @@ export const normalizeRefName = (name: string, prefix: 'graph/' | 'projects/') =
 export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
   const putModule = async (artifact: DagModuleArtifact) => {
     const parsed = parseDagModuleArtifact(artifact)
-    await putImmutable(store, objectPath('modules', parsed.id), parsed)
+    await putImmutableDesignGraphObject(store, objectPath('modules', parsed.id), parsed)
     return parsed.id
   }
   const getModule = async (id: Hash) =>
@@ -245,7 +257,7 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
   const putModuleLock = async (record: DagModuleLock) => {
     const parsed = parseDagModuleLock(record)
     await Promise.all(getDagModuleLockModuleIds(parsed).map(getModule))
-    await putImmutable(store, objectPath('module-locks', parsed.id), parsed)
+    await putImmutableDesignGraphObject(store, objectPath('module-locks', parsed.id), parsed)
     return parsed.id
   }
   const getModuleLock = async (id: Hash) =>
@@ -253,7 +265,7 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
 
   const putGraphRevision = async (record: GraphRevision) => {
     const parsed = parseGraphRevision(record)
-    await putImmutable(store, objectPath('graph-revisions', parsed.id), parsed)
+    await putImmutableDesignGraphObject(store, objectPath('graph-revisions', parsed.id), parsed)
     return parsed.id
   }
   const getGraphRevision = async (id: Hash) =>
@@ -261,7 +273,7 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
 
   const putInvocation = async (record: InvocationDefinition) => {
     const parsed = parseInvocationDefinition(record)
-    await putImmutable(store, objectPath('invocations', parsed.id), parsed)
+    await putImmutableDesignGraphObject(store, objectPath('invocations', parsed.id), parsed)
     return parsed.id
   }
   const getInvocation = async (id: Hash) =>
@@ -272,7 +284,7 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
     await Promise.all(parsed.parents.map(getProjectRevision))
     await Promise.all(Object.values(parsed.invocations).map(getInvocation))
     await Promise.all(Object.values(parsed.extensions).map(getExtension))
-    await putImmutable(store, objectPath('project-revisions', parsed.id), parsed)
+    await putImmutableDesignGraphObject(store, objectPath('project-revisions', parsed.id), parsed)
     return parsed.id
   }
   const getProjectRevision = async (id: Hash): Promise<ProjectRevision> =>
@@ -280,7 +292,7 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
 
   const putExtension = async (record: ProjectExtension) => {
     const parsed = parseProjectExtension(record)
-    await putImmutable(store, objectPath('extensions', parsed.id), parsed)
+    await putImmutableDesignGraphObject(store, objectPath('extensions', parsed.id), parsed)
     return parsed.id
   }
   const getExtension = async (id: Hash) =>
@@ -289,7 +301,7 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
   const putRun = async (record: InvocationRun) => {
     const parsed = parseInvocationRun(record)
     await getInvocation(parsed.invocationId)
-    await putImmutable(
+    await putImmutableDesignGraphObject(
       store,
       `runs/${hashFilePart(parsed.invocationId)}/${hashFilePart(parsed.id)}.json`,
       parsed,
@@ -341,7 +353,11 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
       html: args.html,
     })
     const directory = visualizationDirectory(args.scope, args.outputSchemaId)
-    await putImmutable(store, `${directory}/${hashFilePart(record.visualizationId)}.json`, record)
+    await putImmutableDesignGraphObject(
+      store,
+      `${directory}/${hashFilePart(record.visualizationId)}.json`,
+      record,
+    )
     const active: ActiveDesignVisualization = {
       schemaVersion: 1,
       visualizationId: record.visualizationId,
@@ -374,11 +390,18 @@ export const createDesignGraphRepository = (store: DesignGraphObjectStore) => {
     await args.validate(args.revisionId)
     const next: DesignGraphRef = { schemaVersion: 2, revisionId: args.revisionId }
     const path = `refs/${safePath(args.name, 'Ref name')}.json`
-    const expectedContentHash = args.expected
-      ? canonicalHash(
-          jsonText({ schemaVersion: 2, revisionId: args.expected } satisfies DesignGraphRef),
-        )
-      : null
+    let currentText: string | null
+    try {
+      currentText = await store.readText(path)
+    } catch (error) {
+      if (!(error instanceof Error && error.message.startsWith('Design graph object not found:')))
+        throw error
+      currentText = null
+    }
+    const current = currentText === null ? null : parseDesignGraphRef(JSON.parse(currentText))
+    if ((current?.revisionId ?? null) !== args.expected)
+      throw new Error(`Design graph ref conflict for ${args.name}: reload before saving.`)
+    const expectedContentHash = currentText === null ? null : canonicalHash(currentText)
     const result = await store.writeTextIfUnchanged(path, expectedContentHash, jsonText(next))
     if (!result.written) {
       const current = result.currentContentHash === null ? null : await getRef(args.name)

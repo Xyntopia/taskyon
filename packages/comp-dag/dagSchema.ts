@@ -84,11 +84,19 @@ const pathFromAjv = (instancePath: string): (string | number)[] =>
     .map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))
     .map((part) => (/^\d+$/.test(part) ? Number(part) : part))
 
-const issueFromAjv = (error: ErrorObject): DagSchemaIssue => ({
-  path: pathFromAjv(error.instancePath),
-  message: error.message ?? 'Invalid value',
-  code: error.keyword,
-})
+const issueFromAjv = (error: ErrorObject): DagSchemaIssue => {
+  const missingProperty: unknown = error.params.missingProperty
+  return {
+    path: [
+      ...pathFromAjv(error.instancePath),
+      ...(error.keyword === 'required' && typeof missingProperty === 'string'
+        ? [missingProperty]
+        : []),
+    ],
+    message: error.message ?? 'Invalid value',
+    code: error.keyword,
+  }
+}
 
 export const safeParseSchema = <T = unknown>(
   schema: DagJsonSchema,

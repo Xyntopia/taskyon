@@ -1,0 +1,32 @@
+{
+  "graph": {
+    "bindings": {
+      "item_candidates": "sha256:yg3uRWmBimipsPDjR5Umxrp3c8q8oR76kuNOmllZ8v0",
+      "main": "sha256:MJ_YdlLw_wxzu9-NcBNipeBxJL7mjjuQKTTK2-KwqEw",
+      "packing_recommendation": "sha256:MJ_YdlLw_wxzu9-NcBNipeBxJL7mjjuQKTTK2-KwqEw",
+      "recommendation_policy": "sha256:buidoFnCHiXABWQOAxsjqOjMZLoYN3SuI0CM9TWhn64",
+      "trip_requirements": "sha256:U6hqSbqKDu8A1lJugBJMOnxl8ms38wb6wPSlkel_jFc",
+      "utility_score": "sha256:1nK7wp3r7ExYZzMTo5X7m1hQGy-3xqyCmgAWglVi9mk",
+      "weather_check": "sha256:jw_wfk09nIxmYU4Cn74_2PY_xBJiEBz7_mFAhM-6pXs",
+      "weight_check": "sha256:jJmH4Bbq069sqLYMG7uHyejLaiP-OfEh91D6au2u6R4"
+    },
+    "id": "sha256:3uU1gyMS3T6Z3or1xfL5NvAko6zNAImgvw8zU9gZLEU",
+    "nodeSources": {
+      "nodes/item_candidates.ts": "sha256:ZwvabfZdfcfoDtJ-SYtuXqj6KU4x_4qGPfVP0Xtpa2A",
+      "nodes/packing_recommendation.ts": "sha256:WdT3u5gT0Dev8h2929gQ2RTMUbaAoOMrpO9N96od21U",
+      "nodes/recommendation_policy.ts": "sha256:dZqrPCoTPcz-BS3TRs4C87cCHtH5FcUKMkZnRmyuJFU",
+      "nodes/trip_requirements.ts": "sha256:cxHHSSdIlG3c46xGiqEF49_Iofn4XYrTTigWeGc75nE",
+      "nodes/utility_score.ts": "sha256:ME1epcTj_GLOn7AHthH944f8S3oTGYcqhLpBRS8Hmx4",
+      "nodes/weather_check.ts": "sha256:Q2yySf7utFfigkEacSSe_JeIqBpwLtundmoSbTLU1mo",
+      "nodes/weight_check.ts": "sha256:EWI-MyFH5h5KAjF2ICr5ESUeVkhAIoNlLdS7xV5fQeQ"
+    },
+    "resolver": "taskyon.graph-authoring.v1",
+    "schemaVersion": 3,
+    "unboundNodes": []
+  },
+  "id": "sha256:rffVOEsl84OljHLGUmtz0mgIE77qoie8lo9unWcWSqI",
+  "kind": "taskyon.graph-source-lock",
+  "moduleLocks": {},
+  "schemaVersion": 3,
+  "supportHashes": {}
+}
