@@ -20,7 +20,7 @@ const featureSchema = z.object({
   geometry: geometrySchema,
 })
 
-type PolygonFeature = z.infer<typeof featureSchema>
+export type PolygonFeature = z.infer<typeof featureSchema>
 type Geometry = PolygonFeature['geometry']
 type Bounds = { west: number; east: number; south: number; north: number }
 

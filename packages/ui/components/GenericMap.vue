@@ -63,6 +63,8 @@ interface GenericMapProps {
   pmtilesVectorLayers?: TaskyonPmtilesVectorLayerSpec[]
   pmtilesRasterLayers?: readonly TaskyonPmtilesRasterLayerSpec[]
   showNavigationControls?: boolean
+  showScaleControl?: boolean
+  showAttributionControl?: boolean
 }
 
 const props = withDefaults(defineProps<GenericMapProps>(), {
@@ -77,6 +79,8 @@ const props = withDefaults(defineProps<GenericMapProps>(), {
   pmtilesVectorLayers: () => [],
   pmtilesRasterLayers: () => [],
   showNavigationControls: true,
+  showScaleControl: false,
+  showAttributionControl: false,
 })
 
 const sidebarOpen = defineModel<boolean>('sidebarOpen', {
@@ -278,7 +282,7 @@ const createMap = () => {
       style: resolveMapStyle(),
       center: [props.initialCenter[1], props.initialCenter[0]],
       zoom: props.initialZoom,
-      attributionControl: false,
+      attributionControl: props.showAttributionControl ? { compact: true } : false,
     })
   } catch (error) {
     const message = getErrorMessage(error)
@@ -293,6 +297,9 @@ const createMap = () => {
 
   if (props.showNavigationControls) {
     m.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right')
+  }
+  if (props.showScaleControl) {
+    m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left')
   }
 
   m.on('load', () => {

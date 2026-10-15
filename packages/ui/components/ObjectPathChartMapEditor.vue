@@ -63,6 +63,27 @@
         map-options
       />
     </div>
+    <div class="object-path-charts__col col-12 col-md-6">
+      <q-input
+        v-model="featureValuePath"
+        dense
+        clearable
+        label="Feature value path"
+        hint="Within each feature, e.g. properties.code"
+      />
+    </div>
+    <div class="object-path-charts__col col-12 col-md-6">
+      <q-input
+        v-model.number="mapRowIndex"
+        type="number"
+        min="0"
+        step="1"
+        dense
+        clearable
+        label="Map result row (from 0)"
+        hint="Select one scenario for a feature collection"
+      />
+    </div>
     <div class="object-path-charts__col col-12 col-md-2">
       <q-select
         v-model="objectFeaturePath"
@@ -98,6 +119,16 @@
         label="Zoom layer ids (comma-separated, optional)"
       />
     </div>
+    <div v-if="categories.length" class="object-path-charts__col col-auto">
+      <q-btn
+        flat
+        dense
+        color="primary"
+        label="Category colors"
+        data-cy="map-category-colors"
+        @click="openCategoryColors"
+      />
+    </div>
     <div v-if="showRemove" class="object-path-charts__col col-12 col-md-1">
       <q-btn flat dense color="negative" label="Remove" @click="emit('remove')" />
     </div>
@@ -123,6 +154,46 @@
         map-options
       />
     </div>
+    <q-dialog v-model="categoryColorsOpen" aria-label="Category colors">
+      <q-card style="width: 560px; max-width: 92vw" data-cy="map-category-colors-dialog">
+        <q-card-section class="text-h6">Category colors</q-card-section>
+        <q-card-section class="text-body2 q-pt-none">
+          Choose a color for each category, or use its automatic color.
+        </q-card-section>
+        <q-list separator style="max-height: 60vh; overflow: auto">
+          <q-item v-for="category in categories" :key="category" :data-category="category">
+            <q-item-section>
+              <q-item-label>{{ pendingStyles[category]?.label ?? category }}</q-item-label>
+              <q-item-label caption>
+                {{ category }} · {{ pendingStyles[category]?.color ? 'Custom' : 'Automatic' }}
+              </q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <input
+                type="color"
+                :value="pendingStyles[category]?.color ?? automaticColors[category]"
+                :aria-label="`Color for ${pendingStyles[category]?.label ?? category}`"
+                @input="(event) => chooseCategoryColor(category, event)"
+              />
+            </q-item-section>
+            <q-item-section side>
+              <q-btn
+                flat
+                dense
+                label="Automatic"
+                :aria-label="`Use automatic color for ${pendingStyles[category]?.label ?? category}`"
+                :disable="!pendingStyles[category]?.color"
+                @click="useAutomaticColor(category)"
+              />
+            </q-item-section>
+          </q-item>
+        </q-list>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat label="Cancel" />
+          <q-btn color="primary" label="Apply" @click="applyCategoryColors" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </div>
 </template>
 
@@ -131,6 +202,11 @@ import { computed, ref } from 'vue'
 import type { PlotResolution } from '@taskyon/common/modules/plotMath'
 import type { ObjectPathChartDefinition } from './objectPathChartTypes'
 import { decodeQueryAxisKey } from '@taskyon/comp-dag/queryPipeline'
+import {
+  mapCategoryColor,
+  type MapCategoryStyles,
+  type MapExternalFeatureLayer,
+} from '@taskyon/common/modules/plotMapLayers'
 
 type Option = { label: string; value: string }
 type AxisTransformKind = 'scalar' | 'aggregate' | 'index'
@@ -149,6 +225,7 @@ const props = withDefaults(
     detectedLatPath?: string | null | undefined
     detectedLonPath?: string | null | undefined
     showRemove?: boolean
+    categoryLayers?: readonly MapExternalFeatureLayer[] | undefined
     plotResolutionOptions: Array<{ label: string; value: PlotResolution }>
   }>(),
   {
@@ -162,6 +239,63 @@ const configModel = defineModel<ObjectPathChartDefinition>('config', {
   default: () => ({}),
 })
 const showCoordinateInputs = ref(false)
+
+const categories = computed(() =>
+  [
+    ...new Set(
+      props.categoryLayers?.flatMap(({ features }) =>
+        features.flatMap(({ properties }) => {
+          const category: unknown = properties?.__plotCategory
+          return typeof category === 'string' ? [category] : []
+        }),
+      ) ?? [],
+    ),
+  ].sort(),
+)
+const categoryColorsOpen = ref(false)
+const pendingStyles = ref<MapCategoryStyles>({})
+const automaticColors = ref<Record<string, string>>({})
+
+const openCategoryColors = () => {
+  const context = document.createElement('canvas').getContext('2d')
+  if (!context) throw new Error('Color conversion requires a canvas context.')
+  automaticColors.value = Object.fromEntries(
+    categories.value.map((category) => {
+      context.fillStyle = mapCategoryColor(category)
+      return [category, context.fillStyle]
+    }),
+  )
+  pendingStyles.value = Object.fromEntries(
+    Object.entries(configModel.value.categoryStyles ?? {}).map(([category, style]) => [
+      category,
+      { ...style },
+    ]),
+  )
+  categoryColorsOpen.value = true
+}
+
+const chooseCategoryColor = (category: string, event: Event) => {
+  if (!(event.target instanceof HTMLInputElement)) return
+  pendingStyles.value = {
+    ...pendingStyles.value,
+    [category]: {
+      label: pendingStyles.value[category]?.label ?? category,
+      color: event.target.value,
+    },
+  }
+}
+
+const useAutomaticColor = (category: string) => {
+  pendingStyles.value = {
+    ...pendingStyles.value,
+    [category]: { label: pendingStyles.value[category]?.label ?? category },
+  }
+}
+
+const applyCategoryColors = () => {
+  emit('apply-category-colors', pendingStyles.value)
+  categoryColorsOpen.value = false
+}
 
 const valueTransformKindOptions: Array<{ label: string; value: AxisTransformKind }> = [
   { label: 'Scalar', value: 'scalar' },
@@ -246,7 +380,9 @@ const valueTransformKind = computed<AxisTransformKind>({
 
 const valuePathOptions = computed<Option[]>(() =>
   valueTransformKind.value === 'scalar'
-    ? props.numericColumnOptions
+    ? configModel.value.featurePath && configModel.value.showContour === false
+      ? props.columnOptions
+      : props.numericColumnOptions
     : props.arrayNumericColumnOptions,
 )
 
@@ -336,6 +472,22 @@ const featurePath = computed({
   },
 })
 
+const featureValuePath = computed({
+  get: () => configModel.value.featureValuePath ?? '',
+  set: (value: string | null) => {
+    configModel.value = { ...configModel.value, featureValuePath: value?.trim() || undefined }
+  },
+})
+
+const mapRowIndex = computed({
+  get: () => configModel.value.mapRowIndex,
+  set: (value: number | string | null | undefined) => {
+    const index =
+      typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined
+    configModel.value = { ...configModel.value, mapRowIndex: index }
+  },
+})
+
 const objectFeaturePath = computed({
   get: () => configModel.value.objectFeaturePath ?? '',
   set: (value: string | null) => {
@@ -403,6 +555,7 @@ const zoomToMarkedLayerIdsCsv = computed({
 
 const emit = defineEmits<{
   (e: 'remove'): void
+  (e: 'apply-category-colors', styles: MapCategoryStyles): void
 }>()
 
 void props

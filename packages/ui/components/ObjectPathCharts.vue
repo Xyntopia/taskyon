@@ -126,7 +126,9 @@
           :object-feature-path-options="mapObjectPathOptions"
           :plot-resolution-options="plotResolutionOptions"
           :show-remove="true"
+          :category-layers="mode === 'full' ? chart.mapValue?.layers : undefined"
           @update:config="(next) => updateChartConfig(index, { ...next, kind: 'map' })"
+          @apply-category-colors="(styles) => applyMapCategoryStyles(index, styles)"
           @remove="removeChart(index)"
         />
 
@@ -288,7 +290,10 @@
     </q-card>
 
     <q-dialog v-model="thumbnailPopupOpen">
-      <q-card style="min-width: 900px; max-width: 96vw">
+      <q-card
+        style="min-width: 900px; max-width: 96vw"
+        data-cy="object-path-charts-thumbnail-dialog"
+      >
         <q-card-section class="row items-center">
           <div class="text-subtitle1">
             {{ selectedThumbnailChart?.title || 'Chart' }}
@@ -481,6 +486,7 @@ import {
   buildCoordinatePointLayer,
   buildFeatureValueLayer,
   pickCoordinatePaths,
+  type MapCategoryStyles,
   type MapExternalFeatureLayer,
 } from '@taskyon/common/modules/plotMapLayers'
 import type {
@@ -976,12 +982,15 @@ watch(
 )
 
 const mapFeaturePathOptions = computed<Option[]>(() => {
-  if (featurePathOptionsBySchema.value.length > 0) return featurePathOptionsBySchema.value
-  const out = new Set<string>()
+  const out = new Set<string>(featurePathOptionsBySchema.value.map(({ value }) => value))
   const visit = (value: unknown, prefix: string) => {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       const rec = value as Record<string, unknown>
-      if (rec.type === 'Feature' && rec.geometry && prefix) {
+      if (
+        ((rec.type === 'Feature' && rec.geometry) ||
+          (rec.type === 'FeatureCollection' && Array.isArray(rec.features))) &&
+        prefix
+      ) {
         out.add(prefix)
         return
       }
@@ -993,6 +1002,10 @@ const mapFeaturePathOptions = computed<Option[]>(() => {
   }
 
   for (const run of mapRuns.value.slice(0, 30)) visit(run, '')
+  for (const row of mapRows.value.slice(0, 30))
+    for (const [key, value] of Object.entries(row))
+      if (key.endsWith('.type') && (value === 'Feature' || value === 'FeatureCollection'))
+        out.add(key.slice(0, -5))
 
   return Array.from(out)
     .sort((a, b) => a.localeCompare(b))
@@ -1176,6 +1189,14 @@ function removeChart(index: number) {
 
 function updateChartConfig(index: number, next: ObjectPathChartDefinition) {
   chartsModel.value = chartsModel.value.map((cfg, i) => (i === index ? { ...next } : cfg))
+}
+
+const applyMapCategoryStyles = async (index: number, categoryStyles: MapCategoryStyles) => {
+  const chart = chartsModel.value[index]
+  if (!chart) return
+  updateChartConfig(index, { ...chart, categoryStyles })
+  await nextTick()
+  await updateChart(index)
 }
 
 function getPathValue(root: unknown, path?: string): unknown {
@@ -1486,7 +1507,11 @@ function chartFavoriteKey(chart: ObjectPathChartDefinition): string {
       chart.valuePath ?? '',
       axisTransformKey(chart.valueAxisTransform),
       chart.featurePath ?? '',
+      chart.featureValuePath ?? '',
+      chart.mapRowIndex ?? '',
       chart.objectFeaturePath ?? '',
+      JSON.stringify(chart.categoryStyles ?? {}),
+      chart.attribution ?? '',
       chart.showContour === false ? '0' : '1',
       chart.showFeatures === false ? '0' : '1',
       String(chart.resolution ?? 'auto'),
@@ -1519,7 +1544,7 @@ function toggleChartFavorite(index: number, chart: ObjectPathChartDefinition) {
 const chartKeyAt = (index: number, config: ObjectPathChartDefinition): string => {
   const variant = config.kind === 'map' ? 'map' : 'plot'
   return variant === 'map'
-    ? `${index}:map:${config.latPath || ''}:${config.lonPath || ''}:${config.valuePath || ''}:${axisTransformKey(config.valueAxisTransform)}:${config.featurePath || ''}:${config.objectFeaturePath || ''}:${config.showContour === false ? '0' : '1'}:${config.showFeatures === false ? '0' : '1'}:${config.resolution || 'auto'}:${config.title || ''}`
+    ? `${index}:map:${config.latPath || ''}:${config.lonPath || ''}:${config.valuePath || ''}:${axisTransformKey(config.valueAxisTransform)}:${config.featurePath || ''}:${config.featureValuePath || ''}:${config.mapRowIndex ?? ''}:${config.objectFeaturePath || ''}:${JSON.stringify(config.categoryStyles ?? {})}:${config.attribution ?? ''}:${config.showContour === false ? '0' : '1'}:${config.showFeatures === false ? '0' : '1'}:${config.resolution || 'auto'}:${config.title || ''}`
     : `${index}:plot:${config.plotMode || '2d'}:${config.x || ''}:${config.y || ''}:${config.z || ''}:${axisTransformKey(config.xAxisTransform)}:${axisTransformKey(config.yAxisTransform)}:${axisTransformKey(config.zAxisTransform)}:${config.title || ''}`
 }
 
@@ -1665,7 +1690,9 @@ const canRenderChart = (chart: ChartViewModel | null | undefined): boolean => {
   return (
     (showContour && !!latPath && !!lonPath && !!resolvedValuePath) ||
     (showFeatures && !!latPath && !!lonPath) ||
-    (showFeatures && !!featurePath && (!!resolvedValuePath || !!objectFeaturePath))
+    (showFeatures &&
+      !!featurePath &&
+      (!!resolvedValuePath || !!objectFeaturePath || !!chart.config.featureValuePath))
   )
 }
 
@@ -1798,7 +1825,7 @@ const buildMapPayload = (chart: ChartViewModel, index: number): ChartPayload => 
   if (
     showFeatures &&
     featurePath &&
-    (resolvedValuePath || objectFeaturePath) &&
+    (resolvedValuePath || objectFeaturePath || chart.config.featureValuePath) &&
     (mapRuns.value.length > 0 || mapRows.value.length > 0)
   ) {
     const layer = buildFeatureValueLayer(
@@ -1813,6 +1840,8 @@ const buildMapPayload = (chart: ChartViewModel, index: number): ChartPayload => 
       `features-${index}`,
       '__plotValue',
       objectFeaturePath,
+      chart.config.categoryStyles,
+      { featureValuePath: chart.config.featureValuePath, rowIndex: chart.config.mapRowIndex },
     )
     if (layer) layers.push(layer)
   }

@@ -1,4 +1,5 @@
 import z from 'zod'
+import { spatialCandidateSchema, type PolygonFeature } from './spatialCandidates'
 import { canonicalHash, type DagStorageBackend, type Hash } from './caching'
 import { createNode } from './dagCore'
 import { evaluateQueryAxisValue } from './queryPipeline'
@@ -15,6 +16,12 @@ const documentColumnSchema = z
     path: z.string().min(1).max(256),
     op: z.enum(['identity', 'sum', 'mean', 'min', 'max', 'index']).default('identity'),
     index: z.number().int().min(0).optional(),
+    format: z
+      .literal('geojson')
+      .describe(
+        'Polygon Feature or FeatureCollection. Collection maps select one result row and use a geoshape presentation.',
+      )
+      .optional(),
   })
   .strict()
 
@@ -58,7 +65,15 @@ export const documentViewSchema = z
 
 export type DocumentView = z.infer<typeof documentViewSchema>
 export type DocumentProjection = {
-  rows: Record<string, string | number | boolean | null>[]
+  rows: Record<
+    string,
+    | string
+    | number
+    | boolean
+    | null
+    | PolygonFeature
+    | { type: 'FeatureCollection'; features: PolygonFeature[] }
+  >[]
   complete: boolean
 }
 
@@ -148,14 +163,17 @@ export const parseDocumentTemplate = (template: string) => {
   }
 }
 
-const markdownCell = (value: string | number | boolean | null) =>
-  String(value ?? '—')
+const markdownCell = (value: DocumentProjection['rows'][number][string]) => {
+  if (value !== null && typeof value === 'object')
+    throw new Error('GeoJSON columns require a graphics presentation.')
+  return String(value ?? '—')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('|', '&#124;')
     .replace(/[\\`*_[\]{}!]/g, (character) => `&#${character.charCodeAt(0)};`)
     .replace(/\r?\n/g, '<br>')
+}
 
 const renderTabularView = (
   presentation: Extract<DocumentView['presentation'], { renderer: 'scalar' | 'table' }>,
@@ -247,7 +265,10 @@ export const renderDocumentView = async (
 }
 
 /** Resolve only declared values from an already bounded row, using the shared plot reducers. */
-export const projectDocumentRow = (row: unknown, columns: DocumentView['source']['columns']) =>
+export const projectDocumentRow = (
+  row: unknown,
+  columns: DocumentView['source']['columns'],
+): DocumentProjection['rows'][number] =>
   Object.fromEntries(
     Object.entries(columns).map(([name, spec]) => {
       let value: unknown = row
@@ -263,6 +284,22 @@ export const projectDocumentRow = (row: unknown, columns: DocumentView['source']
           op: spec.op,
           ...(spec.index === undefined ? {} : { index: spec.index }),
         })
+      if (spec.format === 'geojson') {
+        if (spec.op !== 'identity') throw new Error('GeoJSON columns require identity projection.')
+        const polygon = spatialCandidateSchema.shape.feature.unwrap()
+        const feature = z
+          .union([
+            polygon,
+            z.object({
+              type: z.literal('FeatureCollection'),
+              features: z.array(polygon).max(1000),
+            }),
+          ])
+          .parse(value)
+        if (JSON.stringify(feature).length > 2 * 1024 * 1024)
+          throw new Error('GeoJSON column exceeds 2 MiB.')
+        return [name, feature]
+      }
       if (typeof value === 'number' && !Number.isFinite(value)) value = null
       if (
         value !== null &&

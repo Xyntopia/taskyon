@@ -1,4 +1,5 @@
 import type { PlotResolution } from '@taskyon/common/modules/plotMath'
+import type { MapCategoryStyles } from '@taskyon/common/modules/plotMapLayers'
 
 export type AxisTransform =
   | { kind: 'scalar' }
@@ -19,11 +20,15 @@ export type ObjectPathChartDefinition = {
   valuePath?: string | undefined
   valueAxisTransform?: AxisTransform | undefined
   featurePath?: string | undefined
+  featureValuePath?: string | undefined
+  mapRowIndex?: number | undefined
   showContour?: boolean | undefined
   showFeatures?: boolean | undefined
   resolution?: PlotResolution | undefined
   title?: string | undefined
   objectFeaturePath?: string | undefined
+  categoryStyles?: MapCategoryStyles | undefined
+  attribution?: string | undefined
   seriesMetaPath?: string | undefined
   showZoomToMarkedButton?: boolean | undefined
   zoomToMarkedLayerIds?: string[] | undefined

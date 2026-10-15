@@ -444,3 +444,127 @@ export const testDocumentTemplateBoundedViewsAndIndependentCache = async () => {
   if (!rejected) throw new Error('View bounds must be enforced, not silently exceeded.')
   return { success: true }
 }
+
+export const testDocumentTemplateGeoJsonProjection = () => {
+  const feature = {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    },
+  }
+  const view = parseDocumentTemplate(
+    '```document-view\n' +
+      JSON.stringify({
+        id: 'map',
+        source: {
+          invocation: 'gis',
+          columns: { Feature: { path: 'outputs.feature', format: 'geojson' } },
+        },
+        presentation: { renderer: 'vega-lite', spec: {} },
+      }) +
+      '\n```',
+  ).views[0]!
+  const row = projectDocumentRow({ outputs: { feature } }, view.source.columns)
+  if (JSON.stringify(row.Feature) !== JSON.stringify(feature))
+    throw new Error('Explicit GeoJSON projection must retain polygon geometry.')
+  for (const value of [
+    { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[Infinity, 0]]] } },
+    'https://example.test/map.json',
+  ]) {
+    let rejected = false
+    try {
+      projectDocumentRow({ outputs: { feature: value } }, view.source.columns)
+    } catch {
+      rejected = true
+    }
+    if (!rejected) throw new Error('Malformed GeoJSON and remote resources must be rejected.')
+  }
+  let rejected = false
+  try {
+    projectDocumentRow(
+      { outputs: { feature } },
+      { Feature: { path: 'outputs.feature', op: 'identity' } },
+    )
+  } catch {
+    rejected = true
+  }
+  if (!rejected) throw new Error('Object projections must require explicit GeoJSON format.')
+  return { success: true }
+}
+
+export const testDocumentTemplateMapsSelectedCollection = async () => {
+  const { createVegaDocumentRenderer } = await import('./documentGraphics')
+  const features = ['P', 'L'].map((code, index) => ({
+    type: 'Feature',
+    properties: { code },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-120.2 + index * 0.01, 36.48],
+          [-120.19 + index * 0.01, 36.48],
+          [-120.19 + index * 0.01, 36.49],
+          [-120.2 + index * 0.01, 36.48],
+        ],
+      ],
+    },
+  }))
+  const input = { outputs: { map: { type: 'FeatureCollection', features } } }
+  const original = JSON.stringify(input)
+  const row = projectDocumentRow(input, {
+    Feature: { path: 'outputs.map', op: 'identity', format: 'geojson' },
+  })
+  const presentation = {
+    renderer: 'vega-lite' as const,
+    spec: {
+      mark: { type: 'geoshape', stroke: '#333333' },
+      projection: { type: 'identity', reflectY: true },
+      encoding: {
+        shape: { field: 'Feature', type: 'geojson' },
+        color: {
+          field: 'Feature.properties.code',
+          type: 'nominal',
+          scale: { domain: ['P', 'L'], range: ['#d8ab90', '#a8d279'] },
+        },
+      },
+    },
+  }
+  const renderer = createVegaDocumentRenderer()
+  const first = await renderer.render(presentation, [row])
+  if (first !== (await renderer.render(presentation, [row])))
+    throw new Error('A selected collection must render repeatably.')
+  const svg = atob(first.split('base64,')[1]!.split(')')[0]!)
+  const paths = svg.match(/<path\b[^>]*>/g) ?? []
+  for (const color of ['#d8ab90', '#a8d279'])
+    if (!paths.some((path) => path.includes(`fill="${color}"`) && path.includes(' d="M')))
+      throw new Error(
+        'Every evaluated polygon must retain its own category fill, not just a legend swatch.',
+      )
+  if (JSON.stringify(input) !== original)
+    throw new Error('Report projection/rendering must preserve the evaluated result.')
+  for (const [spec, rows, message] of [
+    [presentation.spec, [row, row], 'one result row'],
+    [{ ...presentation.spec, mark: 'bar' }, [row], 'geoshape'],
+  ] as const) {
+    let rejected = false
+    try {
+      await renderer.render({ renderer: 'vega-lite', spec }, [...rows])
+    } catch (error) {
+      rejected = error instanceof Error && error.message.includes(message)
+    }
+    if (!rejected)
+      throw new Error('Collection rendering must reject ambiguous scenarios and non-map expansion.')
+  }
+  return { selectedCollectionRendered: true, categoryGeometryColorsVerified: true }
+}
+testDocumentTemplateMapsSelectedCollection.description =
+  'Renders a selected result FeatureCollection with per-feature colors, rejecting overlapping scenarios and non-map expansion.'

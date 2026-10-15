@@ -88,6 +88,31 @@ const plotMarkdown = (svg: string) => {
   return `![Plot](data:image/svg+xml;base64,${btoa(binary)})`
 }
 
+/** A GeoJSON collection is one selected scenario, with one shape/color per feature. */
+const mapCollectionRows = (spec: Record<string, unknown>, rows: DocumentProjection['rows']) => {
+  const collections = rows.flatMap((row) =>
+    Object.entries(row).flatMap(([column, value]) =>
+      value !== null && typeof value === 'object' && value.type === 'FeatureCollection'
+        ? [{ row, column, features: value.features }]
+        : [],
+    ),
+  )
+  if (!collections.length) return rows
+  if (rows.length !== 1 || collections.length !== 1)
+    throw new Error(
+      'A collection map must select one result row and one GeoJSON column using source.offset/maxRows.',
+    )
+  const mark =
+    typeof spec.mark === 'string'
+      ? spec.mark
+      : spec.mark && typeof spec.mark === 'object' && 'type' in spec.mark
+        ? spec.mark.type
+        : undefined
+  if (mark !== 'geoshape') throw new Error('GeoJSON collections require a geoshape presentation.')
+  const collection = collections[0]!
+  return collection.features.map((feature) => ({ ...collection.row, [collection.column]: feature }))
+}
+
 /** Construct lazily: schema compilation and Vega loading are needed only for plot documents. */
 export const createVegaDocumentRenderer = (): DocumentGraphicsRenderer => {
   let validate: ValidateFunction<TopLevelSpec> | undefined
@@ -100,7 +125,8 @@ export const createVegaDocumentRenderer = (): DocumentGraphicsRenderer => {
     file: denyResource,
   }
   const render = async (spec: Record<string, unknown>, rows: DocumentProjection['rows']) => {
-    if (JSON.stringify(spec).length > 128_000 || rows.length > 1000)
+    const projectedRows = mapCollectionRows(spec, rows)
+    if (JSON.stringify(spec).length > 128_000 || projectedRows.length > 1000)
       throw new Error('Document plot input exceeds its limit.')
     checkDocumentPlot(spec)
     if (!validate) {
@@ -108,7 +134,7 @@ export const createVegaDocumentRenderer = (): DocumentGraphicsRenderer => {
       ajv.addFormat('color-hex', /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)
       validate = ajv.compile<TopLevelSpec>(liteSchema)
     }
-    const input = { width: 480, height: 280, ...spec, data: { values: rows } }
+    const input = { width: 480, height: 280, ...spec, data: { values: projectedRows } }
     if (!validate(input)) throw new Error('Invalid Vega-Lite document plot specification.')
     // Fixed estimates avoid machine-dependent canvas/font measurements. This is Vega's
     // library-wide switch; every document render sets the same policy before evaluation.
@@ -134,6 +160,7 @@ export const createVegaDocumentRenderer = (): DocumentGraphicsRenderer => {
       check: checkDocumentPlot.toString(),
       render: render.toString(),
       image: plotMarkdown.toString(),
+      collection: mapCollectionRows.toString(),
     }),
     render: (presentation, rows) => {
       if (presentation.renderer !== 'vega-lite')

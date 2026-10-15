@@ -1,5 +1,118 @@
 import type { Feature, Point, Polygon } from 'geojson'
 import { type PlotFlatRow, type PlotSparseHeatmapValue } from './plotMath'
+import { z } from 'zod'
+
+const createMapCategoryStylesSchema = () =>
+  z.record(
+    z.string(),
+    z
+      .object({
+        label: z.string().min(1).max(200),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .optional(),
+      })
+      .strict(),
+  )
+
+export type MapCategoryStyles = z.infer<ReturnType<typeof createMapCategoryStylesSchema>>
+
+export const createMapCategoryStylesJsonSchema = () =>
+  z.toJSONSchema(createMapCategoryStylesSchema(), { target: 'draft-7' })
+
+export const normalizeMapCategoryStyles = (value: unknown): MapCategoryStyles | undefined => {
+  const parsed = createMapCategoryStylesSchema().safeParse(value)
+  return parsed.success ? parsed.data : undefined
+}
+
+/** Offline outline preview for WGS84 polygons. This display projection must not be used for area. */
+export const renderPolygonMapSvg = (
+  collection: unknown,
+  options: { title?: string; description?: string } = {},
+): string => {
+  const escapeText = (text: string) =>
+    text.replace(
+      /[&<>"']/g,
+      (char) =>
+        ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&apos;',
+        })[char]!,
+    )
+  const title = escapeText(options.title ?? 'Parcel outlines · WGS84 · north up')
+  const description = escapeText(
+    options.description ??
+      'Whole parcel outlines; not certified facility footprints. Display only, not an area calculation.',
+  )
+  const position = z
+    .tuple([z.number().finite().min(-180).max(180), z.number().finite().min(-90).max(90)])
+    .rest(z.number().finite())
+  const ring = z
+    .array(position)
+    .min(4)
+    .refine(
+      (points) => points[0]![0] === points.at(-1)![0] && points[0]![1] === points.at(-1)![1],
+      'Polygon rings must close.',
+    )
+  const polygon = z.array(ring).min(1)
+  const parsed = z
+    .object({
+      type: z.literal('FeatureCollection'),
+      features: z.array(
+        z.object({
+          type: z.literal('Feature'),
+          geometry: z.discriminatedUnion('type', [
+            z.object({ type: z.literal('Polygon'), coordinates: polygon }),
+            z.object({ type: z.literal('MultiPolygon'), coordinates: z.array(polygon).min(1) }),
+          ]),
+        }),
+      ),
+    })
+    .parse(collection)
+  const polygons = parsed.features.flatMap(({ geometry }) =>
+    geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates,
+  )
+  const points = polygons.flat(2)
+  if (!points.length)
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720"><text x="24" y="36">${title}: no polygons.</text></svg>`
+  const { minLon, maxLon, minLat, maxLat } = points.reduce(
+    (bounds, [lon, lat]) => ({
+      minLon: Math.min(bounds.minLon, lon),
+      maxLon: Math.max(bounds.maxLon, lon),
+      minLat: Math.min(bounds.minLat, lat),
+      maxLat: Math.max(bounds.maxLat, lat),
+    }),
+    { minLon: Infinity, maxLon: -Infinity, minLat: Infinity, maxLat: -Infinity },
+  )
+  const longitudeScale = Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180)
+  const width = (maxLon - minLon) * longitudeScale
+  const height = maxLat - minLat
+  const scale = Math.min(880 / Math.max(width, 1e-9), 620 / Math.max(height, 1e-9))
+  const paths = polygons
+    .map((rings) => {
+      const path = rings
+        .map(
+          (points) =>
+            points
+              .map(
+                ([lon, lat], index) =>
+                  `${index ? 'L' : 'M'}${(40 + (lon - minLon) * longitudeScale * scale).toFixed(2)},${(60 + (maxLat - lat) * scale).toFixed(2)}`,
+              )
+              .join(' ') + ' Z',
+        )
+        .join(' ')
+      return `<path d="${path}" fill-rule="evenodd"/>`
+    })
+    .join('\n')
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" aria-label="${title}">
+<rect width="960" height="720" fill="white"/><text x="40" y="30" font-family="sans-serif" font-size="20">${title}</text>
+<g fill="#5e81ac" fill-opacity="0.2" stroke="#1f2937" stroke-width="1">${paths}</g>
+<text x="40" y="706" font-family="sans-serif" font-size="12">${description}</text></svg>`
+}
 
 export type MapLayerStyle = {
   color?: string
@@ -17,6 +130,16 @@ export type MapExternalFeatureLayer = {
   features: Feature[]
   style?: MapLayerStyle
   interactive?: boolean
+  legend?: Array<{ label: string; color: string }>
+}
+
+export const mapCategoryColor = (category: string): string => {
+  // A category keeps its color when rows are reordered or a scenario removes other categories.
+  const hue = [...category].reduce(
+    (hash, character) => (hash * 31 + character.charCodeAt(0)) % 360,
+    0,
+  )
+  return `hsl(${(hue * 137.508) % 360},55%,60%)`
 }
 
 const valueToColor = (value: number, min: number, max: number): string => {
@@ -225,6 +348,8 @@ export const buildFeatureValueLayer = (
   layerId: string,
   valueProperty = '__plotValue',
   objectFeaturePath?: string,
+  categoryStyles?: MapCategoryStyles,
+  selection: { featureValuePath?: string | undefined; rowIndex?: number | undefined } = {},
 ): MapExternalFeatureLayer | null => {
   const flattenMetaObject = (
     value: unknown,
@@ -245,31 +370,62 @@ export const buildFeatureValueLayer = (
   const pairs: Array<{
     feature: Feature
     value: number | null
+    category?: string
     objectMeta?: Record<string, unknown>
+    rowIndex: number
   }> = []
-  for (const run of runs) {
+  for (const [rowIndex, run] of runs.entries()) {
+    if (selection.rowIndex !== undefined && rowIndex !== selection.rowIndex) continue
     const featRaw = pathValue(run, featurePath, getPathValue) ?? readFlatFeature(run, featurePath)
-    if (!isFeatureLike(featRaw)) continue
-    const valRaw = valuePath ? pathValue(run, valuePath, getPathValue) : undefined
-    const value = typeof valRaw === 'number' ? valRaw : Number(valRaw)
-    const numericValue = Number.isFinite(value) ? value : null
+    const collectionType = pathValue(run, `${featurePath}.type`, getPathValue)
+    const collectionFeatures =
+      collectionType === 'FeatureCollection'
+        ? pathValue(run, `${featurePath}.features`, getPathValue)
+        : undefined
+    if (Array.isArray(collectionFeatures) && runs.length > 1 && selection.rowIndex === undefined)
+      throw new Error('Select a result row before plotting multiple feature collections.')
+    const features = Array.isArray(collectionFeatures)
+      ? collectionFeatures.filter(isFeatureLike)
+      : isFeatureLike(featRaw)
+        ? [featRaw]
+        : []
+    for (const feature of features) {
+      const valRaw = selection.featureValuePath
+        ? pathValue(feature, selection.featureValuePath, getPathValue)
+        : valuePath
+          ? pathValue(run, valuePath, getPathValue)
+          : undefined
+      const value =
+        typeof valRaw === 'number'
+          ? valRaw
+          : typeof valRaw === 'string' && valRaw.trim()
+            ? Number(valRaw)
+            : Number.NaN
+      const numericValue = Number.isFinite(value) ? value : null
+      const category =
+        numericValue === null && typeof valRaw === 'string' && valRaw.trim()
+          ? valRaw.trim()
+          : undefined
 
-    let objectMeta: Record<string, unknown> | undefined
-    if (objectFeaturePath) {
-      const objectRaw = pathValue(run, objectFeaturePath, getPathValue)
-      if (objectRaw && typeof objectRaw === 'object' && !Array.isArray(objectRaw)) {
-        const flat: Record<string, unknown> = {}
-        flattenMetaObject(objectRaw, '', flat)
-        objectMeta = flat
+      let objectMeta: Record<string, unknown> | undefined
+      if (objectFeaturePath) {
+        const objectRaw = pathValue(run, objectFeaturePath, getPathValue)
+        if (objectRaw && typeof objectRaw === 'object' && !Array.isArray(objectRaw)) {
+          const flat: Record<string, unknown> = {}
+          flattenMetaObject(objectRaw, '', flat)
+          objectMeta = flat
+        }
       }
-    }
 
-    if (numericValue == null && !objectMeta) continue
-    pairs.push({
-      feature: cloneFeature(featRaw),
-      value: numericValue,
-      ...(objectMeta ? { objectMeta } : {}),
-    })
+      if (numericValue == null && !category && !objectMeta) continue
+      pairs.push({
+        feature: cloneFeature(feature),
+        value: numericValue,
+        rowIndex,
+        ...(category ? { category } : {}),
+        ...(objectMeta ? { objectMeta } : {}),
+      })
+    }
   }
   if (pairs.length === 0) return null
 
@@ -277,44 +433,57 @@ export const buildFeatureValueLayer = (
   const vMin = values.length > 0 ? Math.min(...values) : 0
   const vMax = values.length > 0 ? Math.max(...values) : 1
 
-  const features: Feature[] = pairs.map(({ feature, value, objectMeta }, idx) => {
-    const props = { ...(feature.properties ?? {}) }
-    if (typeof value === 'number') {
-      props[valueProperty] = value
-      props.__plotColor = valueToColor(value, vMin, vMax)
-    }
-    if (objectMeta) {
-      for (const [k, v] of Object.entries(objectMeta)) {
-        props[`meta.${k}`] =
-          typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
-            ? v
-            : v == null
-              ? null
-              : JSON.stringify(v)
+  const legend = [...new Set(pairs.flatMap(({ category }) => (category ? [category] : [])))]
+    .sort()
+    .map((category) => ({
+      label: categoryStyles?.[category]?.label ?? category,
+      color: categoryStyles?.[category]?.color ?? mapCategoryColor(category),
+    }))
+  const features: Feature[] = pairs.map(
+    ({ feature, value, category, objectMeta, rowIndex }, idx) => {
+      const props = { ...(feature.properties ?? {}) }
+      if (typeof value === 'number') {
+        props[valueProperty] = value
+        props.__plotColor = valueToColor(value, vMin, vMax)
       }
-    }
-    props.__plotRow = idx
-    return {
-      ...feature,
-      id: feature.id ?? idx,
-      properties: props,
-      geometry: feature.geometry,
-    }
-  })
+      if (category) {
+        props.__plotCategory = category
+        props.__plotColor = categoryStyles?.[category]?.color ?? mapCategoryColor(category)
+      }
+      if (objectMeta) {
+        for (const [k, v] of Object.entries(objectMeta)) {
+          props[`meta.${k}`] =
+            typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+              ? v
+              : v == null
+                ? null
+                : JSON.stringify(v)
+        }
+      }
+      props.__plotRow = rowIndex
+      return {
+        ...feature,
+        id: feature.id ?? idx,
+        properties: props,
+        geometry: feature.geometry,
+      }
+    },
+  )
 
   return {
     id: layerId,
     features,
     interactive: true,
+    ...(legend.length ? { legend } : {}),
     style: {
       color: '#1f2937',
       weight: 0.8,
-      fillOpacity: 0.7,
+      fillOpacity: legend.length > 0 ? 1 : 0.7,
       radius: 5,
-      ...(values.length > 0
+      ...(values.length > 0 || legend.length > 0
         ? {
             fillColorProperty: '__plotColor',
-            lineColorProperty: '__plotColor',
+            ...(legend.length === 0 ? { lineColorProperty: '__plotColor' } : {}),
             circleColorProperty: '__plotColor',
           }
         : {}),
