@@ -36,12 +36,12 @@ const createTaskWorkerTestRuntime = async (storage = createPortableTestStorage()
       ty,
       storage,
       cleanup: async () => {
-        await storage.destroy()
+        storage.destroy()
         await databases.closeDatabases()
       },
     }
   } catch (error) {
-    await storage.destroy()
+    storage.destroy()
     await databases.closeDatabases()
     throw error
   }

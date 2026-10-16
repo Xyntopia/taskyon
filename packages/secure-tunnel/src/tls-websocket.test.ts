@@ -21,7 +21,7 @@ class FakeWebSocket {
     })
   }
 
-  send(_data: Uint8Array) {}
+  send() {}
 
   close() {
     this.readyState = 3
