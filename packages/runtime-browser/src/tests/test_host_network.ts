@@ -1,3 +1,4 @@
+import { createMediatedFetch } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import {
   createCustomProxyFetch,
   createHostNetwork,
@@ -142,6 +143,55 @@ export const testCustomProxyPreservesProviderRequestAndStream = async () => {
   assert(
     (await response.text()).includes('data: second'),
     'The response stream must remain readable',
+  )
+  return { success: true }
+}
+
+export const testMediatedFetchPreservesCustomProxyRequest = async () => {
+  const destination = 'https://target.example/items?search=a%20b&limit=2'
+  let authorized = false
+  let forwarded: Request | undefined
+  const proxyFetch = createCustomProxyFetch(
+    'https://proxy.example/fetch?url={url}',
+    (input, init) => {
+      forwarded = new Request(input, init)
+      return Promise.resolve(new Response('synthetic proxy response'))
+    },
+  )
+  const mediatedFetch = createMediatedFetch({
+    authorize: async (capability) => {
+      authorized = capability.origin === 'https://target.example' && capability.access === 'write'
+      return authorized
+    },
+    fetchWithPolicy: async (input, init, options) => {
+      const request = new Request(input, init)
+      const transport = resolveToolHostTransport({
+        request,
+        configured: 'custom-proxy',
+        policy: options?.policy ?? 'default',
+      })
+      assert(transport === 'custom-proxy', 'Tool fetch must select the configured custom proxy')
+      return await proxyFetch(request)
+    },
+  })
+  const response = await mediatedFetch(destination, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Synthetic-Header': 'fixture' },
+    body: '{"fixture":true}',
+  })
+  assert(authorized, 'Mediated fetch must authorize the destination before proxying')
+  assert(forwarded !== undefined, 'The configured custom proxy must receive the request')
+  assert(
+    new URL(forwarded.url).searchParams.get('url') === destination,
+    'Destination must round-trip',
+  )
+  assert(forwarded.method === 'POST', 'Mediated proxy fetch must preserve the method')
+  assert(forwarded.headers.get('x-synthetic-header') === 'fixture', 'Headers must survive')
+  assert(forwarded.headers.get('content-type') === 'application/json', 'Content type must survive')
+  assert((await forwarded.text()) === '{"fixture":true}', 'The request body must survive')
+  assert(
+    (await response.text()) === 'synthetic proxy response',
+    'The response must remain readable',
   )
   return { success: true }
 }

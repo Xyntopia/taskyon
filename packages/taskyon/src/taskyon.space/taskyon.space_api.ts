@@ -22,8 +22,23 @@ import {
   type ServiceTokenPayload,
 } from './tokenservice.types'
 
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  return JSON.parse(await response.text()) as T
+export async function readTokenServiceResponse<T>(response: Response): Promise<T> {
+  const text = await response.text()
+  if (!response.ok) {
+    let message = 'Token service request failed'
+    try {
+      const body: unknown = JSON.parse(text)
+      if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
+        message = body.error.slice(0, 512)
+      }
+    } catch {
+      // HTML responses and other unexpected upstream bodies are not actionable service errors.
+    }
+    throw Object.assign(new Error(`${message} (HTTP ${response.status})`), {
+      status: response.status,
+    })
+  }
+  return JSON.parse(text) as T
 }
 
 async function readStringResponse(response: Response): Promise<string> {
@@ -60,8 +75,7 @@ export async function mintToken(baseUrl: string, authToken: string, cnf?: TokenC
       },
       body: JSON.stringify(cnf ? { cnf } : null),
     })
-    if (!response.ok) throw new Error(`Token mint failed: ${response.status}`)
-    const data = await readJsonResponse<MintTokenResponse>(response)
+    const data = await readTokenServiceResponse<MintTokenResponse>(response)
     return data.token
   }
 
@@ -90,8 +104,7 @@ export async function mintTokens(
       },
       body: JSON.stringify({ requests }),
     })
-    if (!response.ok) throw new Error(`Token mint failed: ${response.status}`)
-    const data = await readJsonResponse<MintTokensResponse>(response)
+    const data = await readTokenServiceResponse<MintTokensResponse>(response)
     return data.tokens
   }
 
@@ -223,8 +236,7 @@ export async function returnToken(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(signSettlement ? { settlementJwt: await signSettlement(body) } : body),
     })
-    if (!response.ok) throw new Error(`Token return failed: ${response.status}`)
-    return await readJsonResponse<ReturnTokenResponse>(response)
+    return await readTokenServiceResponse<ReturnTokenResponse>(response)
   }
 
   const response = await axios.post<ReturnTokenResponse>(
@@ -294,7 +306,7 @@ export async function getTaskyonCosts(
       })
       return undefined
     }
-    const data = await readJsonResponse<{ used_credits: number }[]>(response)
+    const data = await readTokenServiceResponse<{ used_credits: number }[]>(response)
     const cost = data[0]?.used_credits
     if (typeof cost === 'number') return cost
 

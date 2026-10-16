@@ -2,7 +2,7 @@ import { secureFetch } from '@taskyon/secure-tunnel'
 import { humanizeError } from '../utils/error'
 import {
   getTyJwtPublicKey,
-  getSettlementConfirmation,
+  readTokenServiceResponse,
   isSettlementConfirmationUnsupported,
   parseSettlementConfirmationResponse,
   createTunnelTokenProvider,
@@ -20,8 +20,37 @@ import {
 } from '../taskyon.space/tokenservice.types'
 import { sleep } from '../utils/asyncUtils'
 import { canUseTauriHttpPlugin, tauriHttpGetText } from '../utils/tauriHttpPlugin'
-import axios from 'axios'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
+
+export const testTokenServiceErrorResponse = async () => {
+  for (const status of [400, 401, 402, 403, 429, 500]) {
+    const message =
+      status === 429 ? 'API key credit allowance is exhausted' : 'Synthetic service rejection'
+    const failure = await expectThrows(() =>
+      readTokenServiceResponse(new Response(JSON.stringify({ error: message }), { status })),
+    )
+    if (
+      !(failure instanceof Error) ||
+      !failure.message.includes(message) ||
+      !('status' in failure) ||
+      failure.status !== status
+    ) {
+      throw new Error('Token service status and actionable message must survive native HTTP')
+    }
+  }
+  const hidden = await expectThrows(() =>
+    readTokenServiceResponse(new Response('<html>private proxy fixture</html>', { status: 502 })),
+  )
+  if (!(hidden instanceof Error) || hidden.message.includes('private proxy fixture')) {
+    throw new Error('Unexpected upstream bodies must not appear in token service errors')
+  }
+  const success = await readTokenServiceResponse<{ token: string }>(
+    new Response('{"token":"fixture"}'),
+  )
+  if (success.token !== 'fixture')
+    throw new Error('Successful token responses must remain unchanged')
+  return { success: true }
+}
 
 export const testSettlementConfirmationCompatibility = () => {
   const cnf = {
@@ -451,148 +480,6 @@ export const testSecureFetch = async (ctx: { tyauth: string }) => {
   }
 }
 
-const createProxyFetchClient = (tunnelUrl: string) => {
-  return async (url: string, tunnelToken: string, cacheBust = false) => {
-    const urlObj = new URL(tunnelUrl)
-    urlObj.searchParams.set('url', url)
-
-    if (cacheBust) {
-      urlObj.searchParams.set('cb', Date.now().toString())
-    }
-
-    return await axios.get<unknown>(urlObj.toString(), {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${tunnelToken}`,
-      },
-    })
-  }
-}
-
-const responseDataToText = (data: unknown): string => {
-  if (typeof data === 'string') return data
-  if (data === null || data === undefined) return ''
-  try {
-    return JSON.stringify(data)
-  } catch {
-    return Object.prototype.toString.call(data)
-  }
-}
-
-export const testTyProxy = async (ctx: { tyauth: string }) => {
-  const baseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
-
-  const token = await mintToken(
-    baseUrl,
-    ctx.tyauth,
-    await getSettlementConfirmation('https://share.taskyon.space'),
-  )
-
-  const tunnelUrl = 'https://share.taskyon.space/proxy'
-  const proxyFetch = createProxyFetchClient(tunnelUrl)
-
-  // const testApiUrl1 = 'https://api.nasdaq.com/api/quote/AAPL/chart'
-  const testApiUrl2 = 'https://openwhyd.org/'
-
-  // --- Test 1: no browser cache interference ---
-  // Use a cache-busting parameter so that the first request definitely goes to the server.
-  const response1 = await proxyFetch(testApiUrl2, token, true)
-
-  console.log(response1.status)
-  console.log(response1.data)
-  const data1Text = responseDataToText(response1.data)
-
-  let expectedCorsError: string
-
-  if (typeof window === 'undefined') {
-    expectedCorsError = 'CORS enforcement check is not applicable outside a browser runtime.'
-  } else {
-    const err1 = await expectThrows(async () => await fetch(testApiUrl2), 'No CORS error received!')
-    expectedCorsError =
-      "Success: Error while downloading 'normal' browser based fetch, but expected" +
-      humanizeError(err1)
-  }
-
-  // For the no-cache test, we *expect* the server to see a second request and reject it
-  // as a double-spend. The cache-buster ensures this request cannot be fulfilled purely
-  // from the browser cache.
-  const errDoubleSpend = await expectThrows(
-    async () => await proxyFetch(testApiUrl2, token, true),
-    'No double spending error received from server in no-cache scenario!',
-  )
-  const expectedDoubleSpendError =
-    'This Error is expected and should occur during double spending! ' +
-    humanizeError(errDoubleSpend)
-
-  await sleep(5000)
-  // we have to mint a new token for every request
-  const data2 = (
-    await proxyFetch(
-      testApiUrl2,
-      await mintToken(
-        baseUrl,
-        ctx.tyauth,
-        await getSettlementConfirmation('https://share.taskyon.space'),
-      ),
-      true,
-    )
-  ).data
-  const data2Text = responseDataToText(data2)
-
-  // --- Test 2: allow browser caching and detect if it hides double-spend errors ---
-  // Now we intentionally do NOT use cache-busting. If the browser caches the first
-  // successful response, the second call might be served from cache and never reach
-  // the server, so no double-spend error occurs.
-
-  const tokenForCacheTest = await mintToken(
-    baseUrl,
-    ctx.tyauth,
-    await getSettlementConfirmation('https://share.taskyon.space'),
-  )
-
-  const cacheTestResponse1 = await proxyFetch(testApiUrl2, tokenForCacheTest, false)
-
-  let cachingHidDoubleSpend = false
-  let cacheTestErrorDescription: string | null = null
-
-  try {
-    // Second request with the same token and identical URL. If this reaches the
-    // server, it should trigger a double-spend error. If it is served from cache,
-    // it will likely succeed with HTTP 200 and *no* error.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const cacheTestResponse2 = await proxyFetch(testApiUrl2, tokenForCacheTest, false)
-
-    // If we got here, no error was thrown. That means either:
-    //  - the server did not enforce double-spend, or
-    //  - the browser/proxy cache served the response without contacting the server.
-    // We classify this as "caching has hidden the double-spend error".
-    cachingHidDoubleSpend = true
-    cacheTestErrorDescription =
-      'Second proxy request with same token and URL succeeded without error; ' +
-      'this strongly suggests browser/proxy caching prevented the double-spend check '
-  } catch (err) {
-    // This is the *expected* path when caching does NOT interfere: the server sees
-    // the second request and rejects it as a double-spend.
-    cacheTestErrorDescription =
-      'Double-spend error correctly observed even with caching allowed: ' + humanizeError(err)
-  }
-
-  return {
-    // Test 1 (no-cache) outputs
-    fetch1: data1Text.slice(0, 500),
-    fetch2: data2Text.slice(0, 500),
-    expectedCorsError,
-    expectedError: expectedDoubleSpendError,
-
-    // Test 2 (with cache allowed)
-    cacheTest: {
-      cachingHidDoubleSpend,
-      description: cacheTestErrorDescription,
-      firstStatus: cacheTestResponse1.status,
-    },
-  }
-}
-
 export const testTauriHttpPluginHttpsFetch = async () => {
   if (!canUseTauriHttpPlugin()) {
     return {
@@ -653,4 +540,3 @@ testTokenReturnAfterJwtExpButBeforeOms.requiresAuth = true
 testTokenReturnAfterOms.requiresAuth = true
 testSecureFetch.requiresAuth = true
 testSecureFetch.timeoutMs = 60_000
-testTyProxy.requiresAuth = true

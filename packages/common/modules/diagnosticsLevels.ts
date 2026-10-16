@@ -68,10 +68,6 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
     requiresAuth: true,
     requiresNetwork: true,
   },
-  testTyProxy: {
-    requiresAuth: true,
-    requiresNetwork: true,
-  },
   testTauriHttpPluginHttpsFetch: {
     requiresNetwork: true,
   },
