@@ -115,6 +115,7 @@ const waitForAuthCode = async (
   expectedState: string,
   timeoutMs: number,
   redirectUri: string,
+  onListening: () => void,
 ): Promise<{ code: string; redirectUri: string }> => {
   return await new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
@@ -155,7 +156,14 @@ const waitForAuthCode = async (
       reject(new Error(`OAuth login timed out after ${timeoutMs}ms.`))
     }, timeoutMs)
 
-    server.listen(CLI_OAUTH_LOOPBACK_PORT, 'localhost')
+    server.once('error', (error) => {
+      clearTimeout(timer)
+      server.close()
+      reject(error)
+    })
+    // Print the authorization URL only after the loopback server is accepting
+    // connections; a browser callback can arrive immediately.
+    server.listen(CLI_OAUTH_LOOPBACK_PORT, 'localhost', onListening)
   })
 }
 
@@ -259,17 +267,18 @@ export const runAuthorizationCodeFlow = async ({
     challenge,
     authorizeQuery: { ...oauth.authorizeQuery, ...authorizeQuery },
   })
-  const serverWait = waitForAuthCode(state, timeoutMs, redirectUri)
-  process.stdout.write(
-    [
-      'Open this URL in your browser to continue login:',
-      authorizeUrl,
-      '',
-      `After sign-in, the provider should redirect back to ${redirectUri}.`,
-      'Keep this terminal open while the callback completes.',
-      '',
-    ].join('\n'),
-  )
+  const serverWait = waitForAuthCode(state, timeoutMs, redirectUri, () => {
+    process.stdout.write(
+      [
+        'Open this URL in your browser to continue login:',
+        authorizeUrl,
+        '',
+        `After sign-in, the provider should redirect back to ${redirectUri}.`,
+        'Keep this terminal open while the callback completes.',
+        '',
+      ].join('\n'),
+    )
+  })
 
   const { code } = await serverWait
   return await exchangeOauthCode({

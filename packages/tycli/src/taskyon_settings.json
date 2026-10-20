@@ -104,6 +104,9 @@
         "model": "deepseek-v4.1-flash",
         "baseURL": "https://opencode.ai/inference/go",
         "streamSupport": true,
+        "defaultHeaders": {
+          "User-Agent": "Taskyon"
+        },
         "sessionHeader": "x-opencode-session",
         "auth": {
           "type": "apikey"

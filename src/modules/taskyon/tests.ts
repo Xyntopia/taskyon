@@ -188,9 +188,15 @@ testTaskChainNavigationUsesStoredIds.description =
 export function testTaskExecutionProgressReduction() {
   const taskId = 'streamed-task'
   let workerStatus = reduceTaskWorkerStatus(createTaskWorkerStatusState(), {
-    stage: 'processing',
+    stage: 'queued',
     taskId,
   })
+  assert(!workerStatus.settled, 'Expected queued work to mark the worker unsettled')
+  workerStatus = reduceTaskWorkerStatus(workerStatus, { stage: 'waiting' })
+  assert(!workerStatus.settled, 'Expected waiting continuations to keep the worker unsettled')
+  workerStatus = reduceTaskWorkerStatus(workerStatus, { stage: 'processing', taskId })
+  workerStatus = reduceTaskWorkerStatus(workerStatus, { stage: 'processed', taskId })
+  assert(!workerStatus.settled, 'Expected processed tasks not to settle the worker')
   workerStatus = reduceTaskWorkerStatus(workerStatus, { stage: 'all processed' })
   assert(workerStatus.settled, 'Expected all processed to settle app-level worker status')
   assert(workerStatus.activeTaskIds.size === 0, 'Expected all processed to clear active tasks')
@@ -200,6 +206,8 @@ export function testTaskExecutionProgressReduction() {
   )
 
   let state = createTaskExecutionProgressState()
+  state = reduceWorkerProgress(state, { stage: 'waiting' })
+  assert(!state.settled, 'Expected idless waiting events to update the progress worker state')
 
   state = reduceWorkerProgress(state, { stage: 'processing', taskId })
   state = reduceChatCompletionProgress(state, {

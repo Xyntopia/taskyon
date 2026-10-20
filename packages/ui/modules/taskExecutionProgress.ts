@@ -136,7 +136,11 @@ export const reduceTaskWorkerStatus = (
   if (event.stage === 'all processed' || (event.stage === 'aborted' && !taskId)) {
     return { ...state, activeTaskIds: new Set(), settled: true, taskStages: new Map() }
   }
-  if (!taskId) return state
+  const settled =
+    isActiveWorkerStage(event.stage) || event.stage === 'queued' || event.stage === 'waiting'
+      ? false
+      : state.settled
+  if (!taskId) return settled === state.settled ? state : { ...state, settled }
 
   const activeTaskIds = new Set(state.activeTaskIds)
   const taskStages = new Map(state.taskStages)
@@ -152,7 +156,7 @@ export const reduceTaskWorkerStatus = (
   return {
     activeTaskIds,
     lastActiveTaskId: updatesLastActiveTask(event.stage) ? taskId : state.lastActiveTaskId,
-    settled: event.stage === 'processing' ? false : state.settled,
+    settled,
     taskStages,
   }
 }
@@ -165,8 +169,8 @@ export const reduceWorkerProgress = (
   if (event.stage === 'all processed' || (event.stage === 'aborted' && !taskId)) {
     return createTaskExecutionProgressState()
   }
-  if (!taskId) return state
   const workerStatus = reduceTaskWorkerStatus(state, event)
+  if (!taskId) return workerStatus === state ? state : { ...state, ...workerStatus }
 
   const current = state.progressByTaskId.get(taskId)
   const progressByTaskId = ['finished', 'error', 'aborted'].includes(event.stage)

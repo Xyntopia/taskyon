@@ -106,6 +106,7 @@ Optional environment variables:
 - `TYCLI_DATA_DIR` (isolated task records, generated tools, artifacts, transcripts, and indexes)
 - `TYCLI_LOG_DIR` (runtime and diagnostic logs; defaults to the tycli cache log directory)
 - `TYCLI_DEBUG=1` (advanced equivalent of `tycli --debug`)
+- `TYCLI_WORKER_IDLE_TIMEOUT_MS` (optional cap for waiting on background worker tasks before the next prompt; default 10 minutes)
 - `TYCLI_CHAT_COMPLETION_TRACE_DIR` and `TYCLI_CHAT_COMPLETION_TRACE_LABEL` (advanced overrides
   for isolated redacted provider request records and cache audits)
 

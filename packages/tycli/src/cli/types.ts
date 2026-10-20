@@ -76,6 +76,7 @@ export const SUPPORTED_PROVIDERS = [
   'taskyon',
   'local',
   'chatgpt-codex',
+  'opencode-go',
 ] as const
 export const MAX_MODEL_OPTIONS = 10
 export const SLASH_COMMANDS = [

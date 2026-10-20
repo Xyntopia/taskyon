@@ -133,6 +133,11 @@ import {
   type CliLlmState,
 } from './cli/models'
 import { hasInterruptibleWorkerActivity } from './cli/interruptState'
+import {
+  createTaskWorkerStatusState,
+  reduceTaskWorkerStatus,
+  type TaskWorkerStatusState,
+} from '@taskyon/ui/modules/taskExecutionProgress'
 import { TYCLI_ACTIVE_TASK_WAIT_TIMEOUT_MS, isInteractiveTaskResult } from './cli/taskWait'
 import type { ToolchainProfiles } from '@taskyon/taskyon'
 import { createNativePythonTool, findNativePythonExecutable } from './cli/nativePythonTool'
@@ -998,7 +1003,7 @@ const printCliHelp = (host: InteractiveCliHost) => {
     '  PROJECT_CWD / INIT_CWD                Workspace-root fallbacks',
     '',
     'Provider selection:',
-    `  ${prefix}_SELECTED_API                openai, openrouter.ai, taskyon, local, or chatgpt-codex`,
+    `  ${prefix}_SELECTED_API                openai, openrouter.ai, taskyon, local, chatgpt-codex, or opencode-go`,
     '  Provider credentials are managed by /keys and Taskyon-owned OAuth login.',
     '  Taskyon-service diagnostics use the encrypted Taskyon provider secret when available.',
     '',
@@ -4081,14 +4086,12 @@ async function warnIfLocalProviderIsUnavailable(llmState: CliLlmState) {
 
 type CliWorkerStateEffects = {
   onFinished: () => void
-  onIdleSettled: () => void
   onStateChanged: () => void
 }
 
 type CliWorkerStateData = {
   waitingForTask: boolean
-  workerIdleSettleTimer: ReturnType<typeof setTimeout> | null
-  hasWorkerProcessing: boolean
+  workerStatus: TaskWorkerStatusState
   taskProcessingStatus: 'idle' | 'processing' | 'finished'
   activeWorkerTasks: Set<string>
   suppressedTaskIds: Set<string>
@@ -4101,8 +4104,7 @@ type CliWorkerStateData = {
 function createCliWorkerStateData(): CliWorkerStateData {
   return {
     waitingForTask: false,
-    workerIdleSettleTimer: null,
-    hasWorkerProcessing: false,
+    workerStatus: createTaskWorkerStatusState(),
     taskProcessingStatus: 'idle',
     activeWorkerTasks: new Set(),
     suppressedTaskIds: new Set(),
@@ -4116,7 +4118,7 @@ function createCliWorkerStateData(): CliWorkerStateData {
 function cliWorkerActiveTaskCount(data: CliWorkerStateData) {
   return data.activeWorkerTasks.size > 0
     ? data.activeWorkerTasks.size
-    : data.hasWorkerProcessing
+    : !data.workerStatus.settled
       ? 1
       : 0
 }
@@ -4125,7 +4127,7 @@ function cliWorkerHasActiveTask(data: CliWorkerStateData) {
   return hasInterruptibleWorkerActivity({
     waitingForTask: data.waitingForTask,
     activeWorkerTaskCount: data.activeWorkerTasks.size,
-    hasWorkerProcessing: data.hasWorkerProcessing,
+    hasWorkerProcessing: !data.workerStatus.settled,
   })
 }
 
@@ -4134,12 +4136,6 @@ function notifyCliWorkerIdleWaiters(data: CliWorkerStateData) {
   const waiters = [...data.workerIdleWaiters]
   data.workerIdleWaiters.clear()
   waiters.forEach((resolve) => resolve())
-}
-
-function clearCliWorkerIdleSettleTimer(data: CliWorkerStateData) {
-  if (data.workerIdleSettleTimer === null) return
-  clearTimeout(data.workerIdleSettleTimer)
-  data.workerIdleSettleTimer = null
 }
 
 async function waitForCliWorkerIdle(
@@ -4183,15 +4179,14 @@ function recordCliWorkerTask(data: CliWorkerStateData, task: TaskNode) {
 }
 
 function resetCliWorkerStateData(data: CliWorkerStateData) {
-  clearCliWorkerIdleSettleTimer(data)
   data.activeWorkerTasks.clear()
   data.workerTaskStateById.clear()
-  data.hasWorkerProcessing = false
+  data.workerStatus = createTaskWorkerStatusState()
 }
 
 function startCliWorkerTask(data: CliWorkerStateData) {
   data.waitingForTask = true
-  data.hasWorkerProcessing = true
+  data.workerStatus = reduceTaskWorkerStatus(data.workerStatus, { stage: 'queued' })
   data.taskProcessingStatus = 'processing'
 }
 
@@ -4223,17 +4218,18 @@ function updateCliWorkerStage(
   taskId: string | null,
   effects: CliWorkerStateEffects,
 ) {
-  if (stage !== 'waiting') clearCliWorkerIdleSettleTimer(data)
+  if (stage)
+    data.workerStatus = reduceTaskWorkerStatus(
+      data.workerStatus,
+      taskId ? { stage, taskId } : { stage },
+    )
   if (stage === 'queued' || stage === 'processing') {
     if (taskId) data.activeWorkerTasks.add(taskId)
-    if (stage === 'processing') data.hasWorkerProcessing = true
   }
   if (stage === 'processing' || stage === 'in loop' || stage === 'subtasks')
     data.taskProcessingStatus = 'processing'
-  if (stage === 'all processed') {
-    clearCliWorkerIdleSettleTimer(data)
+  if (stage === 'all processed' || (stage === 'aborted' && !taskId)) {
     data.activeWorkerTasks.clear()
-    data.hasWorkerProcessing = false
     data.taskProcessingStatus = 'finished'
     effects.onFinished()
   }
@@ -4245,26 +4241,8 @@ function settleCliWorkerStage(
   taskId: string | null,
   effects: CliWorkerStateEffects,
 ) {
-  if (
-    stage === 'waiting' &&
-    cliWorkerActiveTaskCount(data) > 0 &&
-    data.workerIdleSettleTimer === null
-  ) {
-    data.workerIdleSettleTimer = setTimeout(() => {
-      data.workerIdleSettleTimer = null
-      data.activeWorkerTasks.clear()
-      data.hasWorkerProcessing = false
-      data.taskProcessingStatus = 'finished'
-      effects.onIdleSettled()
-      notifyCliWorkerIdleWaiters(data)
-    }, 100)
-    data.workerIdleSettleTimer.unref()
-  }
   if (['processed', 'finished', 'aborted', 'error'].includes(stage)) {
     if (taskId) data.activeWorkerTasks.delete(taskId)
-    if (stage !== 'processed' && stage !== 'finished') data.hasWorkerProcessing = false
-    if (data.activeWorkerTasks.size === 0 && (stage === 'processed' || stage === 'finished'))
-      data.hasWorkerProcessing = false
     if (cliWorkerActiveTaskCount(data) <= 0) effects.onStateChanged()
   }
 }
@@ -4287,7 +4265,7 @@ function trackCliWorkerProgress(
   notifyCliWorkerIdleWaiters(data)
 }
 
-function createCliWorkerState() {
+export function createCliWorkerState() {
   const data = createCliWorkerStateData()
   return {
     getWaitingForTask: () => data.waitingForTask,
@@ -4308,7 +4286,6 @@ function createCliWorkerState() {
       trackCliWorkerProgress(data, event, effects),
     waitForWorkerIdle: (timeoutMs: number, signal?: AbortSignal) =>
       waitForCliWorkerIdle(data, timeoutMs, signal),
-    clearWorkerIdleSettleTimer: () => clearCliWorkerIdleSettleTimer(data),
     notifyWorkerIdleWaiters: () => notifyCliWorkerIdleWaiters(data),
   }
 }
@@ -4939,12 +4916,6 @@ function createCliTerminalViewEffects(
       markers.flushHiddenNodeMarkers()
       cost.refresh()
       cost.schedule(7_000)
-    },
-    onIdleSettled: () => {
-      cleanup.clear()
-      status.stop()
-      cost.update()
-      cost.refresh()
     },
     onStateChanged: () => {
       thinking.schedule()
@@ -5745,7 +5716,21 @@ async function waitForCliTaskCompletion(
   state.currentLeafId = result.id
   view.refreshCostFooter()
   writeDebug(`received result task: ${result.id} (${result.content.type})`)
-  await workerState.waitForWorkerIdle(10 * 60 * 1000, controller.signal)
+  const configuredIdleTimeoutMs = Number(
+    process.env[`${runtime.host.environmentPrefix}_WORKER_IDLE_TIMEOUT_MS`],
+  )
+  const workerIdleTimeoutMs =
+    Number.isFinite(configuredIdleTimeoutMs) && configuredIdleTimeoutMs > 0
+      ? configuredIdleTimeoutMs
+      : 10 * 60 * 1000
+  await workerState.waitForWorkerIdle(workerIdleTimeoutMs, controller.signal).catch((error) => {
+    if (
+      error instanceof Error &&
+      error.message.startsWith('Timed out waiting for worker to settle')
+    )
+      writeDebug(error.message)
+    else throw error
+  })
   view.refreshCostFooter()
   view.scheduleCostFooterRefresh(7_000)
 }
