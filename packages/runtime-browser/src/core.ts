@@ -49,6 +49,7 @@ export type TaskyonBrowserCoreRuntimeOptions = {
   fetchPolicy?: NonNullable<Parameters<typeof tyCore>[4]>['fetchPolicy']
   allowPrivateSandboxFetch?: boolean
   authorizePopup?: NonNullable<Parameters<typeof tyCore>[4]>['authorizePopup']
+  onInitializationProgress?: NonNullable<Parameters<typeof tyCore>[4]>['onInitializationProgress']
   onStage?: (stage: TaskyonCoreRuntimeStage) => void
   storageNamespacePrefix?: string
   storageSessionId?: string
@@ -214,6 +215,9 @@ export const createTaskyonBrowserCoreRuntime = (
           ...(options.fetchPolicy ? { fetchPolicy: options.fetchPolicy } : {}),
           ...(options.allowPrivateSandboxFetch ? { allowPrivateSandboxFetch: true } : {}),
           ...(options.authorizePopup ? { authorizePopup: options.authorizePopup } : {}),
+          ...(options.onInitializationProgress
+            ? { onInitializationProgress: options.onInitializationProgress }
+            : {}),
           taskManagerStorageFactory: ({ sessionId }) => {
             const scope = options.storageSessionId ?? sessionId
             client.setTaskSource(createTaskRecordReader(storageClient, scope))
