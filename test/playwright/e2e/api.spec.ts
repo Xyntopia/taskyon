@@ -13,7 +13,7 @@ import {
 } from '../support/taskyon'
 
 const onlineEnv = readOnlineEnv(process.cwd())
-const visionModelId = 'openai/gpt-4.1-mini'
+const visionModelId = 'minimax/minimax-m3.1-flash:free'
 const freeTaskyonModelIds = new Set([
   'z-ai/glm-5.3-flash',
   'qwen/qwen3.8-flash',

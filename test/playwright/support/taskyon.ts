@@ -8,7 +8,7 @@ export const testModelId = 'z-ai/glm-5.3-flash'
 
 const modelSelectLabel = 'Select LLM Model for answering/solving the task.'
 const onlineEnvFileName = 'playwright.env.json'
-const onlineEnvKeys = ['taskyon_key', 'openai_api_key', 'openrouter_api_key'] as const
+const onlineEnvKeys = ['taskyon_key', 'google_api_key', 'openrouter_api_key'] as const
 
 type OnlineEnv = Record<(typeof onlineEnvKeys)[number], KeyString>
 
@@ -24,7 +24,7 @@ const parseOnlineEnv = (value: unknown): OnlineEnv | undefined => {
 
   return {
     taskyon_key: Object.getOwnPropertyDescriptor(value, 'taskyon_key')?.value as KeyString,
-    openai_api_key: Object.getOwnPropertyDescriptor(value, 'openai_api_key')?.value as KeyString,
+    google_api_key: Object.getOwnPropertyDescriptor(value, 'google_api_key')?.value as KeyString,
     openrouter_api_key: Object.getOwnPropertyDescriptor(value, 'openrouter_api_key')
       ?.value as KeyString,
   }
@@ -200,7 +200,7 @@ export const startNewChat = async (page: Page) => {
 export const addAiServices = async (page: Page, env: OnlineEnv) => {
   const providerKeys = {
     taskyon: env.taskyon_key,
-    openai: env.openai_api_key,
+    google: env.google_api_key,
     'openrouter.ai': env.openrouter_api_key,
   }
   const providerNames = Object.keys(providerKeys)

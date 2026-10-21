@@ -159,9 +159,9 @@ export const testMediatedFetchPreservesCustomProxyRequest = async () => {
     },
   )
   const mediatedFetch = createMediatedFetch({
-    authorize: async (capability) => {
+    authorize: (capability) => {
       authorized = capability.origin === 'https://target.example' && capability.access === 'write'
-      return authorized
+      return Promise.resolve(authorized)
     },
     fetchWithPolicy: async (input, init, options) => {
       const request = new Request(input, init)

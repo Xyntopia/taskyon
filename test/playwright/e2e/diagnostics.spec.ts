@@ -15,7 +15,7 @@ const diagnosticsTimeoutMs = 600_000
 const toolWorkflowTimeoutMs = 450_000
 const onlineEnv = readOnlineEnv(process.cwd())
 const researchProvider = process.env.PLAYWRIGHT_RESEARCH_PROVIDER ?? 'openrouter.ai'
-const researchModel = process.env.PLAYWRIGHT_RESEARCH_MODEL ?? 'openai/gpt-6-luna'
+const researchModel = process.env.PLAYWRIGHT_RESEARCH_MODEL ?? 'minimax/minimax-m3.1-flash:free'
 
 test('runs quick browser diagnostics without a provider', async ({ page }) => {
   await page.addLocatorHandler(
@@ -90,7 +90,7 @@ test.describe('diagnostics page', () => {
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await expectTaskyonReady(page)
-    await selectLlmModel(page, 'openai', 'gpt-5.1')
+    await selectLlmModel(page, 'google', 'gemini-3.8-flash')
     await page.goto('/diagnostics')
 
     await dataCy(page, 'run-tests').click()
@@ -292,14 +292,13 @@ test.describe('diagnostics page', () => {
     })
     test.setTimeout(toolWorkflowTimeoutMs + 30_000)
     if (!onlineEnv) throw new Error('online env missing')
-
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await expectTaskyonReady(page)
 
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()
-    await selectLlmModel(page, 'openai', 'gpt-5.1')
+    await selectLlmModel(page, 'taskyon', testModelId)
     await page.goto('/diagnostics')
 
     await dataCy(page, 'diagnostics-run-level').click()
