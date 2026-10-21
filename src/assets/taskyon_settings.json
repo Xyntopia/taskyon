@@ -155,6 +155,20 @@
           }
         }
       },
+      "opencode": {
+        "chatCompletion": {
+          "provider": "opencode",
+          "recommendedTransport": "wss",
+          "name": "opencode",
+          "model": "glm-5.3-flash-free",
+          "baseURL": "https://opencode.ai/inference/openai",
+          "streamSupport": true,
+          "routes": {
+            "chatCompletion": "/v1",
+            "models": "/v1/models"
+          }
+        }
+      },
       "chatgpt-codex": {
         "chatCompletion": {
           "provider": "chatgpt-codex",
