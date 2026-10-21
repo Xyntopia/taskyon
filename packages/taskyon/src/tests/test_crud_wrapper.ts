@@ -1,4 +1,4 @@
-import { createPgLiteCrudWrapper } from '../utils/crudWrapper'
+import { createPgLiteCrudWrapper, createVectorStore } from '../utils/crudWrapper'
 import { createInMemoryDatabase } from '../utils/pglite.api'
 
 const assert = (condition: unknown, message: string) => {
@@ -35,3 +35,47 @@ export const testPgLiteCrudBatchInsertStoresRows = async () => {
 
 testPgLiteCrudBatchInsertStoresRows.description =
   'Stores rows through the PGlite CRUD batch insert path.'
+
+export const testVectorSearchFilteredQueryUsesValidSql = async () => {
+  const database = await createInMemoryDatabase('crud-vector-filter-diagnostic')
+  try {
+    const store = await createVectorStore<{
+      content: { type: string }
+      label: string
+    }>(database, `crud_vector_filter_${Date.now()}`)
+    const vector = Array.from({ length: 256 }, () => 0)
+    await store.upsertVector('message-1', 'weather forecast', vector, {
+      content: { type: 'message' },
+      label: 'weather forecast',
+    })
+    await store.upsertVector('result-1', 'weather forecast', vector, {
+      content: { type: 'toolresult' },
+      label: 'weather forecast',
+    })
+
+    const filtered = await store.search('weather forecast', 5, undefined, {
+      content: { type: 'message' },
+    })
+    assert(
+      filtered.some(({ id }) => id === 'message-1'),
+      'Expected filtered search to find message',
+    )
+    assert(!filtered.some(({ id }) => id === 'result-1'), 'Expected filter to exclude result row')
+
+    const allowed = await store.search('weather forecast', 5, ['message-1'])
+    assert(
+      allowed.some(({ id }) => id === 'message-1'),
+      'Expected allowed-ID search to find message',
+    )
+    assert(
+      !allowed.some(({ id }) => id === 'result-1'),
+      'Expected allowed-ID search to exclude result',
+    )
+    return { filtered, allowed }
+  } finally {
+    await database.close()
+  }
+}
+
+testVectorSearchFilteredQueryUsesValidSql.description =
+  'Searches with JSON filters and allowed IDs without producing invalid SQL.'

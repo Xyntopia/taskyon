@@ -469,7 +469,7 @@ export const createVectorStore = async <T>(
 
     // Combine WHERE clauses
     if (whereClauses.length) {
-      sql += `WHERE ${whereClauses.join(' AND ')}\n`
+      sql += ` WHERE ${whereClauses.join(' AND ')}\n`
     }
 
     const results = await db.query<{
