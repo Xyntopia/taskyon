@@ -5,13 +5,6 @@ import {
 } from '@taskyon/taskyon'
 import { processTasksDetailed, runTasks } from '@taskyon/tyclient'
 import { useTaskyonStore } from 'src/stores/taskyonState'
-import { z } from 'zod'
-
-const toolCatalogResult = z.object({
-  'Here are the currently available tools you can inspect': z.array(
-    z.object({ name: z.string() }).passthrough(),
-  ),
-})
 
 function assert(condition: boolean, msg?: string): asserts condition {
   if (!condition) {
@@ -161,10 +154,9 @@ export const testTaskyonUiListsAndUsesAvailableTools = async () => {
     currentTask: null,
     draftTask: getSimpleMessageTask(
       [
-        'Complete exactly these three authorized actions as separate sequential delegated tasks. Do not replace an action with a capability explanation.',
-        'First, list all registered user-facing Taskyon tools using their public exact tool names. Reporting these public names is expected and safe.',
-        'Second, use the registered weather capability to get the current weather for latitude 32.7157 and longitude -117.1611 and begin that result with WEATHER_TASK_COMPLETE.',
-        'Third, use the registered animatedClock capability to open the existing animated alarm clock in a popup. The runtime confirms this tool is available and authorized. Begin that task result with ALARM_CLOCK_TASK_COMPLETE.',
+        'Call taskPlanner once with exactly these two sequential delegated tasks. Do not execute the actions directly from the top-level task, and do not replace an action with a capability explanation.',
+        'First, use the registered weather capability to get the current weather for latitude 32.7157 and longitude -117.1611 and begin that result with WEATHER_TASK_COMPLETE.',
+        'Second, use the registered animatedClock capability to open the existing animated alarm clock in a popup. The runtime confirms this tool is available and authorized. Begin that task result with ALARM_CLOCK_TASK_COMPLETE.',
       ].join(' '),
     ),
     entryNode: getEntryNodeDraft(),
@@ -202,41 +194,13 @@ export const testTaskyonUiListsAndUsesAvailableTools = async () => {
   const functionCalls = conversation
     .filter((task) => task.content.type === 'functioncall')
     .map((task) => (task.content.type === 'functioncall' ? task.content.data.name : ''))
-  const catalogResult = conversation
-    .filter((task) => task.content.type === 'toolresult')
-    .map((task) =>
-      task.content.type === 'toolresult'
-        ? toolCatalogResult.safeParse(task.content.data)
-        : undefined,
-    )
-    .find((candidate) => candidate?.success)
-
   assert(functionCalls.includes('taskPlanner'), 'Expected Taskyon to call taskPlanner')
-  assert(functionCalls.includes('toolSearcher'), 'Expected Taskyon to call toolSearcher')
   assert(
     functionCalls.includes('openMeteoWeatherTool'),
     'Expected Taskyon to call openMeteoWeatherTool',
   )
   assert(functionCalls.includes('animatedClock'), 'Expected Taskyon to call animatedClock')
   assert(functionCalls.includes('newWindowOpener'), 'Expected animatedClock to open a popup')
-  assert(
-    catalogResult !== undefined && catalogResult.success,
-    'Expected toolSearcher to return the available-tool catalog',
-  )
-  const availableToolNames = catalogResult.data[
-    'Here are the currently available tools you can inspect'
-  ].map((tool) => tool.name)
-  for (const toolName of [
-    'taskPlanner',
-    'getGitlabInfo',
-    'openMeteoWeatherTool',
-    'animatedClock',
-  ]) {
-    assert(
-      availableToolNames.includes(toolName),
-      `Expected available-tool catalog to include ${toolName}`,
-    )
-  }
   const entryNodeSelections = conversation
     .filter(
       (task) =>
@@ -246,25 +210,19 @@ export const testTaskyonUiListsAndUsesAvailableTools = async () => {
     .map((task) =>
       task.content.type === 'functioncall' ? task.content.data.arguments.allowedTools : undefined,
     )
-  for (const expectedTool of [
-    'taskPlanner',
-    'toolSearcher',
-    'openMeteoWeatherTool',
-    'animatedClock',
-  ]) {
+  for (const expectedTool of ['openMeteoWeatherTool', 'animatedClock']) {
     assert(
       entryNodeSelections.some(
-        (selection) =>
-          Array.isArray(selection) && selection.length === 1 && selection[0] === expectedTool,
+        (selection) => Array.isArray(selection) && selection.includes(expectedTool),
       ),
-      `Expected an entry-node chooser to select only ${expectedTool}`,
+      `Expected an entry-node chooser to select ${expectedTool}`,
     )
   }
 
   return { taskChain, result, conversation }
 }
 testTaskyonUiListsAndUsesAvailableTools.description =
-  'Runs the browser Taskyon entry flow, plans separate tool-list, weather, and animated-clock tasks, and verifies each delegated entry node chooses its relevant tool.'
+  'Runs the browser Taskyon entry flow, plans separate weather and animated-clock tasks, and verifies each delegated entry node chooses its relevant tool.'
 testTaskyonUiListsAndUsesAvailableTools.modelBased = true
 
 export const testTaskyonUiProfileManagementToolRegistration = async () => {

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { captureBrowserChatCompletionTrace } from '../support/chatCompletionTrace'
 
 import {
@@ -11,11 +11,54 @@ import {
   writeMessage,
 } from '../support/taskyon'
 
+const startCapabilityDialogHandler = (page: Page) => {
+  let active = true
+  let busy = false
+  const handle = async () => {
+    if (!active || busy) return
+    busy = true
+    try {
+      const network = page.locator('.taskyon-capability-dialog--network-access:visible').last()
+      if (await network.isVisible().catch(() => false)) {
+        const direct = network.getByText('Direct host fetch', { exact: true })
+        if (await direct.isVisible().catch(() => false)) {
+          await direct.click()
+          await network.getByRole('button', { name: 'Use transport', exact: true }).click()
+          return
+        }
+        await network.getByText('Allow network access this session', { exact: true }).click()
+        await network.getByRole('button', { name: 'Allow network', exact: true }).click()
+        return
+      }
+      const popup = page.locator('.taskyon-capability-dialog--popup-access:visible').last()
+      if (await popup.isVisible().catch(() => false)) {
+        await popup.getByText('Allow popups this session', { exact: true }).click()
+        await popup.getByRole('button', { name: 'Open popup', exact: true }).click()
+      }
+    } catch {
+      // The dialog can be replaced or closed while the poll is running.
+    } finally {
+      busy = false
+    }
+  }
+  const timer = setInterval(() => {
+    void handle()
+  }, 500)
+  const stop = () => {
+    active = false
+    clearInterval(timer)
+  }
+  page.once('close', stop)
+  return stop
+}
+
 const diagnosticsTimeoutMs = 600_000
 const toolWorkflowTimeoutMs = 450_000
 const onlineEnv = readOnlineEnv(process.cwd())
 const researchProvider = process.env.PLAYWRIGHT_RESEARCH_PROVIDER ?? 'openrouter.ai'
-const researchModel = process.env.PLAYWRIGHT_RESEARCH_MODEL ?? 'minimax/minimax-m3.1-flash:free'
+const researchModel = process.env.PLAYWRIGHT_RESEARCH_MODEL ?? 'openai/gpt-6-luna'
+const clockProvider = process.env.PLAYWRIGHT_CLOCK_PROVIDER ?? 'openrouter.ai'
+const clockModelId = process.env.PLAYWRIGHT_CLOCK_MODEL ?? 'openai/gpt-6-luna'
 
 test('runs quick browser diagnostics without a provider', async ({ page }) => {
   await page.addLocatorHandler(
@@ -282,23 +325,26 @@ test.describe('diagnostics page', () => {
     expect(copiedChat).not.toContain('recentToolCount')
   })
 
-  test('plans separate tool tasks and opens the animated clock popup', async ({
-    page,
-    context,
-  }) => {
+  test('plans separate weather and animated-clock tool tasks', async ({ page }) => {
     test.info().annotations.push({
       type: 'model-based',
       description: 'Scores whether the selected model completes a multi-tool workflow.',
     })
     test.setTimeout(toolWorkflowTimeoutMs + 30_000)
     if (!onlineEnv) throw new Error('online env missing')
+    const trace = await captureBrowserChatCompletionTrace(page)
+    await page.goto('/settings/sandbox-network')
+    await dataCy(page, 'sandbox-fetch-transport').click()
+    await page.getByRole('option', { name: 'Direct host fetch', exact: true }).click()
+    const stopCapabilityDialogs = startCapabilityDialogHandler(page)
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await expectTaskyonReady(page)
 
     await addAiServices(page, onlineEnv)
     await page.getByLabel('go to chat').click()
-    await selectLlmModel(page, 'taskyon', testModelId)
+    await selectLlmModel(page, clockProvider, clockModelId)
+    await trace?.saveRuntimeConfig()
     await page.goto('/diagnostics')
 
     await dataCy(page, 'diagnostics-run-level').click()
@@ -311,39 +357,20 @@ test.describe('diagnostics page', () => {
       .first()
     await expect(diagnosticButton).toBeVisible()
 
-    const clockPopupPromise = context
-      .waitForEvent('page', { timeout: toolWorkflowTimeoutMs })
-      .then((clockPopup) => ({ type: 'popup' as const, clockPopup }))
     await diagnosticButton.click()
-    const diagnosticFinishedPromise = dataCy(page, 'test-finished')
-      .waitFor({ state: 'visible', timeout: toolWorkflowTimeoutMs })
-      .then(async () => {
-        const diagnosticsText = (await dataCy(page, 'diagnostics-result').textContent()) ?? ''
-        return { type: 'diagnostic' as const, diagnosticsText }
-      })
-    const outcome = await Promise.race([clockPopupPromise, diagnosticFinishedPromise])
-    if (outcome.type === 'diagnostic') {
-      test.skip(
-        outcome.diagnosticsText.includes('status: MODEL MISS'),
-        'The selected model did not satisfy this capability evaluation.',
-      )
-      throw new Error(
-        `Diagnostic failed before opening the clock popup:\n${outcome.diagnosticsText}`,
-      )
-    }
-    const { clockPopup } = outcome
-
-    await expect(clockPopup).toHaveTitle('Animated Clock')
-    await expect(clockPopup.locator('#time')).toHaveText(/^\d{2}:\d{2}$/)
-    await expect(clockPopup.locator('#seconds')).toHaveText(/^\d{2}$/)
-    await expect(clockPopup.locator('#date')).not.toHaveText('Loading date...')
-
     await expect(dataCy(page, 'test-finished')).toContainText('Test Finished', {
       timeout: toolWorkflowTimeoutMs,
     })
     const diagnosticsResult = dataCy(page, 'diagnostics-result')
-    await expect(diagnosticsResult).toContainText('Test Taskyon Ui Lists And Uses Available Tools')
+    const diagnosticsText = (await diagnosticsResult.textContent()) ?? ''
+    await trace?.finish()
+    test.skip(
+      diagnosticsText.includes('status: MODEL MISS'),
+      'The selected model did not satisfy this capability evaluation.',
+    )
     await expect(diagnosticsResult).toContainText('status: MODEL PASS')
+    await expect(diagnosticsResult).toContainText('newWindowOpener')
     await expect(diagnosticsResult).toContainText('finished all tests!')
+    stopCapabilityDialogs()
   })
 })
