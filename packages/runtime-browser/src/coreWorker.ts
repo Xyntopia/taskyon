@@ -82,12 +82,15 @@ self.onmessage = (event: MessageEvent<TaskyonBrowserWorkerInitMessage>) => {
       ...(storageSessionId ? { storageSessionId } : {}),
       databaseFactory: persistCryptoSession ? getDatabase : getInMemoryDatabase,
       onStage: (stage) => {
+        console.log(`taskyon worker init stage: ${stage}`)
         const response: TaskyonBrowserWorkerMessage = {
           type: 'runtimeStage',
           stage,
         }
         self.postMessage(response)
       },
+      onInitializationProgress: ({ step, phase, durationMs }) =>
+        console.log(`taskyon worker init step: ${step} ${phase} ${Math.round(durationMs)}ms`),
       storage: {
         kind: 'client',
         port: storageBridge.x,

@@ -1661,6 +1661,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     createFetchWithPolicy: createBrowserFetchWithPolicy,
     fetchPolicy: { policy: 'default' },
     sandboxFetchIdleTimeoutMs: () => stateRefs.appConfiguration.sandboxFetchIdleTimeoutMs,
+    onStage: (stage) => console.log(`taskyon core init stage: ${stage}`),
+    onInitializationProgress: ({ step, phase, durationMs }) =>
+      console.log(`taskyon core init step: ${step} ${phase} ${Math.round(durationMs)}ms`),
     allowPrivateSandboxFetch: true,
     authorizePopup: authorizeBrowserPopup,
     storageNamespacePrefix,
