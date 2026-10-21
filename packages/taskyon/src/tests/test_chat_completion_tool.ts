@@ -640,6 +640,7 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
       'X-Title': 'Taskyon',
     },
     streamSupport: true,
+    sessionHeader: 'x-opencode-session',
     routes: {
       chatCompletion: '/v1/chat/completions',
       models: '/v1/models',
@@ -656,6 +657,10 @@ export const testChatCompletionConnectionIsAnImmutableCreationSnapshot = () => {
   assert(
     connection.defaultHeaders?.['HTTP-Referer'] === 'https://taskyon.space',
     'Expected captured provider headers',
+  )
+  assert(
+    connection.sessionHeader === 'x-opencode-session',
+    'Expected the captured provider session header',
   )
   assert(
     connection.routes.chatCompletion === '/v1/chat/completions',
@@ -2387,6 +2392,63 @@ export const testProviderRequestsApplyProfileHeaders = async () => {
 
 testProviderRequestsApplyProfileHeaders.description =
   'Applies immutable profile headers to OpenRouter and generic compatible provider requests.'
+
+export const testProviderRequestsApplySessionHeader = async () => {
+  const requests: Array<{ headers: Headers; url: string }> = []
+  const testFetch: typeof fetch = (input, init) => {
+    const request = new Request(input, init)
+    requests.push({ headers: new Headers(request.headers), url: request.url })
+    return Promise.resolve(
+      new Response(
+        'data: {"id":"test","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    )
+  }
+
+  const buildRequest = (promptCacheRootId?: string) =>
+    buildChatProviderRequest({
+      messages: [{ role: 'user', content: 'Hello.' }],
+      tools: {},
+      selectedModel: 'test-model',
+      api: {
+        provider: 'opencode-go',
+        name: 'OpenCode Go',
+        model: 'test-model',
+        baseURL: 'https://opencode.ai/inference/go',
+        streamSupport: true,
+        sessionHeader: 'x-opencode-session',
+        routes: {
+          chatCompletion: '/v1/',
+          models: '/v1/models',
+        },
+      },
+      apiKey: 'diagnostic-key',
+      ...(promptCacheRootId ? { promptCacheRootId } : {}),
+      fetch: testFetch,
+    })
+
+  await streamText(await buildRequest('conversation-root')).text
+  await streamText(await buildRequest()).text
+
+  assert(
+    requests[0]?.headers.get('x-opencode-session') === 'conversation-root',
+    'Expected the provider session header to carry the conversation root id',
+  )
+  assert(
+    requests[1]?.headers.get('x-opencode-session') === 'taskyon',
+    'Expected a fallback provider session id without a conversation root',
+  )
+  assert(
+    requests[0]?.url === 'https://opencode.ai/inference/go/v1/chat/completions',
+    'Expected the OpenCode Go chat-completion endpoint',
+  )
+
+  return { success: true }
+}
+
+testProviderRequestsApplySessionHeader.description =
+  'Sends a stable per-conversation session header for providers that require one.'
 
 export const testTaskContractMessagesRenderOnceWithoutHiddenEntryNodeArguments = async () => {
   const agentInstructions = 'Act as a cybersecurity reviewer.'

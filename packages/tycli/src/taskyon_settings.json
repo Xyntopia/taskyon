@@ -96,6 +96,24 @@
         }
       }
     },
+    "opencode-go": {
+      "chatCompletion": {
+        "provider": "opencode-go",
+        "networkTransport": "auto",
+        "name": "OpenCode Go",
+        "model": "deepseek-v4.1-flash",
+        "baseURL": "https://opencode.ai/inference/go",
+        "streamSupport": true,
+        "sessionHeader": "x-opencode-session",
+        "auth": {
+          "type": "apikey"
+        },
+        "routes": {
+          "chatCompletion": "/v1/",
+          "models": "/v1/models"
+        }
+      }
+    },
     "openrouter.ai": {
       "chatCompletion": {
         "provider": "openrouter.ai",

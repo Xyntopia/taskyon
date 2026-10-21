@@ -1,7 +1,7 @@
 # Providers and Models
 
-Taskyon can use Taskyon-hosted models, OpenAI, OpenRouter, ChatGPT Codex through OAuth, and
-OpenAI-compatible endpoints.
+Taskyon can use Taskyon-hosted models, OpenAI, OpenRouter, OpenCode Go, ChatGPT Codex through OAuth,
+and OpenAI-compatible endpoints.
 
 Open **Settings > AI Service Provider** to choose a provider, authenticate, refresh its model list,
 and select a model. Provider-specific keys are stored through Taskyon's secret store rather than in
@@ -30,6 +30,17 @@ only when tunnel setup failed before a provider request may have been sent.
 Taskyon is provider-flexible, not capability-identical. The `chatCompletion` gateway normalizes
 provider access, while tool calling, structured output, web search, vision, token accounting, and
 reasoning options remain model-specific.
+
+## OpenCode Go
+
+The bundled OpenCode Go profile targets `https://opencode.ai/inference/go/v1`. It requires an API
+key stored for the `opencode-go` provider and sends the required `x-opencode-session` header with a
+stable id for each conversation. The service does not answer CORS preflight for its chat endpoint,
+so direct browser chat fails; a hosted browser must use the WSS tunnel or a configured custom
+proxy, while the desktop app and CLI connect directly. The WSS tunnel mints its token from the
+active Taskyon credential: a stored Taskyon key or the shipped free key in the open-source app. In
+the commercial app, a signed-in user with available credits uses their account balance. Model
+listing works directly in the browser.
 
 ## Credentials
 

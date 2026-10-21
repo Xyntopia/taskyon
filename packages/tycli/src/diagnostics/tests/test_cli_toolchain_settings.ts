@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import {
   createCliLlmState,
   getSelectedReasoningEffort,
@@ -52,6 +53,75 @@ export const testCliUsesCompleteCliFlowToolchainSettings = () => {
 
 testCliUsesCompleteCliFlowToolchainSettings.description =
   'Resolves complete CLI flow prompts and provider settings through one ToolchainProfiles declaration.'
+
+export const testCliShipsOpenCodeGoProviderProfile = () => {
+  const provider = cliToolchainProfiles.profiles['opencode-go']?.chatCompletion
+  assert(provider !== undefined, 'Expected the bundled OpenCode Go CLI provider profile')
+  assert(provider.provider === 'opencode-go', 'Expected the OpenCode Go provider identifier')
+  assert(
+    provider.baseURL === 'https://opencode.ai/inference/go',
+    'Expected the OpenCode Go inference endpoint',
+  )
+  assert(
+    provider.routes.chatCompletion === '/v1/' && provider.routes.models === '/v1/models',
+    'Expected the OpenAI-compatible OpenCode Go routes',
+  )
+  assert(
+    provider.sessionHeader === 'x-opencode-session',
+    'Expected the OpenCode Go conversation session header',
+  )
+  assert(provider.auth?.type === 'apikey', 'Expected API-key authentication for OpenCode Go')
+}
+
+testCliShipsOpenCodeGoProviderProfile.description =
+  'Ships the OpenCode Go endpoint as an API-key provider profile for the CLI.'
+
+export const testBrowserShipsOpenCodeGoProviderProfile = () => {
+  const settings = JSON.parse(
+    readFileSync(
+      new URL('../../../../../src/assets/taskyon_settings.json', import.meta.url),
+      'utf8',
+    ),
+  ) as {
+    toolchainProfiles?: {
+      profiles?: Record<
+        string,
+        {
+          chatCompletion?: {
+            provider?: string
+            recommendedTransport?: string
+            baseURL?: string
+            sessionHeader?: string
+            routes?: { chatCompletion?: string; models?: string }
+          }
+        }
+      >
+    }
+  }
+  const provider = settings.toolchainProfiles?.profiles?.['opencode-go']?.chatCompletion
+
+  assert(provider !== undefined, 'Expected the bundled OpenCode Go browser provider profile')
+  assert(provider.provider === 'opencode-go', 'Expected the OpenCode Go provider identifier')
+  assert(
+    provider.recommendedTransport === 'wss',
+    'Expected the browser profile to recommend WSS because direct browser chat is blocked by CORS',
+  )
+  assert(
+    provider.baseURL === 'https://opencode.ai/inference/go',
+    'Expected the OpenCode Go inference endpoint',
+  )
+  assert(
+    provider.routes?.chatCompletion === '/v1/' && provider.routes.models === '/v1/models',
+    'Expected the OpenAI-compatible OpenCode Go routes',
+  )
+  assert(
+    provider.sessionHeader === 'x-opencode-session',
+    'Expected the OpenCode Go conversation session header',
+  )
+}
+
+testBrowserShipsOpenCodeGoProviderProfile.description =
+  'Ships the OpenCode Go browser profile with the WSS route and session header.'
 
 export const testCliModelOverridesDoNotMutateShippedProfiles = () => {
   createCliLlmState(

@@ -195,7 +195,15 @@ export const buildChatProviderRequest = async (input: {
     ? createChatCompletionRecordingFetch(input.providerRequest, input.fetch ?? runtimeFetch)
     : undefined
   const providerFetch = recordingFetch ?? input.fetch ?? runtimeFetch
-  const requestHeaders = input.api.provider === 'taskyon' ? undefined : input.api.defaultHeaders
+  const requestHeaders =
+    input.api.provider === 'taskyon'
+      ? undefined
+      : {
+          ...(input.api.defaultHeaders ?? {}),
+          ...(input.api.sessionHeader
+            ? { [input.api.sessionHeader]: input.promptCacheRootId ?? 'taskyon' }
+            : {}),
+        }
 
   switch (input.api.provider) {
     case 'openai':

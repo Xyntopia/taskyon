@@ -243,6 +243,10 @@ export const providerEndpointConfig = z
       description:
         'Static non-secret headers required by this provider. Credentials belong in the secret store.',
     }),
+    sessionHeader: z.string().optional().meta({
+      description:
+        'Header name that receives a stable per-conversation id for providers that require session correlation.',
+    }),
     auth: z
       .object({
         type: z.enum(['oauth', 'apikey', 'none']).optional().meta({
