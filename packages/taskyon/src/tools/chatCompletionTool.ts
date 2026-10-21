@@ -1,64 +1,17 @@
 import { createStream } from '@taskyon/common/modules/frpBus'
-import { streamText, type ReasoningOutput } from 'ai'
 import type { JSONSchema7 } from 'json-schema'
 import type { FromSchema } from 'json-schema-to-ts'
 import type { ReadonlyDeep } from 'type-fest'
-import type { TyTaskManager } from '../core/taskManager'
-import type { ArtifactStore } from '../core/artifactStore'
-import { sanitizeTaskyonVariableCommentsOutsideCode } from '../core/taskVariables'
-import { isTaskyonKey } from '../core/tyCrypto'
-import type { PromptInjection } from '../llm/promptMessages'
-import {
-  getTaskyonCosts,
-  getTyJwtPublicKey,
-  mintToken,
-  createSettlementConfirmationLoader,
-  verifyServiceToken,
-} from '../taskyon.space/taskyon.space_api'
-import { TOKEN_SERVICE_BASE_URL, TOKEN_SERVICE_PREFIX } from '../taskyon.space/tokenservice.types'
 import {
   resolveChatCompletionConnection,
   type ChatCompletionMetadataEvent,
   type ChatCompletionStreamEvent,
-  type ProviderRequestTrace,
-  type TaskNodeMeta,
 } from '../types/chatCompletion'
-import type { Annotation, partialTaskDraft, TaskGetter, TaskNode } from '../types/taskNode'
-import type { toolContext } from '../types/toolApi'
 import { createTool } from '../types/toolApi'
-import type { ContentHash, ToolBase } from '../types/tools'
-import { humanizeError, serializeError } from '../utils/error'
-import { createDotPathTransformer, serializeForJson } from '../utils/objHelpers'
 import {
-  prepareChatCompletionContext,
-  resolveToolDefinitionsForTaskChain,
-} from './chatCompletion/context'
-import {
-  buildChatProviderRequest,
-  normalizeNativeStructuredOutputSchema,
-} from './chatCompletion/providerRequest'
-import {
-  convertProviderSourceToAnnotation,
-  extractProviderWebSearchAnnotation,
-  interpretAssistantMessage,
-  normalizeAssistantMessageForToolCall,
-  parseStructuredResponseWithTrailingText,
-  validateStructuredResponse,
-} from './chatCompletion/response'
-import { cleanupRawStreamOutput, runChatCompletionStream } from './chatCompletion/streamResult'
-import {
-  isChatCompletionResponseTracingEnabled,
-  isChatCompletionTracingEnabled,
-  redactChatCompletionTraceValue,
-  writeChatCompletionTrace,
-} from './chatCompletionTrace'
-import { resolveNativeWebSearchSupport } from './chatCompletion/webSearchSupport'
-import { limitActiveTools } from './chatCompletion/activeTools'
-import {
-  buildChatCompletionRetryDelayTask,
-  buildNextChatCompletionRetry,
-  findLatestChatCompletionRetry,
-} from './chatCompletionRetryTool'
+  createChatCompletionRunner,
+  type ChatCompletionToolCapabilities,
+} from './chatCompletion/execution'
 
 export {
   convertTaskNodesToOpenAIChat,
@@ -67,763 +20,211 @@ export {
 } from './chatCompletion/context'
 export { convertFunctionCall, getCommandFromStructuredResponse } from './chatCompletion/response'
 
-const getChatCompletionContextOptions = (maxFollow: number | undefined) =>
-  maxFollow === undefined ? undefined : { maxFollow }
-
-const normalizePromptInjections = (value: unknown): PromptInjection[] =>
-  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
-
-const appendAnnotations = (
-  annotations: readonly Annotation[] | undefined,
-  extra: Annotation | undefined,
-): Annotation[] | undefined => {
-  const merged = [...(annotations ?? []), ...(extra ? [extra] : [])]
-  return merged.length > 0 ? merged : undefined
-}
-
-const normalizeProviderUsage = (
-  usage: Awaited<ReturnType<typeof streamText>['totalUsage']>,
-): NonNullable<ProviderRequestTrace['usage']> => ({
-  inputTokens: {
-    ...(usage.inputTokens === undefined ? {} : { total: usage.inputTokens }),
-    ...(usage.inputTokenDetails.noCacheTokens === undefined
-      ? {}
-      : { noCache: usage.inputTokenDetails.noCacheTokens }),
-    ...(usage.inputTokenDetails.cacheReadTokens === undefined
-      ? {}
-      : { cacheRead: usage.inputTokenDetails.cacheReadTokens }),
-    ...(usage.inputTokenDetails.cacheWriteTokens === undefined
-      ? {}
-      : { cacheWrite: usage.inputTokenDetails.cacheWriteTokens }),
-  },
-  outputTokens: {
-    ...(usage.outputTokens === undefined ? {} : { total: usage.outputTokens }),
-    ...(usage.outputTokenDetails.textTokens === undefined
-      ? {}
-      : { text: usage.outputTokenDetails.textTokens }),
-    ...(usage.outputTokenDetails.reasoningTokens === undefined
-      ? {}
-      : { reasoning: usage.outputTokenDetails.reasoningTokens }),
-  },
-  ...(usage.totalTokens === undefined ? {} : { totalTokens: usage.totalTokens }),
-})
-
-const readProviderCosts = async (
-  chatCompletion: Awaited<ReturnType<typeof streamText>>,
-  provider: string,
-) => {
-  const providerMetadata = await chatCompletion.providerMetadata
-  const providerUsage = providerMetadata?.openrouter?.usage as { cost?: unknown } | undefined
-  return typeof providerUsage?.cost === 'number' &&
-    Number.isFinite(providerUsage.cost) &&
-    providerUsage.cost >= 0
-    ? [{ amount: providerUsage.cost, source: provider, unit: 'USD' }]
-    : []
-}
-
 export const chatCompletionToolName = 'chatCompletion'
 
-export function createChatCompletionTool(
-  connection: ReadonlyDeep<{
-    provider: string
-    name: string
-    baseURL: string
-    streamSupport: boolean
-    defaultHeaders?: Record<string, string> | undefined
-    routes: {
-      chatCompletion: string
-      models: string
-    }
-  }>,
-  capabilities: {
-    getTaskChain: TyTaskManager['getTaskChain']
-    getTaskChainSelection: TyTaskManager['getTaskChainSelection']
-    getTask: TaskGetter
-    getArtifact?: ArtifactStore['get']
-    listToolDefinitions: () => Promise<Record<string, ToolBase>>
-    resolveToolDefinition?: (name: string, revision?: ContentHash) => Promise<ToolBase | undefined>
-    fetch?: typeof fetch
-  },
-) {
-  const providerConnection = resolveChatCompletionConnection(connection)
-  const settlementConfirmation = createSettlementConfirmationLoader(providerConnection.baseURL)
-  const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
-  const metadataStream = createStream<ChatCompletionMetadataEvent>()
-  const chatCompletion = createTool({
-    description: 'Generates a chat-based response using the OpenAI API for the previous message.',
-    longDescription: `This tool interfaces with an OpenAI-compatible API to generate completions for
-  conversation prompts. Useful for generating natural language responses in a chat setting.
-  It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
-    list and generate a response`,
-    name: chatCompletionToolName,
-    renderOptions: {
-      hideChat: true,
-      hideLlm: true,
-      hideVector: true,
-      hideVectorResult: true,
-      hideToolSearch: true,
+const chatCompletionParameters = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    model: {
+      type: 'string',
+      description: 'The model selected by the active provider profile for this chat completion.',
     },
-    parameters: {
+    allowedTools: {
+      type: 'array',
+      description:
+        'Optional Parameter. If provided, chatCompletion enables provider-native tool calling and limits calls to this tool set.',
+      items: {
+        type: 'string',
+      },
+    },
+    toolChoice: {
       type: 'object',
+      description:
+        'Optional Parameter. Use to explicitly control provider-native tool choice when allowedTools are provided.',
       additionalProperties: false,
       properties: {
-        model: {
+        type: {
           type: 'string',
-          description:
-            'The model selected by the active provider profile for this chat completion.',
+          enum: ['auto', 'required', 'tool'],
         },
-        allowedTools: {
-          type: 'array',
-          description:
-            'Optional Parameter. If provided, chatCompletion enables provider-native tool calling and limits calls to this tool set.',
-          items: {
-            type: 'string',
-          },
-        },
-        toolChoice: {
-          type: 'object',
-          description:
-            'Optional Parameter. Use to explicitly control provider-native tool choice when allowedTools are provided.',
-          additionalProperties: false,
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['auto', 'required', 'tool'],
-            },
-            toolName: {
-              type: 'string',
-              description: 'Required when type is "tool". Names one allowed tool to call.',
-            },
-          },
-          required: ['type'],
-        },
-        appendSystemPrompts: {
-          type: 'array',
-          description:
-            'Optional Parameter. Append transient system prompts after the rendered task chat. Use this for volatile late context such as current time or editor state.',
-          items: {
-            type: 'string',
-          },
-        },
-        prependSystemPrompts: {
-          type: 'array',
-          description:
-            'Optional Parameter. Prepend stable system prompts before the rendered task chat. Keep these cache-friendly and avoid volatile values.',
-          items: {
-            type: 'string',
-          },
-        },
-        schema: {
-          type: 'object',
-          description:
-            'A json schema object which we can use to generate a specific response and parse it.',
-          additionalProperties: true,
-        },
-        reasoning_effort: {
-          enum: ['low', 'high', 'medium', 'none'],
-          description: 'How many reasoning tokens should models with reasoning capability use?',
-          title: 'Reasoning Effort',
-        },
-        websearch: {
-          type: 'object',
-          description:
-            'Optional websearch capability. When enabled, the model may choose provider-native search alongside ordinary tools; it is not forced to search.',
-          additionalProperties: false,
-          properties: {
-            enabled: {
-              type: 'boolean',
-              title: 'Enabled',
-              default: false,
-              description:
-                'Expose websearch to the model for this request. Provider-native search remains optional and uses automatic tool choice.',
-            },
-            mode: {
-              type: 'string',
-              enum: ['auto', 'required'],
-              default: 'auto',
-              description:
-                'Use auto for normal model choice. Use required for an explicit search action when the provider supports forcing its search tool.',
-            },
-            max_results: {
-              type: 'integer',
-              description:
-                'How many web results should be retrieved at max when websearch is enabled.',
-              title: 'Max Results',
-              default: 5,
-            },
-          },
-        },
-        use_multimodal: {
-          type: 'boolean',
-          title: 'Use Vision',
-          description:
-            'Allow models to use their vision/audio & document undestanding capabilities if their are any files in the prompt.',
-        },
-        context_size: {
-          type: 'integer',
-          description:
-            '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
-        },
-        options: {
-          type: 'object',
-          description:
-            '[Optional] This is where we can specify additional options for the chat completion.',
-          additionalProperties: true,
-          properties: {
-            verbosity: {
-              type: 'string',
-              enum: ['low', 'high', 'medium'],
-              description: 'how verbose should the reponse be?',
-            },
-            artificial_streaming: {
-              type: 'boolean',
-              description: 'Optional. If true, smooths output chunks for UI readability.',
-              default: true,
-            },
-          },
-        },
-        timeouts: {
-          type: 'object',
-          description: '[Optional] We can specify different timeouts for the chat completion.',
-          properties: {
-            totalMs: {
-              type: 'integer',
-              description: 'Total timeout in milliseconds for the entire chat completion process.',
-              default: 10 * 60 * 1000, // 10 minutes
-            },
-            stepMs: {
-              type: 'integer',
-              description:
-                'Timeout in milliseconds for each individual step when interacting with agents.',
-              default: 10 * 60 * 1000, // 10 minutes
-            },
-          },
-        },
-        trace: {
-          type: 'object',
-          description:
-            'Optional request tracing. When enabled and the runtime installed a trace writer, Taskyon records the redacted provider request and response metadata.',
-          additionalProperties: false,
-          properties: {
-            enabled: {
-              type: 'boolean',
-              default: false,
-              description: 'Enable request/response tracing for this chatCompletion call.',
-            },
-            label: {
-              type: 'string',
-              description:
-                'Optional stable label added to trace file names, for example a benchmark task id.',
-            },
-          },
+        toolName: {
+          type: 'string',
+          description: 'Required when type is "tool". Names one allowed tool to call.',
         },
       },
-    } as const satisfies JSONSchema7,
-    function: async (opts, context: toolContext) => {
-      //////////   INITIALIZATION
-      const {
-        model,
-        allowedTools,
-        toolChoice,
-        appendSystemPrompts,
-        prependSystemPrompts,
-        schema,
-        websearch,
-        reasoning_effort: reasoningEffort,
-        options,
-        // if we don't set it, choose the default setting...
-        use_multimodal = true,
-        context_size,
-        timeouts,
-        trace,
-      } = opts
-      const { verbosity, artificial_streaming } = options || {}
-      const normalizedPrependSystemPrompts = normalizePromptInjections(prependSystemPrompts)
-      const normalizedAppendSystemPrompts = appendSystemPrompts ?? []
-      const nativeStructuredSchema = schema
-        ? normalizeNativeStructuredOutputSchema(schema)
-        : undefined
-      const effectiveAppendSystemPrompts =
-        schema && !nativeStructuredSchema
-          ? [
-              ...normalizedAppendSystemPrompts,
-              `Return only JSON matching this schema exactly:\n${JSON.stringify(schema, null, 2)}`,
-            ]
-          : normalizedAppendSystemPrompts
-
-      const timeout = {
-        totalMs: timeouts?.totalMs ?? 10 * 60 * 1000,
-        stepMs: timeouts?.stepMs ?? 10 * 60 * 1000,
-        chunkMs: 120 * 1000,
-      }
-      const useArtificialStreaming = artificial_streaming ?? true
-      const selectedApi = providerConnection.provider
-      const supportsNativeWebSearch = resolveNativeWebSearchSupport(providerConnection)
-      if (
-        websearch?.enabled === true &&
-        websearch.mode === 'required' &&
-        !supportsNativeWebSearch
-      ) {
-        throw new Error(
-          `Provider '${selectedApi}' does not support web search in required mode. Select a provider with web search support or disable web search.`,
-        )
-      }
-      const tools = Array.from(new Set(allowedTools ?? []))
-      const activeTools = limitActiveTools(tools, providerConnection.maxActiveTools)
-      const useProviderToolCalling = activeTools.length > 0
-      const normalizedToolChoice =
-        toolChoice?.type === 'tool' && typeof toolChoice.toolName === 'string'
-          ? { type: 'tool' as const, toolName: toolChoice.toolName }
-          : toolChoice?.type === 'required'
-            ? ('required' as const)
-            : toolChoice?.type === 'auto'
-              ? ('auto' as const)
-              : undefined
-      if (!model) throw new Error('chatCompletion requires an explicit model parameter.')
-
-      // maybe ask for the llm api secrets in the future?
-      const apiKey = await context.getSecret(selectedApi, false, false)
-      if (!apiKey || typeof apiKey !== 'string')
-        throw new Error('We need to define an API key to process our chat Task!')
-      let requestApiKey = apiKey
-      let delegatedTokenJti: string | undefined
-
-      if (selectedApi === 'taskyon') {
-        const tokenServiceBaseUrl = TOKEN_SERVICE_BASE_URL + TOKEN_SERVICE_PREFIX
-        let delegationToken = ''
-        try {
-          const cnf = await settlementConfirmation.get()
-          delegationToken = await mintToken(tokenServiceBaseUrl, apiKey, cnf)
-          const publicKeyPromise = await getTyJwtPublicKey()
-          if (publicKeyPromise) {
-            delegatedTokenJti = (await verifyServiceToken(publicKeyPromise, delegationToken)).jti
-          }
-        } catch (err) {
-          throw new Error('Failed to mint delegation token for taskyon backend.', {
-            cause: err,
-          })
-        }
-        requestApiKey = delegationToken
-      }
-
-      const selectedModel = model
-      console.log('calling chat completion tool...', selectedModel, useProviderToolCalling)
-      // the current task doesn't *have* to exist. We can also works solely with prompts...
-      const executionTaskChain = await context.getExecutionTaskChain()
-      const currentTask = executionTaskChain.at(-1)
-
-      const registeredToolDefs = await capabilities.listToolDefinitions()
-
-      //////////// END INITIALIZATION
-
-      const lastTaskBeforeChatCompletion = executionTaskChain.at(-2)
-      const contextOptions = getChatCompletionContextOptions(context_size)
-      const selectedTaskChain = lastTaskBeforeChatCompletion
-        ? await capabilities.getTaskChainSelection(
-            lastTaskBeforeChatCompletion.id,
-            contextOptions?.maxFollow,
-            {
-              method: 'lineage',
-            },
-          )
-        : { tasks: [], includedSubtaskTaskIds: [] }
-      const taskChain = selectedTaskChain.tasks
-      const toolDefs = await resolveToolDefinitionsForTaskChain(
-        taskChain,
-        registeredToolDefs,
-        capabilities.resolveToolDefinition,
-      )
-      const chatInfo = await prepareChatCompletionContext({
-        taskChain,
-        allowedTools: activeTools,
-        toolDefinitions: toolDefs,
-        appendSystemPrompts: effectiveAppendSystemPrompts,
-        prependSystemPrompts: normalizedPrependSystemPrompts,
-        useVisionModels: use_multimodal,
-        ...(capabilities.getArtifact ? { getArtifact: capabilities.getArtifact } : {}),
-        getTaskById: capabilities.getTask,
-        subtaskHandoffTaskIds: new Set(selectedTaskChain.includedSubtaskTaskIds),
-      })
-
-      const traceTaskId = currentTask?.id ?? 'N/A'
-      const traceLabel = typeof trace?.label === 'string' ? trace.label : undefined
-      const providerRequest: ProviderRequestTrace = {
-        provider: selectedApi,
-        model: selectedModel,
-        taskId: traceTaskId,
-        recordedAt: new Date().toISOString(),
-        attempts: [],
-      }
-      const streamOpts = await buildChatProviderRequest({
-        messages: chatInfo.messages,
-        tools: chatInfo.tools,
-        selectedModel,
-        api: { ...providerConnection, model: selectedModel },
-        apiKey: requestApiKey,
-        ...(nativeStructuredSchema ? { schema: nativeStructuredSchema } : {}),
-        ...(websearch?.enabled === true && supportsNativeWebSearch
-          ? {
-              webSearch: {
-                maxResults: websearch.max_results ?? 5,
-                searchContextSize: 'medium',
-                mode: websearch.mode ?? 'auto',
-              } as const,
-            }
-          : {}),
-        ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(verbosity ? { verbosity } : {}),
-        ...(normalizedToolChoice ? { toolChoice: normalizedToolChoice } : {}),
-        ...(taskChain[0]?.id ? { promptCacheRootId: taskChain[0].id } : {}),
-        providerRequest,
-        ...(capabilities.fetch ? { fetch: capabilities.fetch } : {}),
-      })
-      const traceEnabled = isChatCompletionTracingEnabled(trace?.enabled === true)
-      const captureResponse = isChatCompletionResponseTracingEnabled()
-      const rawResponseChunks: unknown[] = []
-
-      const streamResult = await runChatCompletionStream({
-        streamText,
-        streamOptions: streamOpts,
-        timeout,
-        useArtificialStreaming,
-        abortSignal: context.stopSignal,
-        onChunk(chunk) {
-          const event = { taskId: currentTask?.id ?? 'N/A', chunk }
-          chatCompletionStream.emit(event)
-          if (captureResponse && chunk.type === 'raw') {
-            rawResponseChunks.push(redactChatCompletionTraceValue(chunk.rawValue))
-          }
-        },
-      })
-      const { completion: chatCompletion, rawOutput, partialTextOutput } = streamResult
-      const providerWebSearch = streamResult.providerWebSearch
-
-      if (!streamResult.ok) {
-        // The next attempt discovers a restarted instance; never replay completed work here.
-        if (selectedApi === 'taskyon') settlementConfirmation.clear()
-        const effectiveErr = streamResult.error
-        const failure = streamResult.failure
-        const humanized = humanizeError(effectiveErr)
-        const lower = humanized.toLowerCase()
-        const retryState =
-          failure.shortReason === 'transient provider failure'
-            ? buildNextChatCompletionRetry(findLatestChatCompletionRetry(taskChain), Date.now())
-            : undefined
-        const failureDetails = lower.includes('no endpoints found that support tool use')
-          ? [
-              'Provider routing failed: no endpoint supports tool use for this request.',
-              `Request context: api=${selectedApi}, model=${selectedModel}, providerToolCalling=${useProviderToolCalling}, declaredTools=${Object.keys(chatInfo.tools).length}.`,
-              'Suggested fix: use a model/provider route with tool-call support, relax provider filters, or disable tool use for this run.',
-              'Reference: https://openrouter.ai/docs/guides/routing/provider-selection',
-            ].join('\n')
-          : failure.shortReason === 'transient provider failure'
-            ? [
-                humanized,
-                retryState
-                  ? `Taskyon will retry this chat completion in ${Math.ceil((retryState.retryAt - retryState.scheduledAt) / 1000)} seconds (visible retry ${retryState.retryNumber}); retries stop after ${new Date(retryState.retryDeadlineAt).toISOString()}.`
-                  : 'Taskyon stopped retrying because the 24-hour transient-provider recovery window expired.',
-              ].join('\n')
-            : humanized
-        const partialContent = partialTextOutput.trim() || cleanupRawStreamOutput(rawOutput)
-        const sanitizedPartialContent =
-          partialContent.length > 0
-            ? sanitizeTaskyonVariableCommentsOutsideCode(partialContent)
-            : undefined
-        if (sanitizedPartialContent && sanitizedPartialContent.removedComments.length > 0) {
-          console.warn('Removed Taskyon variable comments from assistant output.', {
-            original: partialContent,
-            sanitized: sanitizedPartialContent.sanitized,
-            removedComments: sanitizedPartialContent.removedComments,
-          })
-        }
-        const partialAssistantSanitation:
-          | NonNullable<TaskNodeMeta['assistantOutputSanitation']>
-          | undefined =
-          sanitizedPartialContent && sanitizedPartialContent.removedComments.length > 0
-            ? {
-                rawIncomingMessage: partialContent,
-                sanitizedMessage: sanitizedPartialContent.sanitized,
-                removedComments: sanitizedPartialContent.removedComments,
-              }
-            : undefined
-        if (currentTask) {
-          metadataStream.emit({
-            taskId: currentTask.id,
-            metadata: {
-              error: {
-                humanized,
-                serialized: serializeError(effectiveErr),
-                ...(effectiveErr instanceof Error
-                  ? {
-                      name: effectiveErr.name,
-                      message: effectiveErr.message,
-                      stack: effectiveErr.stack,
-                      cause: serializeError(effectiveErr.cause),
-                    }
-                  : {}),
-                context: {
-                  phase: 'chatCompletion.stream',
-                  shortReason: failure.shortReason,
-                  selectedApi,
-                  selectedModel,
-                  providerToolCalling: useProviderToolCalling,
-                  declaredToolCount: Object.keys(chatInfo.tools).length,
-                  failureDetails,
-                  rawOutput,
-                  partialTextOutput,
-                },
-              },
-              ...(partialAssistantSanitation
-                ? { assistantOutputSanitation: partialAssistantSanitation }
-                : {}),
-              providerRequest,
-              ...(providerWebSearch ? { providerWebSearch } : {}),
-            },
-          })
-        }
-        console.log('chat completion error', {
-          rawOutput,
-          partialTextOutput,
-          error: effectiveErr,
-          failure,
-        })
-        if (traceEnabled) {
-          await writeChatCompletionTrace({
-            taskId: traceTaskId,
-            ...(traceLabel ? { label: traceLabel } : {}),
-            providerRequest,
-            ...(captureResponse
-              ? {
-                  providerResponse: {
-                    rawChunks: rawResponseChunks,
-                    error: redactChatCompletionTraceValue({
-                      name: effectiveErr instanceof Error ? effectiveErr.name : undefined,
-                      message: humanized,
-                    }),
-                    ...(providerWebSearch ? { providerWebSearch } : {}),
-                  },
-                }
-              : {}),
-          })
-        }
-        return context.createSubtasksResult([
-          ...(sanitizedPartialContent
-            ? [
-                {
-                  role: 'assistant',
-                  content: {
-                    type: 'message',
-                    data: `${failure.assistantPrefix}\n\n${sanitizedPartialContent.sanitized}`,
-                  },
-                } as partialTaskDraft,
-              ]
-            : []),
-          {
-            role: 'system',
-            ...(failure.shortReason === 'transient provider failure'
-              ? { label: ['chatCompletion:transient-provider-failure'] }
-              : {}),
-            content: {
-              type: 'error',
-              data: {
-                message: `${failure.systemNote}${partialContent ? '' : ' No partial output was available.'}\n\n${failureDetails}`,
-                error: serializeForJson(effectiveErr),
-                context: {
-                  shortReason: failure.shortReason,
-                  systemNote: failure.systemNote,
-                  failureDetails,
-                  hasPartialOutput: partialContent.length > 0,
-                  selectedApi,
-                  selectedModel,
-                  providerToolCalling: useProviderToolCalling,
-                  declaredToolCount: Object.keys(chatInfo.tools).length,
-                },
-              },
-            },
-          },
-          ...(retryState
-            ? [buildChatCompletionRetryDelayTask(retryState)]
-            : [
-                {
-                  role: 'system' as const,
-                  content: {
-                    type: 'return' as const,
-                    data: `chat completion ${failure.shortReason}`,
-                  },
-                },
-              ]),
-        ])
-      }
-      const res = streamResult.response
-      const totalUsage = await chatCompletion.totalUsage
-      providerRequest.usage = normalizeProviderUsage(totalUsage)
-
-      if (currentTask && lastTaskBeforeChatCompletion) {
-        const metaInfo: TaskNodeMeta = await getMetaInfos(
-          chatInfo,
-          chatCompletion,
-          rawOutput,
-          res,
-          currentTask,
-          providerConnection.defaultHeaders,
-          apiKey,
-          providerConnection.defaultHeaders?.apiKey ?? '',
-          delegatedTokenJti,
-          metadataStream.emit,
-          totalUsage,
-          selectedApi,
-        )
-        metaInfo.providerRequest = providerRequest
-        if (providerWebSearch) metaInfo.providerWebSearch = providerWebSearch
-        console.log('saving task metadata', {
-          taskId: currentTask.id,
-          providerAttempts: providerRequest.attempts.length,
-        })
-        metadataStream.emit({ taskId: currentTask.id, metadata: metaInfo })
-      } else if (currentTask) {
-        const costs = await readProviderCosts(chatCompletion, selectedApi)
-        metadataStream.emit({
-          taskId: currentTask.id,
-          metadata: {
-            providerRequest,
-            ...(providerWebSearch ? { providerWebSearch } : {}),
-            ...(costs.length > 0 ? { costs } : {}),
-          },
-        })
-      }
-
-      // in case a schema was given, we simply use that schema and return it as a structured message
-      // for further processing (e.g. a contextFunction)...
-      const output = await chatCompletion.output
-      const providerSources = await chatCompletion.sources
-      if (traceEnabled) {
-        const finishReason = captureResponse ? await chatCompletion.rawFinishReason : undefined
-        await writeChatCompletionTrace({
-          taskId: traceTaskId,
-          ...(traceLabel ? { label: traceLabel } : {}),
-          providerRequest,
-          ...(captureResponse
-            ? {
-                providerResponse: {
-                  rawChunks: rawResponseChunks,
-                  messages: redactChatCompletionTraceValue(res.messages),
-                  sources: redactChatCompletionTraceValue(providerSources),
-                  output: redactChatCompletionTraceValue(output),
-                  ...(typeof finishReason === 'string' ? { finishReason } : {}),
-                  ...(providerWebSearch ? { providerWebSearch } : {}),
-                },
-              }
-            : {}),
-        })
-      }
-      // convert sources
-      const sources = providerSources.map(convertProviderSourceToAnnotation)
-      const providerSearch = extractProviderWebSearchAnnotation(res.messages, providerWebSearch)
-
-      if (schema) {
-        const parsedResponse: { data: unknown; trailingText?: string } =
-          typeof output === 'string'
-            ? parseStructuredResponseWithTrailingText(output || '')
-            : { data: output }
-        if (typeof schema !== 'object' || schema === null) {
-          throw new Error('Schema needs to be an object!', { cause: schema })
-        }
-        const structResponse = validateStructuredResponse(parsedResponse.data, schema)
-        const annotations = appendAnnotations(sources, providerSearch)
-        return context.createSubtasksResult([
-          ...(parsedResponse.trailingText
-            ? [
-                {
-                  role: 'assistant' as const,
-                  content: { type: 'message' as const, data: parsedResponse.trailingText },
-                },
-              ]
-            : []),
-          {
-            role: 'assistant',
-            content: {
-              type: 'structured',
-              data: structResponse,
-              ...(annotations ? { ann: annotations } : {}),
-            },
-          },
-        ])
-      }
-
-      if (!res.messages[0])
-        throw new Error('The AI gave us an incomplete response!', {
-          cause: chatCompletion,
-        })
-
-      const normalizedFirstMessage = normalizeAssistantMessageForToolCall(res.messages[0], toolDefs)
-      const outcome = interpretAssistantMessage(
-        sources,
-        normalizedFirstMessage,
-        useProviderToolCalling,
-        toolDefs,
-        chatInfo.variableService,
-      )
-      const assistantOutputSanitation = outcome.sanitation.at(-1)
-      if (currentTask && assistantOutputSanitation) {
-        metadataStream.emit({
-          taskId: currentTask.id,
-          metadata: { assistantOutputSanitation },
-        })
-      }
-
-      switch (outcome.kind) {
-        case 'tool-calls':
-          return context.createSubtasksResult([
-            [
-              ...(outcome.assistantMessages ?? []).map<partialTaskDraft>((message) => ({
-                role: 'assistant',
-                content: {
-                  type: 'message',
-                  data: message.content,
-                  ...(message.annotations ? { ann: message.annotations } : {}),
-                },
-              })),
-              ...outcome.calls.map<partialTaskDraft>((call, index) => {
-                const annotations =
-                  index === 0 ? appendAnnotations(undefined, providerSearch) : undefined
-                return {
-                  role: 'function',
-                  content: {
-                    type: 'functioncall',
-                    data: call,
-                    ...(annotations ? { ann: annotations } : {}),
-                  },
-                }
-              }),
-            ],
-          ])
-        case 'answers':
-          return context.createSubtasksResult([
-            outcome.answers.flatMap<partialTaskDraft>((answer, index) => {
-              const annotations = appendAnnotations(
-                answer.annotations,
-                index === 0 ? providerSearch : undefined,
-              )
-              return [
-                {
-                  role: 'assistant',
-                  content: {
-                    type: 'message',
-                    data: answer.content,
-                    ...(annotations ? { ann: annotations } : {}),
-                  },
-                },
-                {
-                  role: 'system',
-                  content: { type: 'return', data: 'assistant answered' },
-                },
-              ]
-            }),
-          ])
-        case 'empty':
-          return context.createSubtasksResult([[]])
-      }
+      required: ['type'],
     },
+    appendSystemPrompts: {
+      type: 'array',
+      description:
+        'Optional Parameter. Append transient system prompts after the rendered task chat. Use this for volatile late context such as current time or editor state.',
+      items: {
+        type: 'string',
+      },
+    },
+    prependSystemPrompts: {
+      type: 'array',
+      description:
+        'Optional Parameter. Prepend stable system prompts before the rendered task chat. Keep these cache-friendly and avoid volatile values.',
+      items: {
+        type: 'string',
+      },
+    },
+    schema: {
+      type: 'object',
+      description:
+        'A json schema object which we can use to generate a specific response and parse it.',
+      additionalProperties: true,
+    },
+    reasoning_effort: {
+      enum: ['low', 'high', 'medium', 'none'],
+      description: 'How many reasoning tokens should models with reasoning capability use?',
+      title: 'Reasoning Effort',
+    },
+    websearch: {
+      type: 'object',
+      description:
+        'Optional websearch capability. When enabled, the model may choose provider-native search alongside ordinary tools; it is not forced to search.',
+      additionalProperties: false,
+      properties: {
+        enabled: {
+          type: 'boolean',
+          title: 'Enabled',
+          default: false,
+          description:
+            'Expose websearch to the model for this request. Provider-native search remains optional and uses automatic tool choice.',
+        },
+        mode: {
+          type: 'string',
+          enum: ['auto', 'required'],
+          default: 'auto',
+          description:
+            'Use auto for normal model choice. Use required for an explicit search action when the provider supports forcing its search tool.',
+        },
+        max_results: {
+          type: 'integer',
+          description: 'How many web results should be retrieved at max when websearch is enabled.',
+          title: 'Max Results',
+          default: 5,
+        },
+      },
+    },
+    use_multimodal: {
+      type: 'boolean',
+      title: 'Use Vision',
+      description:
+        'Allow models to use their vision/audio & document undestanding capabilities if their are any files in the prompt.',
+    },
+    context_size: {
+      type: 'integer',
+      description:
+        '[Optional] How many of the peceding tasks are going to be used for the chatCompletion?',
+    },
+    options: {
+      type: 'object',
+      description:
+        '[Optional] This is where we can specify additional options for the chat completion.',
+      additionalProperties: true,
+      properties: {
+        verbosity: {
+          type: 'string',
+          enum: ['low', 'high', 'medium'],
+          description: 'how verbose should the reponse be?',
+        },
+        artificial_streaming: {
+          type: 'boolean',
+          description: 'Optional. If true, smooths output chunks for UI readability.',
+          default: true,
+        },
+      },
+    },
+    timeouts: {
+      type: 'object',
+      description: '[Optional] We can specify different timeouts for the chat completion.',
+      properties: {
+        totalMs: {
+          type: 'integer',
+          description: 'Total timeout in milliseconds for the entire chat completion process.',
+          default: 10 * 60 * 1000, // 10 minutes
+        },
+        stepMs: {
+          type: 'integer',
+          description:
+            'Timeout in milliseconds for each individual step when interacting with agents.',
+          default: 10 * 60 * 1000, // 10 minutes
+        },
+      },
+    },
+    trace: {
+      type: 'object',
+      description:
+        'Optional request tracing. When enabled and the runtime installed a trace writer, Taskyon records the redacted provider request and response metadata.',
+      additionalProperties: false,
+      properties: {
+        enabled: {
+          type: 'boolean',
+          default: false,
+          description: 'Enable request/response tracing for this chatCompletion call.',
+        },
+        label: {
+          type: 'string',
+          description:
+            'Optional stable label added to trace file names, for example a benchmark task id.',
+        },
+      },
+    },
+  },
+} as const satisfies JSONSchema7
+
+const chatCompletionDescription =
+  'Generates a chat-based response using the OpenAI API for the previous message.'
+
+const chatCompletionLongDescription = `This tool interfaces with an OpenAI-compatible API to generate completions for
+  conversation prompts. Useful for generating natural language responses in a chat setting.
+  It will convert the chain pointed to by the previous Task (priorID) into openAI compatible message
+    list and generate a response`
+
+const chatCompletionRenderOptions = {
+  hideChat: true,
+  hideLlm: true,
+  hideVector: true,
+  hideVectorResult: true,
+  hideToolSearch: true,
+}
+
+export type ChatCompletionToolConnection = ReadonlyDeep<{
+  provider: string
+  name: string
+  baseURL: string
+  streamSupport: boolean
+  defaultHeaders?: Record<string, string> | undefined
+  routes: {
+    chatCompletion: string
+    models: string
+  }
+}>
+
+export function createChatCompletionTool(
+  connection: ChatCompletionToolConnection,
+  capabilities: ChatCompletionToolCapabilities,
+) {
+  const providerConnection = resolveChatCompletionConnection(connection)
+  const chatCompletionStream = createStream<ChatCompletionStreamEvent>()
+  const metadataStream = createStream<ChatCompletionMetadataEvent>()
+  const run = createChatCompletionRunner({
+    providerConnection,
+    capabilities,
+    emitChatCompletionStream: chatCompletionStream.emit,
+    emitMetadata: metadataStream.emit,
+  })
+  const chatCompletion = createTool({
+    description: chatCompletionDescription,
+    longDescription: chatCompletionLongDescription,
+    name: chatCompletionToolName,
+    renderOptions: chatCompletionRenderOptions,
+    parameters: chatCompletionParameters,
+    function: run,
   })
 
   return {
@@ -838,97 +239,10 @@ export type ChatCompletionTool = Awaited<
 >['chatCompletion']
 
 export type chatCompletionParams = FromSchema<
-  ChatCompletionTool['parameters'],
+  typeof chatCompletionParameters,
   { keepDefaultedPropertiesOptional: true }
 >
 
 export type ChatCompletionArgs = Omit<chatCompletionParams, 'schema'> & {
   schema?: JSONSchema7 & Record<string, unknown>
-}
-
-async function getMetaInfos(
-  chatInfo: Awaited<ReturnType<typeof prepareChatCompletionContext>>,
-  chatCompletion: Awaited<ReturnType<typeof streamText>>,
-  rawOutput: string,
-  res: Awaited<ReturnType<typeof streamText>['response']>,
-  currentTask: TaskNode,
-  providerHeaders: Readonly<Record<string, string>> | undefined,
-  apiKey: string,
-  taskyonKey: string,
-  delegatedTokenJti: string | undefined,
-  emitMetadata: (event: ChatCompletionMetadataEvent) => void,
-  totalUsage: Awaited<ReturnType<typeof streamText>['totalUsage']>,
-  provider: string,
-) {
-  // need to make sure, that we remove audio, image and file data here!
-  // TODO: make sure the following works..  e.g. with adding a file..
-
-  const truncatedMsgs = createDotPathTransformer({
-    '*.content.*.file.file_data': () => '[[file_data omitted]]',
-    '*.content.*.image_url.url': () => '[[image_url omitted]]',
-    '*.content.*.input_audio.data': () => '[[input_audio omitted]]',
-  })(chatInfo.messages)
-  //const out = await chatCompletion.output // same as in messages...
-  const content = await chatCompletion.content
-  const providerCost = await readProviderCosts(chatCompletion, provider)
-  // const t = await chatCompletion.usage
-  const metaInfo: TaskNodeMeta = {
-    streamContent: rawOutput,
-    taskPrompt: truncatedMsgs,
-    tools: Object.values(chatInfo.tools),
-    rawOutput: chatCompletion,
-    promptTokens: totalUsage.inputTokens,
-    resultTokens: totalUsage.outputTokens,
-    taskTokens: totalUsage.totalTokens,
-    ...(providerCost.length > 0 ? { costs: providerCost } : {}),
-  }
-
-  const cont = res.messages[0]?.content
-  if (typeof cont !== 'string') {
-    const reasoning = content.find(
-      (c: { type: string }) => c.type === 'reasoning',
-    ) as ReasoningOutput
-    metaInfo.reasoning = reasoning?.text
-  }
-
-  // doing deepcopy here, because we're communicating to a worker
-  // and need to make sure to dereference values (e.g. if they're vue reactive objects)
-  /* metaInfo.estimatedTokens = await estimateChatTokens(
-    deepCopy(content),
-    openAIConversationThread,
-    toolDefs,
-    deepCopy(allowedTools) || [],
-    typeof choice?.message.content === 'string' ? choice.message.content : '',
-  ) */
-  // we run this asynchronously, because it fetches data in the
-  // background and we don't want to wait here...
-  if (delegatedTokenJti) {
-    const hasUserJwt = !!apiKey && !isTaskyonKey(apiKey, false)
-    if (hasUserJwt) {
-      console.log('getting taskyon generation info')
-      void getTaskyonCosts(
-        providerHeaders,
-        taskyonKey,
-        apiKey,
-        res.id,
-        delegatedTokenJti,
-        currentTask?.id,
-      )
-        .then((costs) => {
-          if (typeof costs === 'number') {
-            console.log('found new task costs:', costs)
-            emitMetadata({ taskId: currentTask.id, metadata: { taskCosts: costs } })
-          }
-        })
-        .catch((err) =>
-          console.warn(
-            'Could not retrieve taskyon generation costs, skipping taskCosts metadata.',
-            err,
-          ),
-        )
-    }
-  }
-
-  metaInfo.rawOutput = { choice: res }
-  return metaInfo
 }

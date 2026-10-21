@@ -18,6 +18,9 @@ node_modules
 /packages/p2p-core/dist
 /packages/relay/dist
 
+# Generated code-analysis reports and baselines remain local
+.code-analysis/
+
 # Cordova related directories and files
 /src-cordova/node_modules
 /src-cordova/platforms

@@ -30,6 +30,7 @@ import {
 import { classifyStreamingFailure } from '../tools/chatCompletion/streamResult'
 import {
   resolveChatCompletionConnection,
+  type ChatCompletionMetadataEvent,
   type ChatCompletionProviderSettings,
   type ProviderRequestTrace,
 } from '../types/chatCompletion'
@@ -38,7 +39,8 @@ import { taskPlanner } from '../tools/TaskPlannerTool'
 import { webResearchPlanner } from '../tools/webResearchTool'
 import { jsonSchema, streamText, type ModelMessage } from 'ai'
 import type { JSONSchema7 } from 'json-schema'
-import { Annotation, TaskContent, type TaskNode } from '../types/taskNode'
+import { Annotation, TaskContent, type partialTaskDraft, type TaskNode } from '../types/taskNode'
+import { createSubtasksResult, type toolContext } from '../types/toolApi'
 import type { ToolBase } from '../types/tools'
 
 function assert(condition: boolean, message: string): asserts condition {
@@ -2449,6 +2451,92 @@ export const testProviderRequestsApplySessionHeader = async () => {
 
 testProviderRequestsApplySessionHeader.description =
   'Sends a stable per-conversation session header for providers that require one.'
+
+export const testChatCompletionToolRunsProviderStreamAndEmitsMetadata = async () => {
+  const userTask = task({
+    id: 'runtime-user',
+    role: 'user',
+    content: { type: 'message', data: 'Say hello.' },
+  })
+  const currentTask = task({
+    id: 'runtime-completion',
+    role: 'function',
+    priorID: userTask.id,
+    content: { type: 'functioncall', data: { name: 'chatCompletion', arguments: {} } },
+  })
+  const providerRequests: string[] = []
+  const testFetch: typeof fetch = (input, init) => {
+    const request = new Request(input, init)
+    providerRequests.push(request.url)
+    return Promise.resolve(
+      new Response(
+        'data: {"id":"test","choices":[{"index":0,"delta":{"content":"Hello from the provider."},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    )
+  }
+  const metadata: ChatCompletionMetadataEvent[] = []
+  const { chatCompletion, metadataStream } = createChatCompletionTool(
+    {
+      provider: 'local',
+      name: 'local',
+      baseURL: 'https://provider.example',
+      streamSupport: true,
+      routes: { chatCompletion: '/v1/', models: '/v1/models' },
+    },
+    {
+      getTaskChain: () => Promise.resolve([]),
+      getTaskChainSelection: () =>
+        Promise.resolve({ tasks: [userTask], includedSubtaskTaskIds: [] }),
+      getTask: () => Promise.resolve(null),
+      listToolDefinitions: () => Promise.resolve({}),
+      fetch: testFetch,
+    },
+  )
+  metadataStream((event) => {
+    metadata.push(event)
+  })
+
+  const result = await chatCompletion.function(
+    { model: 'test-model' },
+    {
+      getExecutionTaskChain: () => Promise.resolve([userTask, currentTask]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve('synthetic-provider-key'),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'chat-completion-runtime-test',
+    } satisfies toolContext,
+  )
+
+  assert(providerRequests.length === 1, 'Expected exactly one provider request')
+  assert(
+    providerRequests[0] === 'https://provider.example/v1/chat/completions',
+    `Unexpected provider URL: ${providerRequests[0]}`,
+  )
+  assert(
+    result !== null && typeof result === 'object' && 'taskChainList' in result,
+    'Expected a task result',
+  )
+  const drafts = (result as { taskChainList: partialTaskDraft[][] }).taskChainList.flat()
+  const assistant = drafts.find((draft) => draft.role === 'assistant')
+  assert(
+    assistant?.content.type === 'message' &&
+      assistant.content.data === 'Hello from the provider.',
+    'Expected the provider answer as an assistant message',
+  )
+  assert(metadata.length === 1, 'Expected one metadata event')
+  assert(metadata[0]?.taskId === currentTask.id, 'Expected metadata for the current task')
+  assert(
+    metadata[0]?.metadata.providerRequest?.provider === 'local',
+    'Expected the provider request trace in metadata',
+  )
+
+  return { success: true }
+}
+
+testChatCompletionToolRunsProviderStreamAndEmitsMetadata.description =
+  'Runs a provider stream through the chatCompletion tool and emits task metadata.'
 
 export const testTaskContractMessagesRenderOnceWithoutHiddenEntryNodeArguments = async () => {
   const agentInstructions = 'Act as a cybersecurity reviewer.'
