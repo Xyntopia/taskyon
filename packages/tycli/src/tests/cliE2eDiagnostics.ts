@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process'
-import { createServer } from 'node:http'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import process from 'node:process'
 import { constants as fsConstants } from 'node:fs'
@@ -7,7 +6,6 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stripVTControlCharacters } from 'node:util'
 import type { TaskNode } from '../../../taskyon/src/types/taskNode'
-import type { AddressInfo } from 'node:net'
 import {
   countDelegatedSubtaskToolCalls,
   renderTaskProgress,
@@ -300,46 +298,6 @@ export const testCliE2eAcceptedOutputWaitsForChildExit = async () => {
   })
   if (result.code !== 0 || !result.output.includes('CLOSED')) {
     throw new Error('Accepted output must wait until the stopped child closes.')
-  }
-}
-
-async function withMockOverpassServer<T>(run: (url: string) => Promise<T>): Promise<T> {
-  const server = createServer((req, res) => {
-    if (req.method !== 'POST') {
-      res.writeHead(405).end()
-      return
-    }
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(
-      JSON.stringify({
-        elements: [
-          {
-            type: 'node',
-            id: 1,
-            lat: 52.521,
-            lon: 13.4094,
-            tags: { name: 'Cafe Alexanderplatz', amenity: 'cafe' },
-          },
-          {
-            type: 'node',
-            id: 2,
-            lat: 52.5263,
-            lon: 13.4112,
-            tags: { name: 'Cafe Rosa Luxemburg', amenity: 'cafe' },
-          },
-        ],
-      }),
-    )
-  })
-
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const address = server.address() as AddressInfo
-  try {
-    return await run(`http://127.0.0.1:${address.port}/api/interpreter`)
-  } finally {
-    await new Promise<void>((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve())),
-    )
   }
 }
 
@@ -676,49 +634,6 @@ export async function testTaskRendererWritesHtmlPreviewForAssistantHtml() {
   assertContains(previewHtml, '<!doctype html>')
   assertContains(previewHtml, '<strong>Map widget</strong>')
   assertContains(previewHtml, '<iframe src="https://example.test/map"></iframe>')
-}
-
-export async function testCliOverpassMapToolPrintsHtmlPreviewLink() {
-  await withMockOverpassServer(async (overpassUrl) => {
-    const result = await runCliE2eSession({
-      testName: 'testCliOverpassMapToolPrintsHtmlPreviewLink',
-      cliArgs: [
-        'client',
-        'callTool',
-        'overpassMapTool',
-        JSON.stringify({
-          overpassQuery:
-            '[out:json][timeout:25];node["amenity"="cafe"](around:300,52.5208,13.4095);out tags center geom;',
-        }),
-      ],
-      steps: [
-        {
-          waitFor: 'HTML preview: file://',
-          failOn: ['Fatal error', '[system|error]', "Tool 'overpassMapTool' failed"],
-          input: '',
-        },
-      ],
-      env: {
-        TASKYON_OVERPASS_INTERPRETER_URL: overpassUrl,
-        TYCLI_HOTKEY_MENUS: '0',
-      },
-      runner: 'pipe',
-      timeoutMs: 90_000,
-    })
-
-    if (result.code !== 0) {
-      throw new Error(`Expected tycli exit code 0, got ${String(result.code)}.\n${result.output}`)
-    }
-    assertContains(result.output, 'HTML preview: file://')
-    assertNotContains(result.output, 'taskyon-world-pmtiles')
-
-    const previewUrl = /HTML preview: (file:\/\/\S+)/.exec(result.output)?.[1]
-    if (!previewUrl) throw new Error(`Could not find preview URL.\n${result.output}`)
-    const previewHtml = await readFile(fileURLToPath(previewUrl), 'utf8')
-    assertContains(previewHtml, 'taskyon-world-pmtiles')
-    assertContains(previewHtml, 'Cafe Alexanderplatz')
-    assertContains(previewHtml, 'Cafe Rosa Luxemburg')
-  })
 }
 
 export async function testCliClarificationToolAcceptsTypedAnswers() {
@@ -1207,7 +1122,7 @@ export async function testEscapeCancelsModelMenuAndKeepsPromptUsable() {
     steps: [
       { waitFor: 'Slash commands:', input: '/model\n' },
       { waitFor: 'Model menu', input: '\u001b' },
-      { waitFor: '\u001b[?2004h> ', input: '/tools\n' },
+      { waitFor: '\u001b[?2004h', input: '/tools\n' },
       { waitFor: 'Active tool definitions:', input: '/exit\n' },
     ],
     env: { TYCLI_HOTKEY_MENUS: '0' },

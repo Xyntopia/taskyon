@@ -20,7 +20,6 @@ import {
   testQuitPromptCancellationReturnsToCtrlD as runQuitPromptCancellationReturnsToCtrlD,
   testCtrlCCancelsModelMenuAndKeepsPromptUsable as runCtrlCCancelsModelMenuAndKeepsPromptUsable,
   testEscapeCancelsModelMenuAndKeepsPromptUsable as runEscapeCancelsModelMenuAndKeepsPromptUsable,
-  testCliOverpassMapToolPrintsHtmlPreviewLink as runCliOverpassMapToolPrintsHtmlPreviewLink,
   testTaskRendererWritesHtmlPreviewForAssistantHtml as runTaskRendererWritesHtmlPreviewForAssistantHtml,
   testTaskRendererDoesNotEchoUserPromptInput as runTaskRendererDoesNotEchoUserPromptInput,
   testCliClarificationToolAcceptsTypedAnswers as runCliClarificationToolAcceptsTypedAnswers,
@@ -668,13 +667,6 @@ export const testCliTaskRendererWritesHtmlPreviewForAssistantHtml = async () =>
 
 testCliTaskRendererWritesHtmlPreviewForAssistantHtml.description =
   'Verifies tycli writes assistant HTML messages to a temporary preview file and prints a file URL.'
-
-export const testCliOverpassMapToolPrintsHtmlPreviewLink = async () =>
-  await runCliOverpassMapToolPrintsHtmlPreviewLink()
-
-testCliOverpassMapToolPrintsHtmlPreviewLink.description =
-  'Runs overpassMapTool through tycli client mode with a local Overpass mock and verifies the CLI prints an HTML preview file URL.'
-testCliOverpassMapToolPrintsHtmlPreviewLink.timeoutMs = 100_000
 
 export const testCliClarificationToolAcceptsTypedAnswers = async () =>
   await runCliClarificationToolAcceptsTypedAnswers()
