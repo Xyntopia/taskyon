@@ -6,6 +6,8 @@ import {
   resolveToolDefinitionsForTaskChain,
 } from '../tools/chatCompletionTool'
 import { createChatCompletionRecordingFetch } from '../tools/chatCompletionTrace'
+import { resolveNativeWebSearchSupport } from '../tools/chatCompletion/webSearchSupport'
+import { limitActiveTools } from '../tools/chatCompletion/activeTools'
 import { serializeObject } from '@taskyon/common/modules/serializeObject'
 import {
   findContinuationLeafTaskIds,
@@ -1487,19 +1489,13 @@ export const testChatCompletionRendersSourceLessProviderSearchAsCompletedContext
     },
   })
   const persistedBeforeRender = JSON.stringify(persistedCall)
-  const messages = await convertTaskNodesToOpenAIChat(
-    [persistedCall],
-    undefined,
-    false,
-    true,
-    {
-      executeJavaScript: {
-        name: 'executeJavaScript',
-        description: 'Execute JavaScript.',
-        parameters: { type: 'object', properties: { code: { type: 'string' } } },
-      },
+  const messages = await convertTaskNodesToOpenAIChat([persistedCall], undefined, false, true, {
+    executeJavaScript: {
+      name: 'executeJavaScript',
+      description: 'Execute JavaScript.',
+      parameters: { type: 'object', properties: { code: { type: 'string' } } },
     },
-  )
+  })
 
   assert(messages[0]?.role === 'system', 'Expected source-less search context before the tool call')
   const note = messages[0]?.content
@@ -1508,7 +1504,10 @@ export const testChatCompletionRendersSourceLessProviderSearchAsCompletedContext
     note.includes('Provider-hosted web search completed'),
     'Expected the completed search activity label',
   )
-  assert(note.includes('did not expose source URLs'), 'Expected source availability to stay factual')
+  assert(
+    note.includes('did not expose source URLs'),
+    'Expected source availability to stay factual',
+  )
   assert(
     note.includes('may already be reflected in this assistant turn'),
     'Expected the renderer to explain where search-derived information may appear',
@@ -1905,6 +1904,46 @@ export const testChatCompletionOpenRouterWebSearchIsAProviderTool = async () => 
   )
   assert(webSearchTool.id === 'openrouter.web_search', 'Expected the OpenRouter web search tool id')
   assert(request.toolChoice === undefined, 'Expected automatic tool choice for OpenRouter search')
+  return { success: true }
+}
+
+export const testNativeWebSearchCapabilityProfileOverridesAdapterDefault = () => {
+  assert(
+    resolveNativeWebSearchSupport({ provider: 'openrouter.ai' }),
+    'Expected OpenRouter native search by default',
+  )
+  assert(
+    resolveNativeWebSearchSupport({ provider: 'taskyon' }),
+    'Expected Taskyon native search by default',
+  )
+  assert(
+    !resolveNativeWebSearchSupport({ provider: 'google' }),
+    'Expected Google native search to default off',
+  )
+  assert(
+    resolveNativeWebSearchSupport({ provider: 'google', nativeWebSearch: true }),
+    'Expected an explicit profile capability to enable native search',
+  )
+  assert(
+    !resolveNativeWebSearchSupport({ provider: 'openai', nativeWebSearch: false }),
+    'Expected an explicit profile capability to disable native search',
+  )
+  return { success: true }
+}
+
+export const testActiveToolsRespectProviderLimit = () => {
+  assert(
+    limitActiveTools(['a', 'b', 'c'], 2).join(',') === 'a,b',
+    'Expected the configured active-tool limit to preserve order and truncate',
+  )
+  assert(
+    limitActiveTools(['a', 'b', 'c'], undefined).length === 3,
+    'Expected an absent limit to keep every active tool',
+  )
+  assert(
+    limitActiveTools(['a'], 5).length === 1,
+    'Expected a limit larger than the tool set to keep the tool set',
+  )
   return { success: true }
 }
 

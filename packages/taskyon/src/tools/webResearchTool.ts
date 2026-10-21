@@ -14,6 +14,7 @@ import {
   waitForPoliteHttpTurn,
 } from '../utils/politeHttp'
 import { readPublicWebResource } from './helperCollection'
+import { webSearch } from './webSearchTool'
 
 type BrowserMcpImportArgs = {
   serverUrl?: string
@@ -1471,6 +1472,7 @@ export const proxyWebReader = createTool({
 export const webResearchTools = [
   importBrowserMcpTools,
   ensureBrowserMcpTools,
+  webSearch,
   webResearchPlanner,
   webResearchPipeline,
   webResearchCandidateValidator,

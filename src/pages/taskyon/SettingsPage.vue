@@ -39,6 +39,22 @@
             v-model:expert-mode-on="state.appConfiguration.expertMode"
             style="max-width: 600px"
           />
+          <q-btn
+            class="q-mt-md"
+            outline
+            no-caps
+            label="Configure web search"
+            data-cy="configure-web-search"
+            @click="searchSetup.open()"
+          />
+          <SearchProviderSetupDialog
+            v-model="searchSetup.visible.value"
+            :testing="searchSetup.testing.value"
+            :initial-provider="searchSetup.initialProvider.value"
+            :error="searchSetup.error.value"
+            @save="searchSetup.saveAndTest"
+            @cancel="searchSetup.cancel"
+          />
         </q-tab-panel>
         <q-tab-panel name="profile" :class="tabPanelClass">
           <SyncTaskyon style="max-width: 600px" />
@@ -250,6 +266,8 @@ import {
 import ExpertEnable from 'components/taskyon/ExpertEnable.vue'
 import LLMProviders from 'components/taskyon/LLMProviders.vue'
 import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
+import SearchProviderSetupDialog from 'components/taskyon/SearchProviderSetupDialog.vue'
+import { useWebSearchProviderSetup } from 'src/modules/taskyon/useWebSearchProviderSetup'
 import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
@@ -262,6 +280,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
+const searchSetup = useWebSearchProviderSetup()
 const corsProxyStatus = ref('')
 const appConfigurationWithoutSandboxFetch = TyProfile.shape.appConfiguration.omit({
   sandboxFetchIdleTimeoutMs: true,

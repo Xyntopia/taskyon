@@ -117,6 +117,14 @@
         <q-btn flat label="Close" @click="showPopupMessage = false" />
       </q-card>
     </q-dialog>
+    <SearchProviderSetupDialog
+      v-model="searchSetup.visible.value"
+      :testing="searchSetup.testing.value"
+      :initial-provider="searchSetup.initialProvider.value"
+      :error="searchSetup.error.value"
+      @save="searchSetup.saveAndTest"
+      @cancel="searchSetup.cancel"
+    />
     <!-- Ask for Passwords... -->
     <password-request-dialog
       v-model="showPassWordDialog"
@@ -146,6 +154,9 @@ import { QSpinnerBox, useMeta, useQuasar } from 'quasar'
 import FadeAwayScrollPage from '@taskyon/ui/components/FadeAwayScrollPage.vue'
 import FileDropzone from '@taskyon/ui/components/FileDropzone.vue'
 import LoadingCircle from '@taskyon/ui/components/LoadingCircle.vue'
+import SearchProviderSetupDialog from 'components/taskyon/SearchProviderSetupDialog.vue'
+import { WEB_SEARCH_SETUP_SECRET } from '@taskyon/taskyon/tools/webSearchTool'
+import { useWebSearchProviderSetup } from 'src/modules/taskyon/useWebSearchProviderSetup'
 import PasswordRequestDialog from '@taskyon/ui/components/PasswordRequestDialog.vue'
 import ToggleButton from '@taskyon/ui/components/ToggleButton.vue'
 import { createScrollManager } from 'src/modules/vueUtils'
@@ -234,12 +245,17 @@ const invitedChat = ref(false)
 const popupMessage = ref<string | undefined>(undefined)
 const showPopupMessage = ref(false)
 
+const searchSetup = useWebSearchProviderSetup()
 const showPassWordDialog = ref(false)
 const infoText = ref('get password')
 let resolveSecret: (secret: string) => void
 onMounted(async () => {
   const ty = await tystate.taskyon
   void ty.onAskNewSecret(({ args: [{ id, secretName, message }], respond }) => {
+    if (secretName === WEB_SEARCH_SETUP_SECRET) {
+      searchSetup.open(respond, String(id))
+      return
+    }
     console.log('new secret request window', id, secretName)
     showPassWordDialog.value = true
     infoText.value =

@@ -52,6 +52,8 @@ import {
   redactChatCompletionTraceValue,
   writeChatCompletionTrace,
 } from './chatCompletionTrace'
+import { resolveNativeWebSearchSupport } from './chatCompletion/webSearchSupport'
+import { limitActiveTools } from './chatCompletion/activeTools'
 import {
   buildChatCompletionRetryDelayTask,
   buildNextChatCompletionRetry,
@@ -356,18 +358,19 @@ export function createChatCompletionTool(
       }
       const useArtificialStreaming = artificial_streaming ?? true
       const selectedApi = providerConnection.provider
-      const supportsNativeWebSearch =
-        selectedApi === 'openai' ||
-        selectedApi === 'chatgpt-codex' ||
-        selectedApi === 'taskyon' ||
-        selectedApi === 'openrouter.ai'
-      if (websearch?.enabled === true && !supportsNativeWebSearch) {
+      const supportsNativeWebSearch = resolveNativeWebSearchSupport(providerConnection)
+      if (
+        websearch?.enabled === true &&
+        websearch.mode === 'required' &&
+        !supportsNativeWebSearch
+      ) {
         throw new Error(
-          `Provider '${selectedApi}' does not support web search. Select a provider with web search support or disable web search.`,
+          `Provider '${selectedApi}' does not support web search in required mode. Select a provider with web search support or disable web search.`,
         )
       }
       const tools = Array.from(new Set(allowedTools ?? []))
-      const useProviderToolCalling = tools.length > 0
+      const activeTools = limitActiveTools(tools, providerConnection.maxActiveTools)
+      const useProviderToolCalling = activeTools.length > 0
       const normalizedToolChoice =
         toolChoice?.type === 'tool' && typeof toolChoice.toolName === 'string'
           ? { type: 'tool' as const, toolName: toolChoice.toolName }
@@ -432,7 +435,7 @@ export function createChatCompletionTool(
       )
       const chatInfo = await prepareChatCompletionContext({
         taskChain,
-        allowedTools: tools,
+        allowedTools: activeTools,
         toolDefinitions: toolDefs,
         appendSystemPrompts: effectiveAppendSystemPrompts,
         prependSystemPrompts: normalizedPrependSystemPrompts,
@@ -458,7 +461,7 @@ export function createChatCompletionTool(
         api: { ...providerConnection, model: selectedModel },
         apiKey: requestApiKey,
         ...(nativeStructuredSchema ? { schema: nativeStructuredSchema } : {}),
-        ...(websearch?.enabled === true
+        ...(websearch?.enabled === true && supportsNativeWebSearch
           ? {
               webSearch: {
                 maxResults: websearch.max_results ?? 5,

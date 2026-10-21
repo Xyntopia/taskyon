@@ -27,12 +27,16 @@
         "error": "Tool error: {error}. Retry with corrected arguments if recoverable; otherwise explain the failure.",
         "retryExhausted": "The tool failed {retryCount} times. Stop retrying and explain the failure."
       }
+    },
+    "webSearch": {
+      "bashFallback": true
     }
   },
   "profiles": {
     "taskyon": {
       "chatCompletion": {
         "provider": "taskyon",
+        "nativeWebSearch": true,
         "networkTransport": "auto",
         "name": "taskyon",
         "baseURL": "https://share.taskyon.space",
@@ -52,6 +56,7 @@
     "openai": {
       "chatCompletion": {
         "provider": "openai",
+        "nativeWebSearch": true,
         "networkTransport": "auto",
         "name": "openai",
         "baseURL": "https://api.openai.com",
@@ -66,6 +71,7 @@
     "chatgpt-codex": {
       "chatCompletion": {
         "provider": "chatgpt-codex",
+        "nativeWebSearch": true,
         "networkTransport": "auto",
         "name": "chatgpt-codex",
         "baseURL": "https://chatgpt.com/backend-api/codex",
@@ -93,6 +99,7 @@
     "openrouter.ai": {
       "chatCompletion": {
         "provider": "openrouter.ai",
+        "nativeWebSearch": true,
         "networkTransport": "auto",
         "name": "openrouter.ai",
         "baseURL": "https://openrouter.ai",

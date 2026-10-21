@@ -145,4 +145,24 @@ test.describe('Taskyon settings and tools', () => {
     await dataCy(page, 'reset-fetch-transport').click()
     await expect(transport).toContainText('Ask on first tool fetch')
   })
+  test('opens search provider onboarding with registration links and cancel', async ({ page }) => {
+    await page.goto('/settings/aiserviceprovider')
+    await dataCy(page, 'configure-web-search').click()
+    const dialog = dataCy(page, 'search-provider-setup')
+    await expect(dialog).toBeVisible()
+    await expect(dataCy(page, 'search-provider-register')).toHaveAttribute(
+      'href',
+      'https://agent.tinyfish.ai/api-keys',
+    )
+    await expect(dataCy(page, 'search-provider-register')).toHaveAttribute('target', '_blank')
+    await expect(dataCy(page, 'search-provider-save')).toBeDisabled()
+    await dataCy(page, 'search-provider-select').click()
+    await page.getByRole('option', { name: 'Jina Search', exact: true }).click()
+    await expect(dataCy(page, 'search-provider-register')).toHaveAttribute(
+      'href',
+      'https://jina.ai/api-dashboard/key-manager',
+    )
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(dialog).toBeHidden()
+  })
 })

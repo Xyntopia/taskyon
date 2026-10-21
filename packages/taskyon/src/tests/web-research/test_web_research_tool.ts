@@ -28,6 +28,8 @@ import {
   webResearchPlanner,
   webResearchTools,
 } from '../../tools/webResearchTool'
+import { requestWebSearch, webSearch, WEB_SEARCH_SETUP_SECRET } from '../../tools/webSearchTool'
+import type { FetchWithPolicy } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import type { TaskNode } from '../../types/taskNode'
 import {
   createSubtasksResult,
@@ -35,6 +37,7 @@ import {
   taskResult,
   toolCall,
   type InternalTool,
+  type toolContext,
 } from '../../types/toolApi'
 import { createExternalToolContext, registerToolRpcTools } from '../../core/toolRpc'
 import { FunctionCall } from '../../types/tools'
@@ -327,14 +330,243 @@ export const testPublicWebReaderChecksPdfBytesAndHttpErrors = async () => {
   return { success: true }
 }
 
-export const testDefaultWebToolsHaveNoJinaDependency = () => {
+export const testDefaultWebToolsExposeFallbackWebSearch = () => {
   const names = createDefaultTaskyonToolSetup({ pythonTool: null }).baseTools.map(
     (tool) => tool.name,
   )
   assert(names.includes('webReader'), 'Expected the shared mediated web reader')
-  assert(!names.some((name) => /jina/i.test(name)), 'Expected no Jina reader or search alias')
-  assert(!names.includes('webSearch'), 'Expected no Jina-backed fallback search tool')
+  assert(names.includes('webSearch'), 'Expected the fallback web search tool')
+  assert(
+    !names.some((name) => /jina/i.test(name)),
+    'Expected the search tool to stay provider-neutral',
+  )
   assert(!names.includes('tauriHttpWebReader'), 'Expected one portable web reader')
+  return { success: true }
+}
+
+export const testWebSearchUsesDirectJinaFallback = async () => {
+  const calls: Array<{
+    url: string
+    method: string
+    accept: string | null
+    respondWith: string | null
+    authorization: string | null
+    policy: string | undefined
+  }> = []
+  const request: FetchWithPolicy = (input, init, options) => {
+    const forwarded = new Request(input, init)
+    calls.push({
+      url: forwarded.url,
+      method: forwarded.method,
+      accept: forwarded.headers.get('accept'),
+      respondWith: forwarded.headers.get('x-respond-with'),
+      authorization: forwarded.headers.get('authorization'),
+      policy: options?.policy,
+    })
+    return Promise.resolve(
+      Response.json({
+        data: [
+          {
+            title: 'Taskyon',
+            description: 'Main page',
+            url: 'https://taskyon.space/',
+          },
+          {
+            title: 'Taskyon repository',
+            description: 'Source code',
+            url: 'https://github.com/Xyntopia/taskyon',
+          },
+        ],
+      }),
+    )
+  }
+
+  const context = {
+    getExecutionTaskChain: () => Promise.resolve([]),
+    createSubtasksResult,
+    getSecret: () => Promise.resolve('synthetic-jina-key'),
+    setSecret: () => Promise.resolve(),
+    stopSignal: new AbortController().signal,
+    toolId: 'web-search-test',
+    fetch: request,
+  } satisfies toolContext
+  const result: unknown = await webSearch.function(
+    { query: 'taskyon', maxResults: 1, provider: 'jina' },
+    context,
+  )
+
+  assert(calls.length === 1, 'Expected exactly one Jina search request')
+  const call = calls[0]
+  assert(call?.url === 'https://s.jina.ai/?q=taskyon', `Unexpected search URL: ${call?.url}`)
+  assert(call?.method === 'GET', 'Expected the search request to use GET')
+  assert(call?.accept === 'application/json', 'Expected a JSON search response')
+  assert(call?.respondWith === 'no-content', 'Expected the Jina no-content response mode')
+  assert(
+    call?.authorization === 'Bearer synthetic-jina-key',
+    'Expected the user Jina key on the direct request',
+  )
+  assert(
+    call?.policy === 'direct',
+    'Expected the search request to force the direct CORS transport',
+  )
+
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    !('results' in result) ||
+    !Array.isArray(result.results)
+  ) {
+    throw new Error('Expected normalized web search results')
+  }
+  assert(result.results.length === 1, 'Expected maxResults to limit the normalized results')
+  const first = result.results[0]
+  if (!first || typeof first !== 'object' || !('url' in first) || typeof first.url !== 'string') {
+    throw new Error('Expected a normalized result URL')
+  }
+  assert(first.url === 'https://taskyon.space/', 'Expected the first Jina result URL')
+  return { success: true }
+}
+
+export const testWebSearchTinyFishFirstUseAndDirectCors = async () => {
+  const storedSecrets = new Map<string, string>()
+  const prompts: string[] = []
+  const requests: Array<{ url: string; key: string | null; policy: string | undefined }> = []
+  const context = {
+    getExecutionTaskChain: () => Promise.resolve([]),
+    createSubtasksResult,
+    getSecret: (name: string, askNew: boolean | string) => {
+      if (askNew) {
+        prompts.push(name)
+        storedSecrets.set('webSearch tinyfish API key', 'synthetic-tinyfish-key')
+        return Promise.resolve('tinyfish')
+      }
+      return Promise.resolve(storedSecrets.get(name) ?? null)
+    },
+    setSecret: () => Promise.resolve(),
+    stopSignal: new AbortController().signal,
+    toolId: 'web-search-tinyfish-test',
+    fetch: ((input, init, options) => {
+      const request = new Request(input, init)
+      requests.push({
+        url: request.url,
+        key: request.headers.get('x-api-key'),
+        policy: options?.policy,
+      })
+      return Promise.resolve(
+        Response.json({
+          results: [
+            { title: 'Official', snippet: 'A website', url: 'https://example.org/page' },
+            { title: 'Duplicate', snippet: '', url: 'https://example.org/page' },
+            { title: 'Bad link', snippet: '', url: 'javascript:alert(1)' },
+          ],
+        }),
+      )
+    }) satisfies FetchWithPolicy,
+  } satisfies toolContext
+  const result = await webSearch.function({ query: 'taskyon', maxResults: 3 }, context)
+  assert(
+    prompts.length === 1 && prompts[0] === 'webSearch provider setup',
+    'Expected one provider onboarding prompt',
+  )
+  assert(requests.length === 1, 'Expected one live search after onboarding')
+  assert(
+    requests[0]?.url === 'https://api.search.tinyfish.ai/?query=taskyon',
+    'Unexpected TinyFish endpoint',
+  )
+  assert(
+    requests[0]?.key === storedSecrets.get('webSearch tinyfish API key'),
+    'Expected the provider key only in the API header',
+  )
+  assert(requests[0]?.policy === 'direct', 'Expected direct CORS host transport')
+  assert(
+    result.results.length === 1 && result.results[0]?.url === 'https://example.org/page',
+    'Expected validated unique results',
+  )
+  return { success: true }
+}
+
+export const testWebSearchSetupCancellationDoesNotFetch = async () => {
+  let calls = 0
+  const context = {
+    getExecutionTaskChain: () => Promise.resolve([]),
+    createSubtasksResult,
+    getSecret: (_name: string, askNew: boolean | string) => Promise.resolve(askNew ? '' : null),
+    setSecret: () => Promise.resolve(),
+    stopSignal: new AbortController().signal,
+    toolId: 'web-search-cancel-test',
+    fetch: (() => {
+      calls++
+      return Promise.resolve(Response.json({ results: [] }))
+    }) satisfies FetchWithPolicy,
+  } satisfies toolContext
+  let rejected = false
+  try {
+    await webSearch.function({ query: 'taskyon' }, context)
+  } catch (error) {
+    rejected = error instanceof Error && error.message.includes('cancelled')
+  }
+  assert(rejected, 'Cancelling onboarding must fail explicitly')
+  assert(calls === 0, 'Cancelled onboarding must make no network requests')
+  return { success: true }
+}
+
+export const testWebSearchBashFallbackSkipsProviderSetup = async () => {
+  const requestedSecrets: string[] = []
+  let fetches = 0
+  const context = {
+    getExecutionTaskChain: () => Promise.resolve([]),
+    createSubtasksResult,
+    getSecret: (name: string) => {
+      requestedSecrets.push(name)
+      return Promise.resolve(null)
+    },
+    setSecret: () => Promise.resolve(),
+    stopSignal: new AbortController().signal,
+    toolId: 'web-search-bash-fallback-test',
+    fetch: (() => {
+      fetches++
+      return Promise.resolve(Response.json({ results: [] }))
+    }) satisfies FetchWithPolicy,
+  } satisfies toolContext
+  const result: unknown = await webSearch.function(
+    { query: 'taskyon', bashFallback: true },
+    context,
+  )
+  assert(fetches === 0, 'Bash fallback must not perform a network request')
+  assert(
+    !requestedSecrets.includes(WEB_SEARCH_SETUP_SECRET),
+    'Bash fallback must not prompt for provider setup',
+  )
+  if (
+    !result ||
+    typeof result !== 'object' ||
+    !('status' in result) ||
+    result.status !== 'fallback'
+  ) {
+    throw new Error('Expected a bash fallback result')
+  }
+  if (!('message' in result) || typeof result.message !== 'string') {
+    throw new Error('Expected bash fallback guidance')
+  }
+  assert(result.message.includes('bash'), 'Expected guidance to use bash')
+  assert(result.message.includes('webReader'), 'Expected guidance to read selected URLs')
+  return { success: true }
+}
+
+export const testWebSearchHttpErrorsDoNotLeakKeys = async () => {
+  for (const status of [401, 403, 429, 500]) {
+    const privateKey = 'synthetic-private-key'
+    const response: FetchWithPolicy = () =>
+      Promise.resolve(new Response(`Server echoed ${privateKey}`, { status }))
+    let message = ''
+    try {
+      await requestWebSearch('tinyfish', 'taskyon', 1, privateKey, response)
+    } catch (error) {
+      message = error instanceof Error ? error.message : ''
+    }
+    assert(message.includes(String(status)), `Expected HTTP ${status} to be reported`)
+    assert(!message.includes(privateKey), 'Provider error must not expose API keys')
+  }
   return { success: true }
 }
 

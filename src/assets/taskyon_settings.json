@@ -94,6 +94,7 @@
       "taskyon": {
         "chatCompletion": {
           "provider": "taskyon",
+          "nativeWebSearch": true,
           "recommendedTransport": "direct",
           "name": "taskyon",
           "model": "z-ai/glm-5.3-flash",
@@ -127,6 +128,7 @@
       "openai": {
         "chatCompletion": {
           "provider": "openai",
+          "nativeWebSearch": true,
           "recommendedTransport": "direct",
           "name": "openai",
           "model": "gpt-5.1",
@@ -138,9 +140,25 @@
           }
         }
       },
+      "google": {
+        "chatCompletion": {
+          "provider": "google",
+          "maxActiveTools": 20,
+          "recommendedTransport": "direct",
+          "name": "google",
+          "model": "gemini-3.8-flash",
+          "baseURL": "https://generativelanguage.googleapis.com/v1beta",
+          "streamSupport": true,
+          "routes": {
+            "chatCompletion": "/openai",
+            "models": "/openai/models"
+          }
+        }
+      },
       "chatgpt-codex": {
         "chatCompletion": {
           "provider": "chatgpt-codex",
+          "nativeWebSearch": true,
           "recommendedTransport": "wss",
           "name": "chatgpt-codex",
           "model": "gpt-5.4",
@@ -168,6 +186,7 @@
       "openrouter.ai": {
         "chatCompletion": {
           "provider": "openrouter.ai",
+          "nativeWebSearch": true,
           "recommendedTransport": "direct",
           "name": "openrouter.ai",
           "model": "google/gemini-2.5-flash-lite",

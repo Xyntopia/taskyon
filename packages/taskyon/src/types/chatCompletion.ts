@@ -314,6 +314,14 @@ export const chatCompletionProviderSettings = providerEndpointConfig
     networkTransportConfirmed: z.boolean().optional().meta({
       description: 'Whether the browser has confirmed an automatic provider route.',
     }),
+    nativeWebSearch: z.boolean().optional().meta({
+      description:
+        'Whether this provider profile supports provider-native or server-side web search. Absent values use the adapter default. OpenRouter and Taskyon are provider-level true regardless of model; model-card web_search fields are cost/engine hints.',
+    }),
+    maxActiveTools: z.number().int().positive().optional().meta({
+      description:
+        'Maximum number of tool definitions sent to this provider per completion. Absent means no profile cap. Used to respect provider-specific forced-tool-choice limits.',
+    }),
     customProxyTemplate: z.string().optional().meta({
       description:
         'Optional per-provider custom proxy URL containing {url} for the encoded target.',
