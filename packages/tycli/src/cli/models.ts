@@ -142,7 +142,7 @@ async function fetchProviderModelsUncached(
     method: 'GET',
     headers: {
       ...(api.defaultHeaders ?? {}),
-      Authorization: `Bearer ${key}`,
+      ...(key ? { Authorization: `Bearer ${key}` } : {}),
       'Cache-Control': 'no-cache',
     },
   })

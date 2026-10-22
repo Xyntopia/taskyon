@@ -2197,6 +2197,42 @@ export const testCodexModelDiscoveryUsesInjectedProviderFetch = async () => {
 testCodexModelDiscoveryUsesInjectedProviderFetch.description =
   'Uses the host-provided fetch transport for Codex model discovery.'
 
+export const testModelDiscoveryOmitsAuthorizationWithoutKey = async () => {
+  let requestHeaders: Headers | undefined
+  const providerFetch: typeof fetch = (_input, init) => {
+    requestHeaders = new Headers(init?.headers)
+    return Promise.resolve(
+      new Response(JSON.stringify({ data: [{ id: 'public-model' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+  }
+
+  const models = await fetchModelsForProvider(
+    {
+      provider: 'opencode-go',
+      name: 'OpenCode Go',
+      model: 'public-model',
+      baseURL: 'https://opencode.ai/inference/go',
+      streamSupport: true,
+      routes: { chatCompletion: '/v1/', models: '/v1/models' },
+    },
+    () => Promise.resolve(''),
+    { fetch: providerFetch },
+  )
+
+  assert(models['public-model'] !== undefined, 'Expected the public model list to parse')
+  assert(
+    requestHeaders?.has('authorization') !== true,
+    'Expected model discovery to omit Authorization without a key',
+  )
+  return { success: true }
+}
+
+testModelDiscoveryOmitsAuthorizationWithoutKey.description =
+  'Fetches a public provider model list without sending an empty bearer token.'
+
 export const testChatCompletionCacheKeyAndBreakpointsFollowTaskTree = async () => {
   const build = (root: string, finalPrompt: string) =>
     buildChatProviderRequest({

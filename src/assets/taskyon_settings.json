@@ -165,7 +165,7 @@
           "streamSupport": true,
           "routes": {
             "chatCompletion": "/v1",
-            "models": "/v1/models"
+            "models": "https://opencode.ai/inference/v1/models"
           }
         }
       },

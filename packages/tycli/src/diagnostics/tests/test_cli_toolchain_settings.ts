@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs'
 import {
   createCliLlmState,
+  fetchProviderModels,
   getSelectedReasoningEffort,
   getSelectedToolchainConfig,
   setReasoningEffort,
 } from '../../cli/models'
 import { DEFAULT_CLI_UNAVAILABLE_TOOL_NAMES } from '../../cli'
 import { CLI_FLOW_TOOL_NAME, cliToolchainProfiles } from '../../cli/toolchainSettings'
+import { chatCompletionProviderSettings } from '../../../../taskyon/src/types/chatCompletion'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -76,31 +78,21 @@ export const testCliShipsOpenCodeGoProviderProfile = () => {
 testCliShipsOpenCodeGoProviderProfile.description =
   'Ships the OpenCode Go endpoint as an API-key provider profile for the CLI.'
 
-export const testBrowserShipsOpenCodeGoProviderProfile = () => {
+const readBrowserProviderProfile = (name: string) => {
   const settings = JSON.parse(
     readFileSync(
       new URL('../../../../../src/assets/taskyon_settings.json', import.meta.url),
       'utf8',
     ),
-  ) as {
-    toolchainProfiles?: {
-      profiles?: Record<
-        string,
-        {
-          chatCompletion?: {
-            provider?: string
-            recommendedTransport?: string
-            baseURL?: string
-            sessionHeader?: string
-            routes?: { chatCompletion?: string; models?: string }
-          }
-        }
-      >
-    }
-  }
-  const provider = settings.toolchainProfiles?.profiles?.['opencode-go']?.chatCompletion
+  ) as { toolchainProfiles?: { profiles?: Record<string, { chatCompletion?: unknown }> } }
+  const profile = settings.toolchainProfiles?.profiles?.[name]?.chatCompletion
+  assert(profile !== undefined, `Expected the bundled ${name} browser provider profile`)
+  return chatCompletionProviderSettings.parse(profile)
+}
 
-  assert(provider !== undefined, 'Expected the bundled OpenCode Go browser provider profile')
+export const testBrowserShipsOpenCodeGoProviderProfile = () => {
+  const provider = readBrowserProviderProfile('opencode-go')
+
   assert(provider.provider === 'opencode-go', 'Expected the OpenCode Go provider identifier')
   assert(
     provider.recommendedTransport === 'wss',
@@ -111,7 +103,7 @@ export const testBrowserShipsOpenCodeGoProviderProfile = () => {
     'Expected the OpenCode Go inference endpoint',
   )
   assert(
-    provider.routes?.chatCompletion === '/v1/' && provider.routes.models === '/v1/models',
+    provider.routes.chatCompletion === '/v1/' && provider.routes.models === '/v1/models',
     'Expected the OpenAI-compatible OpenCode Go routes',
   )
   assert(
@@ -122,6 +114,33 @@ export const testBrowserShipsOpenCodeGoProviderProfile = () => {
 
 testBrowserShipsOpenCodeGoProviderProfile.description =
   'Ships the OpenCode Go browser profile with the WSS route and session header.'
+
+export const testBrowserShipsOpenCodeZenModelRoute = () => {
+  const provider = readBrowserProviderProfile('opencode')
+  assert(
+    provider.routes.models === 'https://opencode.ai/inference/v1/models',
+    'Expected the Zen model list at the inference root rather than the OpenAI family path',
+  )
+}
+
+testBrowserShipsOpenCodeZenModelRoute.description =
+  'Points the OpenCode Zen profile at the public model list under the inference root.'
+
+export const testOpenCodeModelListsLoadWithoutKey = async () => {
+  const zen = readBrowserProviderProfile('opencode')
+  const go = readBrowserProviderProfile('opencode-go')
+  const zenModels = await fetchProviderModels('opencode', zen, '', { forceRefresh: true })
+  const goModels = await fetchProviderModels('opencode-go', go, '', { forceRefresh: true })
+
+  assert(zenModels['glm-5.3-flash-free'] !== undefined, 'Expected the Zen model list')
+  assert(goModels['deepseek-v4.1-flash'] !== undefined, 'Expected the OpenCode Go model list')
+  assert(Object.keys(zenModels).length > 1, 'Expected more than one Zen model')
+  assert(Object.keys(goModels).length > 1, 'Expected more than one OpenCode Go model')
+  return { zen: Object.keys(zenModels).length, go: Object.keys(goModels).length }
+}
+
+testOpenCodeModelListsLoadWithoutKey.description =
+  'Fetches the public OpenCode and OpenCode Go model lists without an API key.'
 
 export const testCliModelOverridesDoNotMutateShippedProfiles = () => {
   createCliLlmState(

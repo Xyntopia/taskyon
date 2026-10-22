@@ -71,6 +71,9 @@ export const diagnosticsTestMetadata: Record<string, DiagnosticsTestMetadata> = 
   testTauriHttpPluginHttpsFetch: {
     requiresNetwork: true,
   },
+  testOpenCodeModelListsLoadWithoutKey: {
+    requiresNetwork: true,
+  },
   testSharedHeadlessBrowserDiscoveryFixture: {
     requiresNetwork: true,
   },

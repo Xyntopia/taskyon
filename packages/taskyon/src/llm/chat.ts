@@ -81,7 +81,7 @@ export const fetchAvailableModels = async (
       method: 'GET',
       headers: {
         ...headers,
-        Authorization: `Bearer ${apiKey}`,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
     })
 
