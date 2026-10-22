@@ -234,6 +234,8 @@
             class="fit"
           />
           <q-separator size="xl" spaced class="self-stretch" />
+          <TaskSchedulesSettings class="fit" style="max-width: 900px" />
+          <q-separator size="xl" spaced class="self-stretch" />
           <div class="row items-center justify-between fit" style="max-width: 900px">
             <div>
               <div class="text-subtitle2">PMTiles storage cache</div>
@@ -269,6 +271,7 @@ import SyncTaskyon from 'components/taskyon/SyncTaskyon.vue'
 import SearchProviderSetupDialog from 'components/taskyon/SearchProviderSetupDialog.vue'
 import { useWebSearchProviderSetup } from 'src/modules/taskyon/useWebSearchProviderSetup'
 import PasswordManager from 'src/components/taskyon/PasswordManager.vue'
+import TaskSchedulesSettings from 'src/components/taskyon/TaskSchedulesSettings.vue'
 import type { iconMap } from 'src/modules/icons'
 import { iconRegistry, settingsIcons } from 'src/modules/icons'
 import { TyProfile } from 'src/modules/taskyon/types'

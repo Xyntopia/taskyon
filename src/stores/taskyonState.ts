@@ -56,6 +56,14 @@ import {
   type TaskyonStorageClient,
 } from '@taskyon/taskyon/api'
 import type { ChatCompletionProviderSettings, ChatCompletionStreamEvent } from '@taskyon/taskyon'
+import {
+  createTaskScheduleRunner,
+  loadTaskSchedules,
+  removeTaskSchedule,
+  saveTaskSchedule,
+  type TaskSchedule,
+  type TaskScheduleInput,
+} from '@taskyon/taskyon'
 import type { DiagnosticsProviderSession } from '@taskyon/common/modules/diagnosticsRunner'
 import {
   createMediatedFetch,
@@ -1704,6 +1712,46 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   )
   const storageClient = runtime.storageClient
   const storageDownload = createBrowserFetchWithPolicy(storageClient)
+  const taskSchedules = ref<TaskSchedule[]>([])
+  const refreshTaskSchedules = async () => {
+    try {
+      taskSchedules.value = await loadTaskSchedules(storageClient)
+    } catch (error) {
+      console.warn('Could not load scheduled tasks.', error)
+    }
+  }
+  const scheduleTask = async (input: TaskScheduleInput) => {
+    const schedule = await saveTaskSchedule(storageClient, input)
+    await refreshTaskSchedules()
+    return schedule
+  }
+  const deleteTaskSchedule = async (id: string) => {
+    await removeTaskSchedule(storageClient, id)
+    await refreshTaskSchedules()
+  }
+  const setTaskScheduleEnabled = async (schedule: TaskSchedule, enabled: boolean) => {
+    await saveTaskSchedule(storageClient, { ...schedule, enabled })
+    await refreshTaskSchedules()
+  }
+  const executeScheduledTask = async (schedule: TaskSchedule) => {
+    const chain = await taskyonClient.task.getChain({ id: schedule.taskId })
+    if (chain.length === 0) throw new Error(`Scheduled task ${schedule.taskId} is not available.`)
+    const drafts = chain.map((task) => ({
+      role: task.role,
+      content: task.content,
+      ...(task.name ? { name: task.name } : {}),
+      ...(task.label ? { label: task.label } : {}),
+    }))
+    await taskyonClient.task.createChain({ tasks: drafts, execute: true, show: false })
+  }
+  const taskScheduleRunner = createTaskScheduleRunner({
+    storage: storageClient,
+    execute: executeScheduledTask,
+    onError: (error) => console.warn('Scheduled task run failed.', error),
+  })
+  taskScheduleRunner.start()
+  onScopeDispose(() => taskScheduleRunner.stop())
+  void refreshTaskSchedules()
   const templateCacheNamespace = 'taskyon/local/task-template-render/v1'
   const taskTemplateRenderer = createTaskTemplateRenderer({
     getTaskById: async (taskId) => await taskyonClient.task.get({ id: taskId }),
@@ -2248,6 +2296,11 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     documentationReady,
     storageClient,
     storageDownload,
+    taskSchedules,
+    refreshTaskSchedules,
+    scheduleTask,
+    deleteTaskSchedule,
+    setTaskScheduleEnabled,
     workflowDiagnosticsHost: {
       createToolSetup: createBrowserToolSetup,
       registerTools: async (ty: Taskyon, extraTools: InternalTool[] = []) => {

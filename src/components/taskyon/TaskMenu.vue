@@ -93,6 +93,13 @@
       <q-item-section> Show task tree </q-item-section>
     </q-item>
     <q-separator v-if="state.appConfiguration.expertMode" />
+    <q-item clickable data-cy="schedule-task" @click="openScheduleDialog">
+      <q-item-section side>
+        <q-icon :name="matSchedule" />
+      </q-item-section>
+      <q-item-section> Schedule task </q-item-section>
+    </q-item>
+    <q-separator v-if="state.appConfiguration.expertMode" />
     <div class="row justify-around" clickable @click="emit('download', task.id)">
       <q-btn class="col q-pa-sm" :icon="matDownload" flat @click="emit('download', task.id)">
         <q-tooltip :delay="0"> Download Task </q-tooltip>
@@ -116,21 +123,43 @@ import {
   matDownload,
   matEdit,
   matRawOn,
+  matSchedule,
   matSearch,
   matShare,
 } from '@quasar/extras/material-icons'
 import { mdiFileTree, mdiForumPlus, mdiLanguageMarkdown } from '@quasar/extras/mdi-v6'
 import type { TaskNode } from '@taskyon/taskyon'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
+import { useQuasar } from 'quasar'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
+import { computed } from 'vue'
+import ScheduleTaskDialog from './ScheduleTaskDialog.vue'
 
 const state = useAppStateStore()
 const { navigateToTask } = useTaskNavigation()
+const $q = useQuasar()
 
-defineProps<{
+const props = defineProps<{
   task: TaskNode
 }>()
+
+const taskLabel = computed(() =>
+  props.task.name ??
+  (props.task.content.type === 'message'
+    ? props.task.content.data.slice(0, 60)
+    : props.task.content.type),
+)
+
+const openScheduleDialog = () => {
+  $q.dialog({
+    component: ScheduleTaskDialog,
+    componentProps: {
+      taskId: props.task.id,
+      defaultLabel: taskLabel.value,
+    },
+  })
+}
 
 const emit = defineEmits<{
   (e: 'edit-task', taskId: string): Promise<void>
