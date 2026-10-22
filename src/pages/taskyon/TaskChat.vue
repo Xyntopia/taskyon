@@ -36,6 +36,23 @@
           <q-btn class="q-mt-md" flat color="primary" label="Start a new chat" to="/" />
         </q-card>
       </div>
+      <div
+        v-else-if="publicChatDenied"
+        class="full-height column justify-center items-center q-pa-md"
+        data-cy="public-chat-denied"
+      >
+        <q-card flat bordered class="q-pa-md text-center">
+          <div class="text-body1">Shared chat not loaded.</div>
+          <div class="text-caption q-mt-sm break-all">{{ publicChatDenied.url }}</div>
+          <q-btn
+            class="q-mt-md"
+            flat
+            color="primary"
+            label="Review source"
+            @click="reopenPublicChatTrust"
+          />
+        </q-card>
+      </div>
       <!-- Welcome Message -->
       <div
         v-else
@@ -131,6 +148,23 @@
       :info-text="infoText"
       @ok="resolveSecret"
     />
+    <q-dialog v-model="showPublicChatTrust" persistent>
+      <q-card class="public-chat-trust-card">
+        <q-card-section>
+          <div class="text-h6">Open this shared chat?</div>
+          <div class="text-body2 q-mt-sm">
+            Taskyon will download and import this document. Only continue if you trust the source.
+          </div>
+          <div class="text-caption q-mt-sm break-all" data-cy="public-chat-source">
+            {{ pendingPublicChatSource?.url }}
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="Deny" data-cy="deny-public-chat" @click="denyPublicChat" />
+          <q-btn color="primary" label="Trust" data-cy="trust-public-chat" @click="trustPublicChat" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </FadeAwayScrollPage>
 </template>
 
@@ -139,10 +173,10 @@ import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
 import {
   createTaskNode,
   fetchMarkdown,
-  getTextFile,
   serializeForJson,
   sleep,
 } from '@taskyon/taskyon'
+import { fetchPublicChatDocument } from '@taskyon/common/modules/webFetching/publicChatImport'
 import { createTaskChainFromMarkdown, createTaskyonClient } from '@taskyon/tyclient'
 import { isTauri } from '@tauri-apps/api/core'
 import CreateNewTask from 'components/taskyon/CreateNewTask.vue'
@@ -206,6 +240,7 @@ const isInitializingTaskyon = computed(() => state.taskyonRunmode === 'waiting f
 const isSessionReady = computed(() => state.taskyonSessionStatus === 'ready')
 const showUnavailableChatTarget = computed(
   () =>
+    !publicChatDenied.value &&
     hasChatTarget.value &&
     isSessionReady.value &&
     tystate.currentTaskResolutionStatus === 'missing',
@@ -213,6 +248,8 @@ const showUnavailableChatTarget = computed(
 const showLoadingState = computed(
   () =>
     hasChatTarget.value &&
+    !pendingPublicChatSource.value &&
+    !publicChatDenied.value &&
     (isInitializingTaskyon.value ||
       !isSessionReady.value ||
       (!hasVisibleChat.value && !showUnavailableChatTarget.value)),
@@ -242,6 +279,10 @@ const taskThreadContainer = ref<HTMLElement | undefined>()
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
 const loadingFromGdrive = ref(false)
 const invitedChat = ref(false)
+type PublicChatSource = { url: string; kind: 'url' | 'gdrive' }
+const pendingPublicChatSource = ref<PublicChatSource>()
+const publicChatDenied = ref<PublicChatSource>()
+const showPublicChatTrust = ref(false)
 const popupMessage = ref<string | undefined>(undefined)
 const showPopupMessage = ref(false)
 
@@ -269,37 +310,63 @@ const openPopupMessage = (message: string) => {
   showPopupMessage.value = true
 }
 
+const requestPublicChatTrust = (url: string, kind: PublicChatSource['kind']) => {
+  pendingPublicChatSource.value = { url, kind }
+  publicChatDenied.value = undefined
+  showPublicChatTrust.value = true
+}
+
+const reopenPublicChatTrust = () => {
+  if (!publicChatDenied.value) return
+  pendingPublicChatSource.value = publicChatDenied.value
+  publicChatDenied.value = undefined
+  showPublicChatTrust.value = true
+}
+
+const denyPublicChat = () => {
+  publicChatDenied.value = pendingPublicChatSource.value
+  pendingPublicChatSource.value = undefined
+  showPublicChatTrust.value = false
+}
+
+const trustPublicChat = async () => {
+  const source = pendingPublicChatSource.value
+  if (!source) return
+  pendingPublicChatSource.value = undefined
+  publicChatDenied.value = undefined
+  showPublicChatTrust.value = false
+  if (source.kind === 'gdrive') loadingFromGdrive.value = true
+  try {
+    state.lockBottomScroll = false
+    const document = await fetchPublicChatDocument(
+      (request) => tystate.hostFetch.fetch({ kind: 'tool' }, request),
+      source.url,
+    )
+    invitedChat.value = true
+    const newTaskId = await createTaskChainFromMarkdown(taskyonClient, document.text)
+    navigateToTask(newTaskId, { replace: true })
+  } catch (error) {
+    console.error('Error loading shared chat:', error)
+    openPopupMessage(
+      `Error loading shared chat: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  } finally {
+    if (source.kind === 'gdrive') {
+      await sleep(2000)
+      loadingFromGdrive.value = false
+      dismissloading?.()
+    }
+  }
+}
+
 async function updateChatThread() {
   console.log('update chat thread')
   if (props.taskId) {
     return
   } else if (props.gdriveFileId) {
-    state.lockBottomScroll = false
-    const markdownUrl = `https://share.taskyon.space/proxy/gdrive/${props.gdriveFileId}`
-    loadingFromGdrive.value = true
-    invitedChat.value = true
-    try {
-      const markdownContent = await getTextFile(markdownUrl)
-      const newTaskId = await createTaskChainFromMarkdown(taskyonClient, markdownContent)
-      navigateToTask(newTaskId, { replace: true })
-    } catch (error) {
-      console.error('Error loading from Google Drive:', error)
-      openPopupMessage(
-        `Error loading from Google Drive: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    } finally {
-      await sleep(2000)
-      loadingFromGdrive.value = false
-      dismissloading?.()
-    }
+    requestPublicChatTrust(`https://share.taskyon.space/proxy/gdrive/${props.gdriveFileId}`, 'gdrive')
   } else if (props.importUrl) {
-    const markdownUrl = new URL(props.importUrl)
-    if (markdownUrl) {
-      state.lockBottomScroll = false
-      const markdownContent = await getTextFile(markdownUrl)
-      const newTaskId = await createTaskChainFromMarkdown(taskyonClient, markdownContent)
-      navigateToTask(newTaskId, { replace: true })
-    }
+    requestPublicChatTrust(props.importUrl, 'url')
   } else if (props.filePath) {
     state.lockBottomScroll = false
     let newTaskId: string | undefined
