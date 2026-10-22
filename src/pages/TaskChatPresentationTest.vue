@@ -26,6 +26,11 @@
         <TaskWidget :task="task" :previous-task="previousTask" :next-task="nextTask" />
       </template>
     </TaskChatThread>
+    <TaskChatThread v-if="fixtureReady" :tasks="[richMessage]">
+      <template #task="{ task, previousTask, nextTask }">
+        <TaskWidget :task="task" :previous-task="previousTask" :next-task="nextTask" />
+      </template>
+    </TaskChatThread>
   </q-page>
 </template>
 
@@ -122,6 +127,12 @@ const workspaceResult: TaskNode = {
     type: 'toolresult',
     data: { path: 'docs/note.txt', chars: 17, revision: 'sha256:fixture' },
   },
+}
+
+const richMessage: TaskNode = {
+  id: 'rich-html-message',
+  role: 'assistant',
+  content: { type: 'message', data: 'Rich HTML message with <b>bold</b> text.' },
 }
 
 const taskyon = useTaskyonStore()

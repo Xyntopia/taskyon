@@ -684,6 +684,16 @@ export const generateIframeSrc = (
           window.parent.postMessage({ type: 'iframeClick', x: event.clientX, y: event.clientY }, '*');
         });
 
+        document.addEventListener('contextmenu', function(event) {
+          const selection = window.getSelection();
+          if (selection && selection.toString().length > 0) return;
+          event.preventDefault();
+          window.parent.postMessage(
+            { type: 'contextmenu', x: event.clientX, y: event.clientY },
+            '*'
+          );
+        });
+
       </script>
     </body>
   </html>

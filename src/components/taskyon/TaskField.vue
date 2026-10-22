@@ -10,9 +10,18 @@
       <q-tooltip>This message is displayed in a secure sandbox</q-tooltip>
     </q-icon>
     <!--Task Display-->
-    <div v-touch-hold="() => (showTaskMenu = true)" class="task-display">
-      <!-- Context menu - positioned at right-click location -->
-      <ResponsiveMenuDialog v-if="!textSelected" v-model="showTaskMenu" auto-close context-menu>
+    <div v-touch-hold="() => openTaskMenu()" class="task-display" @contextmenu="onContextMenu">
+      <!-- Anchor used to open the context menu at the pointer position -->
+      <div
+        ref="contextMenuAnchor"
+        class="task-context-menu-anchor"
+        :style="contextMenuAnchorStyle"
+      ></div>
+      <ResponsiveMenuDialog
+        v-model="showTaskMenu"
+        auto-close
+        :target="contextMenuAnchor ?? undefined"
+      >
         <TaskMenu
           class="task-buttons"
           :task="task"
@@ -127,16 +136,7 @@
       <q-slide-transition v-show="!short || expandMessageContent">
         <div>
           <!--expandable task content-->
-          <slot
-            :show-task-menu="
-              (state: boolean) => {
-                showTaskMenu = state
-                if (!state) {
-                  taskMenu?.hide()
-                }
-              }
-            "
-          ></slot>
+          <slot :show-task-menu="setTaskMenu"></slot>
         </div>
       </q-slide-transition>
       <!--task costs-->
@@ -224,13 +224,12 @@ import {
 import ResponsiveMenuDialog from '@taskyon/ui/components/ResponsiveMenuDialog.vue'
 import type { TaskNode } from '@taskyon/taskyon'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
-import { useTextSelection } from '@vueuse/core'
 import TokenUsage from 'components/taskyon/TokenUsage.vue'
 import { type QMenu } from 'quasar'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useTaskyonStore } from 'stores/taskyonState'
-import { computed, defineAsyncComponent, ref, useTemplateRef } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { openrouterPricing } from '@taskyon/common/modules/utils'
 import TaskDebugTabs from './TaskDebugTabs.vue'
@@ -251,8 +250,7 @@ const emit = defineEmits<{
 }>()
 
 const taskMenu = useTemplateRef<QMenu>('taskMenuRef')
-const textSelectionState = useTextSelection()
-const textSelected = computed(() => textSelectionState.text.value.length > 0)
+const contextMenuAnchor = useTemplateRef<HTMLElement>('contextMenuAnchor')
 
 const ShareDialogBtn = defineAsyncComponent(
   () =>
@@ -274,6 +272,7 @@ const router = useRouter()
 
 //const tmButton = useTemplateRef('tmButton')
 const showTaskMenu = ref(false)
+const contextMenuPosition = ref<{ x: number; y: number } | null>(null)
 const showShareDlg = ref(false)
 const showDownloadDlg = ref(false)
 const showBottomDebugClose = ref(false)
@@ -345,6 +344,52 @@ function onDebugPanelResize(size: { height: number }) {
 function copyRawConversation() {
   void copyToClipboard(props.rawConversationText)
 }
+
+const contextMenuAnchorStyle = computed(() =>
+  contextMenuPosition.value
+    ? {
+        left: `${contextMenuPosition.value.x}px`,
+        top: `${contextMenuPosition.value.y}px`,
+      }
+    : { display: 'none' },
+)
+
+const selectionIntersects = (target: EventTarget | null) => {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false
+  if (!(target instanceof Node)) return true
+  return Array.from({ length: selection.rangeCount }, (_, index) =>
+    selection.getRangeAt(index),
+  ).some((range) => range.intersectsNode(target))
+}
+
+const openTaskMenu = (position?: { x: number; y: number }) => {
+  const displayRect = contextMenuAnchor.value?.parentElement?.getBoundingClientRect()
+  contextMenuPosition.value =
+    position && displayRect
+      ? { x: position.x - displayRect.left, y: position.y - displayRect.top }
+      : { x: 0, y: 0 }
+  showTaskMenu.value = false
+  void nextTick(() => {
+    showTaskMenu.value = true
+  })
+}
+
+const setTaskMenu = (open: boolean, position?: { x: number; y: number }) => {
+  if (open) {
+    openTaskMenu(position)
+    return
+  }
+  contextMenuPosition.value = null
+  showTaskMenu.value = false
+  taskMenu.value?.hide()
+}
+
+function onContextMenu(event: MouseEvent) {
+  if (selectionIntersects(event.target)) return
+  event.preventDefault()
+  openTaskMenu({ x: event.clientX, y: event.clientY })
+}
 </script>
 
 <style lang="sass">
@@ -368,6 +413,12 @@ function copyRawConversation() {
   position: relative
   display: flex
   flex-direction: column
+
+  .task-context-menu-anchor
+    position: absolute
+    width: 0
+    height: 0
+    pointer-events: none
 
   .task-menu-anchor
     position: sticky

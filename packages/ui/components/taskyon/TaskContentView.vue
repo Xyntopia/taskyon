@@ -10,6 +10,7 @@
         @iframe-ready="emit('iframe-ready', $event)"
         @if-longpress="emit('if-longpress', $event)"
         @if-click="emit('if-click', $event)"
+        @if-context-menu="emit('if-context-menu', $event)"
       />
       <div v-else class="task-content-view__raw">{{ task.content.data }}</div>
     </template>
@@ -59,6 +60,7 @@
       :use-iframe="useMarkdownIframe"
       @if-longpress="emit('if-longpress', $event)"
       @if-click="emit('if-click', $event)"
+      @if-context-menu="emit('if-context-menu', $event)"
     />
 
     <div v-else-if="task.content.type === 'return'" class="task-content-view__text">
@@ -128,6 +130,7 @@ const emit = defineEmits<{
   (event: 'iframe-ready', element: HTMLIFrameElement): void
   (event: 'if-longpress', position: { x: number; y: number }): void
   (event: 'if-click', position: { x: number; y: number }): void
+  (event: 'if-context-menu', position: { x: number; y: number }): void
   (event: 'open-variable', taskId: string): void
 }>()
 

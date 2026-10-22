@@ -50,6 +50,7 @@ const emit = defineEmits<{
   (e: 'iframe-ready', el: HTMLIFrameElement): void
   (e: 'ifLongpress', pos: { x: number; y: number }): void
   (e: 'ifClick', pos: { x: number; y: number }): void
+  (e: 'ifContextMenu', pos: { x: number; y: number }): void
 }>()
 
 function handleMarkdownClick(event: MouseEvent) {
@@ -253,6 +254,14 @@ function handleMessage(event: MessageEvent) {
 
   if (event.data?.type === 'iframeClick') {
     emit('ifClick', { x: event.data.x, y: event.data.y })
+  }
+
+  if (event.data?.type === 'contextmenu') {
+    const rect = iframeRef.value.getBoundingClientRect()
+    emit('ifContextMenu', {
+      x: rect.left + Number(event.data.x),
+      y: rect.top + Number(event.data.y),
+    })
   }
 
   if (event.data?.type === 'linkClick') {

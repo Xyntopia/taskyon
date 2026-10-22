@@ -196,6 +196,7 @@
           @iframe-ready="(el: HTMLIFrameElement) => onIframeMessage(el, task.id)"
           @if-longpress="showTaskMenu(true)"
           @if-click="showTaskMenu(false)"
+          @if-context-menu="(position) => showTaskMenu(true, position)"
         />
       </template>
     </TaskField>
@@ -234,6 +235,7 @@
           :show-source-task-hint="sourceTaskId !== undefined"
           @if-longpress="showTaskMenu(true)"
           @if-click="showTaskMenu(false)"
+          @if-context-menu="(position) => showTaskMenu(true, position)"
         />
       </template>
     </TaskField>
