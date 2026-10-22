@@ -146,6 +146,8 @@ Common commands:
 - `yarn test` runs the file-size preflight; browser E2E and CLI diagnostic entry points include it
   as well.
 - `yarn test:e2e` runs the Playwright browser E2E suite against local development.
+- `yarn test:e2e:cross-browser` runs the curated browser-sensitive regression specs in Chromium
+  and Firefox. Install Firefox once with `npx playwright install firefox`.
 - `yarn test:e2e:production` builds and tests the local production SPA.
 - `yarn lint` runs typechecking and ESLint.
 - `yarn format:file <path...>` formats specific files.

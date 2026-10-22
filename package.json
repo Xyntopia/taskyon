@@ -101,6 +101,7 @@
     "test:e2e:production": "yarn check:file-sizes && yarn build:app && node scripts/write-build-metadata.mjs dist/spa/build-metadata.json \"$(git rev-parse --verify HEAD)\" \"$(date -u +'%Y-%m-%dT%H:%M:%SZ')\" && PLAYWRIGHT_EXPECT_BUILD_METADATA=1 PLAYWRIGHT_LOCAL_PRODUCTION=1 PLAYWRIGHT_PORT=4000 playwright test",
     "test:e2e:online": "yarn check:file-sizes && PLAYWRIGHT_REQUIRE_ONLINE=1 playwright test",
     "test:e2e:headed": "yarn check:file-sizes && playwright test --headed",
+    "test:e2e:cross-browser": "yarn check:file-sizes && PLAYWRIGHT_BROWSERS=chromium,firefox playwright test test/playwright/e2e/context-menu.spec.ts",
     "test:e2e:discover": "yarn check:file-sizes && playwright test --list",
     "test:e2e:ui": "yarn check:file-sizes && yarn test:e2e:discover && playwright test --ui",
     "serve:spa": "node scripts/serve-spa.mjs",

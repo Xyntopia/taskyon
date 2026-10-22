@@ -4,9 +4,29 @@ const port = Number(process.env.PLAYWRIGHT_PORT ?? 9000)
 const localProduction = process.env.PLAYWRIGHT_LOCAL_PRODUCTION === '1'
 const baseURL =
   process.env.PLAYWRIGHT_BASE_URL ?? `${localProduction ? 'http' : 'https'}://127.0.0.1:${port}`
-const browserName = process.env.PLAYWRIGHT_BROWSER === 'firefox' ? 'firefox' : 'chromium'
-const desktopDevice =
-  browserName === 'firefox' ? devices['Desktop Firefox'] : devices['Desktop Chrome']
+const supportedBrowsers = ['chromium', 'firefox'] as const
+type BrowserName = (typeof supportedBrowsers)[number]
+
+const browserNames = (
+  process.env.PLAYWRIGHT_BROWSERS ??
+  process.env.PLAYWRIGHT_BROWSER ??
+  'chromium'
+)
+  .split(',')
+  .map((name) => name.trim())
+  .filter(Boolean)
+  .map((name) => {
+    if (!supportedBrowsers.includes(name as BrowserName)) {
+      throw new Error(
+        `Unsupported Playwright browser "${name}". Use: ${supportedBrowsers.join(', ')}.`,
+      )
+    }
+    return name as BrowserName
+  })
+
+if (browserNames.length === 0) {
+  throw new Error(`PLAYWRIGHT_BROWSERS must list: ${supportedBrowsers.join(', ')}.`)
+}
 const startServer = process.env.PLAYWRIGHT_SKIP_WEB_SERVER !== '1'
 const webServer = startServer
   ? {
@@ -39,10 +59,8 @@ export default defineConfig({
     ignoreHTTPSErrors: true,
   },
   ...(webServer ? { webServer } : {}),
-  projects: [
-    {
-      name: browserName,
-      use: { ...desktopDevice },
-    },
-  ],
+  projects: browserNames.map((name) => ({
+    name,
+    use: { ...(name === 'firefox' ? devices['Desktop Firefox'] : devices['Desktop Chrome']) },
+  })),
 })
