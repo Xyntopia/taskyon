@@ -158,6 +158,7 @@ invocation fetch capability and host network permission; host response and redir
             id: storageObjectId,
             data: bytesFromBase64(content),
             contentType: mimeType,
+            provenance: { origin: 'tool-save' },
           })
           result = { success: true, namespace: storageNamespace, id: storageObjectId, metadata }
           break
@@ -193,6 +194,7 @@ invocation fetch capability and host network permission; host response and redir
               namespace: storageNamespace,
               id: objectId,
               contentType,
+              provenance: { origin: 'download', sourceUrl: url },
             },
             response.body,
             { ...(validatePrefix ? { validatePrefix } : {}), signal: context.stopSignal },

@@ -1,4 +1,4 @@
-import type { TaskyonStorageClient } from './storageProtocol'
+import type { BlobProvenance, TaskyonStorageClient } from './storageProtocol'
 
 /** Publish only a complete stream; keep at most one network chunk and one wire chunk in flight. */
 export async function writeBlobStream(
@@ -6,7 +6,7 @@ export async function writeBlobStream(
     TaskyonStorageClient,
     'beginBlobWrite' | 'writeBlobChunk' | 'commitBlobWrite' | 'abortBlobWrite'
   >,
-  target: { namespace: string; id: string; contentType?: string },
+  target: { namespace: string; id: string; contentType?: string; provenance?: BlobProvenance },
   body: ReadableStream<Uint8Array<ArrayBuffer>>,
   options: { validatePrefix?: (prefix: Uint8Array) => void; signal?: AbortSignal } = {},
 ) {
@@ -42,7 +42,12 @@ export async function writeBlobStream(
     }
     options.validatePrefix?.(prefix)
     options.signal?.throwIfAborted()
-    return await client.commitBlobWrite({ ...target, writeId, expectedSize: size })
+    return await client.commitBlobWrite({
+      namespace: target.namespace,
+      id: target.id,
+      writeId,
+      expectedSize: size,
+    })
   } catch (error) {
     await reader.cancel(error).catch(() => undefined)
     if (writeId) await client.abortBlobWrite({ ...target, writeId }).catch(() => undefined)

@@ -435,6 +435,19 @@ const renderSourceAnnotationLines = (annotations: readonly Annotation[] | undefi
       const details = [metadata, annotation.content].filter(Boolean).join('\n  ')
       return [`- ${label}${details ? `\n  ${details}` : ''}`]
     }
+    if (annotation.type === 'storage-file') {
+      const label = annotation.name ?? annotation.id
+      const metadata = [
+        `namespace "${annotation.namespace}"`,
+        `id "${annotation.id}"`,
+        annotation.mediaType,
+        annotation.size === undefined ? undefined : `${annotation.size} bytes`,
+      ]
+        .filter((detail): detail is string => detail !== undefined)
+        .join(', ')
+      const original = annotation.sourceUrl ? `\n  original: ${annotation.sourceUrl}` : ''
+      return [`- Stored file ${label} (${metadata})${original}`]
+    }
     return []
   }) ?? []
 

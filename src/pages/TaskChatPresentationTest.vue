@@ -31,6 +31,11 @@
         <TaskWidget :task="task" :previous-task="previousTask" :next-task="nextTask" />
       </template>
     </TaskChatThread>
+    <TaskChatThread v-if="fixtureReady" :tasks="[storedFileAnswer]">
+      <template #task="{ task, previousTask, nextTask }">
+        <TaskWidget :task="task" :previous-task="previousTask" :next-task="nextTask" />
+      </template>
+    </TaskChatThread>
   </q-page>
 </template>
 
@@ -135,6 +140,25 @@ const richMessage: TaskNode = {
   content: { type: 'message', data: 'Rich HTML message with <b>bold</b> text.' },
 }
 
+const storedFileAnswer: TaskNode = {
+  id: 'stored-file-answer',
+  role: 'assistant',
+  content: {
+    type: 'message',
+    data: 'Saved the menu as `presentation-test.pdf`.',
+    ann: [
+      {
+        type: 'storage-file',
+        namespace: 'tool-files',
+        id: 'presentation-test.pdf',
+        mediaType: 'application/pdf',
+        size: 26,
+        sourceUrl: 'https://example.test/presentation-test.pdf',
+      },
+    ],
+  },
+}
+
 const taskyon = useTaskyonStore()
 const fixtureReady = ref(false)
 
@@ -144,6 +168,10 @@ onMounted(async () => {
     id: 'presentation-test.pdf',
     data: new TextEncoder().encode('%PDF-1.7\nTaskyon fixture'),
     contentType: 'application/pdf',
+    provenance: {
+      origin: 'download',
+      sourceUrl: 'https://example.test/presentation-test.pdf',
+    },
   })
   await taskyon.storageClient.set({
     namespace: 'workspace-files/v1',

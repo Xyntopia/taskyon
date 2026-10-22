@@ -2574,6 +2574,101 @@ export const testChatCompletionToolRunsProviderStreamAndEmitsMetadata = async ()
 testChatCompletionToolRunsProviderStreamAndEmitsMetadata.description =
   'Runs a provider stream through the chatCompletion tool and emits task metadata.'
 
+export const testChatCompletionAttachesStoredFileSourcesToTheAnswer = async () => {
+  const userTask = task({
+    id: 'storage-source-user',
+    role: 'user',
+    content: { type: 'message', data: 'Download the menu.' },
+  })
+  const storageCall = task({
+    id: 'storage-source-call',
+    role: 'function',
+    priorID: userTask.id,
+    content: { type: 'functioncall', data: { name: 'storage', arguments: {} } },
+  })
+  const storageResult = task({
+    id: 'storage-source-result',
+    role: 'system',
+    priorID: storageCall.id,
+    content: {
+      type: 'toolresult',
+      data: {
+        success: true,
+        namespace: 'tool-files',
+        id: 'menu.pdf',
+        url: 'https://example.com/menu.pdf',
+        metadata: { size: 42, contentType: 'application/pdf', sha256: 'sha256:abc' },
+      },
+    },
+  })
+  const currentTask = task({
+    id: 'storage-source-completion',
+    role: 'function',
+    priorID: storageResult.id,
+    content: { type: 'functioncall', data: { name: 'chatCompletion', arguments: {} } },
+  })
+  const testFetch: typeof fetch = () =>
+    Promise.resolve(
+      new Response(
+        'data: {"id":"test","choices":[{"index":0,"delta":{"content":"Saved as `menu.pdf`."},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    )
+  const { chatCompletion } = createChatCompletionTool(
+    {
+      provider: 'local',
+      name: 'local',
+      baseURL: 'https://provider.example',
+      streamSupport: true,
+      routes: { chatCompletion: '/v1/', models: '/v1/models' },
+    },
+    {
+      getTaskChain: () => Promise.resolve([]),
+      getTaskChainSelection: () =>
+        Promise.resolve({
+          tasks: [userTask, storageCall, storageResult],
+          includedSubtaskTaskIds: [],
+        }),
+      getTask: () => Promise.resolve(null),
+      listToolDefinitions: () => Promise.resolve({}),
+      fetch: testFetch,
+    },
+  )
+
+  const result = await chatCompletion.function(
+    { model: 'test-model' },
+    {
+      getExecutionTaskChain: () =>
+        Promise.resolve([userTask, storageCall, storageResult, currentTask]),
+      createSubtasksResult,
+      getSecret: () => Promise.resolve('synthetic-provider-key'),
+      setSecret: () => Promise.resolve(),
+      stopSignal: new AbortController().signal,
+      toolId: 'chat-completion-storage-source-test',
+    } satisfies toolContext,
+  )
+
+  const drafts = (result as { taskChainList: partialTaskDraft[][] }).taskChainList.flat()
+  const assistant = drafts.find((draft) => draft.role === 'assistant')
+  assert(
+    assistant?.content.type === 'message',
+    'Expected the provider answer as an assistant message',
+  )
+  const annotations = 'ann' in assistant.content ? assistant.content.ann : undefined
+  const storedFile = annotations?.find((annotation) => annotation.type === 'storage-file')
+  assert(storedFile?.type === 'storage-file', 'Expected a stored-file annotation on the answer')
+  assert(storedFile.namespace === 'tool-files', 'Expected the storage namespace')
+  assert(storedFile.id === 'menu.pdf', 'Expected the storage object id')
+  assert(storedFile.mediaType === 'application/pdf', 'Expected the stored media type')
+  assert(storedFile.size === 42, 'Expected the stored size')
+  assert(storedFile.sourceUrl === 'https://example.com/menu.pdf', 'Expected the download URL')
+
+  return { success: true }
+}
+
+testChatCompletionAttachesStoredFileSourcesToTheAnswer.description =
+  'Attaches storage tool results from the task chain as stored-file annotations on the answer.'
+
 export const testTaskContractMessagesRenderOnceWithoutHiddenEntryNodeArguments = async () => {
   const agentInstructions = 'Act as a cybersecurity reviewer.'
   const objective = 'Audit the authentication boundary.'

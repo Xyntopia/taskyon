@@ -5,7 +5,7 @@
         v-if="markdownEnabled"
         no-line-numbers
         :src="task.content.data"
-        :extensions="markdownExtensions"
+        :extensions="messageMarkdownExtensions"
         :use-iframe="useMarkdownIframe"
         @iframe-ready="emit('iframe-ready', $event)"
         @if-longpress="emit('if-longpress', $event)"
@@ -103,6 +103,10 @@ import TaskFileBrowser from './TaskFileBrowser.vue'
 import TaskSourcesList from './TaskSourcesList.vue'
 import TaskVariableHint from './TaskVariableHint.vue'
 import TyMarkdown from '../tyMarkdown.vue'
+import {
+  createStorageFileLinkExtension,
+  type StorageFileAnnotation,
+} from './storageFileLinks'
 
 const props = withDefaults(
   defineProps<{
@@ -160,6 +164,19 @@ const functionArgumentSegments = computed(() => {
 const annotations = computed(() =>
   'ann' in props.task.content ? (props.task.content.ann ?? []) : [],
 )
+
+const storageFiles = computed(() =>
+  annotations.value.filter(
+    (annotation): annotation is StorageFileAnnotation => annotation.type === 'storage-file',
+  ),
+)
+
+const messageMarkdownExtensions = computed<MarkdownExtension[]>(() => [
+  ...props.markdownExtensions,
+  ...(storageFiles.value.length > 0
+    ? [createStorageFileLinkExtension(storageFiles.value)]
+    : []),
+])
 
 const structuredContent = computed<Record<string, unknown> | undefined>(() => {
   if (props.task.content.type !== 'toolresult' && props.task.content.type !== 'structured') {

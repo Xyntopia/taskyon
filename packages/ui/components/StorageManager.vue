@@ -50,8 +50,23 @@
                 <q-icon :name="node.entry ? matDescription : matFolder" />
                 <div class="q-ml-sm">
                   <div>{{ node.label }}</div>
-                  <div v-if="node.entry" class="text-caption text-grey-7">
+                  <div v-if="node.entry" class="text-caption text-grey-7 row items-center">
                     {{ node.entry.caption }}
+                    <q-icon
+                      v-if="node.entry.provenance?.origin === 'download'"
+                      :name="matFileDownload"
+                      size="1rem"
+                      class="q-ml-xs text-primary"
+                      data-cy="storage-download-provenance"
+                    >
+                      <q-tooltip>
+                        {{
+                          node.entry.provenance.sourceUrl
+                            ? `Downloaded from ${node.entry.provenance.sourceUrl}`
+                            : 'Downloaded file'
+                        }}
+                      </q-tooltip>
+                    </q-icon>
                   </div>
                 </div>
                 <q-space />
@@ -112,6 +127,7 @@ import {
   matDelete,
   matDescription,
   matDownload,
+  matFileDownload,
   matFolder,
   matRefresh,
   matUpload,
@@ -119,7 +135,11 @@ import {
 import type { TaskyonStorageClient } from '@taskyon/taskyon'
 import { computed, onMounted, ref } from 'vue'
 
-type LogicalEntry = { id: string; caption: string }
+type LogicalEntry = {
+  id: string
+  caption: string
+  provenance?: { origin: string; sourceUrl?: string }
+}
 type LogicalNode = {
   label: string
   path: string
@@ -225,6 +245,7 @@ const refreshLogical = async () => {
       : (await storageClient.listBlobs({ namespace: selectedNamespace })).blobs.map((blob) => ({
           id: blob.id,
           caption: `${formatSize(blob.size)} · ${blob.contentType ?? 'application/octet-stream'}`,
+          ...(blob.provenance ? { provenance: blob.provenance } : {}),
         }))
 }
 
@@ -266,6 +287,7 @@ const uploadFiles = async (event: Event) => {
       id,
       data: new Uint8Array(await file.arrayBuffer()),
       contentType: file.type || 'application/octet-stream',
+      provenance: { origin: 'upload' },
     })
   }
   input.value = ''

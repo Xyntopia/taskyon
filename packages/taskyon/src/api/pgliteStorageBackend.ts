@@ -5,6 +5,7 @@ import type {
   StorageBlobMetadata,
   StorageRecordBackend,
 } from './storageProtocol'
+import { blobProvenance } from './storageProtocol'
 import {
   mergeStorageRecord,
   storageQueryMatches,
@@ -19,8 +20,15 @@ type BlobRow = {
   content_type: string | null
   modified_at: string
   sha256: string | null
+  provenance: unknown
 }
-type WriteRow = { id: string; object_oid: number | null; size: number; content_type: string | null }
+type WriteRow = {
+  id: string
+  object_oid: number | null
+  size: number
+  content_type: string | null
+  provenance: unknown
+}
 type PgLiteTransaction = Parameters<Parameters<TyPGDB['transaction']>[0]>[0]
 type Queryable = TyPGDB | PgLiteTransaction
 
@@ -58,9 +66,11 @@ const initialize = (database: TyPGDB) => {
     );
     ALTER TABLE taskyon_storage_blobs ADD COLUMN IF NOT EXISTS object_oid OID;
     ALTER TABLE taskyon_storage_blobs ALTER COLUMN data DROP NOT NULL;
+    ALTER TABLE taskyon_storage_blobs ADD COLUMN IF NOT EXISTS provenance JSONB;
     ALTER TABLE taskyon_storage_blob_writes ADD COLUMN IF NOT EXISTS object_oid OID;
     ALTER TABLE taskyon_storage_blob_writes ADD COLUMN IF NOT EXISTS size BIGINT;
     ALTER TABLE taskyon_storage_blob_writes ALTER COLUMN data DROP NOT NULL;
+    ALTER TABLE taskyon_storage_blob_writes ADD COLUMN IF NOT EXISTS provenance JSONB;
   `,
     )
     .then(() => undefined)
@@ -72,13 +82,17 @@ const idParts = (id: string | number) => ({ idType: typeof id, idText: String(id
 const rowId = ({ id_type, id_text }: RecordRow) =>
   id_type === 'number' ? Number(id_text) : id_text
 
-const toMetadata = (row: BlobRow): StorageBlobMetadata => ({
-  id: row.id,
-  size: Number(row.size),
-  modifiedAt: row.modified_at,
-  ...(row.content_type ? { contentType: row.content_type } : {}),
-  ...(row.sha256 ? { sha256: row.sha256 } : {}),
-})
+const toMetadata = (row: BlobRow): StorageBlobMetadata => {
+  const provenance = blobProvenance.safeParse(row.provenance)
+  return {
+    id: row.id,
+    size: Number(row.size),
+    modifiedAt: row.modified_at,
+    ...(row.content_type ? { contentType: row.content_type } : {}),
+    ...(row.sha256 ? { sha256: row.sha256 } : {}),
+    ...(provenance.success ? { provenance: provenance.data } : {}),
+  }
+}
 
 const sha256 = (data: Uint8Array<ArrayBuffer>) => {
   const hasher = createSha256Hasher()
@@ -219,7 +233,7 @@ export const createPgLiteStorageBlobBackend = async (
   const getRow = async (id: string, db: Queryable = database) =>
     (
       await db.query<BlobRow>(
-        `SELECT id, object_oid, size, content_type, modified_at, sha256
+        `SELECT id, object_oid, size, content_type, modified_at, sha256, provenance
        FROM taskyon_storage_blobs WHERE namespace=$1 AND id=$2`,
         [namespace, id],
       )
@@ -249,17 +263,18 @@ export const createPgLiteStorageBlobBackend = async (
     size: number,
     contentType?: string,
     hash?: string,
+    provenance?: StorageBlobMetadata['provenance'],
   ) => {
     const previous = await getRow(id, db)
     const modifiedAt = new Date().toISOString()
     await db.query(
       `INSERT INTO taskyon_storage_blobs
-       (namespace,id,data,object_oid,size,content_type,modified_at,sha256)
-       VALUES ($1,$2,NULL,$3,$4,$5,$6,$7)
+       (namespace,id,data,object_oid,size,content_type,modified_at,sha256,provenance)
+       VALUES ($1,$2,NULL,$3,$4,$5,$6,$7,$8)
        ON CONFLICT(namespace,id) DO UPDATE SET data=NULL,object_oid=EXCLUDED.object_oid,
        size=EXCLUDED.size,content_type=EXCLUDED.content_type,
-       modified_at=EXCLUDED.modified_at,sha256=EXCLUDED.sha256`,
-      [namespace, id, oid, size, contentType ?? null, modifiedAt, hash ?? null],
+       modified_at=EXCLUDED.modified_at,sha256=EXCLUDED.sha256,provenance=EXCLUDED.provenance`,
+      [namespace, id, oid, size, contentType ?? null, modifiedAt, hash ?? null, provenance ?? null],
     )
     if (previous?.object_oid !== oid) await unlink(db, previous?.object_oid)
     return {
@@ -268,12 +283,13 @@ export const createPgLiteStorageBlobBackend = async (
       modifiedAt,
       ...(contentType ? { contentType } : {}),
       ...(hash ? { sha256: hash } : {}),
+      ...(provenance ? { provenance } : {}),
     }
   }
   const getWrite = async (db: Queryable, id: string, writeId: string) => {
     const row = (
       await db.query<WriteRow>(
-        `SELECT id,object_oid,COALESCE(size,octet_length(data)) AS size,content_type
+        `SELECT id,object_oid,COALESCE(size,octet_length(data)) AS size,content_type,provenance
        FROM taskyon_storage_blob_writes WHERE namespace=$1 AND write_id=$2 AND id=$3`,
         [namespace, writeId, id],
       )
@@ -289,7 +305,7 @@ export const createPgLiteStorageBlobBackend = async (
        object_oid=COALESCE(object_oid,lo_from_bytea(0,data)),
        size=COALESCE(size,octet_length(data)),data=NULL
        WHERE namespace=$1 AND write_id=$2 AND id=$3
-       RETURNING id,object_oid,size,content_type`,
+       RETURNING id,object_oid,size,content_type,provenance`,
         [namespace, writeId, id],
       )
     ).rows[0]!
@@ -305,7 +321,7 @@ export const createPgLiteStorageBlobBackend = async (
       )
       return { data: result.rows[0]!.data, metadata: toMetadata(row) }
     },
-    set: async (id, data, contentType) =>
+    set: async (id, data, contentType, provenance) =>
       database.transaction(async (db) => {
         const oid = await allocate(db)
         for (let offset = 0; offset < data.length; offset += 1024 * 1024)
@@ -314,7 +330,7 @@ export const createPgLiteStorageBlobBackend = async (
             offset,
             data.subarray(offset, offset + 1024 * 1024),
           ])
-        return publish(db, id, oid, data.length, contentType, sha256(data))
+        return publish(db, id, oid, data.length, contentType, sha256(data), provenance)
       }),
     stat: async (id) => {
       const row = await getRow(id)
@@ -323,7 +339,7 @@ export const createPgLiteStorageBlobBackend = async (
     list: async () =>
       (
         await database.query<BlobRow>(
-          `SELECT id,object_oid,size,content_type,modified_at,sha256
+          `SELECT id,object_oid,size,content_type,modified_at,sha256,provenance
        FROM taskyon_storage_blobs WHERE namespace=$1`,
           [namespace],
         )
@@ -346,7 +362,7 @@ export const createPgLiteStorageBlobBackend = async (
           eof: offset + data.length >= Number(row.size),
         }
       }),
-    append: async (id, data, expectedSize, contentType) =>
+    append: async (id, data, expectedSize, contentType, provenance) =>
       database.transaction(async (db) => {
         const row = await getRow(id, db)
         const size = Number(row?.size ?? 0)
@@ -362,22 +378,25 @@ export const createPgLiteStorageBlobBackend = async (
               ).rows[0]!.oid
             : await allocate(db))
         await db.query('SELECT lo_put($1::oid,$2::bigint,$3::bytea)', [oid, size, data])
+        const origin = blobProvenance.safeParse(row?.provenance)
         return publish(
           db,
           id,
           oid,
           size + data.length,
           contentType ?? row?.content_type ?? undefined,
+          undefined,
+          provenance ?? (origin.success ? origin.data : undefined),
         )
       }),
-    beginWrite: async (id, contentType) =>
+    beginWrite: async (id, contentType, provenance) =>
       database.transaction(async (db) => {
         const writeId = crypto.randomUUID()
         const oid = await allocate(db)
         await db.query(
           `INSERT INTO taskyon_storage_blob_writes
-        (write_id,namespace,id,object_oid,size,content_type) VALUES ($1,$2,$3,$4,0,$5)`,
-          [writeId, namespace, id, oid, contentType ?? null],
+        (write_id,namespace,id,object_oid,size,content_type,provenance) VALUES ($1,$2,$3,$4,0,$5,$6)`,
+          [writeId, namespace, id, oid, contentType ?? null, provenance ?? null],
         )
         return { writeId }
       }),
@@ -410,6 +429,7 @@ export const createPgLiteStorageBlobBackend = async (
         const hash = await digest(db, row.object_oid, size)
         if (expectedSha256 && hash !== expectedSha256)
           throw new Error(`Blob checksum mismatch for "${id}".`)
+        const origin = blobProvenance.safeParse(row.provenance)
         const metadata = await publish(
           db,
           targetId ?? id,
@@ -417,6 +437,7 @@ export const createPgLiteStorageBlobBackend = async (
           size,
           row.content_type ?? undefined,
           hash,
+          origin.success ? origin.data : undefined,
         )
         await db.query(
           'DELETE FROM taskyon_storage_blob_writes WHERE write_id=$1 AND namespace=$2',

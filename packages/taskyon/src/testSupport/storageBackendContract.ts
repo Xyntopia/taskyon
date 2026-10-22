@@ -71,11 +71,22 @@ export const runStorageBackendContract = async (provider: StorageBackendProvider
       id: 'value.txt',
       data: first,
       contentType: 'text/plain',
+      provenance: { origin: 'download', sourceUrl: 'https://example.test/value.txt' },
     })
     assert(firstMetadata.contentType === 'text/plain', 'Persist blob media type')
     assert(
+      firstMetadata.provenance?.origin === 'download' &&
+        firstMetadata.provenance.sourceUrl === 'https://example.test/value.txt',
+      'Persist blob provenance',
+    )
+    assert(
       (await storage.statBlob({ namespace, id: 'value.txt' }))?.contentType === 'text/plain',
       'Reload blob media type',
+    )
+    assert(
+      (await storage.statBlob({ namespace, id: 'value.txt' }))?.provenance?.sourceUrl ===
+        'https://example.test/value.txt',
+      'Reload blob provenance',
     )
     await storage.appendBlob({
       namespace,
@@ -94,20 +105,32 @@ export const runStorageBackendContract = async (provider: StorageBackendProvider
       (await storage.statBlob({ namespace, id: 'value.txt' }))?.contentType === 'text/plain',
       'Preserve blob media type after append',
     )
+    assert(
+      (await storage.statBlob({ namespace, id: 'value.txt' }))?.provenance?.origin === 'download',
+      'Preserve blob provenance after append',
+    )
 
     const staged = encoder.encode('staged-value')
     const hasher = createSha256Hasher()
     hasher.update(staged)
-    const { writeId } = await storage.beginBlobWrite({ namespace, id: 'staged.bin' })
+    const { writeId } = await storage.beginBlobWrite({
+      namespace,
+      id: 'staged.bin',
+      provenance: { origin: 'tool-save' },
+    })
     await storage.writeBlobChunk({ namespace, id: 'staged.bin', writeId, offset: 0, data: staged })
     assert((await storage.statBlob({ namespace, id: 'staged.bin' })) === null, 'Hide staged blob')
-    await storage.commitBlobWrite({
+    const stagedMetadata = await storage.commitBlobWrite({
       namespace,
       id: 'staged.bin',
       writeId,
       expectedSize: staged.byteLength,
       expectedSha256: hasher.digest(),
     })
+    assert(
+      stagedMetadata.provenance?.origin === 'tool-save',
+      'Persist staged blob provenance',
+    )
     assert((await storage.listBlobs({ namespace })).blobs.length === 2, 'List committed blobs')
     const pending = await storage.beginBlobWrite({ namespace, id: 'value.txt' })
     const replacement = encoder.encode('new-value')

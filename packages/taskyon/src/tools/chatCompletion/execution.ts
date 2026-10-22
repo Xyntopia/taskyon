@@ -38,6 +38,7 @@ import {
   validateStructuredResponse,
 } from './response'
 import { cleanupRawStreamOutput, runChatCompletionStream } from './streamResult'
+import { collectStorageFileAnnotations } from './storageSources'
 import {
   isChatCompletionResponseTracingEnabled,
   isChatCompletionTracingEnabled,
@@ -78,9 +79,10 @@ const normalizePromptInjections = (value: unknown): PromptInjection[] =>
 
 const appendAnnotations = (
   annotations: readonly Annotation[] | undefined,
-  extra: Annotation | undefined,
+  extra: Annotation | Annotation[] | undefined,
 ): Annotation[] | undefined => {
-  const merged = [...(annotations ?? []), ...(extra ? [extra] : [])]
+  const extras = extra === undefined ? [] : Array.isArray(extra) ? extra : [extra]
+  const merged = [...(annotations ?? []), ...extras]
   return merged.length > 0 ? merged : undefined
 }
 
@@ -829,6 +831,7 @@ const buildStructuredChatCompletionResult = (
   output: Awaited<ReturnType<typeof streamText>['output']>,
   sources: Annotation[],
   providerSearch: Annotation | undefined,
+  storageSources: Annotation[],
 ): unknown => {
   const schema = run.request.schema
   if (!schema) throw new Error('Expected a structured output schema.')
@@ -840,7 +843,10 @@ const buildStructuredChatCompletionResult = (
     throw new Error('Schema needs to be an object!', { cause: schema })
   }
   const structResponse = validateStructuredResponse(parsedResponse.data, schema)
-  const annotations = appendAnnotations(sources, providerSearch)
+  const annotations = appendAnnotations(sources, [
+    ...storageSources,
+    ...(providerSearch ? [providerSearch] : []),
+  ])
   return run.context.createSubtasksResult([
     ...(parsedResponse.trailingText
       ? [
@@ -889,10 +895,11 @@ const buildToolCallDrafts = (
 const buildAnswerDrafts = (
   outcome: Extract<ReturnType<typeof interpretAssistantMessage>, { kind: 'answers' }>,
   providerSearch: Annotation | undefined,
+  storageSources: Annotation[],
 ): partialTaskDraft[] =>
   outcome.answers.flatMap<partialTaskDraft>((answer, index) => {
     const annotations = appendAnnotations(
-      answer.annotations,
+      index === 0 ? appendAnnotations(answer.annotations, storageSources) : answer.annotations,
       index === 0 ? providerSearch : undefined,
     )
     return [
@@ -917,6 +924,7 @@ const buildOutcomeChatCompletionResult = (
   res: Awaited<ReturnType<typeof streamText>['response']>,
   sources: Annotation[],
   providerSearch: Annotation | undefined,
+  storageSources: Annotation[],
 ): unknown => {
   if (!res.messages[0]) {
     throw new Error('The AI gave us an incomplete response!', { cause: completion })
@@ -940,7 +948,9 @@ const buildOutcomeChatCompletionResult = (
     case 'tool-calls':
       return run.context.createSubtasksResult([buildToolCallDrafts(outcome, providerSearch)])
     case 'answers':
-      return run.context.createSubtasksResult([buildAnswerDrafts(outcome, providerSearch)])
+      return run.context.createSubtasksResult([
+        buildAnswerDrafts(outcome, providerSearch, storageSources),
+      ])
     case 'empty':
       return run.context.createSubtasksResult([[]])
   }
@@ -961,10 +971,18 @@ const buildChatCompletionSuccessResult = async (
     res.messages,
     streamResult.providerWebSearch,
   )
+  const storageSources = collectStorageFileAnnotations(run.taskChain)
   if (run.request.schema) {
-    return buildStructuredChatCompletionResult(run, output, sources, providerSearch)
+    return buildStructuredChatCompletionResult(run, output, sources, providerSearch, storageSources)
   }
-  return buildOutcomeChatCompletionResult(run, completion, res, sources, providerSearch)
+  return buildOutcomeChatCompletionResult(
+    run,
+    completion,
+    res,
+    sources,
+    providerSearch,
+    storageSources,
+  )
 }
 
 export const createChatCompletionRunner = (deps: ChatCompletionRunnerDeps) => {

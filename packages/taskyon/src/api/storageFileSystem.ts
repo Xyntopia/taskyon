@@ -12,6 +12,7 @@ import {
   type StorageRecordFileAdapter,
 } from './storageRecordFileBackend'
 import type { StorageBlobBackend, StorageBlobMetadata } from './storageProtocol'
+import { blobProvenance } from './storageProtocol'
 
 export type StorageDirectoryEntry = {
   name: string
@@ -99,13 +100,18 @@ const serialMutex = () => {
 const blobMetadata = (
   id: string,
   info: { size: number; modifiedAtMs: number },
-  details: { contentType?: string | undefined; sha256?: string | undefined },
+  details: {
+    contentType?: string | undefined
+    sha256?: string | undefined
+    provenance?: StorageBlobMetadata['provenance']
+  },
 ): StorageBlobMetadata => ({
   id,
   size: info.size,
   modifiedAt: new Date(info.modifiedAtMs).toISOString(),
   ...(details.contentType ? { contentType: details.contentType } : {}),
   ...(details.sha256 ? { sha256: details.sha256 } : {}),
+  ...(details.provenance ? { provenance: details.provenance } : {}),
 })
 
 export const createFileSystemBlobStorageBackend = (
@@ -126,7 +132,11 @@ export const createFileSystemBlobStorageBackend = (
       const info = await fs.stat(blobLegacyPath(namespace, id))
       if (!info) return null
       const details = z
-        .object({ contentType: z.string().optional(), sha256: z.string().optional() })
+        .object({
+          contentType: z.string().optional(),
+          sha256: z.string().optional(),
+          provenance: blobProvenance.optional(),
+        })
         .safeParse(value)
       return {
         metadata: blobMetadata(id, info, details.success ? details.data : {}),

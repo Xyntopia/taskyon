@@ -21,6 +21,7 @@ import { createSha256Hasher, sha256HashBytes } from '@taskyon/common/modules/can
 import type { Port } from '@taskyon/common/modules/frpBus'
 import {
   createStorageProtocolServer,
+  type BlobProvenance,
   type StorageBlobBackend,
   type StorageBlobMetadata,
   type TaskyonStorageMessage,
@@ -122,7 +123,7 @@ const fileSha256 = async (path: string) => {
 const fileMetadata = async (
   path: string,
   id: string,
-  details?: { contentType?: string; sha256?: string },
+  details?: { contentType?: string; sha256?: string; provenance?: BlobProvenance },
 ): Promise<StorageBlobMetadata> => {
   const value = await stat(path)
   return {
@@ -131,6 +132,7 @@ const fileMetadata = async (
     modifiedAt: value.mtime.toISOString(),
     ...(details?.contentType ? { contentType: details.contentType } : {}),
     ...(details?.sha256 ? { sha256: details.sha256 } : {}),
+    ...(details?.provenance ? { provenance: details.provenance } : {}),
   }
 }
 
@@ -189,11 +191,18 @@ export const createCliFileBlobStorageBackend = (
           id?: string
           contentType?: string
           sha256?: string
+          provenance?: BlobProvenance
         },
     )) ?? {}
   const writeDetails = async (
     path: string,
-    details: { id?: string; generation?: string; contentType?: string; sha256?: string },
+    details: {
+      id?: string
+      generation?: string
+      contentType?: string
+      sha256?: string
+      provenance?: BlobProvenance
+    },
   ) => await writeJsonFile(path, details)
   const locked = <T>(operation: () => Promise<T>) => withDirectoryLock(lockDirectory, operation)
 
@@ -221,7 +230,7 @@ export const createCliFileBlobStorageBackend = (
   const publish = async (
     id: string,
     path: string,
-    details: { contentType?: string; sha256?: string },
+    details: { contentType?: string; sha256?: string; provenance?: BlobProvenance },
   ) => {
     const generation = randomUUID()
     const destination = generationPath(generation)
@@ -260,7 +269,7 @@ export const createCliFileBlobStorageBackend = (
           return { data, metadata: await fileMetadata(path, id, await visibleDetails(id, path)) }
         }),
       ),
-    set: async (id, data, contentType) =>
+    set: async (id, data, contentType, provenance) =>
       locked(async () => {
         const temporary = stagingPath(randomUUID())
         await mkdir(dirname(temporary), { recursive: true })
@@ -269,6 +278,7 @@ export const createCliFileBlobStorageBackend = (
           return await publish(id, temporary, {
             ...(contentType ? { contentType } : {}),
             sha256: sha256HashBytes(data),
+            ...(provenance ? { provenance } : {}),
           })
         } finally {
           await rm(temporary, { force: true }).catch(() => undefined)
@@ -310,7 +320,7 @@ export const createCliFileBlobStorageBackend = (
         await handle.close()
       }
     },
-    append: async (id, data, expectedSize, contentType) =>
+    append: async (id, data, expectedSize, contentType, provenance) =>
       locked(async () => {
         const path = await visiblePath(id)
         const size = (await missingAsNull(() => stat(path)))?.size ?? 0
@@ -325,12 +335,15 @@ export const createCliFileBlobStorageBackend = (
           return await publish(id, temporary, {
             contentType: contentType ?? previous.contentType,
             sha256: await fileSha256(temporary),
+            ...(provenance ?? previous.provenance
+              ? { provenance: provenance ?? previous.provenance }
+              : {}),
           })
         } finally {
           await rm(temporary, { force: true }).catch(() => undefined)
         }
       }),
-    beginWrite: async (id, contentType) => {
+    beginWrite: async (id, contentType, provenance) => {
       const writeId = randomUUID()
       const path = stagingPath(writeId)
       await mkdir(dirname(path), { recursive: true })
@@ -338,6 +351,7 @@ export const createCliFileBlobStorageBackend = (
       await writeDetails(stagingDetailsPath(writeId), {
         id,
         ...(contentType ? { contentType } : {}),
+        ...(provenance ? { provenance } : {}),
       })
       return { writeId }
     },
@@ -379,6 +393,7 @@ export const createCliFileBlobStorageBackend = (
         const details = {
           ...(stagedDetails.contentType ? { contentType: stagedDetails.contentType } : {}),
           sha256,
+          ...(stagedDetails.provenance ? { provenance: stagedDetails.provenance } : {}),
         }
         const metadata = await publish(publishedId, staged, details)
         await rm(stagingDetailsPath(writeId), { force: true }).catch(() => undefined)

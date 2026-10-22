@@ -93,6 +93,7 @@ test.describe('task chat presentation', () => {
     await expect(page.locator('[data-storage-object-id="presentation-test.pdf"]')).toHaveClass(
       /bg-blue-1/,
     )
+    await expect(page.locator('[data-cy="storage-download-provenance"]').first()).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Physical OPFS' })).toBeVisible()
   })
 
@@ -154,5 +155,27 @@ test.describe('task chat presentation', () => {
     await expect
       .poll(() => page.evaluate(() => sessionStorage.getItem('last-window-open-url')))
       .toBe('https://example.test/failed-download.pdf')
+  })
+
+  test('links stored-file sources to the file manager object', async ({ page }) => {
+    await page.goto('/task-chat-presentation-test')
+
+    const answer = page.locator('[data-task-id="stored-file-answer"]')
+    await expect(answer).toBeVisible()
+
+    const fileLink = answer.locator('a[href*="/storage?"]').first()
+    await expect(fileLink).toContainText('presentation-test.pdf')
+    await fileLink.click()
+    await expect(page).toHaveURL(
+      /\/storage\?namespace=tool-files&kind=blob&id=presentation-test.pdf/,
+    )
+    await expect(page.locator('[data-storage-object-id="presentation-test.pdf"]')).toHaveClass(
+      /bg-blue-1/,
+    )
+
+    await page.goBack()
+    await expect(answer).toBeVisible()
+    await answer.getByRole('button', { name: 'Sources' }).click()
+    await expect(page.getByText('tool-files · application/pdf · 26 bytes')).toBeVisible()
   })
 })

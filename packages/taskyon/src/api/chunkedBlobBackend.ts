@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createSha256Hasher } from '@taskyon/common/modules/canonicalHash'
-import { blobMetadata, type StorageBlobBackend } from './storageProtocol'
+import { blobMetadata, blobProvenance, type BlobProvenance, type StorageBlobBackend } from './storageProtocol'
 
 export const STORAGE_CHUNK_BYTES = 1024 * 1024
 export const blobGenerationSchema = z.object({
@@ -12,6 +12,7 @@ export const blobWriteGenerationSchema = z.object({
   generation: z.string().uuid(),
   size: blobMetadata.shape.size,
   contentType: blobMetadata.shape.contentType,
+  provenance: blobProvenance.optional(),
 })
 export type BlobGeneration = z.output<typeof blobGenerationSchema>
 export type BlobWriteGeneration = z.output<typeof blobWriteGenerationSchema>
@@ -116,6 +117,7 @@ async function commit(
     modifiedAt: new Date().toISOString(),
     sha256,
     ...(row.contentType ? { contentType: row.contentType } : {}),
+    ...(row.provenance ? { provenance: row.provenance } : {}),
   }
   await store.publish(targetId, { generation: row.generation, metadata })
   await store.removeWrite(writeId)
@@ -124,7 +126,7 @@ async function commit(
 }
 
 export function createChunkedBlobBackend(store: BlobChunkStore): StorageBlobBackend {
-  const beginWrite = (id: string, contentType?: string) =>
+  const beginWrite = (id: string, contentType?: string, provenance?: BlobProvenance) =>
     store.transaction(async (store) => {
       const writeId = crypto.randomUUID()
       await store.putWrite(writeId, {
@@ -132,6 +134,7 @@ export function createChunkedBlobBackend(store: BlobChunkStore): StorageBlobBack
         generation: crypto.randomUUID(),
         size: 0,
         ...(contentType ? { contentType } : {}),
+        ...(provenance ? { provenance } : {}),
       })
       return { writeId }
     })
@@ -177,8 +180,8 @@ export function createChunkedBlobBackend(store: BlobChunkStore): StorageBlobBack
     abortWrite,
     writeStatus: (id, writeId) =>
       store.transaction(async (store) => ({ size: (await requireWrite(store, id, writeId)).size })),
-    set: async (id, data, contentType) => {
-      const { writeId } = await beginWrite(id, contentType)
+    set: async (id, data, contentType, provenance) => {
+      const { writeId } = await beginWrite(id, contentType, provenance)
       try {
         await writeChunk(id, writeId, 0, data)
         return await commitWrite(id, writeId, data.length)
@@ -187,17 +190,19 @@ export function createChunkedBlobBackend(store: BlobChunkStore): StorageBlobBack
         throw error
       }
     },
-    append: (id, data, size, contentType) =>
+    append: (id, data, size, contentType, provenance) =>
       store.transaction(async (store) => {
         const previous = await store.get(id)
         if ((previous?.metadata.size ?? 0) !== size) throw new Error('Blob append offset mismatch')
         const writeId = crypto.randomUUID()
         const type = contentType ?? previous?.metadata.contentType
+        const origin = provenance ?? previous?.metadata.provenance
         let row: BlobWriteGeneration = {
           id,
           generation: crypto.randomUUID(),
           size: 0,
           ...(type ? { contentType: type } : {}),
+          ...(origin ? { provenance: origin } : {}),
         }
         await store.putWrite(writeId, row)
         try {

@@ -28,6 +28,21 @@ export const Annotation = z.union([
     })
     .partial()
     .required({ type: true }),
+  z
+    .object({
+      type: z.literal('storage-file').describe('Identifies a file stored in Taskyon storage.'),
+      namespace: z.string().describe('Storage namespace that owns the object.'),
+      id: z.string().describe('Opaque storage object id within the namespace.'),
+      name: z.string().optional().describe('File name presented for the stored object.'),
+      mediaType: z.string().optional().describe('Stored media type.'),
+      size: z.number().int().nonnegative().optional().describe('Stored size in bytes.'),
+      sha256: z.string().optional().describe('Stored content hash when available.'),
+      sourceUrl: z
+        .string()
+        .optional()
+        .describe('Original download URL kept separate from the stored object.'),
+    })
+    .describe('A stored Taskyon object referenced by an answer.'),
   z.object({
     type: z
       .literal('web-search')

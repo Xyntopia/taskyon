@@ -163,12 +163,24 @@ const blobBytes = z.instanceof(Uint8Array<ArrayBuffer>) as z.ZodType<Uint8Array<
 const blobChunk = blobBytes.refine((data) => data.byteLength <= 1024 * 1024, {
   message: 'Blob chunks must not exceed 1 MiB.',
 })
+export const blobProvenance = z.object({
+  origin: z
+    .enum(['download', 'upload', 'tool-save'])
+    .describe('How the object entered Taskyon storage.'),
+  sourceUrl: z
+    .string()
+    .optional()
+    .describe('Original source URL for downloaded objects.'),
+})
+export type BlobProvenance = z.output<typeof blobProvenance>
+
 export const blobMetadata = z.object({
   id: blobId,
   size: z.number().int().nonnegative(),
   contentType: z.string().optional(),
   modifiedAt: z.string(),
   sha256: z.string().optional(),
+  provenance: blobProvenance.optional(),
 })
 
 const taskyonStorageBlobProtocol = defineFrpServiceProtocol({
@@ -185,6 +197,7 @@ const taskyonStorageBlobProtocol = defineFrpServiceProtocol({
         id: blobId,
         data: blobBytes,
         contentType: z.string().optional(),
+        provenance: blobProvenance.optional(),
         ...storagePolicy,
       }),
       response: blobMetadata,
@@ -222,6 +235,7 @@ const taskyonStorageBlobProtocol = defineFrpServiceProtocol({
         data: blobChunk,
         expectedSize: z.number().int().nonnegative(),
         contentType: z.string().optional(),
+        provenance: blobProvenance.optional(),
         ...storagePolicy,
       }),
       response: blobMetadata,
@@ -231,6 +245,7 @@ const taskyonStorageBlobProtocol = defineFrpServiceProtocol({
         namespace: storageNamespace,
         id: blobId,
         contentType: z.string().optional(),
+        provenance: blobProvenance.optional(),
         ...storagePolicy,
       }),
       response: z.object({ writeId: z.string() }),
@@ -528,6 +543,7 @@ export const createStorageClient = (
       id: string
       data: Uint8Array<ArrayBuffer>
       contentType?: string
+      provenance?: BlobProvenance
     }) => storage.blobs.set({ ...request, ...blobLocation(request.namespace) }),
     statBlob: (request: { namespace: string; id: string }) =>
       storage.blobs.stat({ ...blobLocation(request.namespace), id: request.id }),
@@ -541,9 +557,14 @@ export const createStorageClient = (
       data: Uint8Array<ArrayBuffer>
       expectedSize: number
       contentType?: string
+      provenance?: BlobProvenance
     }) => storage.blobs.append({ ...request, ...blobLocation(request.namespace) }),
-    beginBlobWrite: (request: { namespace: string; id: string; contentType?: string }) =>
-      storage.blobs.beginWrite({ ...request, ...blobLocation(request.namespace) }),
+    beginBlobWrite: (request: {
+      namespace: string
+      id: string
+      contentType?: string
+      provenance?: BlobProvenance
+    }) => storage.blobs.beginWrite({ ...request, ...blobLocation(request.namespace) }),
     writeBlobChunk: (request: {
       namespace: string
       id: string
@@ -578,22 +599,34 @@ export const createProtocolStorageBlobBackend = (
 ): StorageBlobBackend => {
   return {
     get: async (id) => await client.getBlob({ namespace, id }),
-    set: async (id, data, contentType) =>
-      await client.setBlob({ namespace, id, data, ...(contentType ? { contentType } : {}) }),
+    set: async (id, data, contentType, provenance) =>
+      await client.setBlob({
+        namespace,
+        id,
+        data,
+        ...(contentType ? { contentType } : {}),
+        ...(provenance ? { provenance } : {}),
+      }),
     stat: async (id) => await client.statBlob({ namespace, id }),
     list: async () => (await client.listBlobs({ namespace })).blobs,
     readRange: async (id, offset, length) =>
       await client.readBlobRange({ namespace, id, offset, length }),
-    append: async (id, data, expectedSize, contentType) =>
+    append: async (id, data, expectedSize, contentType, provenance) =>
       await client.appendBlob({
         namespace,
         id,
         data,
         expectedSize,
         ...(contentType ? { contentType } : {}),
+        ...(provenance ? { provenance } : {}),
       }),
-    beginWrite: async (id, contentType) =>
-      await client.beginBlobWrite({ namespace, id, ...(contentType ? { contentType } : {}) }),
+    beginWrite: async (id, contentType, provenance) =>
+      await client.beginBlobWrite({
+        namespace,
+        id,
+        ...(contentType ? { contentType } : {}),
+        ...(provenance ? { provenance } : {}),
+      }),
     writeChunk: async (id, writeId, offset, data) =>
       await client.writeBlobChunk({ namespace, id, writeId, offset, data }),
     writeStatus: async (id, writeId) => await client.getBlobWriteStatus({ namespace, id, writeId }),
@@ -650,6 +683,7 @@ export type StorageBlobBackend = {
     id: string,
     data: Uint8Array<ArrayBuffer>,
     contentType?: string,
+    provenance?: BlobProvenance,
   ) => Promise<StorageBlobMetadata>
   stat: (id: string) => Promise<StorageBlobMetadata | null>
   list: () => Promise<StorageBlobMetadata[]>
@@ -663,8 +697,13 @@ export type StorageBlobBackend = {
     data: Uint8Array<ArrayBuffer>,
     expectedSize: number,
     contentType?: string,
+    provenance?: BlobProvenance,
   ) => Promise<StorageBlobMetadata>
-  beginWrite: (id: string, contentType?: string) => Promise<{ writeId: string }>
+  beginWrite: (
+    id: string,
+    contentType?: string,
+    provenance?: BlobProvenance,
+  ) => Promise<{ writeId: string }>
   writeChunk: (
     id: string,
     writeId: string,
@@ -930,8 +969,13 @@ export const createStorageProtocolServer = (
       blobs: {
         get: async ({ namespace, id, distribution }) =>
           await (await blobBackend('get', namespace, distribution, id)).get(id),
-        set: async ({ namespace, id, data, contentType, distribution }) =>
-          await (await blobBackend('set', namespace, distribution, id)).set(id, data, contentType),
+        set: async ({ namespace, id, data, contentType, provenance, distribution }) =>
+          await (await blobBackend('set', namespace, distribution, id)).set(
+            id,
+            data,
+            contentType,
+            provenance,
+          ),
         stat: async ({ namespace, id, distribution }) =>
           await (await blobBackend('stat', namespace, distribution, id)).stat(id),
         list: async ({ namespace, distribution }) => ({
@@ -941,14 +985,22 @@ export const createStorageProtocolServer = (
           await (
             await blobBackend('readRange', namespace, distribution, id)
           ).readRange(id, offset, length),
-        append: async ({ namespace, id, data, expectedSize, contentType, distribution }) =>
+        append: async ({
+          namespace,
+          id,
+          data,
+          expectedSize,
+          contentType,
+          provenance,
+          distribution,
+        }) =>
           await (
             await blobBackend('append', namespace, distribution, id)
-          ).append(id, data, expectedSize, contentType),
-        beginWrite: async ({ namespace, id, contentType, distribution }) =>
+          ).append(id, data, expectedSize, contentType, provenance),
+        beginWrite: async ({ namespace, id, contentType, provenance, distribution }) =>
           await (
             await blobBackend('beginWrite', namespace, distribution, id)
-          ).beginWrite(id, contentType),
+          ).beginWrite(id, contentType, provenance),
         writeChunk: async ({ namespace, id, writeId, offset, data, distribution }) =>
           await (
             await blobBackend('writeChunk', namespace, distribution, id)
