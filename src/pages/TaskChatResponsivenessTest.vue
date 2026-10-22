@@ -3,6 +3,7 @@
     <div v-if="confirmCreation" role="status">Creation is waiting</div>
     <q-btn label="Confirm creation" :disable="!confirmCreation" @click="confirmCreation?.()" />
     <q-btn label="Open tool example" @click="openExample" />
+    <q-btn label="Open long conversation" @click="openLongConversation" />
     <q-btn label="Stream assistant response" @click="streamAssistantResponse" />
     <TaskChatWindow
       v-model:selected-task-id="selected"
@@ -10,6 +11,7 @@
       :entry-node="undefined"
       status="ready"
       :all-tools="tools"
+      :message-window="12"
       :chat-completion-stream="chatCompletion.stream"
     />
   </q-page>
@@ -115,6 +117,22 @@ const openExample = () => {
     client.taskModel.ingest(task)
   }
   selected.value = 'fixture-call'
+}
+const openLongConversation = () => {
+  let previousId: string | undefined
+  for (let index = 1; index <= 40; index++) {
+    const id = `long-message-${index}`
+    const task: TaskNode = {
+      id,
+      ...(previousId ? { priorID: previousId } : {}),
+      role: index % 2 === 1 ? 'user' : 'assistant',
+      content: { type: 'message', data: `Long conversation message ${index}` },
+    }
+    tasks.set(id, task)
+    client.taskModel.ingest(task)
+    previousId = id
+  }
+  selected.value = previousId
 }
 const streamAssistantResponse = async () => {
   for (let index = 0; index < 24; index++) {

@@ -14,6 +14,7 @@
     :show-web-search="showWebSearch"
     :show-assistant-identity="showAssistantIdentity"
     :presentation="presentation"
+    :message-window="messageWindow"
     :chat-completion-stream="chatCompletionStream"
     :worker-stream="workerStream"
     :data-cy="chatDataCy"
@@ -45,6 +46,7 @@ const {
   showAssistantIdentity = true,
   chatDataCy = undefined,
   presentation = {},
+  messageWindow = 0,
   chatCompletionStream = undefined,
   workerStream = undefined,
 } = defineProps<{
@@ -60,6 +62,7 @@ const {
   showAssistantIdentity?: boolean | undefined
   chatDataCy?: string | undefined
   presentation?: Partial<TaskChatPresentation> | undefined
+  messageWindow?: number | undefined
   chatCompletionStream?: StreamSubscription<ChatCompletionStreamEvent> | undefined
   workerStream?: StreamSubscription<TyTaskStreamData> | undefined
 }>()

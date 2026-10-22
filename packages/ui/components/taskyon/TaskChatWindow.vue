@@ -63,6 +63,7 @@
           :tools="allTools"
           :expert-mode="expertMode"
           :presentation="presentation"
+          :message-window="messageWindow"
           :client="client"
           :selected-task-id="selectedTaskId"
         >
@@ -150,6 +151,7 @@ const props = withDefaults(
     showWebSearch?: boolean
     showAssistantIdentity?: boolean
     presentation?: Partial<TaskChatPresentation>
+    messageWindow?: number
     chatCompletionStream?: StreamSubscription<ChatCompletionStreamEvent> | undefined
     workerStream?: StreamSubscription<TyTaskStreamData> | undefined
   }>(),
@@ -163,6 +165,7 @@ const props = withDefaults(
     showWebSearch: false,
     showAssistantIdentity: true,
     presentation: () => ({}),
+    messageWindow: 0,
   },
 )
 

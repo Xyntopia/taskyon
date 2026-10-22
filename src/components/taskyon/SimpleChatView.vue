@@ -8,6 +8,7 @@
     :hidden-task-ids="hiddenTaskIds"
     :show-all-tasks="showAllTasks"
     :expert-mode="expertMode"
+    :message-window="state.appConfiguration.chatMessageWindow"
   >
     <template #task="{ task, previousTask, nextTask }">
       <Task

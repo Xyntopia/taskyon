@@ -138,3 +138,34 @@ test('finishing an earlier send does not reopen its conversation', async ({ page
     'Keep this in the original conversation',
   )
 })
+
+test('long conversations render a bounded window and load older messages in place', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 844 })
+  await page.goto('/task-chat-responsiveness-test')
+  await page.getByRole('button', { name: 'Open long conversation' }).click()
+
+  const thread = page.locator('.task-chat-window__thread')
+  await thread.evaluate((element) => {
+    element.style.height = '200px'
+    element.style.flex = '0 0 200px'
+    element.scrollTop = 0
+    element.dispatchEvent(new Event('scroll'))
+  })
+
+  const messages = page.locator('[data-cy="taskyon-chat-thread"] [data-task-id]')
+  await expect(messages).toHaveCount(12)
+  await expect(page.getByText('Long conversation message 40')).toBeVisible()
+  await expect(page.getByText('Long conversation message 1', { exact: true })).toHaveCount(0)
+
+  const anchor = page.locator('[data-task-id="long-message-29"]')
+  const beforeTop = (await anchor.boundingBox())?.y ?? 0
+
+  await page.getByRole('button', { name: 'Show 28 older messages' }).click()
+  await expect(messages).toHaveCount(24)
+  await expect(page.getByText('Long conversation message 1', { exact: true })).toHaveCount(0)
+
+  const afterTop = (await anchor.boundingBox())?.y ?? 0
+  expect(Math.abs(afterTop - beforeTop)).toBeLessThanOrEqual(2)
+})

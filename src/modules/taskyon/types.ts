@@ -112,6 +112,16 @@ export const appConfiguration = z.object({
     description: 'Enable web search button in message editor.',
     title: 'Web Search Button',
   }),
+  chatMessageWindow: z
+    .number()
+    .int()
+    .min(0)
+    .default(30)
+    .meta({
+      title: 'Chat Message Window',
+      description:
+        'Render only the most recent N messages in long chats, with a button to load older ones. Set 0 to render every message.',
+    }),
   taskSearchVectorizer: z
     .enum(['static-multilingual', 'transformer-minilm'])
     .default('static-multilingual')
@@ -175,7 +185,7 @@ export const appConfiguration = z.object({
 export type appConfiguration = z.infer<typeof appConfiguration>
 
 export const TyProfile = z.object({
-  version: z.literal(36).meta({
+  version: z.literal(37).meta({
     description:
       'whenever the schema of the settings change, this number will get changed as well...',
   }),

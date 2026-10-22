@@ -9,6 +9,7 @@
     :all-tools="allTools"
     :welcome-message="welcomeMessage"
     :expert-mode="configuration?.appConfiguration?.expertMode === true"
+    :message-window="appState.appConfiguration.chatMessageWindow"
     :chat-completion-stream="chatCompletionStream"
     :worker-stream="workerStream"
   />

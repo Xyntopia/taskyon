@@ -1,5 +1,15 @@
 <template>
-  <div class="task-chat-thread column" data-cy="taskyon-chat-thread">
+  <div ref="threadElement" class="task-chat-thread column" data-cy="taskyon-chat-thread">
+    <q-btn
+      v-if="hiddenTaskCount > 0"
+      flat
+      dense
+      no-caps
+      class="task-chat-thread__load-older"
+      data-cy="load-older-messages"
+      :label="`Show ${hiddenTaskCount} older messages`"
+      @click="loadOlderMessages"
+    />
     <template v-for="{ task, index, previousTask, nextTask } in visibleTasks" :key="task.id">
       <q-expansion-item v-if="reasoning?.get(task.id)" label="reasoning" dense class="text-caption">
         <TyMarkdown :src="reasoning.get(task.id) ?? ''" />
@@ -34,11 +44,11 @@
 <script setup lang="ts">
 import type { partialTaskDraft, TaskNode, ToolBase, TaskyonClient } from '@taskyon/taskyon/api'
 import type { TaskChatPresentation } from '@taskyon/ui/modules/taskChatPresentation'
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import TaskToolResultRow from './TaskToolResultRow.vue'
 import TyMarkdown from '../tyMarkdown.vue'
 import TaskChatMessage from './TaskChatMessage.vue'
-import { selectTasksVisibleInChat } from './taskChatVisibility'
+import { selectTaskChatWindow, selectTasksVisibleInChat } from './taskChatVisibility'
 
 const props = withDefaults(
   defineProps<{
@@ -52,6 +62,7 @@ const props = withDefaults(
     showAllTasks?: boolean
     expertMode?: boolean
     presentation?: Partial<TaskChatPresentation>
+    messageWindow?: number
   }>(),
   {
     pendingTask: undefined,
@@ -61,6 +72,7 @@ const props = withDefaults(
     showAllTasks: false,
     expertMode: false,
     presentation: () => ({}),
+    messageWindow: 0,
   },
 )
 
@@ -106,8 +118,56 @@ const displayedTasks = computed(() =>
     : selectTasksVisibleInChat(availableTasks.value, props.tools, props.expertMode),
 )
 
+const expandedMessages = ref(0)
+watch(
+  () => props.messageWindow,
+  () => (expandedMessages.value = 0),
+)
+const windowedTasks = computed(() =>
+  selectTaskChatWindow(
+    displayedTasks.value,
+    props.messageWindow > 0 ? props.messageWindow + expandedMessages.value : 0,
+  ),
+)
+const hiddenTaskCount = computed(() => windowedTasks.value.hiddenCount)
+
+const threadElement = ref<HTMLElement>()
+const findScrollableParent = (element: HTMLElement | undefined) => {
+  let parent = element?.parentElement ?? undefined
+  while (parent) {
+    const style = getComputedStyle(parent)
+    if (
+      (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+      parent.scrollHeight > parent.clientHeight
+    )
+      return parent
+    parent = parent.parentElement ?? undefined
+  }
+  return undefined
+}
+const loadOlderMessages = async () => {
+  const container = findScrollableParent(threadElement.value)
+  const anchor = threadElement.value?.querySelector<HTMLElement>('[data-task-id]')
+  if (!container || !anchor) {
+    expandedMessages.value += props.messageWindow
+    return
+  }
+  const anchorTop = anchor.getBoundingClientRect().top
+  expandedMessages.value += props.messageWindow
+  await nextTick()
+  const keepAnchorStable = () => {
+    const delta = anchor.getBoundingClientRect().top - anchorTop
+    if (delta !== 0) container.scrollTop += delta
+  }
+  keepAnchorStable()
+  if (typeof ResizeObserver === 'undefined') return
+  const observer = new ResizeObserver(keepAnchorStable)
+  observer.observe(threadElement.value as HTMLElement)
+  window.setTimeout(() => observer.disconnect(), 500)
+}
+
 const visibleTasks = computed(() =>
-  displayedTasks.value.map((task, index) => {
+  windowedTasks.value.tasks.map((task, index) => {
     const sourceIndex = availableTasks.value.indexOf(task)
     return {
       task,

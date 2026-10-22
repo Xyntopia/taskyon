@@ -46,3 +46,11 @@ export const selectTasksForChatCopy = (
   selectTasksVisibleInChat(tasks, tools, expertMode).filter(
     (task) => task.content.type !== 'functioncall',
   )
+
+export const selectTaskChatWindow = <T>(
+  tasks: readonly T[],
+  windowSize: number,
+): { tasks: readonly T[]; hiddenCount: number } => {
+  if (windowSize <= 0 || tasks.length <= windowSize) return { tasks, hiddenCount: 0 }
+  return { tasks: tasks.slice(-windowSize), hiddenCount: tasks.length - windowSize }
+}
