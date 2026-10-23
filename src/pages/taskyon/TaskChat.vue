@@ -342,6 +342,8 @@ const trustPublicChat = async () => {
       (request) => tystate.hostFetch.fetch({ kind: 'tool' }, request),
       source.url,
     )
+    // The trust dialog can open before the Taskyon core finishes initializing.
+    await tystate.taskyon
     invitedChat.value = true
     const newTaskId = await createTaskChainFromMarkdown(taskyonClient, document.text)
     navigateToTask(newTaskId, { replace: true })
