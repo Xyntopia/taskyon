@@ -1,2 +1,3 @@
 dist
 media/tyclient.bundle.mjs
+*.vsix

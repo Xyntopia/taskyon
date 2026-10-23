@@ -12,6 +12,12 @@
     "Other"
   ],
   "main": "./dist/extension.js",
+  "files": [
+    "dist/**",
+    "media/**",
+    "resources/**",
+    "README.md"
+  ],
   "activationEvents": [
     "*",
     "onCommand:taskyon.open",
@@ -73,13 +79,13 @@
     "build": "node ./scripts/build.mjs",
     "watch": "node ./scripts/build.mjs --watch",
     "vscode:prepublish": "npm run build",
-    "package": "npm run build && npx @vscode/vsce package"
+    "package": "npm run build && npx @vscode/vsce package --no-dependencies"
   },
   "devDependencies": {
     "@taskyon/taskyon": "workspace:*",
     "@taskyon/tyclient": "workspace:*",
     "@types/vscode": "^1.80.0",
-    "@vscode/vsce": "^2.15.0",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.9.2",
     "zod": "^4.1.8"
