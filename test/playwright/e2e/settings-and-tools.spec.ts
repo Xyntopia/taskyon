@@ -133,17 +133,17 @@ test.describe('Taskyon settings and tools', () => {
   test('persists and resets the browser fetch transport', async ({ page }) => {
     await page.goto('/settings/sandbox-network')
     const transport = dataCy(page, 'sandbox-fetch-transport')
-    await expect(transport).toContainText('Ask on first tool fetch')
+    await expect(transport).toHaveValue('Ask on first tool fetch')
 
     await transport.click()
     await page.getByRole('option', { name: 'Secure WSS tunnel (recommended)', exact: true }).click()
-    await expect(transport).toContainText('Secure WSS tunnel (recommended)')
+    await expect(transport).toHaveValue('Secure WSS tunnel (recommended)')
     await expect(dataCy(page, 'sandbox-fetch-wss-url')).toBeVisible()
 
     await page.reload()
-    await expect(transport).toContainText('Secure WSS tunnel (recommended)')
+    await expect(transport).toHaveValue('Secure WSS tunnel (recommended)')
     await dataCy(page, 'reset-fetch-transport').click()
-    await expect(transport).toContainText('Ask on first tool fetch')
+    await expect(transport).toHaveValue('Ask on first tool fetch')
   })
   test('opens search provider onboarding with registration links and cancel', async ({ page }) => {
     await page.goto('/settings/aiserviceprovider')

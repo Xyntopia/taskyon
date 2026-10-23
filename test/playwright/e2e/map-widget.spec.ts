@@ -240,7 +240,7 @@ test.describe('map widget in chat', () => {
     const fetchTransport = dataCy(page, 'sandbox-fetch-transport')
     await fetchTransport.click()
     await page.getByRole('option', { name: 'Direct host fetch', exact: true }).click()
-    await expect(fetchTransport).toContainText('Direct host fetch')
+    await expect(fetchTransport).toHaveValue('Direct host fetch')
     await enableExpertMode(page)
   })
 

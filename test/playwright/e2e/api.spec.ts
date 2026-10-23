@@ -7,13 +7,13 @@ import {
   dataCy,
   expectTaskyonReady,
   readOnlineEnv,
+  resolveVisionModelId,
   selectLlmModel,
   setSettingsToggle,
   writeMessage,
 } from '../support/taskyon'
 
 const onlineEnv = readOnlineEnv(process.cwd())
-const visionModelId = 'minimax/minimax-m3.1-flash:free'
 const freeTaskyonModelIds = new Set([
   'z-ai/glm-5.3-flash',
   'qwen/qwen3.8-flash',
@@ -55,6 +55,7 @@ test.describe('Taskyon API', () => {
 
   test('can configure providers, upload an image, and get a vision response', async ({ page }) => {
     if (!onlineEnv) throw new Error('online env missing')
+    const visionModelId = await resolveVisionModelId(onlineEnv.openrouter_api_key)
 
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
@@ -109,7 +110,7 @@ test.describe('Taskyon API', () => {
     await expect(dataCy(page, 'model-id')).toContainText(unlockedModelId)
 
     await dataCy(page, 'model-id').click()
-    await expect(dataCy(page, 'provider-select')).toContainText('taskyon')
+    await expect(dataCy(page, 'provider-select')).toHaveValue('taskyon')
     await expect(dataCy(page, 'model-select')).toHaveValue(unlockedModelId)
   })
 })

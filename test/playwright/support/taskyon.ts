@@ -197,6 +197,47 @@ export const startNewChat = async (page: Page) => {
   await page.getByLabel('start new chat').click()
 }
 
+const openRouterModelsUrl = 'https://openrouter.ai/api/v1/models'
+const preferredVisionModelId = 'nvidia/nemotron-3.5-super-vl:free'
+
+export const resolveVisionModelId = async (openRouterApiKey: KeyString): Promise<string> => {
+  const override = process.env.PLAYWRIGHT_VISION_MODEL_ID?.trim()
+  if (override) return override
+
+  const response = await fetch(openRouterModelsUrl, {
+    headers: { Authorization: `Bearer ${openRouterApiKey}` },
+  })
+  if (!response.ok) {
+    throw new Error(
+      `Could not load OpenRouter models: ${response.status} ${response.statusText}`,
+    )
+  }
+
+  type OpenRouterModel = {
+    id: string
+    pricing?: { prompt?: string; completion?: string }
+    architecture?: { input_modalities?: string[]; output_modalities?: string[] }
+  }
+
+  const payload = (await response.json()) as { data?: OpenRouterModel[] }
+  const models = Array.isArray(payload.data) ? payload.data : []
+  const freeVisionModels = models.filter(
+    (model) =>
+      Number(model.pricing?.prompt) === 0 &&
+      Number(model.pricing?.completion) === 0 &&
+      model.architecture?.input_modalities?.includes('image') === true &&
+      model.architecture?.output_modalities?.includes('text') === true,
+  )
+
+  const [firstFreeVisionModel] = freeVisionModels
+  if (!firstFreeVisionModel) {
+    throw new Error('OpenRouter currently exposes no free vision model for the online test.')
+  }
+
+  const preferred = freeVisionModels.find((model) => model.id === preferredVisionModelId)
+  return (preferred ?? firstFreeVisionModel).id
+}
+
 export const addAiServices = async (page: Page, env: OnlineEnv) => {
   const providerKeys = {
     taskyon: env.taskyon_key,
