@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { captureBrowserChatCompletionTrace } from '../support/chatCompletionTrace'
+import { createClipboardProbe } from '../support/clipboard'
 
 import {
   addAiServices,
@@ -296,14 +297,14 @@ test.describe('diagnostics page', () => {
     }
   })
 
-  test('simple chat completes without routing errors', async ({ page, context }) => {
+  test('simple chat completes without routing errors', async ({ page }) => {
     test.info().annotations.push({
       type: 'model-based',
       description: 'Replays the routing-error transcript through the browser UI runtime.',
     })
     if (!onlineEnv) throw new Error('online env missing')
 
-    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    const clipboard = await createClipboardProbe(page)
     await page.goto('/')
     await expect(page.getByPlaceholder('Describe what you want to build')).toBeVisible()
     await expectTaskyonReady(page)
@@ -357,7 +358,7 @@ test.describe('diagnostics page', () => {
     }
 
     await page.getByLabel('copy entire chat as markdown').click()
-    const copiedChat = await page.evaluate(() => navigator.clipboard.readText())
+    const copiedChat = await clipboard.read()
     expect(copiedChat).not.toContain('Invalid arguments for tool')
     expect(copiedChat).not.toContain('type: tooldefinition')
     expect(copiedChat).not.toContain('prompt_templates')

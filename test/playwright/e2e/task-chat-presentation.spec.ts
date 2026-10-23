@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { createClipboardProbe } from '../support/clipboard'
 
 test.describe('task chat presentation', () => {
-  test('hides internal tasks and summarizes visible tool calls', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  test('hides internal tasks and summarizes visible tool calls', async ({ page }) => {
+    const clipboard = await createClipboardProbe(page)
     await page.goto('/task-chat-presentation-test')
 
     await expect(page.getByText('Visible user message')).toBeVisible()
@@ -25,8 +26,14 @@ test.describe('task chat presentation', () => {
     await expect(visibleCall).toHaveClass(/functioncall/)
     await expect(visibleCall.locator('.task-chat-message__content')).toHaveCount(0)
 
+    const clipboardSentinel = `taskyon-clipboard-sentinel-${Date.now()}`
+    await page.evaluate((text) => navigator.clipboard.writeText(text), clipboardSentinel)
     await page.locator('[data-cy="copy-visible-task-chat"]').click()
-    const copied = await page.evaluate(() => navigator.clipboard.readText())
+    await page.waitForFunction(
+      async (sentinel) => (await navigator.clipboard.readText()) !== sentinel,
+      clipboardSentinel,
+    )
+    const copied = await clipboard.read()
     expect(copied).toContain('Visible user message')
     expect(copied).toContain('Visible assistant message')
     expect(copied).not.toContain('hiddenTool')
