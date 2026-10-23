@@ -38,7 +38,7 @@ import baseDaeTemplate from './base_dae.jinja?raw'
 import javascriptTemplate from './javascript.jinja?raw'
 import solveJavascriptTemplate from './javascript_solve.jinja?raw'
 import defaultSolverSource from './simulateModel?raw'
-import checkedSolveFixtures from './fixtures/checked_solve_programs.json?raw'
+import checkedSolveFixtures from './fixtures/checked_solve_programs.json'
 import {
   mapDiagramToGraph,
   type DiagramEdgeData,
@@ -7997,7 +7997,7 @@ export async function testModelicaSolveGeneratorImpureRandomRollback() {
   const wasm = await getDiagnosticsWasm()
   const fixtureFunction = `
     {% set null=none %}
-    {% set program_fixtures=${checkedSolveFixtures} %}
+    {% set program_fixtures=${JSON.stringify(checkedSolveFixtures)} %}
     function evaluateImpure(t) {
       const sy=[],sp=[],output=[];
       {% for fixture in program_fixtures %}
@@ -8032,7 +8032,7 @@ export async function testModelicaSolveGeneratorImpureRandomRollback() {
     code: `() => {
       ${generated.content}
       ${defaultSolverSource}
-      const expected=${checkedSolveFixtures}.find(fixture=>fixture.name==='impure_event_calls').expected;
+      const expected=${JSON.stringify(checkedSolveFixtures)}.find(fixture=>fixture.name==='impure_event_calls').expected;
       const model=Model(),other=Model();
       const options={sim:{t0:0,tf:0.05,dt:0.05,x0:[1]}};
       simulateModel(options,{},model);simulateModel(options,{},other);
@@ -8069,7 +8069,7 @@ export async function testModelicaSolveGeneratorScalarPrograms() {
   // These template views were emitted from checked native IR and compared with its evaluator.
   const fixtureFunction = `
     {% set null=none %}
-    {% set program_fixtures=${checkedSolveFixtures} %}
+    {% set program_fixtures=${JSON.stringify(checkedSolveFixtures)} %}
     function evaluateProgramFixtures() {
       const sy=[],sp=[],t=0,results=[];
       {% for fixture in program_fixtures %}
@@ -8093,7 +8093,7 @@ export async function testModelicaSolveGeneratorScalarPrograms() {
     id: 'modelica-solve-scalar-folds',
     code: `() => {
       ${generated.content}
-      const fixtures=${checkedSolveFixtures},results=Model(fixtures.flatMap(fixture=>fixture.external_tables)).evaluateProgramFixtures();
+      const fixtures=${JSON.stringify(checkedSolveFixtures)},results=Model(fixtures.flatMap(fixture=>fixture.external_tables)).evaluateProgramFixtures();
       for(let i=0;i<fixtures.length;i++) {
         const expected=fixtures[i].expected,actual=results[i];
         if(actual.length!==expected.length || actual.some((value,k)=>value!==expected[k]))

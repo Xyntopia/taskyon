@@ -285,7 +285,7 @@ const tystate = useTaskyonStore()
 const state = useAppStateStore()
 const { saveObjToGdrive, loadObjFromGdrive } = useGdrive(tystate.getGdriveToken)
 const $q = useQuasar()
-const isTauriApp = process.env.CLIENT ? isTauri() : false
+const isTauriApp = import.meta.env.QUASAR_CLIENT ? isTauri() : false
 
 const showSeedPhrase = ref(false)
 const pressedSeedPhraseCopyButton = ref(false)

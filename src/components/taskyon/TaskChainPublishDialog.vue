@@ -198,7 +198,7 @@ const canShare = navigator.canShare ? navigator.canShare() : false
 // this here is done in order to check if taskyon is run locally...
 // we want people to always be redirected to taskyon.space when using the sharing
 // feature except if taskyon is run in development mode.
-const baseURL = process.env.DEV
+const baseURL = import.meta.env.QUASAR_DEV
   ? window.location.origin
   : window.location.origin.includes('dev.taskyon.space')
     ? 'https://dev.taskyon.space'

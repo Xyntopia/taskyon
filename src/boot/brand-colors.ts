@@ -1,5 +1,5 @@
 // $
-import { defineBoot } from '#q-app/wrappers'
+import { defineBoot } from '#q-app'
 import { setCssVar } from 'quasar'
 import { hexToRgb } from '@taskyon/common/modules/utils'
 import { initialStoredStateObj } from '../modules/ui/initialState'

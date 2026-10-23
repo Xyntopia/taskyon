@@ -355,10 +355,10 @@ export const getTyJwtPublicKey = async () => {
         if (!response.ok) throw new Error(`JWT public key request failed: ${response.status}`)
         return await readStringResponse(response)
       })()
-    : ((await axios.get(pkeyUrl)).data ?? process.env)
+    : (await axios.get(pkeyUrl)).data
 
   if (!PROXY_JWT_PUBLIC_KEY) {
-    console.error('[attachWsProxy] Missing PROXY_JWT_PUBLIC_KEY env var, WS proxy disabled')
+    console.error('[attachWsProxy] Missing JWT public key, WS proxy disabled')
     return
   }
 

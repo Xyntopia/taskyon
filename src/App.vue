@@ -35,11 +35,11 @@ declare global {
   }
 }
 
-if (process.env.CLIENT) {
+if (import.meta.env.QUASAR_CLIENT) {
   const route = useRoute()
   useMeta(() => generateTaskyonMeta(route))
 
-  if (process.env.DEV) {
+  if (import.meta.env.QUASAR_DEV) {
     const params = new URLSearchParams(window.location.search)
     const enableChii =
       params.get('chii') === '1' || window.localStorage.getItem('taskyon.enableChii') === '1'

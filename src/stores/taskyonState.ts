@@ -1388,7 +1388,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
       }),
     )
   const hostedProviderRuntime =
-    process.env.CLIENT &&
+    import.meta.env.QUASAR_CLIENT &&
     isHostedBrowserProviderRuntime({ hostname: window.location.hostname, isTauri: isTauri() })
   const createHostedProviderFetch = (requestKind: TaskyonDirectFallbackRequest['requestKind']) =>
     hostedProviderRuntime
@@ -1406,7 +1406,7 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
   const wssModelFetch = createHostedProviderFetch('model-discovery')
   const wssOauthFetch = createHostedProviderFetch('oauth')
   const directFetch: typeof fetch =
-    process.env.CLIENT && canUseTauriHttpPlugin()
+    import.meta.env.QUASAR_CLIENT && canUseTauriHttpPlugin()
       ? tauriHttpFetch
       : globalThis.fetch.bind(globalThis)
   let verifiedCorsProxyUrl: string | undefined

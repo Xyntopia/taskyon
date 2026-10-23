@@ -203,7 +203,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'v
 // <!-- Viewport Meta in order to make window size shrink on mobile when keyboard pops up! -->
 // <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 const viewportContent =
-  process.env.CLIENT && isTauri()
+  import.meta.env.QUASAR_CLIENT && isTauri()
     ? 'width=device-width, initial-scale=1.0'
     : 'width=device-width, initial-scale=1.0, interactive-widget=resizes-content'
 

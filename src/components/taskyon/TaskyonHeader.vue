@@ -222,7 +222,7 @@ const drawerOpen = defineModel<boolean | undefined>('drawerOpen', {
 })
 
 const ShareDialogBtn = defineAsyncComponent(() => import('../taskyon/TaskChainPublishDialog.vue'))
-const ResetButton = process.env.DEV
+const ResetButton = import.meta.env.QUASAR_DEV
   ? defineAsyncComponent(
       () =>
         import(

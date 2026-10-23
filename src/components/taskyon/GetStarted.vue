@@ -227,7 +227,7 @@ import { useRouter } from 'vue-router'
 const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const router = useRouter()
-const isTauriApp = process.env.CLIENT ? isTauri() : false
+const isTauriApp = import.meta.env.QUASAR_CLIENT ? isTauri() : false
 const customSuggestions = computed(() => state.appConfiguration.chatSuggestions ?? [])
 
 const stages = [

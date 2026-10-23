@@ -4,7 +4,7 @@
 import axios from 'axios'
 import { defineStore } from 'pinia'
 import { LocalStorage, useQuasar } from 'quasar' // TODO: load dynamically! :)
-import defaultSettings from 'src/assets/taskyon_settings.json?raw'
+import defaultSettings from 'src/assets/taskyon_settings.json'
 import { TyProfile } from 'src/modules/taskyon/types'
 import { setPmtilesStorageCacheGlobalConfig } from '@taskyon/ui/gis/pmtilesStorageCache'
 import type { MergeOptions } from '@taskyon/common/modules/utils'
@@ -110,7 +110,7 @@ function clearBrowserStorage(localStorageKeys?: string[]) {
 }
 
 export function getUrlConfig() {
-  if (process.env.CLIENT) {
+  if (import.meta.env.QUASAR_CLIENT) {
     const searchParams = new URLSearchParams(window.location.search)
     const isIframeParam = searchParams.get('iframe') === 'true'
     const isVscodeParam =
@@ -134,7 +134,7 @@ export function getUrlConfig() {
 
 function getInitialState() {
   // load storable settings
-  const res = TyProfile.safeParse(JSON.parse(defaultSettings))
+  const res = TyProfile.safeParse(defaultSettings)
   if (!res.success) {
     throw new Error('The default settings provided do not work!', { cause: res.error.message })
   }
@@ -983,7 +983,7 @@ export const useAppStateStore = defineStore('ui-state', () => {
       replace?: boolean
     } = {},
   ) => {
-    if (!process.env.CLIENT) return
+    if (!import.meta.env.QUASAR_CLIENT) return
     const routeTarget = buildTaskSelectionRoute(window.location.href, taskId, options.path)
     if (routeTarget === route.value.fullPath) return
     if (options.replace) {

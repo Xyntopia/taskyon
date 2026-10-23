@@ -157,7 +157,7 @@ export async function vectorize(txt: string, modelName: string, chunkSize = 512,
     ).config.max_position_embeddings || chunkSize
 
   // Tokenize the entire text and get the tokens
-  const fullInputs = (await tokenizer(txt)) as {
+  const fullInputs = tokenizer(txt) as {
     input_ids: Tensor
     attention_mask: Tensor
     token_type_ids: Tensor
@@ -214,7 +214,7 @@ export async function vectorize(txt: string, modelName: string, chunkSize = 512,
     console.log('summarize');
     const tokenizer = await loadTokenizer(modelName);
     const model = await loadModel(modelName);
-    const inputs = (await tokenizer(txt)) as Record<string, Tensor>;
+    const inputs = tokenizer(txt) as Record<string, Tensor>;
     //const res = (await model.generate(inputs))// as Record<string, Tensor>;
   }*/
 

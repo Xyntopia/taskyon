@@ -74,7 +74,7 @@ import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import TaskChainMenu from './TaskChainMenu.vue'
 
-const localDev = process.env.DEV
+const localDev = import.meta.env.QUASAR_DEV
 const $route = useRoute()
 const state = useAppStateStore()
 const tystate = useTaskyonStore()

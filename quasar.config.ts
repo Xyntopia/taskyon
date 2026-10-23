@@ -1,7 +1,7 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file
 
-import { defineConfig } from '#q-app/wrappers'
+import { defineConfig } from '#q-app'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -175,6 +175,18 @@ export default defineConfig((ctx) => {
         node: 'node20',
       },
 
+      // app-vite 3 only ships the "@" alias; keep the legacy aliases this codebase used.
+      alias: {
+        src: fileURLToPath(new URL('./src', import.meta.url)),
+        app: fileURLToPath(new URL('.', import.meta.url)),
+        components: fileURLToPath(new URL('./src/components', import.meta.url)),
+        layouts: fileURLToPath(new URL('./src/layouts', import.meta.url)),
+        pages: fileURLToPath(new URL('./src/pages', import.meta.url)),
+        assets: fileURLToPath(new URL('./src/assets', import.meta.url)),
+        boot: fileURLToPath(new URL('./src/boot', import.meta.url)),
+        stores: fileURLToPath(new URL('./src/stores', import.meta.url)),
+      },
+
       typescript: {
         strict: true,
         vueShim: true,
@@ -218,7 +230,6 @@ export default defineConfig((ctx) => {
       // rebuildCache: true, // rebuilds Vite/linter/etc cache on startup
 
       // publicPath: '/',
-      analyze: !fastDevBuild,
       ...(fastDevBuild ? { minify: false } : {}),
 
       // not sure, if we need this here...
@@ -320,6 +331,7 @@ export default defineConfig((ctx) => {
               {
                 src: 'src/assets/taskyon_settings.json',
                 dest: '.', // Will be placed in the root of the output dir ('public')
+                rename: { stripBase: true },
               },
               {
                 src: 'README.md',
@@ -368,14 +380,7 @@ export default defineConfig((ctx) => {
         // ...(ctx.prod ? [sourcemapBannerPlugin()] : []),
 
         // https://www.npmjs.com/package/vite-bundle-analyzer
-        // TODO: re-enable this!
-        /*analyzer({
-          openAnalyzer: true, // Automatically open the analyzer UI in your browser
-          summary: true, // Set to true if you prefer just a summary
-          fileName: '../analyze_report',
-          analyzerMode: 'static', // we use static here so that it also works in a CI setting.
-          // Other options can go here if needed.
-        }),*/
+        // TODO: re-enable bundle analysis with a Vite 8-compatible plugin.
         [
           '@intlify/unplugin-vue-i18n/vite',
           {

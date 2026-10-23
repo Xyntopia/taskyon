@@ -48,7 +48,7 @@ const loadMarkdown = async () => {
     if (txt) {
       markdownContent.value = txt
     } else {
-      if (process.env.PROD) {
+      if (import.meta.env.QUASAR_PROD) {
         void router.replace('/404')
       }
     }

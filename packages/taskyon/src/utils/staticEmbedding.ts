@@ -63,7 +63,7 @@ export const getStaticEmbedding = async (
 ) => {
   const model = await loadStaticEmbeddingModel(modelName)
   const tokenizer = await loadTokenizer(modelName)
-  const tokenized = (await tokenizer(text)) as {
+  const tokenized = tokenizer(text) as {
     input_ids: { tolist: () => Array<Array<number | bigint>> }
     attention_mask?: { tolist: () => Array<Array<number | bigint>> }
   }
