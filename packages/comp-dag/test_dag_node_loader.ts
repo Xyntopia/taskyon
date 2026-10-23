@@ -219,8 +219,8 @@ export const testStoredDagNodeReceivesFetchAsASeparateService = async () => {
     params: {},
     use: {},
     mediatedFetch: createMediatedFetch({
-      authorize: async (capability) =>
-        capability.origin === 'https://example.test' && capability.access === 'read',
+      authorize: (capability) =>
+        Promise.resolve(capability.origin === 'https://example.test' && capability.access === 'read'),
       fetch: () => Promise.resolve(new Response('service-result')),
     }),
   })
@@ -254,8 +254,8 @@ export const testCompiledDagNodeRecordReceivesFetchService = async () => {
       [record.id]: { ...recordWithoutRun, runCode: record.runSource },
     },
     rootHash: record.id,
-    authorizeFetch: async (_record, capability) =>
-      capability.origin === 'https://example.test' && capability.access === 'read',
+    authorizeFetch: (_record, capability) =>
+      Promise.resolve(capability.origin === 'https://example.test' && capability.access === 'read'),
     fetch: () => Promise.resolve(new Response('graph-result')),
   })
   const result = await compiled[record.id]!.call({}).run(undefined, {
@@ -286,8 +286,8 @@ export const testCompiledDagNodePassesFetchPolicyToHost = async () => {
   const compiled = compileDagNodeRecordGraph({
     graph: { [record.id]: record },
     rootHash: record.id,
-    authorizeFetch: async (_record, capability) =>
-      capability.origin === 'https://example.test' && capability.access === 'read',
+    authorizeFetch: (_record, capability) =>
+      Promise.resolve(capability.origin === 'https://example.test' && capability.access === 'read'),
     fetch: () => Promise.resolve(new Response('direct-result')),
     fetchWithPolicy: (_input, _init, options) => {
       receivedOptions = options

@@ -1,4 +1,5 @@
 import { createApp, h, nextTick, ref } from 'vue'
+import type { Component } from 'vue'
 import type { ObjectPathChartDefinition } from './objectPathChartTypes'
 import type {
   ObjectPathChartsMapRendererSlotProps,
@@ -25,7 +26,7 @@ export const testMapCategoryColorEditor = async () => {
   if (typeof document === 'undefined')
     return { skipped: true, reason: 'Requires a browser DOM and Vue component rendering.' }
   const componentUrl = new URL('./ObjectPathCharts.vue', import.meta.url).href
-  const { default: ObjectPathCharts }: typeof import('./ObjectPathCharts.vue') = await import(
+  const { default: ObjectPathCharts }: { default: Component } = await import(
     /* @vite-ignore */ componentUrl
   )
   const q = await import('quasar')

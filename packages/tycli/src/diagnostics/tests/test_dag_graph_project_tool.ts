@@ -823,7 +823,7 @@ export const testDagGraphProjectHttpSourceUsesMediatedFetch = async () => {
     {
       ...context,
       fetch: createMediatedFetch({
-        authorize: async () => false,
+        authorize: () => Promise.resolve(false),
         fetch: () => {
           requests += 1
           return Promise.reject(new Error('Denied HTTP must not reach transport.'))

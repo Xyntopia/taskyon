@@ -1095,7 +1095,6 @@ async function readDirSafe(path) {
 
 async function runSolverForModel({
   modelName,
-  sourceModelica,
   templateSource,
   solverSource,
   sim,

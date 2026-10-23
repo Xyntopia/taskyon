@@ -150,7 +150,7 @@ export function daeJsonForTemplate(
     usePreparedDae?: boolean
   },
 ): string {
-  if (Boolean(options?.usePreparedDae)) {
+  if (options?.usePreparedDae) {
     const preparedDae = asDaeRecord(compiled.dae_prepared)
     if (preparedDae) return JSON.stringify(preparedDae)
   }

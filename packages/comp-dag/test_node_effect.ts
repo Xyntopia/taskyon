@@ -50,9 +50,11 @@ export const testPureStoredNodeCannotFetchThroughServices = async () => {
       ...(mode === 'mediated'
         ? {
             mediatedFetch: createMediatedFetch({
-              authorize: async (capability) => {
+              authorize: (capability) => {
                 authorizations += 1
-                return capability.origin === 'https://example.test' && capability.access === 'read'
+                return Promise.resolve(
+                  capability.origin === 'https://example.test' && capability.access === 'read',
+                )
               },
               fetch,
             }),
@@ -62,9 +64,9 @@ export const testPureStoredNodeCannotFetchThroughServices = async () => {
           : { fetch }),
       ...(mode === 'authorized'
         ? {
-            authorizeFetch: async () => {
+            authorizeFetch: () => {
               authorizations += 1
-              return true
+              return Promise.resolve(true)
             },
           }
         : {}),
@@ -109,8 +111,8 @@ export const testPureStoredNodeCannotFetchThroughServices = async () => {
       record: await defineDagNodeRecord({ ...base, effect: 'source' }),
       nodeById: {},
       ...transport,
-      authorizeFetch: async (capability) =>
-        capability.origin === 'https://example.test' && capability.access === 'read',
+      authorizeFetch: (capability) =>
+        Promise.resolve(capability.origin === 'https://example.test' && capability.access === 'read'),
     })
     const result = await acquired.call({}).run(undefined, { execution: { mode: 'local' } })
     if (result.value !== 'observed' || Number(reads) !== 1)
@@ -130,8 +132,8 @@ export const testPureDirectStoredNodeCannotFetchThroughServices = async () => {
       params: {},
       use: {},
       mediatedFetch: createMediatedFetch({
-        authorize: async (capability) =>
-          capability.origin === 'https://example.test' && capability.access === 'read',
+        authorize: (capability) =>
+          Promise.resolve(capability.origin === 'https://example.test' && capability.access === 'read'),
         fetch: () => {
           reads += 1
           return Promise.resolve(new Response('observed'))
@@ -182,12 +184,12 @@ export const testSourceStoredNodeRequiresHttpAuthorization = async () => {
         ...(permission === 'missing'
           ? {}
           : {
-              authorizeFetch: async (capability) => {
+              authorizeFetch: (capability) => {
                 authorizations += 1
-                return (
+                return Promise.resolve(
                   permission === 'allowed' &&
-                  capability.origin === 'https://example.test' &&
-                  capability.access === 'read'
+                    capability.origin === 'https://example.test' &&
+                    capability.access === 'read',
                 )
               },
             }),
@@ -251,9 +253,9 @@ export const testProjectInputCapabilityRequiresSourceEffect = async () => {
     compileDagNodeRecord({
       record: await defineDagNodeRecord({ ...base, effect }),
       nodeById: {},
-      callCapability: async () => {
+      callCapability: () => {
         reads += 1
-        return '{"value":1}'
+        return Promise.resolve('{"value":1}')
       },
     })
   let rejected = false

@@ -183,7 +183,7 @@ export const testInvocationInheritsExplodedSourceParameters = async () => {
     await evaluateRows({
       rootNodeId: invocation.rootNodeId,
       params,
-      onRow: async ({ outputs }) => {
+      onRow: ({ outputs }) => {
         rows.push(outputs)
       },
     })
@@ -1623,8 +1623,8 @@ export const testStoredNodeLoaderSharesConcurrentSourcesAndRetriesFailures = asy
   const renamed = { ...saved.file, path: 'RenamedSource.ts' }
   const loaded = await Promise.all([load([saved.file]), load([renamed])])
   assert(Number(batches) === 2, 'A failed parser request must be retryable and shared')
-  assert(loaded[0]![saved.hash]?.file.path === saved.file.path, 'Preserve the first file path')
-  assert(loaded[1]![saved.hash]?.file.path === renamed.path, 'Preserve each caller file path')
+  assert(loaded[0][saved.hash]?.file.path === saved.file.path, 'Preserve the first file path')
+  assert(loaded[1][saved.hash]?.file.path === renamed.path, 'Preserve each caller file path')
   await load([saved.file])
   assert(Number(batches) === 2, 'Completed parsing must be reused')
   const [invalid] = await Promise.allSettled([

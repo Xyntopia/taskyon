@@ -632,12 +632,11 @@ export const updateAuthoredGraphRecords = async (
       for (const [alias, ref] of Object.entries(record.inputs ?? {})) {
         if ('kind' in ref) throw new Error('Use a choose expression for alternatives.')
         const candidate = names.get(ref.nodeId)
+        const originalInput = original.inputs?.[alias]
         if (
           candidate &&
           desired.has(candidate) &&
-          (!original.inputs?.[alias] ||
-            'kind' in original.inputs[alias]! ||
-            original.inputs[alias]!.nodeId !== ref.nodeId)
+          (!originalInput || 'kind' in originalInput || originalInput.nodeId !== ref.nodeId)
         )
           inputs[alias] = { source: candidate, role: ref.role }
       }

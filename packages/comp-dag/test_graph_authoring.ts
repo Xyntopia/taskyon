@@ -58,10 +58,11 @@ export const testGraphSourceCompilationCacheIsDisposableAndSourceBound = async (
   const statuses: string[] = []
   let writes = 0
   const cache = {
-    get: async (id: Hash) => records.get(id),
-    set: async (id: Hash, value: unknown) => {
+    get: (id: Hash) => Promise.resolve(records.get(id)),
+    set: (id: Hash, value: unknown) => {
       writes += 1
       records.set(id, value)
+      return Promise.resolve()
     },
     onStatus: (status: string) => {
       statuses.push(status)
@@ -503,7 +504,7 @@ export const testGraphAuthoringChoosesProvidersExplicitly = async () => {
   const selected = {
     ...consumer,
     source: consumer.source.replace(
-      /ids: \{[\s\S]*?\n    \},/,
+      /ids: \{[\s\S]*?\n {4}\},/,
       `ids: { selected: { inputs: { value: {
         sources: { first: 'a', second: 'b' },
         choose: { parameter: 'provider', default: 'first' },
@@ -880,10 +881,12 @@ export const testGraphAuthoringCustomHttpSourceReplaysWithoutNetwork = async () 
   let requests = 0
   const graph = compileDagNodeRecordGraph({
     graph: resolved.resolvedNodes,
-    authorizeFetch: async () => true,
-    fetch: async () => {
+    authorizeFetch: () => Promise.resolve(true),
+    fetch: () => {
       requests += 1
-      return new Response('{"value":9}', { headers: { 'content-type': 'application/json' } })
+      return Promise.resolve(
+        new Response('{"value":9}', { headers: { 'content-type': 'application/json' } }),
+      )
     },
   })
   const records = createMemoryRecords()
@@ -908,9 +911,7 @@ export const testGraphAuthoringCustomHttpSourceReplaysWithoutNetwork = async () 
   const snapshot = createSourceSnapshot(manifests)
   const offline = compileDagNodeRecordGraph({
     graph: resolved.resolvedNodes,
-    fetch: async () => {
-      throw new Error('Network must remain unused.')
-    },
+    fetch: () => Promise.reject(new Error('Network must remain unused.')),
   })
   const replay = await offline[resolved.bindings.decoded!]!.call({
     url: 'https://example.invalid/data',
@@ -939,7 +940,7 @@ export const testGraphAuthoringChoiceDoesNotAcquireInactiveSource = async () => 
   const select = {
     ...consumer,
     source: consumer.source.replace(
-      /ids: \{[\s\S]*?\n    \},/,
+      /ids: \{[\s\S]*?\n {4}\},/,
       `ids: { selected: { inputs: { value: { sources: { good: 'good', bad: 'bad' }, choose: { parameter: 'provider', default: 'good' } } } } },`,
     ),
   }
@@ -947,10 +948,10 @@ export const testGraphAuthoringChoiceDoesNotAcquireInactiveSource = async () => 
   let requests = 0
   const graph = compileDagNodeRecordGraph({
     graph: resolved.resolvedNodes,
-    authorizeFetch: async () => true,
-    fetch: async () => {
+    authorizeFetch: () => Promise.resolve(true),
+    fetch: () => {
       requests += 1
-      return new Response('ok')
+      return Promise.resolve(new Response('ok'))
     },
   })
   const result = await graph[resolved.bindings.selected!]!.call({

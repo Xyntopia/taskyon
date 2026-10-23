@@ -8712,7 +8712,6 @@ end MslResistorStrictIconProbe;
       dae_prepared?: unknown
     }
     const dae = selectDaeForTemplate(compiled, { usePreparedDae: true })
-    const daeJson = daeJsonForTemplate(compiled, { usePreparedDae: true })
     if (!dae || typeof dae !== 'object' || Array.isArray(dae)) {
       throw new Error('Top-level resistor compile did not return a DAE object')
     }

@@ -1,3 +1,5 @@
+import type * as TypeScript from 'typescript'
+
 import type { Hash } from './caching.ts'
 import {
   getDagModuleLockModuleIds,
@@ -88,7 +90,7 @@ const unsupportedPackages: DagPackageArtifactResolver = {
 }
 
 const transpileLockedModule = (
-  ts: typeof import('typescript'),
+  ts: typeof TypeScript,
   fileName: string,
   source: string,
 ) => {

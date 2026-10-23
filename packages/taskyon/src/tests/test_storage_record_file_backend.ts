@@ -83,13 +83,17 @@ export const testFileStorageReadersShareLockWhileWritesWait = async () => {
       await readGate
       return records.get(path) ?? null
     },
-    write: async (path, record) => {
+    write: (path, record) => {
       wrote = true
       records.set(path, record)
+      return Promise.resolve()
     },
-    remove: async () => undefined,
-    list: async () => [...records.keys()],
-    clearDirectory: async () => records.clear(),
+    remove: () => Promise.resolve(),
+    list: () => Promise.resolve([...records.keys()]),
+    clearDirectory: () => {
+      records.clear()
+      return Promise.resolve()
+    },
     withNamespaceLock: (_directory, operation, mode: 'shared' | 'exclusive' = 'exclusive') =>
       navigator.locks.request(namespace, { mode }, operation),
   }

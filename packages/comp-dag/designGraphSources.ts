@@ -222,9 +222,11 @@ const compileSourceNodes = async (
             'Authored nodes use moduleImports names; module lock hashes are generated.',
           )
         const name = declaration.fields.moduleImports
-        const lock = typeof name === 'string' ? modules.locks.get(name) : undefined
+        if (name !== undefined && typeof name !== 'string')
+          throw new Error(`Invalid authored import declaration: ${JSON.stringify(name)}`)
+        const lock = name === undefined ? undefined : modules.locks.get(name)
         if (name !== undefined && !lock)
-          throw new Error(`Missing authored import declaration: ${String(name)}`)
+          throw new Error(`Missing authored import declaration: ${name}`)
         return {
           path: file.path,
           source:
