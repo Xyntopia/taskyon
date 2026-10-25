@@ -26,8 +26,8 @@ test.describe('sharing functionality', () => {
 
     await page.getByLabel('share content').click()
     await expect(page.getByText('Choose sharing method', { exact: true })).toBeVisible()
-    await expect(
-      page.getByRole('button', { name: 'Share through Gdrive', exact: true }),
-    ).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save chat to Google Drive' })).toBeVisible()
+    await expect(page.locator('[data-cy="shared-chat-public-url"]')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Use URL', exact: true })).toBeVisible()
   })
 })
