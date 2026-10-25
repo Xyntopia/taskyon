@@ -1,6 +1,6 @@
 # Development Setup
 
-Taskyon is a Yarn 4 monorepo. Use Node.js 20 or newer.
+Taskyon is a Yarn 4 monorepo. Use Node.js 22.22 or newer.
 
 ```bash
 yarn install
@@ -12,14 +12,72 @@ actual HTTPS URL if it selects another port. The local CORS proxy selects a free
 automatically; set `TASKYON_CORS_PROXY_PORT` only when a fixed proxy port is needed.
 `yarn dev:http` enables the explicit HTTP development mode.
 
-The Nix flake pins Node, Yarn/Corepack, Rust, and supporting tools:
+## Browser compatibility
+
+The `browserslist` setting in `package.json` targets `cover 95.5%`, `last 2 versions`,
+and `not dead`. As of 2026-10-24 this corresponds to approximately 95.4% of global
+browser usage (`yarn browserslist --coverage`). Autoprefixer adds any CSS vendor
+prefixes needed by these targets; `yarn test:postcss` checks the coverage threshold
+and CSS transformation.
+
+Browserslist is a **CSS compatibility target**, not a guarantee that every selected
+browser can run Taskyon. Vite 8's default production JavaScript target is Baseline
+Widely Available (Chrome/Edge 111+, Firefox 114+, Safari/iOS 16.4+), while Taskyon
+also requires runtime capabilities such as WebAssembly, workers, and browser storage.
+Supporting older browsers end to end would require checking those capabilities,
+adjusting the JS build or polyfills when appropriate, and testing the affected browsers.
+
+## Nix and non-Nix development
+
+**Nix is optional.** Taskyon must build on Ubuntu or another supported Linux system
+without installing Nix. Both setups use the same Yarn and Cargo build scripts.
+
+With Nix, enter the frontend directory and run:
 
 ```bash
 nix develop
+yarn install
+yarn dev
 ```
 
-No global Quasar installation is required. Outside the Nix shell, keep `COREPACK_HOME` outside the
-repository if Corepack resolves through a package directory marked as ESM.
+The flake supplies a pinned Rust compiler and the `wasm32-unknown-unknown` target
+through Fenix, plus the matching `wasm-bindgen-cli` from the HTTPS tunnel's
+`Cargo.lock`. No `prepare_rust` command or `cargo install` is needed inside
+the Nix shell. `nix develop .#wasm` is an alias of the default shell, retained
+for existing direnv configurations that use `use flake .#wasm`. Yarn is supplied
+by a Nix-store wrapper around Corepack, which selects the version pinned in
+`package.json`; it does not require working symlinks in `.corepack/bin`.
+
+On Ubuntu **without Nix**, install Node.js 22.22+ and enable Corepack,
+then initialize the Rust tooling with rustup:
+
+```bash
+sudo apt-get install build-essential pkg-config \
+  libssl-dev curl python3
+rustup toolchain install 1.95.0
+rustup target add wasm32-unknown-unknown \
+  --toolchain 1.95.0
+cargo +1.95.0 install wasm-bindgen-cli \
+  --version 0.2.108 --locked
+corepack enable
+yarn install
+yarn dev
+```
+
+Install `rustup` from the [official Rust installation instructions](https://rustup.rs/)
+if it is not already present. The repository's `rust-toolchain.toml` pins Rust
+for both rustup and Fenix; the required `wasm-bindgen-cli` version matches
+`packages/https_tunnel_wasm/Cargo.lock`. If either changes, update this setup
+guide and the non-Nix Docker build accordingly.
+
+Rumoca is a separate Rust project with its own pinned nightly toolchain and
+flake. Enter `packages/rumoca` and use its own `nix develop` or rustup
+setup when working on Rumoca directly; Taskyon's stable frontend shell should
+not override Rumoca's compiler.
+
+No global Quasar installation is required. Outside the Nix shell, keep
+`COREPACK_HOME` outside the repository if Corepack resolves through a package
+directory marked as ESM.
 
 ## Common commands
 

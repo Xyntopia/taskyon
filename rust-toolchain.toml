@@ -1,0 +1,7 @@
+# Stable Rust for Taskyon's HTTPS tunnel. Rumoca pins its nightly separately.
+# rustup (without Nix) and Fenix (inside nix develop) share this file.
+[toolchain]
+channel = "1.95.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]

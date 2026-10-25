@@ -93,7 +93,9 @@
     "tycli:prod": "yarn tycli:build && node packages/tycli/dist/cli.cjs",
     "tycli": "yarn workspace @taskyon/tycli dev",
     "test": "yarn check:file-sizes",
-    "test:all": "yarn check:file-sizes && yarn lint && yarn test:build-metadata && yarn test:container-config && yarn tycli:diagnostics --online && yarn test:e2e",
+    "test:all": "yarn check:file-sizes && yarn lint && yarn test:rust-toolchain && yarn test:postcss && yarn test:build-metadata && yarn test:container-config && yarn tycli:diagnostics --online && yarn test:e2e",
+    "test:rust-toolchain": "node --test scripts/rust-toolchain.test.mjs",
+    "test:postcss": "node --test scripts/postcss-config.test.mjs",
     "test:build-metadata": "yarn check:file-sizes && node --import ./packages/tycli/src/register.ts --experimental-strip-types --test packages/common/modules/buildMetadata.test.ts scripts/write-build-metadata.test.mjs",
     "test:container-config": "yarn check:file-sizes && node --test scripts/open-source-container.test.mjs",
     "test:release": "node --test scripts/release.test.mjs",
@@ -192,6 +194,7 @@
     "@vue/eslint-config-typescript": "^14.4.0",
     "@vue/test-utils": "^2.3.0",
     "autoprefixer": "^10.4.2",
+    "browserslist": "4.29.4",
     "dependency-cruiser": "^16.8.0",
     "eslint": "^9.14.0",
     "eslint-plugin-vue": "^10.4.0",
@@ -200,6 +203,7 @@
     "json-schema-to-ts": "^3.1.1",
     "madge": "^8.0.0",
     "openai": "^6.16.0",
+    "postcss": "8.5.31",
     "prettier": "^3.3.3",
     "sort-package-json": "^3.0.0",
     "type-fest": "^4.30.1",
@@ -268,12 +272,9 @@
     "zod": "4.4.3"
   },
   "browserslist": [
-    "last 4 Chrome versions",
-    "last 4 Firefox versions",
-    "last 4 Edge versions",
-    "last 4 Safari versions",
-    "last 4 Android versions",
-    "last 4 iOS versions"
+    "cover 95.5%",
+    "last 2 versions",
+    "not dead"
   ],
   "packageManager": "yarn@4.16.0"
 }

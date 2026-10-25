@@ -5,6 +5,10 @@
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs_unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -13,18 +17,46 @@
       nixpkgs,
       nixpkgs_unstable,
       flake-utils,
+      fenix,
     }:
 
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        # https://nixos.wiki/wiki/Rust
-        # https://nixos.org/manual/nixpkgs/stable/#rust
-        # if we want a specific rust version:
-        # rust-overlay.url = "github:oxalica/rust-overlay";
         pkgs = import nixpkgs { inherit system; };
         pkgs_unstable = import nixpkgs_unstable { inherit system; };
         python = pkgs.python311;
+        # Fenix and rustup share one stable toolchain pin, separate from Rumoca's nightly.
+        rustToolchain = fenix.packages.${system}.fromToolchainFile {
+          file = ./rust-toolchain.toml;
+          sha256 = "sha256-gh/xTkxKHL4eiRXzWv8KP7vfjSk61Iq48x47BEDFgfk=";
+        };
+        # Bindgen CLI must match the crate recorded in the tunnel Cargo.lock.
+        wasmBindgenVersion =
+          let
+            lock = builtins.fromTOML (builtins.readFile ./packages/https_tunnel_wasm/Cargo.lock);
+            bindings = builtins.filter (package: package.name == "wasm-bindgen") lock.package;
+          in
+          (builtins.head bindings).version;
+        wasmBindgenSource = pkgs.fetchCrate {
+          pname = "wasm-bindgen-cli";
+          version = wasmBindgenVersion;
+          hash = "sha256-UsuxILm1G6PkmVw0I/JF12CRltAfCJQFOaT4hFwvR8E=";
+        };
+        wasmBindgenCli = pkgs.buildWasmBindgenCli {
+          src = wasmBindgenSource;
+          cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+            src = wasmBindgenSource;
+            pname = "wasm-bindgen-cli";
+            version = wasmBindgenVersion;
+            hash = "sha256-iqQiWbsKlLBiJFeqIYiXo3cqxGLSjNM8SOWXGM9u43E=";
+          };
+        };
+        # Corepack selects the Yarn version pinned by package.json. Supply a
+        # store-backed executable so direnv never depends on local .corepack shims.
+        yarnBin = pkgs.writeShellScriptBin "yarn" ''
+          exec ${pkgs.nodejs_22}/bin/corepack yarn "$@"
+        '';
         mkTycliBin =
           commandName:
           pkgs.writeShellScriptBin commandName ''
@@ -51,64 +83,6 @@
         tycBin = mkTycliBin "tyc";
         tycliDevBin = mkTycliDevBin "tycli-dev";
         tycDevBin = mkTycliDevBin "tyc-dev";
-        prepareRustBin = pkgs.writeShellScriptBin "prepare_rust" ''
-                    set -euo pipefail
-
-                    repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-                    rumoca_root="$repo_root/packages/rumoca"
-                    toolchain_file="$rumoca_root/rust-toolchain.toml"
-                    lock_file="$rumoca_root/Cargo.lock"
-                    expected_wasm_pack="0.13.1"
-
-                    if [ ! -f "$toolchain_file" ]; then
-                      echo "prepare_rust: missing $toolchain_file" >&2
-                      exit 1
-                    fi
-
-                    if [ ! -f "$lock_file" ]; then
-                      echo "prepare_rust: missing $lock_file" >&2
-                      exit 1
-                    fi
-
-                    toolchain="$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$toolchain_file" | head -n 1)"
-                    if [ -z "$toolchain" ]; then
-                      echo "prepare_rust: could not read pinned Rumoca toolchain from $toolchain_file" >&2
-                      exit 1
-                    fi
-
-                    expected_wasm_bindgen="$(
-                      python - <<'PY'
-          import pathlib, tomllib
-          lock = tomllib.loads(pathlib.Path("packages/rumoca/Cargo.lock").read_text())
-          versions = sorted(
-              {
-                  pkg["version"]
-                  for pkg in lock.get("package", [])
-                  if pkg.get("name") == "wasm-bindgen"
-              }
-          )
-          if not versions:
-              raise SystemExit("failed to discover wasm-bindgen version in packages/rumoca/Cargo.lock")
-          print(versions[-1])
-          PY
-                    )"
-
-                    echo "[prepare_rust] Installing general Rust toolchain..."
-                    rustup toolchain install stable
-
-                    echo "[prepare_rust] Installing Rumoca pinned toolchain: $toolchain"
-                    rustup toolchain install "$toolchain"
-                    rustup target add wasm32-unknown-unknown --toolchain "$toolchain"
-                    rustup component add rust-src --toolchain "$toolchain"
-
-                    echo "[prepare_rust] Installing wasm-bindgen-cli $expected_wasm_bindgen"
-                    cargo install wasm-bindgen-cli --version "$expected_wasm_bindgen" --locked --force
-
-                    echo "[prepare_rust] Installing wasm-pack $expected_wasm_pack"
-                    cargo install wasm-pack --version "$expected_wasm_pack" --locked --force
-
-                    echo "[prepare_rust] Done."
-        '';
 
         # this is all tauri-related stuff
         libraries = with pkgs; [
@@ -155,7 +129,7 @@
           #mesa
           #libdrm
           cargo-tauri
-          rustup # needed for adding new targets e.g. wasm-bindgen!
+          # Fenix provides Rust inside Nix; rustup is for non-Nix environments.
           # add rust toolchain
           rustc
           rustfmt # needed in order to compile rumoca
@@ -197,7 +171,8 @@
           #cargo-edit
           #cargo-watch
           lld # linker for https_tunnel_wasm
-          #rustup
+          rustToolchain
+          wasmBindgenCli
           #rust-analyzer
           #rust-src
           # for tauri
@@ -216,6 +191,7 @@
           # we disable yarn-berry, because it is installed using corepack!
           # yarn-berry
           nodejs_22
+          yarnBin
 
           # helpers
           graphviz # we are using this with "madge" in order to display dependency graphs...
@@ -247,11 +223,12 @@
           tycBin
           tycliDevBin
           tycDevBin
-          prepareRustBin
         ];
       in
       {
-        devShells.default = pkgs.mkShell rec {
+        packages.wasm-bindgen-cli = wasmBindgenCli;
+        devShells = rec {
+          default = pkgs.mkShell rec {
           # pure  = true;                   # ← turn on “pure” mode
           name = "xyntopia_gui";
           # TODO: what is this for? nativeBuildInputs = [ pkgs.bashInteractive ];
@@ -282,141 +259,9 @@
                           set +a
                         fi
 
-                        export PATH="$(pwd)/node_modules/.bin:$PATH:$HOME/.cargo/bin"
+                        # Do not let the host's rustup toolchain override pinned Fenix.
+                        export PATH="${rustToolchain}/bin:$(pwd)/node_modules/.bin:$PATH"
 
-                        check_rumoca_rust_toolchain() {
-                          local toolchain_file="$(pwd)/packages/rumoca/rust-toolchain.toml"
-                          local toolchain=""
-                          local cargo_bin=""
-                          local loader=""
-
-                          if ! command -v rustup >/dev/null 2>&1; then
-                            return
-                          fi
-
-                          if [ ! -f "$toolchain_file" ]; then
-                            return
-                          fi
-
-                          toolchain="$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$toolchain_file" | head -n 1)"
-                          if [ -z "$toolchain" ]; then
-                            return
-                          fi
-
-                          cargo_bin="$(rustup which cargo --toolchain "$toolchain" 2>/dev/null || true)"
-                          if [ -z "$cargo_bin" ]; then
-                            echo "[devShell] Rumoca Rust toolchain '$toolchain' is not installed."
-                            echo "[devShell] Your general Rust toolchain is usually installed with:"
-                            echo "[devShell]   rustup toolchain install stable"
-                            echo "[devShell] Rumoca also needs its pinned toolchain from packages/rumoca/rust-toolchain.toml:"
-                            echo "[devShell]   rustup toolchain install $toolchain"
-                            echo "[devShell]   rustup target add wasm32-unknown-unknown --toolchain $toolchain"
-                            echo "[devShell]   rustup component add rust-src --toolchain $toolchain"
-                            return
-                          fi
-
-                          if "$cargo_bin" --version >/dev/null 2>&1; then
-                            return
-                          fi
-
-                          loader="$(${pkgs.binutils}/bin/readelf -l "$cargo_bin" 2>/dev/null | sed -n 's@.*Requesting program interpreter: \(.*\)]@\1@p' | head -n 1)"
-
-                          echo "[devShell] Rumoca Rust toolchain '$toolchain' is installed but not executable."
-                          if [ -n "$loader" ] && [ ! -e "$loader" ]; then
-                            echo "[devShell] Missing ELF loader: $loader"
-                            echo "[devShell] This often happens after a NixOS upgrade or GC when rustup binaries still point at an older glibc path."
-                          fi
-                          echo "[devShell] If your base Rust install is broken, first try:"
-                          echo "[devShell]   rustup toolchain install stable"
-                          echo "[devShell] Rumoca itself still needs its pinned toolchain, so reinstall that too:"
-                          echo "[devShell]   rustup toolchain uninstall $toolchain"
-                          echo "[devShell]   rustup toolchain install $toolchain"
-                          echo "[devShell]   rustup target add wasm32-unknown-unknown --toolchain $toolchain"
-                          echo "[devShell]   rustup component add rust-src --toolchain $toolchain"
-                        }
-
-                        check_rumoca_wasm_tooling() {
-                          local rumoca_root="$(pwd)/packages/rumoca"
-                          local expected_wasm_bindgen=""
-                          local expected_wasm_pack="0.13.1"
-                          local wasm_bindgen_bin=""
-                          local wasm_pack_bin=""
-                          local wasm_bindgen_version=""
-                          local wasm_pack_version=""
-                          local loader=""
-
-                          if [ ! -d "$rumoca_root" ]; then
-                            return
-                          fi
-
-                          expected_wasm_bindgen="$(
-                            python - <<'PY' 2>/dev/null
-            import pathlib, tomllib
-            lock = tomllib.loads(pathlib.Path("packages/rumoca/Cargo.lock").read_text())
-            versions = sorted(
-                {
-                    pkg["version"]
-                    for pkg in lock.get("package", [])
-                    if pkg.get("name") == "wasm-bindgen"
-                }
-            )
-            if versions:
-                print(versions[-1])
-            PY
-                          )"
-
-                          wasm_bindgen_bin="$(command -v wasm-bindgen 2>/dev/null || true)"
-                          if [ -z "$wasm_bindgen_bin" ]; then
-                            echo "[devShell] wasm-bindgen-cli is missing."
-                            if [ -n "$expected_wasm_bindgen" ]; then
-                              echo "[devShell] Install it with:"
-                              echo "[devShell]   cargo install wasm-bindgen-cli --version $expected_wasm_bindgen --locked --force"
-                            fi
-                          else
-                            wasm_bindgen_version="$(wasm-bindgen --version 2>/dev/null | sed -n 's/.* \([0-9][0-9A-Za-z._-]*\)$/\1/p' | head -n 1)"
-                            if ! wasm-bindgen --version >/dev/null 2>&1; then
-                              loader="$(${pkgs.binutils}/bin/readelf -l "$wasm_bindgen_bin" 2>/dev/null | sed -n 's@.*Requesting program interpreter: \(.*\)]@\1@p' | head -n 1)"
-                              echo "[devShell] wasm-bindgen-cli exists but is not executable: $wasm_bindgen_bin"
-                              if [ -n "$loader" ] && [ ! -e "$loader" ]; then
-                                echo "[devShell] Missing ELF loader: $loader"
-                                echo "[devShell] This often happens after a NixOS upgrade or GC."
-                              fi
-                              if [ -n "$expected_wasm_bindgen" ]; then
-                                echo "[devShell] Reinstall it with:"
-                                echo "[devShell]   cargo install wasm-bindgen-cli --version $expected_wasm_bindgen --locked --force"
-                              fi
-                            elif [ -n "$expected_wasm_bindgen" ] && [ "$wasm_bindgen_version" != "$expected_wasm_bindgen" ]; then
-                              echo "[devShell] wasm-bindgen-cli version mismatch: found $wasm_bindgen_version, expected $expected_wasm_bindgen."
-                              echo "[devShell] Reinstall it with:"
-                              echo "[devShell]   cargo install wasm-bindgen-cli --version $expected_wasm_bindgen --locked --force"
-                            fi
-                          fi
-
-                          wasm_pack_bin="$(command -v wasm-pack 2>/dev/null || true)"
-                          if [ -z "$wasm_pack_bin" ]; then
-                            echo "[devShell] wasm-pack is missing."
-                            echo "[devShell] Install it with:"
-                            echo "[devShell]   cargo install wasm-pack --version $expected_wasm_pack --locked --force"
-                            return
-                          fi
-
-                          wasm_pack_version="$(wasm-pack --version 2>/dev/null | sed -n 's/.* \([0-9][0-9A-Za-z._-]*\)$/\1/p' | head -n 1)"
-                          if ! wasm-pack --version >/dev/null 2>&1; then
-                            echo "[devShell] wasm-pack exists but is not executable: $wasm_pack_bin"
-                            echo "[devShell] Reinstall it with:"
-                            echo "[devShell]   cargo install wasm-pack --version $expected_wasm_pack --locked --force"
-                            return
-                          fi
-
-                          if [ "$wasm_pack_version" != "$expected_wasm_pack" ]; then
-                            echo "[devShell] wasm-pack version mismatch: found $wasm_pack_version, expected $expected_wasm_pack."
-                            echo "[devShell] Install the expected version with:"
-                            echo "[devShell]   cargo install wasm-pack --version $expected_wasm_pack --locked --force"
-                          fi
-                        }
-
-                        check_rumoca_rust_toolchain
-                        check_rumoca_wasm_tooling
 
                         export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath libraries}:$LD_LIBRARY_PATH
                         export XDG_DATA_DIRS=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS
@@ -477,6 +322,9 @@
                           corepack enable --install-directory="$COREPACK_BIN"
                           echo "$NODE_VERSION" > "$COREPACK_MARKER"
                         fi
+
+                        # Always prefer the Nix-provided yarn over mutable project-local shims.
+                        export PATH="${yarnBin}/bin:$PATH"
           '';
 
           # fixes xcb issues :
@@ -484,6 +332,10 @@
 
           # fixes libstdc++ issues and libgl.so issues
           #LD_LIBRARY_PATH=${stdenv.cc.cc.lib}/lib/:/run/opengl-driver/lib/
+          };
+          # Backward compatible with existing direnv `use flake .#wasm` configs.
+          # Default already includes the pinned Rust WASM target and wasm-bindgen CLI.
+          wasm = default;
         };
       }
     );
