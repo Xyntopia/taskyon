@@ -37,15 +37,12 @@ const resolveTaskChatProps = (
   extra: Record<string, unknown> = {},
 ) => ({
   taskId: getSingleQueryParam(route.query.t),
-  gdriveFileId: getSingleQueryParam(route.query.gd),
   importUrl: getSingleQueryParam(route.query.url),
   ...extra,
 })
 
 const shouldOpenChatRoute = (route: RouteLocationNormalizedLoaded) =>
-  typeof route.query.t === 'string' ||
-  typeof route.query.gd === 'string' ||
-  typeof route.query.url === 'string'
+  typeof route.query.t === 'string' || typeof route.query.url === 'string'
 
 export const universalTyRoutes: RouteRecordRaw[] = [
   {

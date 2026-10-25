@@ -161,7 +161,12 @@
         </q-card-section>
         <q-card-actions align="right">
           <q-btn flat label="Deny" data-cy="deny-public-chat" @click="denyPublicChat" />
-          <q-btn color="primary" label="Trust" data-cy="trust-public-chat" @click="trustPublicChat" />
+          <q-btn
+            color="primary"
+            label="Trust"
+            data-cy="trust-public-chat"
+            @click="trustPublicChat"
+          />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -170,12 +175,7 @@
 
 <script setup lang="ts">
 import { mdiSubdirectoryArrowRight } from '@quasar/extras/mdi-v6'
-import {
-  createTaskNode,
-  fetchMarkdown,
-  serializeForJson,
-  sleep,
-} from '@taskyon/taskyon'
+import { createTaskNode, fetchMarkdown, serializeForJson } from '@taskyon/taskyon'
 import { fetchPublicChatDocument } from '@taskyon/common/modules/webFetching/publicChatImport'
 import { createTaskChainFromMarkdown, createTaskyonClient } from '@taskyon/tyclient'
 import { isTauri } from '@tauri-apps/api/core'
@@ -195,6 +195,7 @@ import PasswordRequestDialog from '@taskyon/ui/components/PasswordRequestDialog.
 import ToggleButton from '@taskyon/ui/components/ToggleButton.vue'
 import { createScrollManager } from 'src/modules/vueUtils'
 import { useTaskNavigation } from 'src/composables/useTaskNavigation'
+import { publicChatDownloadUrl } from 'src/modules/gdriveShareUrls'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import { computed, onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
@@ -222,14 +223,11 @@ const props = defineProps<{
   treeBrowser?: boolean
   rootTaskId?: string
   taskId?: string
-  gdriveFileId?: string
   importUrl?: string
   folder?: string
   filePath?: string
 }>()
-const hasChatTarget = computed(() =>
-  Boolean(props.taskId || props.gdriveFileId || props.importUrl || props.filePath),
-)
+const hasChatTarget = computed(() => Boolean(props.taskId || props.importUrl || props.filePath))
 const hasVisibleChat = computed(
   () => tystate.selectedThread.length > 0 && Boolean(tystate.currentTask.value),
 )
@@ -262,6 +260,7 @@ const showAllTasks = ref<boolean>(props.detailed)
 const showHierarchy = ref(false)
 const delayedTrue = ref(false)
 let dismissloading: ReturnType<typeof $q.notify> | undefined = undefined
+const loadingPublicChat = ref(false)
 
 function activateAfter(ms: number) {
   delayedTrue.value = false
@@ -277,9 +276,8 @@ const taskyonClient = createTaskyonClient(tystate.api)
 const { navigateToTask } = useTaskNavigation()
 const taskThreadContainer = ref<HTMLElement | undefined>()
 const fileAttachments = ref<File[]>([]) // holds all attached files as a "tasklist"
-const loadingFromGdrive = ref(false)
 const invitedChat = ref(false)
-type PublicChatSource = { url: string; kind: 'url' | 'gdrive' }
+type PublicChatSource = { url: string }
 const pendingPublicChatSource = ref<PublicChatSource>()
 const publicChatDenied = ref<PublicChatSource>()
 const showPublicChatTrust = ref(false)
@@ -310,8 +308,8 @@ const openPopupMessage = (message: string) => {
   showPopupMessage.value = true
 }
 
-const requestPublicChatTrust = (url: string, kind: PublicChatSource['kind']) => {
-  pendingPublicChatSource.value = { url, kind }
+const requestPublicChatTrust = (url: string) => {
+  pendingPublicChatSource.value = { url }
   publicChatDenied.value = undefined
   showPublicChatTrust.value = true
 }
@@ -335,12 +333,12 @@ const trustPublicChat = async () => {
   pendingPublicChatSource.value = undefined
   publicChatDenied.value = undefined
   showPublicChatTrust.value = false
-  if (source.kind === 'gdrive') loadingFromGdrive.value = true
+  loadingPublicChat.value = true
   try {
     state.lockBottomScroll = false
     const document = await fetchPublicChatDocument(
-      (request) => tystate.hostFetch.fetch({ kind: 'tool' }, request),
-      source.url,
+      tystate.publicChatFetch,
+      publicChatDownloadUrl(source.url),
     )
     // The trust dialog can open before the Taskyon core finishes initializing.
     await tystate.taskyon
@@ -353,11 +351,9 @@ const trustPublicChat = async () => {
       `Error loading shared chat: ${error instanceof Error ? error.message : String(error)}`,
     )
   } finally {
-    if (source.kind === 'gdrive') {
-      await sleep(2000)
-      loadingFromGdrive.value = false
-      dismissloading?.()
-    }
+    loadingPublicChat.value = false
+    dismissloading?.()
+    dismissloading = undefined
   }
 }
 
@@ -365,10 +361,8 @@ async function updateChatThread() {
   console.log('update chat thread')
   if (props.taskId) {
     return
-  } else if (props.gdriveFileId) {
-    requestPublicChatTrust(`https://share.taskyon.space/proxy/gdrive/${props.gdriveFileId}`, 'gdrive')
   } else if (props.importUrl) {
-    requestPublicChatTrust(props.importUrl, 'url')
+    requestPublicChatTrust(props.importUrl)
   } else if (props.filePath) {
     state.lockBottomScroll = false
     let newTaskId: string | undefined
@@ -439,7 +433,7 @@ watch(tystate.currentTask, () => {
 })
 
 watch(
-  () => [props.taskId, props.gdriveFileId, props.importUrl, props.folder, props.filePath] as const,
+  () => [props.taskId, props.importUrl, props.folder, props.filePath] as const,
   async () => {
     if (!hasChatTarget.value) return
     await updateChatThread()
@@ -526,7 +520,7 @@ watchEffect(() => {
 })
 
 watchEffect(() => {
-  if (loadingFromGdrive.value)
+  if (loadingPublicChat.value)
     dismissloading = $q.notify({
       message: `Loading your shared conversation. Thank you for your patience...`,
       color: 'primary',

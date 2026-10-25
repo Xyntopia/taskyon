@@ -55,8 +55,11 @@ test.describe('public shared chat import', () => {
 
     await page.locator('[data-cy="trust-public-chat"]').click()
 
-    await expect(page.getByText('Shared public question', { exact: true })).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByText('Shared public question', { exact: true })).toBeVisible({
+      timeout: 60_000,
+    })
     await expect(page.getByText('Shared public answer', { exact: true })).toBeVisible()
+    await expect(page).not.toHaveURL(/\?url=/)
     expect(downloadCount()).toBe(1)
   })
 
@@ -75,13 +78,10 @@ test.describe('public shared chat import', () => {
     expect(downloadCount()).toBe(0)
   })
 
-  test('asks for trust on the legacy GDrive entry point', async ({ page }) => {
+  test('does not fetch legacy GDrive proxy links', async ({ page }) => {
     await presetDirectTransport(page)
     await page.goto('/chat?gd=legacy-share-id')
 
-    await expect(page.getByText('Open this shared chat?')).toBeVisible()
-    await expect(page.locator('[data-cy="public-chat-source"]')).toContainText(
-      'https://share.taskyon.space/proxy/gdrive/legacy-share-id',
-    )
+    await expect(page.getByText('Open this shared chat?')).toHaveCount(0)
   })
 })

@@ -53,7 +53,7 @@ import { useTaskNavigation } from 'src/composables/useTaskNavigation'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'stores/taskyonState'
 import type { ReadonlyDeep } from 'type-fest'
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ChooseModelDialog from './ChooseModelDialog.vue'
 import SimpleSettingsDialog from './SimpleSettingsDialog.vue'
 
@@ -81,7 +81,16 @@ const state = useAppStateStore()
 const tystate = useTaskyonStore()
 const taskyonClient = tystate.taskyonClient
 const { navigateToTask } = useTaskNavigation()
-const sessionSwitching = computed(() => state.taskyonSessionStatus === 'switching-session')
+const workflowToolsReady = ref(false)
+void tystate.waitUntilReady().then(
+  () => {
+    workflowToolsReady.value = true
+  },
+  (error: unknown) => console.error('Taskyon workflow tools failed to initialize', error),
+)
+const sessionSwitching = computed(
+  () => !workflowToolsReady.value || state.taskyonSessionStatus !== 'ready',
+)
 const selectedTaskType = computed(() =>
   state.createTaskType.type === 'functioncall' ? state.createTaskType.name : undefined,
 )

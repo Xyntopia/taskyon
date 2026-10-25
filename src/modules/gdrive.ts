@@ -382,16 +382,3 @@ async function downloadFileFromDrive(fileId: string, token: string) {
   const { data } = await axios.get(url, { headers, responseType: 'blob' })
   return data
 }
-
-export function getFileId(originalLink: string) {
-  const url = new URL(originalLink)
-  const parts = url.pathname.split('/')
-  const fileId = parts[parts.length - 2]
-  if (!fileId) throw new Error('Invalid Google Drive link')
-  return fileId
-}
-
-export function gdriveDirectDownloadLink(link: string) {
-  const fileId = getFileId(link)
-  return `https://drive.google.com/uc?id=${fileId}&export=download`
-}

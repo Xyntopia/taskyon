@@ -27,7 +27,7 @@
         </div>
 
         <!-- Task Change Notification Banner -->
-        <q-banner v-if="hasTaskChanged && gdriveLink" class="q-mt-md" dense rounded>
+        <q-banner v-if="hasTaskChanged && sharedSourceUrl" class="q-mt-md" dense rounded>
           <template #avatar>
             <q-icon :name="matWarning" color="secondary" />
           </template>
@@ -50,37 +50,28 @@
 
         <div class="column q-gutter-sm q-pt-md">
           <template v-if="share">
-            <q-btn v-if="false" outline :icon="matLink" label="Create Public Link" />
             <q-btn
-              v-if="false"
-              outline
-              :icon="symOutlinedPublic"
-              label="Share with public link"
-              @click="onExportIpfs(taskId)"
-            />
-            <q-btn
-              v-if="!gdriveLink"
               outline
               :icon="symOutlinedDriveExport"
-              label="Share through Gdrive"
+              label="Save chat to Google Drive"
               :loading="loadingGdrive"
               @click="onExportPublicGdrive(selectedTaskList)"
             />
-            <div v-else class="text-overline text-center q-pb-md">
-              Gdrive Store & Share:
-              <InfoDialog
-                :info-text="`*Taskyon shares files using your Google Drive.*
-
-You can always find and manage these files in your own Google Drive folder.
-You have full control: if you delete a shared file from your Drive,
-the sharing link will stop working.
-
-This means only you decide what is shared and for how long.
-No one else can access or remove your files without your permission.`"
-              />
-            </div>
-            <q-slide-transition v-if="gdriveLink">
-              <div v-show="gdriveLink" class="row q-gutter-md items-center justify-center">
+            <q-input
+              v-model="providedSourceUrl"
+              outlined
+              dense
+              type="url"
+              label="Or use an existing public Markdown URL"
+              hint="Provide a raw HTTPS Markdown document, not a provider preview page."
+              data-cy="shared-chat-public-url"
+            >
+              <template #append>
+                <q-btn flat dense :icon="matLink" label="Use URL" @click="usePublicUrl" />
+              </template>
+            </q-input>
+            <q-slide-transition v-if="sharedSourceUrl">
+              <div v-show="sharedSourceUrl" class="row q-gutter-md items-center justify-center">
                 <q-btn
                   v-if="canShare"
                   class="q-mb-md"
@@ -103,8 +94,8 @@ No one else can access or remove your files without your permission.`"
                 <div>
                   <template
                     v-for="[link, label] in [
-                      [taskyonShareLink, 'Copy taskyon.space link (stored in gdrive)'],
-                      [gdriveLink, 'Copy markdown link'],
+                      [taskyonShareLink, 'Copy Taskyon share link'],
+                      [sharedSourceUrl, 'Copy source URL'],
                     ] as Array<[string, string]>"
                     :key="link"
                   >
@@ -173,9 +164,8 @@ import {
   symOutlinedDriveExport,
   symOutlinedFileSave,
   symOutlinedMarkdown,
-  symOutlinedPublic,
 } from '@quasar/extras/material-symbols-outlined'
-import InfoDialog from '@taskyon/ui/components/InfoDialog.vue'
+import { validateSandboxFetchUrl } from '@taskyon/common/modules/webFetching/mediatedFetch'
 import QrCode from '@taskyon/ui/components/QrCode.vue'
 import CopyTaskChatButton from '@taskyon/ui/components/taskyon/CopyTaskChatButton.vue'
 import { selectTasksForChatCopy } from '@taskyon/ui/components/taskyon/taskChatVisibility'
@@ -183,7 +173,8 @@ import { saveFile } from '@taskyon/ui/modules/fileSave'
 import { copyToClipboard } from '@taskyon/common/modules/utils'
 import { chat2Md, chatToYaml, type TaskNode } from '@taskyon/taskyon'
 import { useQuasar } from 'quasar'
-import { getFileId, useGdrive } from 'src/modules/gdrive'
+import { useGdrive } from 'src/modules/gdrive'
+import { publicChatDownloadUrl } from 'src/modules/gdriveShareUrls'
 import { asyncComputed } from 'src/modules/vueUtils'
 import { useAppStateStore } from 'src/stores/appState'
 import { useTaskyonStore } from 'src/stores/taskyonState'
@@ -218,12 +209,12 @@ const {
   download?: boolean
 }>()
 
-const gdriveLink = ref<string>()
+const sharedSourceUrl = ref<string>()
+const providedSourceUrl = ref('')
 const loadingGdrive = ref(false)
 
 // New state for tracking task changes
 const lastGeneratedTaskId = ref<string>()
-const linkGeneratedAt = ref<Date>()
 const hasTaskChangeWarningDismissed = ref(false)
 
 const taskId = computed(() => (typeof taskOrId === 'string' ? taskOrId : taskOrId.id))
@@ -231,7 +222,7 @@ const taskId = computed(() => (typeof taskOrId === 'string' ? taskOrId : taskOrI
 // Computed property to check if task has changed since last link generation
 const hasTaskChanged = computed(() => {
   return (
-    gdriveLink.value &&
+    sharedSourceUrl.value &&
     lastGeneratedTaskId.value &&
     taskId.value !== lastGeneratedTaskId.value &&
     !hasTaskChangeWarningDismissed.value
@@ -267,21 +258,30 @@ watch(
   (newTaskId, oldTaskId) => {
     if (newTaskId !== oldTaskId) {
       hasTaskChangeWarningDismissed.value = false
-      // Only reset gdriveLink if we want to force regeneration
-      // Comment out the line below if you want to keep the old link until manually regenerated
-      // gdriveLink.value = undefined
+      // Keep the published snapshot until the user chooses to replace it.
     }
   },
 )
 
 const taskyonShareLink = computed(() => {
-  if (gdriveLink.value) {
-    const fileId = getFileId(gdriveLink.value)
-    return `${baseURL}/chat?gd=${fileId}`
-  } else {
-    throw new Error('Could not create a taskyon share link!')
-  }
+  if (!sharedSourceUrl.value) throw new Error('Choose a public source URL before sharing.')
+  return `${baseURL}/chat?url=${encodeURIComponent(sharedSourceUrl.value)}`
 })
+
+function usePublicUrl() {
+  try {
+    const source = validateSandboxFetchUrl(providedSourceUrl.value.trim())
+    if (source.protocol !== 'https:') throw new Error('Public share URLs must use HTTPS.')
+    publicChatDownloadUrl(source.toString())
+    sharedSourceUrl.value = source.toString()
+    lastGeneratedTaskId.value = undefined
+  } catch (error) {
+    $q.notify({
+      type: 'negative',
+      message: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
 
 async function onExportPublicGdrive(taskList: TaskNode[]) {
   try {
@@ -302,14 +302,18 @@ async function onExportPublicGdrive(taskList: TaskNode[]) {
           true,
         )
 
-        if (gdriveFile.webViewLink) {
-          gdriveLink.value = gdriveFile.webViewLink
-          lastGeneratedTaskId.value = selectedId
-          linkGeneratedAt.value = new Date()
-          hasTaskChangeWarningDismissed.value = false
-        }
+        if (!gdriveFile.webViewLink)
+          throw new Error('Google Drive did not return a public share URL')
+        sharedSourceUrl.value = gdriveFile.webViewLink
+        lastGeneratedTaskId.value = selectedId
+        hasTaskChangeWarningDismissed.value = false
       }
     }
+  } catch (error) {
+    $q.notify({
+      type: 'negative',
+      message: error instanceof Error ? error.message : String(error),
+    })
   } finally {
     loadingGdrive.value = false
   }
@@ -322,10 +326,6 @@ async function regenerateGdriveLink() {
 
 function dismissTaskChangeWarning() {
   hasTaskChangeWarningDismissed.value = true
-}
-
-function onExportIpfs(taskId: string) {
-  console.log('export to ipfs', taskId)
 }
 
 async function onExportChatMD(taskList: TaskNode[]) {
@@ -375,7 +375,7 @@ async function onExportChatYaml(taskList: TaskNode[]) {
 const $q = useQuasar()
 
 function shareViaSocialApps() {
-  if (navigator.share && gdriveLink.value) {
+  if (navigator.share && sharedSourceUrl.value) {
     navigator
       .share({
         title: 'Share Taskyon Chat',

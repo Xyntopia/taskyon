@@ -27,8 +27,15 @@ export const readCurrentTaskSelectionRoute = (href: string) => {
 
 const updateTaskQuery = (query: URLSearchParams, taskId: string | null | undefined) => {
   const normalizedTaskId = normalizeTaskId(taskId)
-  if (normalizedTaskId) query.set(TASK_QUERY_PARAM, normalizedTaskId)
-  else query.delete(TASK_QUERY_PARAM)
+  if (normalizedTaskId) {
+    query.set(TASK_QUERY_PARAM, normalizedTaskId)
+    // Once a public chat has been imported, the local task ID owns the route.
+    // Retaining the original URL would needlessly expose the source and
+    // could trigger repeat-import logic on future navigation.
+    query.delete('url')
+  } else {
+    query.delete(TASK_QUERY_PARAM)
+  }
 }
 
 export const getTaskSelectionPath = (

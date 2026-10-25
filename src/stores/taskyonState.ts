@@ -2291,6 +2291,9 @@ export const useTaskyonStore = defineStore('taskyonControl', () => {
     taskyonClient,
     providerNetworkFetch: providerOauthFetch,
     hostFetch,
+    // The open-source host uses its configured mediated transport. Commercial
+    // deployments may constrain public sharing to their authorized WSS tunnel.
+    publicChatFetch: (request: Request) => hostFetch.fetch({ kind: 'tool' }, request),
     taskTemplateRenderer,
     documentationBases,
     documentationReady,
