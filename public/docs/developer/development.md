@@ -48,6 +48,25 @@ for existing direnv configurations that use `use flake .#wasm`. Yarn is supplied
 by a Nix-store wrapper around Corepack, which selects the version pinned in
 `package.json`; it does not require working symlinks in `.corepack/bin`.
 
+The Nix shell deliberately **does not export `LD_LIBRARY_PATH`**: mixing Nix
+libraries and Ubuntu's glibc prevented Playwright's Chromium from launching.
+`yarn tauri:*` scripts use `scripts/run-tauri.sh` to supply GTK/WebKit native
+libraries only to the Tauri process. On NixOS, enable `programs.nix-ld.enable`
+in your system configuration so the Playwright-downloaded browsers can use
+`NIX_LD` and `NIX_LD_LIBRARY_PATH` from the development shell. The project uses
+Playwright's browser revisions pinned by `yarn.lock`, not the separately packaged
+Nix Playwright browsers (which may be a different version). Install the browsers
+with `yarn playwright install chromium firefox` if they are not already cached.
+
+Check the environment and launch Chromium inside the shell:
+
+```bash
+yarn test:nix-browser-env
+```
+
+The same `yarn test:e2e:production` command should then work directly in the
+shell; there is no need to unset library variables or use a separate host shell.
+
 On Ubuntu **without Nix**, install Node.js 22.22+ and enable Corepack,
 then initialize the Rust tooling with rustup:
 

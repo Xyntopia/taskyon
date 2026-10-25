@@ -233,20 +233,13 @@
           name = "xyntopia_gui";
           # TODO: what is this for? nativeBuildInputs = [ pkgs.bashInteractive ];
           buildInputs = libraries ++ packages;
-          # the following comes from here: https://tauri.app/start/prerequisites/
-          # but by declaring LD_LIBRARY_PATH we might have done it correctly already ;)
-          # and thats why we're commenting it out...
-          #PKG_CONFIG_PATH = "${glib.dev}/lib/pkgconfig:${libsoup_3.dev}/lib/pkgconfig:${webkitgtk_4_1.dev}/lib/pkgconfig:${at-spi2-atk.dev}/lib/pkgconfig:${gtk3.dev}/lib/pkgconfig:${gdk-pixbuf.dev}/lib/pkgconfig:${cairo.dev}/lib/pkgconfig:${pango.dev}/lib/pkgconfig:${harfbuzz.dev}/lib/pkgconfig";
-          # propagatedBuildInputs = libraries;  # your GTK/WebKit/etc libs
+          # pkg-config finds the Tauri GTK/WebKit headers through buildInputs.
+          # Native libraries are scoped to Tauri, never injected into Playwright/Node.
 
           shellHook = ''
                         # python poetry related stuff
                         unset SOURCE_DATE_EPOCH
                         unset LD_PRELOAD
-
-                        # Environment variables
-                        # fixes libstdc++ issues, libz.so.1 issues
-                        export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib/:${pkgs.lib.makeLibraryPath buildInputs}";
 
                         export NODE_OPTIONS="--max-old-space-size=8192"
                         echo "increasing node memory allocation to $NODE_OPTIONS"
@@ -259,11 +252,19 @@
                           set +a
                         fi
 
+                        # Do not override the dynamic loader for Node or Playwright's browsers.
+                        # On NixOS, nix-ld uses NIX_LD_LIBRARY_PATH for downloaded Chromium;
+                        # unlike LD_LIBRARY_PATH this does not affect Nix-linked binaries.
+                        unset LD_LIBRARY_PATH
+                        export NIX_LD="''${NIX_LD:-${pkgs.stdenv.cc.bintools.dynamicLinker}}"
+                        export NIX_LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath (libraries ++ [ pkgs.stdenv.cc.cc.lib ])}''${NIX_LD_LIBRARY_PATH:+:$NIX_LD_LIBRARY_PATH}"
+                        # The Tauri launcher applies this only to native GTK/WebKit processes.
+                        export TASKYON_TAURI_LIBRARY_PATH="${pkgs.lib.makeLibraryPath (libraries ++ [ pkgs.stdenv.cc.cc.lib ])}"
+
                         # Do not let the host's rustup toolchain override pinned Fenix.
                         export PATH="${rustToolchain}/bin:$(pwd)/node_modules/.bin:$PATH"
 
 
-                        export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath libraries}:$LD_LIBRARY_PATH
                         export XDG_DATA_DIRS=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS
 
                         # Ensure WebKitGTK/libsoup can load the TLS backend on NixOS.
@@ -330,8 +331,6 @@
           # fixes xcb issues :
           # QT_PLUGIN_PATH=${qt5.qtbase}/${qt5.qtbase.qtPluginPrefix}
 
-          # fixes libstdc++ issues and libgl.so issues
-          #LD_LIBRARY_PATH=${stdenv.cc.cc.lib}/lib/:/run/opengl-driver/lib/
           };
           # Backward compatible with existing direnv `use flake .#wasm` configs.
           # Default already includes the pinned Rust WASM target and wasm-bindgen CLI.
