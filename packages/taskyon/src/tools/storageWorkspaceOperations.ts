@@ -1,6 +1,7 @@
 import type { TaskyonStorageClient } from '../api/storageProtocol'
 import {
   workspaceGlobMatches,
+  WorkspaceFileNotFoundError,
   type WorkspaceEntry,
   type WorkspaceMatch,
   type WorkspaceOperations,
@@ -68,7 +69,7 @@ export const createStorageWorkspaceOperations = (
     read: async (rawPath) => {
       const path = normalizePath(rawPath)
       const result = await storageClient.get({ namespace, id: path })
-      if (result.value === null) throw new Error(`Workspace file not found: ${path}`)
+      if (result.value === null) throw new WorkspaceFileNotFoundError(path)
       return { content: parseStoredFile(result.value, path).content, revision: result.contentHash }
     },
     write: async ({ path: rawPath, content, expectedRevision }) => {

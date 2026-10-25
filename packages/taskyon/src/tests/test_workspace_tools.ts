@@ -112,6 +112,29 @@ export const testStorageWorkspaceOperationsPersistTextFiles = async () => {
         read.content.includes('browser'),
       'Expected StorageClient-backed read content',
     )
+    const missing = await findTool(tools, 'read').function?.({ path: 'message1' }, context)
+    assert(
+      missing &&
+        typeof missing === 'object' &&
+        'found' in missing &&
+        missing.found === false &&
+        'error' in missing &&
+        missing.error === 'Workspace file not found: message1',
+      'Expected a missing workspace file to return a recoverable tool result',
+    )
+    let missingEditError = ''
+    try {
+      await findTool(tools, 'edit').function?.(
+        { path: 'message1', edits: [{ oldText: 'before', newText: 'after' }] },
+        context,
+      )
+    } catch (error) {
+      missingEditError = String(error)
+    }
+    assert(
+      missingEditError.includes('Workspace file not found: message1'),
+      'Expected editing a nonexistent file to remain a strict error',
+    )
     assert(
       found &&
         typeof found === 'object' &&

@@ -5,6 +5,13 @@ export type WorkspaceReadResult = {
   revision: string | null
 }
 
+export class WorkspaceFileNotFoundError extends Error {
+  constructor(path: string) {
+    super(`Workspace file not found: ${path}`)
+    this.name = 'WorkspaceFileNotFoundError'
+  }
+}
+
 export type WorkspaceEntry = {
   path: string
   type: 'file' | 'directory'
@@ -160,7 +167,20 @@ export const createStandardWorkspaceTools = (operations: WorkspaceOperations): I
       offset?: number
       limit?: number
     }) => {
-      const result = await operations.read(path)
+      // A guessed path is a normal agent lookup miss, not a fatal task error.
+      // Keep validation, storage, and edit failures strict.
+      const result = await operations.read(path).catch((error: unknown) => {
+        if (error instanceof WorkspaceFileNotFoundError) return error
+        throw error
+      })
+      if (result instanceof WorkspaceFileNotFoundError) {
+        return {
+          path,
+          found: false,
+          error: result.message,
+          hint: 'Use ls or find to discover files.',
+        }
+      }
       const lines = normalizeLineEndings(result.content).split('\n')
       const start = Math.min(lines.length, Math.max(1, Math.trunc(offset ?? 1)))
       const count = clamp(limit, 200, MAX_READ_LINES)
